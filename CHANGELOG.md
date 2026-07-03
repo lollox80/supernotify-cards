@@ -3,6 +3,24 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.0] - 2026-07-04
+
+### Added
+- **Italian translations**: card strings now follow `hass.language`
+  automatically (override with `language:` in the card config). English
+  fallback.
+- **Overview: `sent_today_entity` option** — point it to a daily
+  `utility_meter` on `sensor.supernotify_notifications` to show "sent
+  today" with yesterday's total (from the meter `last_period` attribute)
+  instead of the since-startup counter.
+- **Control: `quiet_entity` option** — show a computed quiet state (e.g.
+  a template binary_sensor combining DND switch, schedules and voice
+  toggle) in the status bar, while the DND tile keeps toggling the manual
+  switch.
+- **Composer: recipients and camera** — recipient chips (auto-discovered,
+  sent as `target:`) and a camera selector that attaches a snapshot via
+  `data.media.camera_entity_id`, both reflected in the phone preview.
+
 ## [0.8.0] - 2026-07-04
 
 ### Added

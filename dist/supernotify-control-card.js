@@ -8,7 +8,91 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.8.0";
+const VERSION = "0.9.0";
+
+/**
+ * Minimal i18n: strings follow hass.language (override with `language:` in
+ * the card config). English fallback.
+ */
+const SN_STRINGS = {
+  en: {
+    presence: "Presence", time_band: "Time band", quiet: "Quiet",
+    act_scen: "Active scenarios", on: "on", off: "off", active: "active",
+    dnd: "Do not disturb", tap_silence: "tap to silence",
+    snooze: "Snooze", min: "min", pause_nc: "pause non-critical",
+    snoozed: "Snoozed", until: "until", tap_clear: "tap to clear",
+    announce: "Announce", intercom: "intercom",
+    announce_ph: "Announce on all speakers…", send: "Send",
+    announced: "Announced", cleared: "Snoozes cleared",
+    snoozed_for: "Snoozed non-critical notifications for",
+    sent: "Sent", sent_today: "Sent today", since_startup: "since startup",
+    yesterday: "yesterday", failures: "Failures", deliveries: "Deliveries",
+    enabled_total: "enabled/total", last_notif: "Last notification",
+    transports: "Transports", delivered: "delivered", failed: "failed",
+    channels: "channels", none: "none", no_transports: "no transport entities found",
+    start: "start", volume: "volume", now: "now", crosses: "crosses midnight",
+    enabled: "enabled", implicit: "implicit", explicit: "explicit",
+    by_scenario: "by scenario", fallback: "fallback", fallback_err: "fallback on error",
+    fixed_targets: "fixed targets", no_deliveries: "no delivery entities found",
+    home: "home", away: "away", devices: "devices", overrides: "delivery overrides",
+    no_contact: "no contact points", no_recipients: "no recipient entities found",
+    active_now: "active now", disabled: "disabled", other: "Other",
+    media: "media", no_scenarios: "no scenario entities found",
+    sim_pick: "🎬 Scenarios — tap to simulate", sim_fire: "📤 Deliveries that would fire",
+    sim_hint: "Real engine data (enquire services). Priority-based delivery filtering happens engine-side and is not simulated here. Disabled wins over enabled, like the runtime merge.",
+    sim_none: "no deliveries would fire", scenario_tag: "scenario",
+    title: "Title", message: "Message", priority: "Priority",
+    channels_lbl: "Channels — none picked = normal routing",
+    recipients_lbl: "Recipients — none picked = channel defaults",
+    camera_lbl: "Camera snapshot", preview: "Preview",
+    no_title: "(no title)", no_message: "(no message)",
+    default_prio: "default (medium)",
+    comp_hint: "Picked channels are sent with delivery_selection: fixed (only those fire). Critical really is critical — sirens included.",
+    critical_confirm: "Send a CRITICAL notification? Sirens and max volume included.",
+    write_first: "Write a message first", sent_toast: "Sent 🚀",
+  },
+  it: {
+    presence: "Presenza", time_band: "Fascia oraria", quiet: "Silenzioso",
+    act_scen: "Scenari attivi", on: "attivo", off: "spento", active: "attivo",
+    dnd: "Non disturbare", tap_silence: "tocca per silenziare",
+    snooze: "Snooze", min: "min", pause_nc: "pausa ai non critici",
+    snoozed: "In pausa", until: "fino alle", tap_clear: "tocca per annullare",
+    announce: "Annuncia", intercom: "interfono",
+    announce_ph: "Annuncia su tutti gli Echo di casa…", send: "Invia",
+    announced: "Annunciato", cleared: "Pause annullate",
+    snoozed_for: "Notifiche non critiche in pausa per",
+    sent: "Inviate", sent_today: "Inviate oggi", since_startup: "dall'avvio",
+    yesterday: "ieri", failures: "Fallimenti", deliveries: "Delivery",
+    enabled_total: "attive/totali", last_notif: "Ultima notifica",
+    transports: "Transport", delivered: "consegnata", failed: "fallite",
+    channels: "canali", none: "nessuno", no_transports: "nessuna entità transport trovata",
+    start: "inizio", volume: "volume", now: "ora", crosses: "attraversa mezzanotte",
+    enabled: "attiva", implicit: "implicita", explicit: "esplicita",
+    by_scenario: "da scenario", fallback: "fallback", fallback_err: "fallback su errore",
+    fixed_targets: "target fissi", no_deliveries: "nessuna entità delivery trovata",
+    home: "in casa", away: "fuori", devices: "dispositivi", overrides: "override delivery",
+    no_contact: "nessun recapito", no_recipients: "nessuna entità destinatario trovata",
+    active_now: "attivo ora", disabled: "disattivato", other: "Altro",
+    media: "media", no_scenarios: "nessuna entità scenario trovata",
+    sim_pick: "🎬 Scenari — tocca per simulare", sim_fire: "📤 Canali che partirebbero",
+    sim_hint: "Dati reali del motore (servizi enquire). Il filtro per priorità delle delivery avviene lato motore e non è simulato qui. Lo spegnimento vince sull'accensione, come nel merge reale.",
+    sim_none: "nessun canale partirebbe", scenario_tag: "scenario",
+    title: "Titolo", message: "Messaggio", priority: "Priorità",
+    channels_lbl: "Canali — nessuno scelto = instradamento normale",
+    recipients_lbl: "Destinatari — nessuno scelto = default dei canali",
+    camera_lbl: "Foto camera", preview: "Anteprima",
+    no_title: "(senza titolo)", no_message: "(nessun messaggio)",
+    default_prio: "default (media)",
+    comp_hint: "I canali scelti partono con delivery_selection: fixed (solo quelli). Il critical è critical davvero — sirene incluse.",
+    critical_confirm: "Inviare una notifica CRITICA? Sirene e volume massimo inclusi.",
+    write_first: "Scrivi prima un messaggio", sent_toast: "Inviata 🚀",
+  },
+};
+
+function snT(config, hass) {
+  const lang = ((config && config.language) || (hass && hass.language) || "en").split("-")[0];
+  return SN_STRINGS[lang] || SN_STRINGS.en;
+}
 
 /**
  * Prototype-style intro banner, shared by every card.
@@ -144,18 +228,19 @@ class SupernotifyControlCard extends HTMLElement {
     // with a SUPERNOTIFY_<CMD>_<RECIPIENT>_<TARGET>_<minutes> action name.
     // NONCRITICAL keeps critical notifications flowing during the snooze.
     // When a snooze is already active, tapping the tile clears it instead.
+    const T = snT(this._config, this._hass);
     if ((this._snoozes || []).length) {
       await this._hass.callWS({
         type: "call_service", domain: "supernotify", service: "clear_snoozes",
         service_data: {}, return_response: true,
       });
-      this._toast("Snoozes cleared");
+      this._toast(T.cleared);
     } else {
       const minutes = this._config.snooze_minutes || 30;
       const action =
         this._config.snooze_action || `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_${minutes}`;
       this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
-      this._toast(`Snoozed non-critical notifications for ${minutes} min`);
+      this._toast(`${T.snoozed_for} ${minutes} ${T.min}`);
     }
     setTimeout(() => this._refreshSnoozes(), 800);
   }
@@ -174,7 +259,7 @@ class SupernotifyControlCard extends HTMLElement {
       data: { delivery_selection: "fixed", delivery },
     });
     input.value = "";
-    this._toast("Announced");
+    this._toast(snT(this._config, this._hass).announced);
   }
 
   _toast(msg) {
@@ -276,8 +361,8 @@ class SupernotifyControlCard extends HTMLElement {
         <div class="tiles" id="tiles"></div>
         <div class="announce" id="announceRow">
           <ha-icon icon="mdi:bullhorn"></ha-icon>
-          <input id="announceInput" placeholder="Announce on all speakers…">
-          <button id="announceBtn">Send</button>
+          <input id="announceInput" placeholder="${snT(this._config, this._hass).announce_ph}">
+          <button id="announceBtn">${snT(this._config, this._hass).send}</button>
         </div>
         <div id="groups"></div>
         <div class="ver">supernotify-control-card v${VERSION}</div>
@@ -300,25 +385,29 @@ class SupernotifyControlCard extends HTMLElement {
   _renderStatus() {
     const c = this._config;
     const p = this._palette();
+    const T = snT(c, this._hass);
     const segs = [];
     const seg = (l, v, color) =>
       `<div class="sseg"><span class="sl">${l}</span><span class="sv"${color ? ` style="color:${color}"` : ""}>${v}</span></div>`;
     if (c.presence_entity) {
       const st = this._st(c.presence_entity);
-      segs.push(seg("Presence", this._friendly(c.presence_entity, "") + " · " + (st === "home" ? "home" : st || "—"),
+      segs.push(seg("🏠 " + T.presence, this._friendly(c.presence_entity, "") + " · " + (st === "home" ? T.home : st || "—"),
         st === "home" ? p.ok : undefined));
     }
     const band = this._activeBand();
     if (band) {
       const vol = band.volume ? Math.round(+this._st(band.volume) || 0) + "%" : "";
-      segs.push(seg("Time band", band.name.replace(/_/g, " ") + (vol ? " · vol " + vol : ""), p.brandD));
+      segs.push(seg("🕐 " + T.time_band, band.name.replace(/_/g, " ") + (vol ? " · vol " + vol : ""), p.brandD));
     }
-    if (c.dnd_entity) {
-      const on = this._on(c.dnd_entity);
-      segs.push(seg("Quiet", on ? "on" : "off", on ? p.warn : p.ok));
+    if (c.dnd_entity || c.quiet_entity) {
+      // quiet_entity (optional): a COMPUTED quiet state (e.g. a template
+      // binary_sensor combining DND switch, schedules, voice toggle) shown in
+      // the status bar, while the DND tile keeps toggling the manual switch.
+      const on = this._on(c.quiet_entity || c.dnd_entity);
+      segs.push(seg("🔕 " + T.quiet, on ? T.on : T.off, on ? p.warn : p.ok));
     }
     const act = this._activeScenarios();
-    if (act !== null) segs.push(seg("Active scenarios", String(act.length)));
+    if (act !== null) segs.push(seg("🎬 " + T.act_scen, String(act.length)));
     this.shadowRoot.getElementById("statusbar").innerHTML = segs.join("");
   }
 
@@ -332,30 +421,31 @@ class SupernotifyControlCard extends HTMLElement {
 
   _tileDef(t) {
     const c = this._config;
+    const T = snT(c, this._hass);
     if (t === "dnd" && c.dnd_entity) {
       const on = this._on(c.dnd_entity);
       return { cls: on ? "warn" : "", icon: on ? "🔕" : "🔔",
-        name: "Do not disturb", sub: on ? "active" : "tap to silence",
+        name: T.dnd, sub: on ? T.active : T.tap_silence,
         act: () => this._toggle(c.dnd_entity) };
     }
     if (t === "snooze") {
       const act = this._snoozes || [];
       if (act.length) {
         const until = act[0] && act[0].snooze_until ? act[0].snooze_until.slice(0, 5) : "";
-        return { cls: "warn", icon: "😴", name: "Snoozed",
-          sub: (until ? "until " + until + " · " : "") + "tap to clear",
+        return { cls: "warn", icon: "😴", name: T.snoozed,
+          sub: (until ? T.until + " " + until + " · " : "") + T.tap_clear,
           act: () => this._snooze() };
       }
-      return { cls: "", icon: "😴", name: `Snooze ${c.snooze_minutes || 30} min`,
-        sub: "pause non-critical", act: () => this._snooze() };
+      return { cls: "", icon: "😴", name: `${T.snooze} ${c.snooze_minutes || 30} ${T.min}`,
+        sub: T.pause_nc, act: () => this._snooze() };
     }
     if (t === "announce")
-      return { cls: "", icon: "📢", name: "Announce", sub: "intercom",
+      return { cls: "", icon: "📢", name: T.announce, sub: T.intercom,
         act: () => this.shadowRoot.getElementById("announceInput").focus() };
     if (t && t.toggle) {
       const on = this._on(t.toggle);
       return { cls: on ? "on" : "", icon: t.icon || "⚙️",
-        name: t.name || this._friendly(t.toggle), sub: on ? "on" : "off",
+        name: t.name || this._friendly(t.toggle), sub: on ? T.on : T.off,
         act: () => this._toggle(t.toggle) };
     }
     return null;
@@ -544,11 +634,11 @@ class SupernotifyOverviewCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div class="stats" id="stats"></div>
-        <div class="sec">Last notification</div>
+        <div class="sec">${snT(this._config, this._hass).last_notif}</div>
         <div class="lastmsg" id="last">—</div>
-        <div class="sec">Active scenarios</div>
+        <div class="sec">${snT(this._config, this._hass).act_scen}</div>
         <div id="scen">—</div>
-        <div class="sec">Transports</div>
+        <div class="sec">${snT(this._config, this._hass).transports}</div>
         <div id="transports"></div>
         <div class="ver">supernotify-overview-card v${VERSION}</div>
       </ha-card>`;
@@ -566,13 +656,26 @@ class SupernotifyOverviewCard extends HTMLElement {
     const stat = (k, v, s, color) =>
       `<div class="stat"><div class="k">${k}</div><div class="v"${color ? ` style="color:${color}"` : ""}>${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
     const p = this._palette();
+    const T = snT(this._config, this._hass);
     const snz = this._snoozes || [];
+    // Optional daily counter (utility_meter on sensor.supernotify_notifications):
+    // shows "sent today" with yesterday's total from the last_period attribute.
+    let sentStat;
+    const todayId = this._config.sent_today_entity;
+    const todayState = todayId ? this._hass.states[todayId] : null;
+    if (todayState && !["unknown", "unavailable"].includes(todayState.state)) {
+      const yd = todayState.attributes && todayState.attributes.last_period;
+      sentStat = stat("📨 " + T.sent_today, esc(Math.round(+todayState.state)),
+        yd != null ? T.yesterday + ": " + esc(Math.round(+yd)) : "");
+    } else {
+      sentStat = stat("📨 " + T.sent, sent != null ? esc(sent) : "—", T.since_startup);
+    }
     this.shadowRoot.getElementById("stats").innerHTML =
-      stat("📨 Sent", sent != null ? esc(sent) : "—", "since startup") +
-      stat("⚠️ Failures", failures != null ? esc(failures) : "—", "", +failures > 0 ? p.crit : p.ok) +
-      stat("🎬 Active scenarios", act ? act.length : "—", "") +
-      stat("📤 Deliveries", dels.length ? `${delsOn}/${dels.length}` : "—", "enabled/total") +
-      stat("😴 Snoozed", snz.length, snz.length && snz[0].snooze_until ? "until " + esc(String(snz[0].snooze_until).slice(0, 5)) : "", snz.length ? p.warn : undefined);
+      sentStat +
+      stat("⚠️ " + T.failures, failures != null ? esc(failures) : "—", "", +failures > 0 ? p.crit : p.ok) +
+      stat("🎬 " + T.act_scen, act ? act.length : "—", "") +
+      stat("📤 " + T.deliveries, dels.length ? `${delsOn}/${dels.length}` : "—", T.enabled_total) +
+      stat("😴 " + T.snoozed, snz.length, snz.length && snz[0].snooze_until ? T.until + " " + esc(String(snz[0].snooze_until).slice(0, 5)) : "", snz.length ? p.warn : undefined);
 
     const lastEl = this.shadowRoot.getElementById("last");
     if (this._last) {
@@ -584,23 +687,23 @@ class SupernotifyOverviewCard extends HTMLElement {
       const prio = n.priority
         ? `<span class="badge" style="background:${p.soft};color:${prioCol || p.muted}">${esc(n.priority)}</span>`
         : "";
-      const ch = +n.delivered > 0 ? `<span class="badge b-off">${n.delivered} channel${n.delivered > 1 ? "s" : ""}</span>` : "";
+      const ch = +n.delivered > 0 ? `<span class="badge b-off">${n.delivered} ${T.channels}</span>` : "";
       lastEl.innerHTML = `<div class="t">${when}</div><div>${msg}</div>
-        <div style="margin-top:5px">${prio}<span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ delivered" : "✖ " + n.failed + " failed"}</span>${ch}</div>`;
+        <div style="margin-top:5px">${prio}<span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ " + T.delivered : "✖ " + n.failed + " " + T.failed}</span>${ch}</div>`;
     } else {
       lastEl.textContent = "—";
     }
 
     this.shadowRoot.getElementById("scen").innerHTML = act && act.length
       ? act.map((s) => `<span class="chip">🎬 ${esc(s)}</span>`).join("")
-      : `<span class="badge b-off">none</span>`;
+      : `<span class="badge b-off">${T.none}</span>`;
 
     const trs = this._scan("transport");
     this.shadowRoot.getElementById("transports").innerHTML = trs.length
       ? trs.map((t) =>
           `<div class="row"><div>${esc(t.name)}</div><span class="badge ${t.state === "on" ? "b-ok" : "b-off"}">${t.state === "on" ? "ok" : "off"}</span></div>`
         ).join("")
-      : `<span class="badge b-off">no transport entities found</span>`;
+      : `<span class="badge b-off">${T.no_transports}</span>`;
   }
 }
 
@@ -750,17 +853,18 @@ class SupernotifyBandsCard extends HTMLElement {
     if (this._dragging) return;
     const bands = this._bands();
     const active = this._activeKey(bands);
+    const T = snT(this._config, this._hass);
     const rows = this.shadowRoot.getElementById("rows");
     rows.innerHTML = bands.map((b, i) => {
       const next = bands[(i + 1) % bands.length];
       const isAct = b.key === active;
       return `<div class="row ${isAct ? "act" : ""}">
-        <div class="who"><b>${b.icon} ${b.name}</b>${isAct ? ' <span class="badge">now</span>' : ""}
-          <div class="rng">${b.hhmm || "—"} → ${next.hhmm || "—"}${i === bands.length - 1 ? " · crosses midnight" : ""}</div>
+        <div class="who"><b>${b.icon} ${b.name}</b>${isAct ? ` <span class="badge">${T.now}</span>` : ""}
+          <div class="rng">${b.hhmm || "—"} → ${next.hhmm || "—"}${i === bands.length - 1 ? " · " + T.crosses : ""}</div>
         </div>
-        <div class="fld"><span class="k">start</span>
+        <div class="fld"><span class="k">${T.start}</span>
           <input type="time" value="${b.hhmm}" data-e="${b.start}"></div>
-        <div class="fld volwrap"><span class="k">volume <span data-l="${b.key}">${b.vol != null ? b.vol : "—"}</span>%</span>
+        <div class="fld volwrap"><span class="k">${T.volume} <span data-l="${b.key}">${b.vol != null ? b.vol : "—"}</span>%</span>
           <input type="range" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}"></div>
       </div>`;
     }).join("");
@@ -804,10 +908,10 @@ const SN_TRANSPORT_ICONS = {
   generic: "⚙️", notify_entity: "🔔", media: "📺", mqtt: "📡",
 };
 
-const SN_SELECTION_LABELS = {
-  default: "implicit", explicit: "explicit", scenario: "by scenario",
-  fallback: "fallback", fallback_on_error: "fallback on error",
-};
+function snSelectionLabel(sel, T) {
+  return { default: T.implicit, explicit: T.explicit, scenario: T.by_scenario,
+    fallback: T.fallback, fallback_on_error: T.fallback_err }[sel];
+}
 
 class SupernotifyDeliveriesCard extends HTMLElement {
   static getStubConfig() {
@@ -907,10 +1011,11 @@ class SupernotifyDeliveriesCard extends HTMLElement {
   _update() {
     if (!this.shadowRoot) return;
     const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const T = snT(this._config, this._hass);
     const dels = this._deliveries();
     const rows = this.shadowRoot.getElementById("rows");
     if (!dels.length) {
-      rows.innerHTML = `<span class="badge b-off">no delivery entities found</span>`;
+      rows.innerHTML = `<span class="badge b-off">${T.no_deliveries}</span>`;
       return;
     }
     rows.innerHTML = dels.map((d, i) => {
@@ -919,11 +1024,11 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       const tags = [];
       let sel = d.a.selection;
       if (Array.isArray(sel)) sel = sel.join(", ");
-      tags.push(`🔀 ${SN_SELECTION_LABELS[sel] || sel || "implicit"}`);
+      tags.push(`🔀 ${snSelectionLabel(sel, T) || sel || T.implicit}`);
       if (d.a.action) tags.push(`⚙️ ${d.a.action}`);
       const tgt = d.a.target;
       const nTgt = Array.isArray(tgt) ? tgt.length : tgt && typeof tgt === "object" ? Object.keys(tgt).length : tgt ? 1 : 0;
-      if (nTgt) tags.push(`🎯 ${nTgt} fixed target${nTgt > 1 ? "s" : ""}`);
+      if (nTgt) tags.push(`🎯 ${nTgt} ${T.fixed_targets}`);
       if (d.a.target_usage && d.a.target_usage !== "no_action") tags.push(`↔️ ${d.a.target_usage}`);
       const alias = d.a.friendly_name && d.a.friendly_name !== d.name ? d.a.friendly_name : "";
       return `<div class="row" data-i="${i}">
@@ -931,7 +1036,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
         <div class="mid"><b>${esc(d.name)}</b> <span class="tr">${esc(tr)}${alias ? " · " + esc(alias) : ""}</span>
           <div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
         </div>
-        <span class="badge ${d.on ? "b-on" : "b-off"}">${d.on ? "enabled" : "off"}</span>
+        <span class="badge ${d.on ? "b-on" : "b-off"}">${d.on ? T.enabled : T.off}</span>
       </div>`;
     }).join("");
     rows.querySelectorAll(".row").forEach((node) => {
@@ -1050,10 +1155,11 @@ class SupernotifyRecipientsCard extends HTMLElement {
   _update() {
     if (!this.shadowRoot) return;
     const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const T = snT(this._config, this._hass);
     const recs = this._recipients();
     const rows = this.shadowRoot.getElementById("rows");
     if (!recs.length) {
-      rows.innerHTML = `<span class="badge b-off">no recipient entities found</span>`;
+      rows.innerHTML = `<span class="badge b-off">${T.no_recipients}</span>`;
       return;
     }
     rows.innerHTML = recs.map((r, i) => {
@@ -1064,18 +1170,18 @@ class SupernotifyRecipientsCard extends HTMLElement {
       if (r.a.email) tags.push(`✉️ ${r.a.email}`);
       if (r.a.phone_number) tags.push(`💬 ${r.a.phone_number}`);
       const nDev = Array.isArray(r.a.mobile_devices) ? r.a.mobile_devices.length : 0;
-      if (nDev) tags.push(`📱 ${nDev} device${nDev > 1 ? "s" : ""}`);
+      if (nDev) tags.push(`📱 ${nDev} ${T.devices}`);
       const nOvr = r.a.delivery && typeof r.a.delivery === "object" ? Object.keys(r.a.delivery).length : 0;
-      if (nOvr) tags.push(`🔗 ${nOvr} delivery override${nOvr > 1 ? "s" : ""}`);
-      if (!tags.length) tags.push(`<span class="tag warn">⚠️ no contact points</span>`);
+      if (nOvr) tags.push(`🔗 ${nOvr} ${T.overrides}`);
+      if (!tags.length) tags.push(`<span class="tag warn">⚠️ ${T.no_contact}</span>`);
       const alias = r.a.friendly_name && r.a.friendly_name !== r.name ? r.a.friendly_name : "";
       return `<div class="row" data-i="${i}">
         <span class="em">👤</span>
         <div class="mid"><b>${esc(alias || r.name)}</b>
-          <span class="sub">${esc(personId || "")}${pState !== undefined ? (home ? " · 🏠 home" : " · 🚗 away") : ""}</span>
+          <span class="sub">${esc(personId || "")}${pState !== undefined ? (home ? " · 🏠 " + T.home : " · 🚗 " + T.away) : ""}</span>
           <div class="tags">${tags.map((t) => t.startsWith("<span") ? t : `<span class="tag">${esc(t)}</span>`).join("")}</div>
         </div>
-        <span class="badge ${r.on ? "b-on" : "b-off"}">${r.on ? "enabled" : "off"}</span>
+        <span class="badge ${r.on ? "b-on" : "b-off"}">${r.on ? T.enabled : T.off}</span>
       </div>`;
     }).join("");
     rows.querySelectorAll(".row").forEach((node) => {
@@ -1234,6 +1340,7 @@ class SupernotifyScenariosCard extends HTMLElement {
 
   _rowHtml(s, i, active) {
     const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const T = snT(this._config, this._hass);
     const isAct = active.includes(s.name);
     const em = SN_SCENARIO_ICONS[s.name] || "🎬";
     const tags = [];
@@ -1245,7 +1352,7 @@ class SupernotifyScenariosCard extends HTMLElement {
     if (dels.length > 6) tags.push(`<span class="tag">+${dels.length - 6}</span>`);
     const ags = Array.isArray(s.a.action_groups) ? s.a.action_groups : [];
     if (ags.length) tags.push(`<span class="tag">🔘 ${esc(ags.join(", "))}</span>`);
-    if (s.a.media) tags.push(`<span class="tag">📷 media</span>`);
+    if (s.a.media) tags.push(`<span class="tag">📷 ${T.media}</span>`);
     const alias = s.a.friendly_name && s.a.friendly_name !== s.name ? s.a.friendly_name : "";
     return `<div class="row ${isAct ? "act" : ""}" data-i="${i}">
       <span class="em">${em}</span>
@@ -1253,8 +1360,8 @@ class SupernotifyScenariosCard extends HTMLElement {
         ${alias ? `<span style="font-size:11px;color:inherit;opacity:.6"> · ${esc(s.name)}</span>` : ""}
         <div class="tags">${tags.join("")}</div>
       </div>
-      ${isAct ? `<span class="badge b-act">active now</span>` : ""}
-      ${s.a.enabled === false ? `<span class="badge b-dis">disabled</span>` : ""}
+      ${isAct ? `<span class="badge b-act">${T.active_now}</span>` : ""}
+      ${s.a.enabled === false ? `<span class="badge b-dis">${T.disabled}</span>` : ""}
     </div>`;
   }
 
@@ -1264,7 +1371,7 @@ class SupernotifyScenariosCard extends HTMLElement {
     const active = this._active || [];
     const rows = this.shadowRoot.getElementById("rows");
     if (!all.length) {
-      rows.innerHTML = `<span class="tag">no scenario entities found</span>`;
+      rows.innerHTML = `<span class="tag">${snT(this._config, this._hass).no_scenarios}</span>`;
       return;
     }
     const sortFn = (x, y) => {
@@ -1285,7 +1392,7 @@ class SupernotifyScenariosCard extends HTMLElement {
       }
       const rest = all.filter((s) => !used.has(s.name)).sort(sortFn);
       if (rest.length)
-        html += `<div class="sec">Other</div>` +
+        html += `<div class="sec">${snT(this._config, this._hass).other}</div>` +
           rest.map((s) => this._rowHtml(s, all.indexOf(s), active)).join("");
     } else {
       html = all.slice().sort(sortFn).map((s) => this._rowHtml(s, all.indexOf(s), active)).join("");
@@ -1410,13 +1517,11 @@ class SupernotifySimulatorCard extends HTMLElement {
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
-        ${snIntro(this._config, this._dark)}<div class="sec">🎬 Scenarios — tap to simulate</div>
+        ${snIntro(this._config, this._dark)}<div class="sec">${snT(this._config, this._hass).sim_pick}</div>
         <div id="chips"></div>
-        <div class="sec">📤 Deliveries that would fire</div>
+        <div class="sec">${snT(this._config, this._hass).sim_fire}</div>
         <div id="result">—</div>
-        <div class="hint">Real engine data (enquire services). Priority-based delivery
-          filtering happens engine-side and is not simulated here. Disabled wins
-          over enabled, like the runtime merge.</div>
+        <div class="hint">${snT(this._config, this._hass).sim_hint}</div>
         <div class="ver">supernotify-simulator-card v${VERSION}</div>
       </ha-card>`;
     this._refresh();
@@ -1454,8 +1559,8 @@ class SupernotifySimulatorCard extends HTMLElement {
       fired.map((d) =>
         `<span class="out">${esc(d)}${byScenAdd.has(d) && !(this._implicit || []).includes(d) ? ' <span class="tag">scenario</span>' : ""}</span>`
       ).join("") +
-      suppressed.map((d) => `<span class="out sup">${esc(d)} <span class="tag">off</span></span>`).join("") ||
-      "<span class='hint'>no deliveries would fire</span>";
+      suppressed.map((d) => `<span class="out sup">${esc(d)} <span class="tag">${snT(this._config, this._hass).off}</span></span>`).join("") ||
+      `<span class='hint'>${snT(this._config, this._hass).sim_none}</span>`;
   }
 }
 
@@ -1482,6 +1587,7 @@ class SupernotifyComposerCard extends HTMLElement {
     this._config = { style: "supernotify", ...(config || {}) };
     this._rendered = false;
     this._picked = new Set();
+    this._pickedRec = new Set();
   }
 
   set hass(hass) {
@@ -1526,6 +1632,7 @@ class SupernotifyComposerCard extends HTMLElement {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
+    const T = snT(this._config, this._hass);
     const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
     this.shadowRoot.innerHTML = `
       <style>
@@ -1566,33 +1673,37 @@ class SupernotifyComposerCard extends HTMLElement {
       <ha-card style="position:relative">
         ${snIntro(this._config, this._dark)}<div class="grid2">
           <div>
-            <label>Title</label>
+            <label>${T.title}</label>
             <input type="text" id="t" placeholder="🧪 Test">
-            <label>Message</label>
-            <textarea id="m" rows="3" placeholder="Message text…"></textarea>
-            <label>Priority</label>
+            <label>${T.message}</label>
+            <textarea id="m" rows="3" placeholder="…"></textarea>
+            <label>${T.priority}</label>
             <select id="p">
-              <option value="">default (medium)</option>
+              <option value="">${T.default_prio}</option>
               <option value="minimum">minimum</option>
               <option value="low">low</option>
               <option value="medium">medium</option>
               <option value="high">high</option>
               <option value="critical">critical ⚠️</option>
             </select>
-            <label>Channels — none picked = normal routing</label>
+            <label>${T.channels_lbl}</label>
             <div id="chips">${this._deliveryNames().map((d) => `<span class="chip" data-d="${esc(d)}">${esc(d)}</span>`).join("")}</div>
-            <button class="send" id="send">🚀 Send</button>
+            <label>${T.recipients_lbl}</label>
+            <div id="recChips">${this._recipientNames().map((r) => `<span class="chip" data-r="${esc(r.person)}">👤 ${esc(r.name)}</span>`).join("")}</div>
+            <label>${T.camera_lbl}</label>
+            <select id="cam"><option value="">${T.none}</option>${this._cameraNames().map((c) => `<option value="${esc(c)}">📷 ${esc(c)}</option>`).join("")}</select>
+            <button class="send" id="send">🚀 ${T.send}</button>
           </div>
           <div>
-            <label>Preview</label>
+            <label>${T.preview}</label>
             <div class="phone"><div class="notif">
               <div class="pstrip" id="pvStrip"></div>
               <div class="napp">🔔 SuperNotify</div>
-              <div class="ntit" id="pvT">(no title)</div>
-              <div class="nmsg" id="pvM">(no message)</div>
+              <div class="ntit" id="pvT">${T.no_title}</div>
+              <div class="nmsg" id="pvM">${T.no_message}</div>
+              <div class="nmsg" id="pvC" style="display:none"></div>
             </div></div>
-            <div class="hint">Picked channels are sent with delivery_selection: fixed
-              (only those fire). Critical really is critical — sirens included.</div>
+            <div class="hint">${T.comp_hint}</div>
           </div>
         </div>
         <div class="toast" id="toast"></div>
@@ -1600,32 +1711,63 @@ class SupernotifyComposerCard extends HTMLElement {
       </ha-card>`;
     const sr = this.shadowRoot;
     const upd = () => {
-      sr.getElementById("pvT").textContent = sr.getElementById("t").value || "(no title)";
-      sr.getElementById("pvM").textContent = sr.getElementById("m").value || "(no message)";
+      sr.getElementById("pvT").textContent = sr.getElementById("t").value || T.no_title;
+      sr.getElementById("pvM").textContent = sr.getElementById("m").value || T.no_message;
       const pr = sr.getElementById("p").value;
       sr.getElementById("pvStrip").style.background =
         { critical: p.crit, high: p.warn, low: p.muted, minimum: p.muted }[pr] || p.brand;
+      const cam = sr.getElementById("cam").value;
+      const pvC = sr.getElementById("pvC");
+      pvC.style.display = cam ? "" : "none";
+      pvC.textContent = cam ? "📷 " + cam : "";
     };
     sr.getElementById("t").addEventListener("input", upd);
     sr.getElementById("m").addEventListener("input", upd);
     sr.getElementById("p").addEventListener("change", upd);
-    sr.querySelectorAll(".chip").forEach((node) => {
+    sr.getElementById("cam").addEventListener("change", upd);
+    sr.querySelectorAll("#chips .chip").forEach((node) => {
       node.onclick = () => {
         const d = node.dataset.d;
         if (this._picked.has(d)) this._picked.delete(d); else this._picked.add(d);
         node.classList.toggle("sel", this._picked.has(d));
       };
     });
+    sr.querySelectorAll("#recChips .chip").forEach((node) => {
+      node.onclick = () => {
+        const r = node.dataset.r;
+        if (this._pickedRec.has(r)) this._pickedRec.delete(r); else this._pickedRec.add(r);
+        node.classList.toggle("sel", this._pickedRec.has(r));
+      };
+    });
     sr.getElementById("send").onclick = () => this._send();
+  }
+
+  _recipientNames() {
+    // From the recipient entities SuperNotify exposes: person entity + label.
+    const out = [];
+    if (!this._hass) return out;
+    for (const id of Object.keys(this._hass.states)) {
+      const m = id.match(/^[a-z_]+\.supernotify_recipient_(.+)$/);
+      if (!m) continue;
+      const a = this._hass.states[id].attributes || {};
+      if (a.entity_id) out.push({ person: a.entity_id, name: a.friendly_name || m[1] });
+    }
+    return out.sort((x, y) => x.name.localeCompare(y.name));
+  }
+
+  _cameraNames() {
+    if (!this._hass) return [];
+    return Object.keys(this._hass.states).filter((e) => e.startsWith("camera.")).sort();
   }
 
   _send() {
     const sr = this.shadowRoot;
+    const T = snT(this._config, this._hass);
     const message = (sr.getElementById("m").value || "").trim();
-    if (!message) { this._toast("Write a message first"); return; }
+    if (!message) { this._toast(T.write_first); return; }
     const title = (sr.getElementById("t").value || "").trim();
     const priority = sr.getElementById("p").value;
-    if (priority === "critical" && !confirm("Send a CRITICAL notification? Sirens and max volume included."))
+    if (priority === "critical" && !confirm(T.critical_confirm))
       return;
     const data = {};
     if (priority) data.priority = priority;
@@ -1634,11 +1776,14 @@ class SupernotifyComposerCard extends HTMLElement {
       data.delivery = {};
       for (const d of this._picked) data.delivery[d] = {};
     }
+    const cam = sr.getElementById("cam").value;
+    if (cam) data.media = { camera_entity_id: cam };
     const payload = { message };
     if (title) payload.title = title;
+    if (this._pickedRec.size) payload.target = [...this._pickedRec];
     if (Object.keys(data).length) payload.data = data;
     this._hass.callService("notify", "supernotify", payload);
-    this._toast("Sent 🚀");
+    this._toast(T.sent_toast);
   }
 
   _toast(msg) {
