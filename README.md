@@ -116,3 +116,16 @@ bands:                   # config order = chronological order (cyclic)
   late_night:    {start: input_datetime.notifier_start_late_night,    volume: input_number.notifier_late_night_volume}
 # per band, optional: name and icon (emoji); defaults provided for the six standard bands
 ```
+
+## supernotify-deliveries-card
+
+Delivery dashboard, auto-discovered from the entities SuperNotify exposes:
+transport icon, selection/action/target tags, enabled badge. Tap a row for
+the full delivery attributes.
+
+```yaml
+type: custom:supernotify-deliveries-card
+# optional:
+hide_defaults: true     # hide auto-generated DEFAULT_* deliveries (default true)
+style: theme
+```

@@ -3,6 +3,16 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] - 2026-07-03
+
+### Added
+- **New card: `supernotify-deliveries-card`** (same bundle). Delivery
+  dashboard that auto-discovers the delivery entities SuperNotify exposes:
+  transport icon, name and alias, selection/action/fixed-target/target_usage
+  tags, enabled badge, enabled-first sorting. Tap a row for the full
+  attributes (more-info dialog). `hide_defaults` option (default true)
+  filters out the auto-generated `DEFAULT_*` deliveries.
+
 ## [0.3.0] - 2026-07-03
 
 ### Added

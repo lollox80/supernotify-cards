@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -765,6 +765,164 @@ window.customCards.push({
   type: "supernotify-bands-card",
   name: "SuperNotify Bands Card",
   description: "Time bands editor: one row per band with active badge, inline start time and volume slider.",
+});
+
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-deliveries-card — delivery dashboard
+ * Auto-discovers the delivery entities SuperNotify exposes and renders
+ * them prototype-style: transport icon, name, selection/action/target
+ * tags and enabled badge. Tap a row for the full attributes (more-info).
+ * ════════════════════════════════════════════════════════════════════════ */
+
+const SN_TRANSPORT_ICONS = {
+  mobile_push: "📱", telegram: "✈️", alexa_media_player: "🗣️", alexa_devices: "🗣️",
+  google_cast: "📺", pushover: "🔔", email: "✉️", ntfy: "📢", gotify: "📨",
+  lametric: "🕹️", chime: "🎵", persistent: "📌", sms: "💬", tts: "🗣️",
+  generic: "⚙️", notify_entity: "🔔", media: "📺", mqtt: "📡",
+};
+
+const SN_SELECTION_LABELS = {
+  default: "implicit", explicit: "explicit", scenario: "by scenario",
+  fallback: "fallback", fallback_on_error: "fallback on error",
+};
+
+class SupernotifyDeliveriesCard extends HTMLElement {
+  static getStubConfig() {
+    return { hide_defaults: true };
+  }
+
+  setConfig(config) {
+    if (!config) throw new Error("Invalid configuration");
+    this._config = { hide_defaults: true, style: "supernotify", ...config };
+    this._rendered = false;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._rendered || wasDark !== this._dark) this._render();
+    else this._update();
+  }
+
+  getCardSize() {
+    return 8;
+  }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return {
+        brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", line: "var(--divider-color)",
+        panel: "var(--card-background-color)", soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
+      };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", line: "#2b3441",
+          panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", line: "#e3e9f0",
+          panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  _deliveries() {
+    const out = [];
+    if (!this._hass) return out;
+    for (const id of Object.keys(this._hass.states)) {
+      const m = id.match(/^[a-z_]+\.supernotify_delivery_(.+)$/);
+      if (!m) continue;
+      const name = m[1];
+      if (this._config.hide_defaults && /^default_/i.test(name)) continue;
+      const s = this._hass.states[id];
+      out.push({ id, name, on: s.state === "on", a: s.attributes || {} });
+    }
+    // enabled first, then alphabetical — like the prototype list
+    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
+    return out;
+  }
+
+  _moreInfo(entityId) {
+    this.dispatchEvent(new CustomEvent("hass-more-info", {
+      detail: { entityId }, bubbles: true, composed: true,
+    }));
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px;
+               border-bottom: 1px solid ${p.line}; cursor: pointer; border-radius: 8px; }
+        .row:hover { background: ${p.soft}; }
+        .row:last-child { border-bottom: 0; }
+        .em { font-size: 22px; flex-shrink: 0; }
+        .mid { flex: 1; min-width: 0; }
+        .mid b { font-size: 14px; }
+        .mid .tr { font-size: 11.5px; color: ${p.muted}; }
+        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
+               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750;
+                 flex-shrink: 0; }
+        .b-on { background: rgba(46,158,91,.14); color: ${p.ok}; }
+        .b-off { background: ${p.soft}; color: ${p.muted}; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+      </style>
+      <ha-card>
+        <div id="rows"></div>
+        <div class="ver">supernotify-deliveries-card v${VERSION}</div>
+      </ha-card>`;
+    this._update();
+  }
+
+  _update() {
+    if (!this.shadowRoot) return;
+    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const dels = this._deliveries();
+    const rows = this.shadowRoot.getElementById("rows");
+    if (!dels.length) {
+      rows.innerHTML = `<span class="badge b-off">no delivery entities found</span>`;
+      return;
+    }
+    rows.innerHTML = dels.map((d, i) => {
+      const tr = d.a.transport || "";
+      const em = SN_TRANSPORT_ICONS[tr] || "📤";
+      const tags = [];
+      let sel = d.a.selection;
+      if (Array.isArray(sel)) sel = sel.join(", ");
+      tags.push(`🔀 ${SN_SELECTION_LABELS[sel] || sel || "implicit"}`);
+      if (d.a.action) tags.push(`⚙️ ${d.a.action}`);
+      const tgt = d.a.target;
+      const nTgt = Array.isArray(tgt) ? tgt.length : tgt && typeof tgt === "object" ? Object.keys(tgt).length : tgt ? 1 : 0;
+      if (nTgt) tags.push(`🎯 ${nTgt} fixed target${nTgt > 1 ? "s" : ""}`);
+      if (d.a.target_usage && d.a.target_usage !== "no_action") tags.push(`↔️ ${d.a.target_usage}`);
+      const alias = d.a.friendly_name && d.a.friendly_name !== d.name ? d.a.friendly_name : "";
+      return `<div class="row" data-i="${i}">
+        <span class="em">${em}</span>
+        <div class="mid"><b>${esc(d.name)}</b> <span class="tr">${esc(tr)}${alias ? " · " + esc(alias) : ""}</span>
+          <div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+        </div>
+        <span class="badge ${d.on ? "b-on" : "b-off"}">${d.on ? "enabled" : "off"}</span>
+      </div>`;
+    }).join("");
+    rows.querySelectorAll(".row").forEach((node) => {
+      node.onclick = () => this._moreInfo(dels[+node.dataset.i].id);
+    });
+  }
+}
+
+customElements.define("supernotify-deliveries-card", SupernotifyDeliveriesCard);
+
+window.customCards.push({
+  type: "supernotify-deliveries-card",
+  name: "SuperNotify Deliveries Card",
+  description: "Delivery dashboard: auto-discovered rows with transport icon, selection/action/target tags and enabled badge.",
 });
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");
