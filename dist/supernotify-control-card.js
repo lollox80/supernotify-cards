@@ -359,19 +359,22 @@ class SupernotifyControlCard extends HTMLElement {
       <ha-card>
         ${snIntro(this._config, this._dark)}<div class="statusbar" id="statusbar"></div>
         <div class="tiles" id="tiles"></div>
-        <div class="announce" id="announceRow">
+        ${(this._config.tiles || []).includes("announce") ? `<div class="announce" id="announceRow">
           <ha-icon icon="mdi:bullhorn"></ha-icon>
           <input id="announceInput" placeholder="${snT(this._config, this._hass).announce_ph}">
           <button id="announceBtn">${snT(this._config, this._hass).send}</button>
-        </div>
+        </div>` : ""}
         <div id="groups"></div>
         <div class="ver">supernotify-control-card v${VERSION}</div>
         <div class="toast" id="toast"></div>
       </ha-card>`;
-    this.shadowRoot.getElementById("announceBtn").addEventListener("click", () => this._announce());
-    this.shadowRoot.getElementById("announceInput").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") this._announce();
-    });
+    const abtn = this.shadowRoot.getElementById("announceBtn");
+    if (abtn) {
+      abtn.addEventListener("click", () => this._announce());
+      this.shadowRoot.getElementById("announceInput").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") this._announce();
+      });
+    }
     this._update();
   }
 
@@ -408,7 +411,9 @@ class SupernotifyControlCard extends HTMLElement {
     }
     const act = this._activeScenarios();
     if (act !== null) segs.push(seg("🎬 " + T.act_scen, String(act.length)));
-    this.shadowRoot.getElementById("statusbar").innerHTML = segs.join("");
+    const bar = this.shadowRoot.getElementById("statusbar");
+    bar.innerHTML = segs.join("");
+    bar.style.display = segs.length ? "" : "none";
   }
 
   _icon(ic) {

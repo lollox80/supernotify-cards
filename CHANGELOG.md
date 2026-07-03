@@ -3,6 +3,15 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.1] - 2026-07-04
+
+### Changed
+- Control card can now be used as a **modes-only board**: with
+  `tiles: []` the intercom row is hidden (it renders only when the
+  `announce` tile is configured) and the status bar hides itself when it
+  has nothing to show. Useful for a dedicated "house modes" view with
+  just grouped toggles.
+
 ## [0.9.0] - 2026-07-04
 
 ### Added
