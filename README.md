@@ -5,6 +5,10 @@ Lovelace cards for [SuperNotify](https://github.com/rhizomatics/supernotify).
 See [CHANGELOG.md](CHANGELOG.md) for release notes. The loaded version is
 shown on the card footer.
 
+All cards accept two common options: `style: theme` (follow the HA theme
+instead of the SuperNotify palette) and `intro: <text>` (HTML allowed),
+which renders an info banner at the top of the card.
+
 ## supernotify-control-card
 
 Touch-first control center: status bar, big quick-action tiles and grouped

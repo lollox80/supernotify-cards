@@ -8,7 +8,21 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.7.0";
+const VERSION = "0.8.0";
+
+/**
+ * Prototype-style intro banner, shared by every card.
+ * Set `intro: <text>` (HTML allowed) in the card config to render it.
+ */
+function snIntro(config, dark) {
+  if (!config || !config.intro) return "";
+  const bg = dark ? "#14212e" : "#eef6fd";
+  const bd = dark ? "#26384a" : "#cfe4f7";
+  const fg = dark ? "#8fd0ff" : "#23577e";
+  return `<div style="background:${bg};border:1px solid ${bd};color:${fg};
+    border-radius:12px;padding:10px 14px;font-size:12.5px;line-height:1.55;
+    margin-bottom:12px">${config.intro}</div>`;
+}
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -258,7 +272,7 @@ class SupernotifyControlCard extends HTMLElement {
         .toast.show { opacity: .95; transform: translateX(-50%) translateY(0); }
       </style>
       <ha-card>
-        <div class="statusbar" id="statusbar"></div>
+        ${snIntro(this._config, this._dark)}<div class="statusbar" id="statusbar"></div>
         <div class="tiles" id="tiles"></div>
         <div class="announce" id="announceRow">
           <ha-icon icon="mdi:bullhorn"></ha-icon>
@@ -529,7 +543,7 @@ class SupernotifyOverviewCard extends HTMLElement {
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 10px; }
       </style>
       <ha-card>
-        <div class="stats" id="stats"></div>
+        ${snIntro(this._config, this._dark)}<div class="stats" id="stats"></div>
         <div class="sec">Last notification</div>
         <div class="lastmsg" id="last">—</div>
         <div class="sec">Active scenarios</div>
@@ -724,7 +738,7 @@ class SupernotifyBandsCard extends HTMLElement {
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
-        <div id="rows"></div>
+        ${snIntro(this._config, this._dark)}<div id="rows"></div>
         <div class="ver">supernotify-bands-card v${VERSION}</div>
       </ha-card>`;
     this._update();
@@ -884,7 +898,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
-        <div id="rows"></div>
+        ${snIntro(this._config, this._dark)}<div id="rows"></div>
         <div class="ver">supernotify-deliveries-card v${VERSION}</div>
       </ha-card>`;
     this._update();
@@ -1027,7 +1041,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
-        <div id="rows"></div>
+        ${snIntro(this._config, this._dark)}<div id="rows"></div>
         <div class="ver">supernotify-recipients-card v${VERSION}</div>
       </ha-card>`;
     this._update();
@@ -1212,7 +1226,7 @@ class SupernotifyScenariosCard extends HTMLElement {
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
-        <div id="rows"></div>
+        ${snIntro(this._config, this._dark)}<div id="rows"></div>
         <div class="ver">supernotify-scenarios-card v${VERSION}</div>
       </ha-card>`;
     this._update();
@@ -1396,7 +1410,7 @@ class SupernotifySimulatorCard extends HTMLElement {
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
-        <div class="sec">🎬 Scenarios — tap to simulate</div>
+        ${snIntro(this._config, this._dark)}<div class="sec">🎬 Scenarios — tap to simulate</div>
         <div id="chips"></div>
         <div class="sec">📤 Deliveries that would fire</div>
         <div id="result">—</div>
@@ -1550,7 +1564,7 @@ class SupernotifyComposerCard extends HTMLElement {
         .toast.show { opacity: .95; }
       </style>
       <ha-card style="position:relative">
-        <div class="grid2">
+        ${snIntro(this._config, this._dark)}<div class="grid2">
           <div>
             <label>Title</label>
             <input type="text" id="t" placeholder="🧪 Test">

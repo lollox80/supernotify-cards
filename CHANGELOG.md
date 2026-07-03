@@ -3,6 +3,14 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0] - 2026-07-04
+
+### Added
+- **`intro` option on every card**: renders a prototype-style info banner
+  at the top of the card with the text (HTML allowed) from the config.
+  Lets dashboards carry the explanatory copy of the SuperNotify prototype
+  in any language without hard-coding strings in the cards.
+
 ## [0.7.0] - 2026-07-04
 
 ### Added
