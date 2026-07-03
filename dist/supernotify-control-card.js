@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.6.0";
+const VERSION = "0.7.0";
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -1289,6 +1289,359 @@ window.customCards.push({
   type: "supernotify-scenarios-card",
   name: "SuperNotify Scenarios Card",
   description: "Scenarios dashboard: active-now badge, per-delivery override tags, optional category groups.",
+});
+
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-simulator-card — "who receives?" simulator
+ * Pick scenarios (pre-selected with the ones active right now) and see
+ * which deliveries would fire, using the REAL engine data:
+ * enquire_implicit_deliveries (baseline) + enquire_deliveries_by_scenario
+ * (per-scenario enabled/disabled). Disabled wins over enabled, matching
+ * the engine merge semantics.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+class SupernotifySimulatorCard extends HTMLElement {
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { style: "supernotify", ...(config || {}) };
+    this._rendered = false;
+    this._sel = null;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._rendered || wasDark !== this._dark) this._render();
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  connectedCallback() {
+    this._refresh();
+  }
+
+  async _ws(service) {
+    const r = await this._hass.callWS({
+      type: "call_service", domain: "supernotify", service,
+      service_data: {}, return_response: true,
+    });
+    return (r && r.response) || {};
+  }
+
+  async _refresh() {
+    if (!this._hass) return;
+    try {
+      const [act, byScen, impl] = await Promise.all([
+        this._ws("enquire_active_scenarios"),
+        this._ws("enquire_deliveries_by_scenario"),
+        this._ws("enquire_implicit_deliveries"),
+      ]);
+      this._byScen = byScen || {};
+      this._implicit = [];
+      for (const names of Object.values(impl || {})) {
+        if (Array.isArray(names)) this._implicit.push(...names);
+      }
+      if (this._sel === null) this._sel = new Set(act.scenarios || []);
+      this._simulate();
+    } catch (e) { /* supernotify may still be loading */ }
+  }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return { brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", crit: "var(--error-color, #e23c3c)",
+        line: "var(--divider-color)", panel: "var(--card-background-color)",
+        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)" };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", crit: "#ff9a9a",
+          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", crit: "#c62828",
+          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+               font-weight: 800; color: ${p.muted}; margin: 12px 0 7px; }
+        .sec:first-child { margin-top: 0; }
+        .chip { display: inline-flex; align-items: center; gap: 5px;
+                border: 1.5px solid ${p.line}; background: ${p.panel};
+                border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 650;
+                cursor: pointer; margin: 0 5px 6px 0; user-select: none; }
+        .chip.sel { background: ${p.brand}; border-color: ${p.brand}; color: #fff; }
+        .out { display: inline-flex; align-items: center; gap: 6px;
+               border: 1.5px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
+               border-radius: 999px; padding: 6px 13px; font-size: 12.5px; font-weight: 700;
+               margin: 0 6px 6px 0; }
+        .out .tag { font-size: 10px; font-weight: 800; text-transform: uppercase;
+                    color: ${p.ok}; }
+        .out.sup { opacity: .55; text-decoration: line-through; color: ${p.crit}; }
+        .out.sup .tag { color: ${p.crit}; text-decoration: none; }
+        .hint { font-size: 11.5px; color: ${p.muted}; margin-top: 8px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+      </style>
+      <ha-card>
+        <div class="sec">🎬 Scenarios — tap to simulate</div>
+        <div id="chips"></div>
+        <div class="sec">📤 Deliveries that would fire</div>
+        <div id="result">—</div>
+        <div class="hint">Real engine data (enquire services). Priority-based delivery
+          filtering happens engine-side and is not simulated here. Disabled wins
+          over enabled, like the runtime merge.</div>
+        <div class="ver">supernotify-simulator-card v${VERSION}</div>
+      </ha-card>`;
+    this._refresh();
+  }
+
+  _simulate() {
+    if (!this.shadowRoot) return;
+    const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const chips = this.shadowRoot.getElementById("chips");
+    const names = Object.keys(this._byScen || {}).sort();
+    chips.innerHTML = names.map((n) =>
+      `<span class="chip ${this._sel.has(n) ? "sel" : ""}" data-n="${esc(n)}">${SN_SCENARIO_ICONS[n] || "🎬"} ${esc(n)}</span>`
+    ).join("") || "—";
+    chips.querySelectorAll(".chip").forEach((node) => {
+      node.onclick = () => {
+        const n = node.dataset.n;
+        if (this._sel.has(n)) this._sel.delete(n); else this._sel.add(n);
+        this._simulate();
+      };
+    });
+
+    const enabled = new Set(this._implicit || []);
+    const byScenAdd = new Set();
+    const disabled = new Set();
+    for (const n of this._sel) {
+      const s = this._byScen[n];
+      if (!s) continue;
+      (s.enabled || []).forEach((d) => { enabled.add(d); byScenAdd.add(d); });
+      (s.disabled || []).forEach((d) => disabled.add(d));
+    }
+    const fired = [...enabled].filter((d) => !disabled.has(d)).sort();
+    const suppressed = [...enabled].filter((d) => disabled.has(d)).sort();
+    const res = this.shadowRoot.getElementById("result");
+    res.innerHTML =
+      fired.map((d) =>
+        `<span class="out">${esc(d)}${byScenAdd.has(d) && !(this._implicit || []).includes(d) ? ' <span class="tag">scenario</span>' : ""}</span>`
+      ).join("") +
+      suppressed.map((d) => `<span class="out sup">${esc(d)} <span class="tag">off</span></span>`).join("") ||
+      "<span class='hint'>no deliveries would fire</span>";
+  }
+}
+
+customElements.define("supernotify-simulator-card", SupernotifySimulatorCard);
+
+window.customCards.push({
+  type: "supernotify-simulator-card",
+  name: "SuperNotify Simulator Card",
+  description: "Who receives? Pick scenarios and see which deliveries would fire, from real engine data.",
+});
+
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-composer-card — try & send
+ * Free-form composer: title, message, priority, optional explicit delivery
+ * chips, live phone preview, send via notify.supernotify.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+class SupernotifyComposerCard extends HTMLElement {
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { style: "supernotify", ...(config || {}) };
+    this._rendered = false;
+    this._picked = new Set();
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._rendered || wasDark !== this._dark) this._render();
+  }
+
+  getCardSize() {
+    return 8;
+  }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return { brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color)",
+        crit: "var(--error-color, #e23c3c)",
+        line: "var(--divider-color)", panel: "var(--card-background-color)",
+        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)" };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", warn: "#f0a020", crit: "#ff9a9a",
+          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#f0a020", crit: "#e23c3c",
+          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  _deliveryNames() {
+    const out = [];
+    if (!this._hass) return out;
+    for (const id of Object.keys(this._hass.states)) {
+      const m = id.match(/^[a-z_]+\.supernotify_delivery_(.+)$/);
+      if (m && !/^default_/i.test(m[1])) out.push(m[1]);
+    }
+    return out.sort();
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .grid2 { display: grid; grid-template-columns: 1fr 220px; gap: 16px; }
+        @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+        label { display: block; font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+                font-weight: 800; color: ${p.muted}; margin: 10px 0 4px; }
+        label:first-child { margin-top: 0; }
+        input[type=text], textarea, select { width: 100%; box-sizing: border-box;
+          border: 1.5px solid ${p.line}; border-radius: 10px; padding: 9px 11px;
+          font-size: 13.5px; background: ${p.panel}; color: ${p.ink}; font-family: inherit; }
+        input:focus, textarea:focus, select:focus { outline: none; border-color: ${p.brand}; }
+        .chip { display: inline-flex; border: 1.5px solid ${p.line}; background: ${p.panel};
+                border-radius: 999px; padding: 5px 11px; font-size: 11.5px; font-weight: 650;
+                cursor: pointer; margin: 0 5px 5px 0; user-select: none; }
+        .chip.sel { background: ${p.brand}; border-color: ${p.brand}; color: #fff; }
+        .send { border: 0; border-radius: 10px; background: ${p.brand}; color: #fff;
+                font-weight: 750; padding: 11px 20px; cursor: pointer; font-size: 13.5px;
+                margin-top: 14px; }
+        .send:active { transform: scale(.97); }
+        .phone { border: 1.5px solid ${p.line}; border-radius: 18px; padding: 12px;
+                 background: ${this._dark ? "#10161e" : "#f4f7fa"}; }
+        .notif { background: ${p.panel}; border-radius: 12px; padding: 10px 12px;
+                 box-shadow: 0 1px 4px rgba(16,42,67,.12); }
+        .pstrip { height: 3px; border-radius: 3px; margin-bottom: 7px; background: ${p.brand}; }
+        .napp { font-size: 10.5px; color: ${p.muted}; font-weight: 700; }
+        .ntit { font-size: 13px; font-weight: 750; margin-top: 3px; }
+        .nmsg { font-size: 12.5px; margin-top: 2px; color: ${p.ink}; }
+        .hint { font-size: 11px; color: ${p.muted}; margin-top: 6px; }
+        .toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+                 background: ${p.ink}; color: ${p.panel}; border-radius: 10px;
+                 padding: 8px 16px; font-size: 12.5px; font-weight: 650; opacity: 0;
+                 pointer-events: none; transition: .25s; }
+        .toast.show { opacity: .95; }
+      </style>
+      <ha-card style="position:relative">
+        <div class="grid2">
+          <div>
+            <label>Title</label>
+            <input type="text" id="t" placeholder="🧪 Test">
+            <label>Message</label>
+            <textarea id="m" rows="3" placeholder="Message text…"></textarea>
+            <label>Priority</label>
+            <select id="p">
+              <option value="">default (medium)</option>
+              <option value="minimum">minimum</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="critical">critical ⚠️</option>
+            </select>
+            <label>Channels — none picked = normal routing</label>
+            <div id="chips">${this._deliveryNames().map((d) => `<span class="chip" data-d="${esc(d)}">${esc(d)}</span>`).join("")}</div>
+            <button class="send" id="send">🚀 Send</button>
+          </div>
+          <div>
+            <label>Preview</label>
+            <div class="phone"><div class="notif">
+              <div class="pstrip" id="pvStrip"></div>
+              <div class="napp">🔔 SuperNotify</div>
+              <div class="ntit" id="pvT">(no title)</div>
+              <div class="nmsg" id="pvM">(no message)</div>
+            </div></div>
+            <div class="hint">Picked channels are sent with delivery_selection: fixed
+              (only those fire). Critical really is critical — sirens included.</div>
+          </div>
+        </div>
+        <div class="toast" id="toast"></div>
+        <div style="text-align:right;font-size:10px;color:${p.muted};opacity:.7;margin-top:8px">supernotify-composer-card v${VERSION}</div>
+      </ha-card>`;
+    const sr = this.shadowRoot;
+    const upd = () => {
+      sr.getElementById("pvT").textContent = sr.getElementById("t").value || "(no title)";
+      sr.getElementById("pvM").textContent = sr.getElementById("m").value || "(no message)";
+      const pr = sr.getElementById("p").value;
+      sr.getElementById("pvStrip").style.background =
+        { critical: p.crit, high: p.warn, low: p.muted, minimum: p.muted }[pr] || p.brand;
+    };
+    sr.getElementById("t").addEventListener("input", upd);
+    sr.getElementById("m").addEventListener("input", upd);
+    sr.getElementById("p").addEventListener("change", upd);
+    sr.querySelectorAll(".chip").forEach((node) => {
+      node.onclick = () => {
+        const d = node.dataset.d;
+        if (this._picked.has(d)) this._picked.delete(d); else this._picked.add(d);
+        node.classList.toggle("sel", this._picked.has(d));
+      };
+    });
+    sr.getElementById("send").onclick = () => this._send();
+  }
+
+  _send() {
+    const sr = this.shadowRoot;
+    const message = (sr.getElementById("m").value || "").trim();
+    if (!message) { this._toast("Write a message first"); return; }
+    const title = (sr.getElementById("t").value || "").trim();
+    const priority = sr.getElementById("p").value;
+    if (priority === "critical" && !confirm("Send a CRITICAL notification? Sirens and max volume included."))
+      return;
+    const data = {};
+    if (priority) data.priority = priority;
+    if (this._picked.size) {
+      data.delivery_selection = "fixed";
+      data.delivery = {};
+      for (const d of this._picked) data.delivery[d] = {};
+    }
+    const payload = { message };
+    if (title) payload.title = title;
+    if (Object.keys(data).length) payload.data = data;
+    this._hass.callService("notify", "supernotify", payload);
+    this._toast("Sent 🚀");
+  }
+
+  _toast(msg) {
+    const t = this.shadowRoot.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(this._tt);
+    this._tt = setTimeout(() => t.classList.remove("show"), 2400);
+  }
+}
+
+customElements.define("supernotify-composer-card", SupernotifyComposerCard);
+
+window.customCards.push({
+  type: "supernotify-composer-card",
+  name: "SuperNotify Composer Card",
+  description: "Try & send: title, message, priority, optional explicit channels, live phone preview.",
 });
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");

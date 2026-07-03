@@ -157,3 +157,26 @@ groups:
     scenarios: [early_morning, morning, afternoon, evening, night, late_night]
 # scenarios not listed fall into an "Other" group
 ```
+
+## supernotify-simulator-card
+
+"Who receives?" — pick scenarios and see which deliveries would fire,
+computed from real engine data (`enquire_implicit_deliveries` and
+`enquire_deliveries_by_scenario`). Suppressed deliveries are shown
+struck-through. Priority-based delivery filtering happens engine-side and
+is not simulated.
+
+```yaml
+type: custom:supernotify-simulator-card
+```
+
+## supernotify-composer-card
+
+Try & send: title, message, priority, optional explicit channel chips
+(auto-discovered), live phone preview. Sends a real notification via
+`notify.supernotify` — with `delivery_selection: fixed` when channels are
+picked, and a confirmation guard on critical priority.
+
+```yaml
+type: custom:supernotify-composer-card
+```

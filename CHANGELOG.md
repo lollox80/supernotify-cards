@@ -3,6 +3,20 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0] - 2026-07-04
+
+### Added
+- **New card: `supernotify-simulator-card`** — "who receives?": pick
+  scenarios (pre-selected with the ones active right now) and see which
+  deliveries would fire. Built on real engine data
+  (`enquire_implicit_deliveries` + `enquire_deliveries_by_scenario`),
+  suppressed deliveries shown struck-through; disabled wins over enabled,
+  matching the runtime merge semantics.
+- **New card: `supernotify-composer-card`** — try & send: title, message,
+  priority selector, optional explicit channel chips (auto-discovered),
+  live phone preview, confirmation guard on critical, sends via
+  `notify.supernotify` (`delivery_selection: fixed` when channels picked).
+
 ## [0.6.0] - 2026-07-04
 
 ### Added
