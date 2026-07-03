@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -587,6 +587,184 @@ window.customCards.push({
   type: "supernotify-overview-card",
   name: "SuperNotify Overview Card",
   description: "Dashboard overview for SuperNotify: sent/failure counters, active scenarios, last notification, transport status.",
+});
+
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-bands-card — time bands editor
+ * One row per band: icon, name, active range, "now" badge on the active
+ * band, inline start-time input (input_datetime) and volume slider
+ * (input_number). Mirrors the prototype's "Fasce" page.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+class SupernotifyBandsCard extends HTMLElement {
+  static getStubConfig() {
+    return { bands: {} };
+  }
+
+  setConfig(config) {
+    if (!config || !config.bands || !Object.keys(config.bands).length)
+      throw new Error("bands is required: {name: {start: input_datetime.x, volume: input_number.y}}");
+    this._config = { style: "supernotify", ...config };
+    this._rendered = false;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._rendered || wasDark !== this._dark) this._render();
+    else this._update();
+  }
+
+  getCardSize() {
+    return 1 + Object.keys(this._config.bands).length;
+  }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return {
+        brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", line: "var(--divider-color)",
+        panel: "var(--card-background-color)", soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        okSoft: "rgba(46,158,91,.10)", ink: "var(--primary-text-color)",
+        muted: "var(--secondary-text-color)",
+      };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#0288d1", ok: "#7fe0a5", line: "#2b3441",
+          panel: "#1a222c", soft: "#16212c", okSoft: "rgba(46,158,91,.15)",
+          ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", line: "#e3e9f0",
+          panel: "#fff", soft: "#eef4fb", okSoft: "#e9f7ee",
+          ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  _st(id) {
+    const s = this._hass && this._hass.states[id];
+    return s ? s.state : undefined;
+  }
+
+  _bands() {
+    // Preserve config order (chronological, cyclic: last crosses midnight).
+    const DEFAULT_ICONS = { early_morning: "🌅", morning: "🌤️", afternoon: "☀️",
+      evening: "🌇", night: "🌙", late_night: "🌃" };
+    return Object.entries(this._config.bands).map(([key, b]) => {
+      const raw = this._st(b.start) || "";
+      const [h, m] = raw.split(":");
+      return {
+        key, start: b.start, volume: b.volume,
+        name: b.name || key.replace(/_/g, " "),
+        icon: b.icon || DEFAULT_ICONS[key] || "🕐",
+        hhmm: h !== undefined && m !== undefined ? `${h.padStart(2, "0")}:${m}` : "",
+        min: h !== undefined && m !== undefined ? +h * 60 + +m : null,
+        vol: b.volume ? Math.round(+this._st(b.volume) || 0) : null,
+      };
+    });
+  }
+
+  _activeKey(bands) {
+    const now = new Date();
+    const t = now.getHours() * 60 + now.getMinutes();
+    const valid = bands.filter((b) => b.min !== null).slice()
+      .sort((a, b) => a.min - b.min);
+    for (let i = 0; i < valid.length; i++) {
+      const s = valid[i].min, e = valid[(i + 1) % valid.length].min;
+      const hit = s < e ? t >= s && t < e : t >= s || t < e;
+      if (hit) return valid[i].key;
+    }
+    return null;
+  }
+
+  _setStart(entity, hhmm) {
+    this._hass.callService("input_datetime", "set_datetime", {
+      entity_id: entity, time: hhmm + ":00",
+    });
+  }
+
+  _setVolume(entity, value) {
+    this._hass.callService("input_number", "set_value", {
+      entity_id: entity, value: +value,
+    });
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+               padding: 10px 8px; border-radius: 12px; }
+        .row.act { background: ${p.okSoft}; }
+        .who { flex: 1; min-width: 150px; }
+        .who b { font-size: 14px; }
+        .who .rng { font-size: 11.5px; color: ${p.muted}; margin-top: 1px; }
+        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px;
+                 font-weight: 750; background: rgba(46,158,91,.16); color: ${p.ok}; }
+        .fld { display: flex; flex-direction: column; gap: 2px; }
+        .fld .k { font-size: 10px; letter-spacing: .05em; text-transform: uppercase;
+                  font-weight: 800; color: ${p.muted}; }
+        input[type=time] { border: 1.5px solid ${p.line}; border-radius: 8px;
+                 padding: 6px 8px; font-size: 13px; background: ${p.panel}; color: ${p.ink}; }
+        input[type=time]:focus { outline: none; border-color: ${p.brand}; }
+        .volwrap { min-width: 150px; }
+        input[type=range] { width: 100%; accent-color: ${p.brand}; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+      </style>
+      <ha-card>
+        <div id="rows"></div>
+        <div class="ver">supernotify-bands-card v${VERSION}</div>
+      </ha-card>`;
+    this._update();
+  }
+
+  _update() {
+    if (!this.shadowRoot) return;
+    // Skip re-render while the user is dragging a slider in this card.
+    if (this._dragging) return;
+    const bands = this._bands();
+    const active = this._activeKey(bands);
+    const rows = this.shadowRoot.getElementById("rows");
+    rows.innerHTML = bands.map((b, i) => {
+      const next = bands[(i + 1) % bands.length];
+      const isAct = b.key === active;
+      return `<div class="row ${isAct ? "act" : ""}">
+        <div class="who"><b>${b.icon} ${b.name}</b>${isAct ? ' <span class="badge">now</span>' : ""}
+          <div class="rng">${b.hhmm || "—"} → ${next.hhmm || "—"}${i === bands.length - 1 ? " · crosses midnight" : ""}</div>
+        </div>
+        <div class="fld"><span class="k">start</span>
+          <input type="time" value="${b.hhmm}" data-e="${b.start}"></div>
+        <div class="fld volwrap"><span class="k">volume <span data-l="${b.key}">${b.vol != null ? b.vol : "—"}</span>%</span>
+          <input type="range" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}"></div>
+      </div>`;
+    }).join("");
+    rows.querySelectorAll("input[type=time]").forEach((inp) => {
+      inp.onchange = () => this._setStart(inp.dataset.e, inp.value);
+    });
+    rows.querySelectorAll("input[type=range]").forEach((inp) => {
+      if (!inp.dataset.e) { inp.disabled = true; return; }
+      inp.oninput = () => {
+        this._dragging = true;
+        const l = rows.querySelector(`[data-l="${inp.dataset.k}"]`);
+        if (l) l.textContent = inp.value;
+      };
+      inp.onchange = () => {
+        this._dragging = false;
+        this._setVolume(inp.dataset.e, inp.value);
+      };
+    });
+  }
+}
+
+customElements.define("supernotify-bands-card", SupernotifyBandsCard);
+
+window.customCards.push({
+  type: "supernotify-bands-card",
+  name: "SuperNotify Bands Card",
+  description: "Time bands editor: one row per band with active badge, inline start time and volume slider.",
 });
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");

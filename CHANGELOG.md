@@ -3,6 +3,15 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-07-03
+
+### Added
+- **New card: `supernotify-bands-card`** (same bundle). Time bands editor
+  mirroring the prototype's Fasce page: one row per band with icon and
+  name, active range, "now" badge on the currently active band (handles
+  the cross-midnight band), inline start-time input writing to
+  `input_datetime` and volume slider writing to `input_number`.
+
 ## [0.2.0] - 2026-07-03
 
 ### Added
