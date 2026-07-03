@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.1.3";
+const VERSION = "0.1.4";
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -211,6 +211,8 @@ class SupernotifyControlCard extends HTMLElement {
         .mpill.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
         .mpill .pd { width: 8px; height: 8px; border-radius: 50%; background: ${p.dot}; }
         .mpill.on .pd { background: ${p.ok}; box-shadow: 0 0 0 3px rgba(46,158,91,.18); }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7;
+               margin-top: 10px; user-select: none; }
         .toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%) translateY(20px);
                  background: ${p.ink}; color: ${p.panel};
                  border-radius: 10px; padding: 8px 16px; font-size: 12.5px; font-weight: 650;
@@ -226,6 +228,7 @@ class SupernotifyControlCard extends HTMLElement {
           <button id="announceBtn">Send</button>
         </div>
         <div id="groups"></div>
+        <div class="ver">supernotify-control-card v${VERSION}</div>
         <div class="toast" id="toast"></div>
       </ha-card>`;
     this.shadowRoot.getElementById("announceBtn").addEventListener("click", () => this._announce());
