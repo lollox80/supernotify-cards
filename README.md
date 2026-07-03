@@ -69,6 +69,7 @@ bands:
 | `dnd_entity` | no | `input_boolean` used by the DND tile and status bar |
 | `announce_delivery` | no | SuperNotify delivery used by Announce (default `alexa_announce`) |
 | `snooze_minutes` | no | minutes for the snooze tile (default 30) |
+| `snooze_action` | no | override the snooze command (default `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_<minutes>`; e.g. use `..._EVERYTHING_...` to pause critical too) |
 | `tiles` | no | list of `dnd`, `snooze`, `announce`, or `{toggle, name, icon}` |
 | `groups` | no | grouped `input_boolean` toggles with a `name` |
 | `bands` | no | time bands (`input_datetime` start + `input_number` volume) for the status bar |

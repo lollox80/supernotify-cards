@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.1.2";
+const VERSION = "0.1.3";
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -97,9 +97,15 @@ class SupernotifyControlCard extends HTMLElement {
   }
 
   _snooze() {
+    // SuperNotify snoozing is event-driven (same mechanism as the push
+    // notification buttons): fire a mobile_app_notification_action event
+    // with a SUPERNOTIFY_<CMD>_<RECIPIENT>_<TARGET>_<minutes> action name.
+    // NONCRITICAL keeps critical notifications flowing during the snooze.
     const minutes = this._config.snooze_minutes || 30;
-    this._hass.callService("supernotify", "snooze", { minutes });
-    this._toast(`Snoozed all channels for ${minutes} min`);
+    const action =
+      this._config.snooze_action || `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_${minutes}`;
+    this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
+    this._toast(`Snoozed non-critical notifications for ${minutes} min`);
   }
 
   _announce() {
@@ -279,7 +285,7 @@ class SupernotifyControlCard extends HTMLElement {
     }
     if (t === "snooze")
       return { cls: "", icon: "😴", name: `Snooze ${c.snooze_minutes || 30} min`,
-        sub: "pause all channels", act: () => this._snooze() };
+        sub: "pause non-critical", act: () => this._snooze() };
     if (t === "announce")
       return { cls: "", icon: "📢", name: "Announce", sub: "intercom",
         act: () => this.shadowRoot.getElementById("announceInput").focus() };
