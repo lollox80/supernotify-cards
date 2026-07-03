@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -468,15 +468,18 @@ class SupernotifyOverviewCard extends HTMLElement {
   async _refresh() {
     if (!this._hass) return;
     try {
-      const [act, last] = await Promise.all([
+      const [act, last, snz] = await Promise.all([
         this._ws("enquire_active_scenarios"),
         this._ws("enquire_last_notification"),
+        this._ws("enquire_snoozes"),
       ]);
       this._active = act.scenarios || [];
       this._last = last && Object.keys(last).length ? last : null;
+      this._snoozes = snz.snoozes || [];
     } catch (e) {
       this._active = this._active || null;
       this._last = this._last || null;
+      this._snoozes = this._snoozes || [];
     }
     if (this._rendered) this._update();
   }
@@ -549,11 +552,13 @@ class SupernotifyOverviewCard extends HTMLElement {
     const stat = (k, v, s, color) =>
       `<div class="stat"><div class="k">${k}</div><div class="v"${color ? ` style="color:${color}"` : ""}>${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
     const p = this._palette();
+    const snz = this._snoozes || [];
     this.shadowRoot.getElementById("stats").innerHTML =
       stat("📨 Sent", sent != null ? esc(sent) : "—", "since startup") +
       stat("⚠️ Failures", failures != null ? esc(failures) : "—", "", +failures > 0 ? p.crit : p.ok) +
       stat("🎬 Active scenarios", act ? act.length : "—", "") +
-      stat("📤 Deliveries", dels.length ? `${delsOn}/${dels.length}` : "—", "enabled/total");
+      stat("📤 Deliveries", dels.length ? `${delsOn}/${dels.length}` : "—", "enabled/total") +
+      stat("😴 Snoozed", snz.length, snz.length && snz[0].snooze_until ? "until " + esc(String(snz[0].snooze_until).slice(0, 5)) : "", snz.length ? p.warn : undefined);
 
     const lastEl = this.shadowRoot.getElementById("last");
     if (this._last) {
@@ -561,9 +566,13 @@ class SupernotifyOverviewCard extends HTMLElement {
       const when = n.created ? esc(String(n.created).replace("T", " ").slice(0, 16)) : "";
       const msg = esc((n.message || "").slice(0, 90));
       const ok = (n.failed || 0) === 0;
+      const prioCol = { critical: "#e23c3c", high: "#f0a020", medium: p.brandD }[n.priority];
+      const prio = n.priority
+        ? `<span class="badge" style="background:${p.soft};color:${prioCol || p.muted}">${esc(n.priority)}</span>`
+        : "";
+      const ch = +n.delivered > 0 ? `<span class="badge b-off">${n.delivered} channel${n.delivered > 1 ? "s" : ""}</span>` : "";
       lastEl.innerHTML = `<div class="t">${when}</div><div>${msg}</div>
-        <div style="margin-top:5px"><span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ delivered" : "✖ " + n.failed + " failed"}</span>
-        ${n.delivered != null ? `<span class="badge b-off">${n.delivered} channels</span>` : ""}</div>`;
+        <div style="margin-top:5px">${prio}<span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ delivered" : "✖ " + n.failed + " failed"}</span>${ch}</div>`;
     } else {
       lastEl.textContent = "—";
     }
@@ -1067,6 +1076,219 @@ window.customCards.push({
   type: "supernotify-recipients-card",
   name: "SuperNotify Recipients Card",
   description: "Recipients dashboard: home state, contact tags (email, phone, devices) and enabled badge.",
+});
+
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-scenarios-card — scenarios dashboard
+ * Auto-discovers the scenario entities SuperNotify exposes. "Active now"
+ * badge comes from the enquire_active_scenarios response service (polled),
+ * per-delivery override tags (enabled/disabled) from entity attributes.
+ * Optional groups reproduce the prototype categories.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+const SN_SCENARIO_ICONS = {
+  critical_panic: "🚨", high_priority: "⬆️", alexa_low_whisper: "🔉",
+  notifiche_vocali_solo_ufficio: "👤", notifiche_vocali_off: "🔇",
+  phone_notifications_off: "📵", screen_notifications_off: "🖥️",
+  cn_dnd_orario: "🔔", dnd_globale: "🔕", dnd_workdays: "💼", dnd_holidays: "🏖️",
+  xmas: "🎄", halloween: "👻", alone_night: "🌙", multi_home: "👨‍👩‍👧",
+  early_morning: "🌅", morning: "🌤️", afternoon: "☀️", evening: "🌇",
+  night: "🌙", late_night: "🌃", emergency: "🚨", presenza_ingresso: "🚪",
+  alarm_disarmed: "🛡️", alarm_armed: "🔒",
+};
+
+class SupernotifyScenariosCard extends HTMLElement {
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { poll_seconds: 60, style: "supernotify", groups: null, ...(config || {}) };
+    this._rendered = false;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._rendered || wasDark !== this._dark) this._render();
+    else this._update();
+  }
+
+  getCardSize() {
+    return 10;
+  }
+
+  connectedCallback() {
+    const s = (this._config && this._config.poll_seconds) || 60;
+    this._pollTimer = setInterval(() => this._refresh(), s * 1000);
+    this._refresh();
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._pollTimer);
+  }
+
+  async _refresh() {
+    if (!this._hass) return;
+    try {
+      const r = await this._hass.callWS({
+        type: "call_service", domain: "supernotify", service: "enquire_active_scenarios",
+        service_data: {}, return_response: true,
+      });
+      this._active = (r && r.response && r.response.scenarios) || [];
+    } catch (e) { /* retry on next poll */ }
+    if (this._rendered) this._update();
+  }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return {
+        brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", crit: "var(--error-color, #e23c3c)",
+        line: "var(--divider-color)", panel: "var(--card-background-color)",
+        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        okSoft: "rgba(46,158,91,.10)",
+        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
+      };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", crit: "#ff9a9a",
+          line: "#2b3441", panel: "#1a222c", soft: "#16212c", okSoft: "rgba(46,158,91,.15)",
+          ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", crit: "#c62828",
+          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", okSoft: "#e9f7ee",
+          ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  _scenarios() {
+    const out = [];
+    if (!this._hass) return out;
+    for (const id of Object.keys(this._hass.states)) {
+      const m = id.match(/^[a-z_]+\.supernotify_scenario_(.+)$/);
+      if (!m) continue;
+      const s = this._hass.states[id];
+      out.push({ id, name: m[1], a: s.attributes || {} });
+    }
+    return out;
+  }
+
+  _moreInfo(entityId) {
+    this.dispatchEvent(new CustomEvent("hass-more-info", {
+      detail: { entityId }, bubbles: true, composed: true,
+    }));
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+               font-weight: 800; color: ${p.muted}; margin: 14px 0 6px; }
+        .sec:first-child { margin-top: 0; }
+        .row { display: flex; align-items: center; gap: 12px; padding: 9px 8px;
+               border-bottom: 1px solid ${p.line}; cursor: pointer; border-radius: 8px; }
+        .row.act { background: ${p.okSoft}; }
+        .row:hover { background: ${p.soft}; }
+        .row:last-child { border-bottom: 0; }
+        .em { font-size: 20px; flex-shrink: 0; width: 26px; text-align: center; }
+        .mid { flex: 1; min-width: 0; }
+        .mid b { font-size: 13.5px; }
+        .tags { margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
+               border-radius: 7px; padding: 1px 7px; font-size: 10.5px; font-weight: 650;
+               white-space: nowrap; }
+        .tag.on { color: ${p.ok}; }
+        .tag.off { color: ${p.crit}; }
+        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750;
+                 flex-shrink: 0; }
+        .b-act { background: rgba(46,158,91,.16); color: ${p.ok}; }
+        .b-dis { background: rgba(226,60,60,.10); color: ${p.crit}; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+      </style>
+      <ha-card>
+        <div id="rows"></div>
+        <div class="ver">supernotify-scenarios-card v${VERSION}</div>
+      </ha-card>`;
+    this._update();
+  }
+
+  _rowHtml(s, i, active) {
+    const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const isAct = active.includes(s.name);
+    const em = SN_SCENARIO_ICONS[s.name] || "🎬";
+    const tags = [];
+    const dels = s.a.delivery && typeof s.a.delivery === "object" ? Object.entries(s.a.delivery) : [];
+    for (const [dn, dc] of dels.slice(0, 6)) {
+      const on = !dc || dc.enabled !== false;
+      tags.push(`<span class="tag ${on ? "on" : "off"}">${on ? "✓" : "✕"} ${esc(dn)}</span>`);
+    }
+    if (dels.length > 6) tags.push(`<span class="tag">+${dels.length - 6}</span>`);
+    const ags = Array.isArray(s.a.action_groups) ? s.a.action_groups : [];
+    if (ags.length) tags.push(`<span class="tag">🔘 ${esc(ags.join(", "))}</span>`);
+    if (s.a.media) tags.push(`<span class="tag">📷 media</span>`);
+    const alias = s.a.friendly_name && s.a.friendly_name !== s.name ? s.a.friendly_name : "";
+    return `<div class="row ${isAct ? "act" : ""}" data-i="${i}">
+      <span class="em">${em}</span>
+      <div class="mid"><b>${esc(alias || s.name)}</b>
+        ${alias ? `<span style="font-size:11px;color:inherit;opacity:.6"> · ${esc(s.name)}</span>` : ""}
+        <div class="tags">${tags.join("")}</div>
+      </div>
+      ${isAct ? `<span class="badge b-act">active now</span>` : ""}
+      ${s.a.enabled === false ? `<span class="badge b-dis">disabled</span>` : ""}
+    </div>`;
+  }
+
+  _update() {
+    if (!this.shadowRoot) return;
+    const all = this._scenarios();
+    const active = this._active || [];
+    const rows = this.shadowRoot.getElementById("rows");
+    if (!all.length) {
+      rows.innerHTML = `<span class="tag">no scenario entities found</span>`;
+      return;
+    }
+    const sortFn = (x, y) => {
+      const ax = active.includes(x.name) ? 0 : 1, ay = active.includes(y.name) ? 0 : 1;
+      return ax === ay ? x.name.localeCompare(y.name) : ax - ay;
+    };
+    let html = "";
+    if (Array.isArray(this._config.groups) && this._config.groups.length) {
+      const used = new Set();
+      for (const g of this._config.groups) {
+        const items = (g.scenarios || [])
+          .map((n) => all.find((s) => s.name === n))
+          .filter(Boolean);
+        items.forEach((s) => used.add(s.name));
+        if (!items.length) continue;
+        html += `<div class="sec">${g.name || ""}</div>` +
+          items.map((s) => this._rowHtml(s, all.indexOf(s), active)).join("");
+      }
+      const rest = all.filter((s) => !used.has(s.name)).sort(sortFn);
+      if (rest.length)
+        html += `<div class="sec">Other</div>` +
+          rest.map((s) => this._rowHtml(s, all.indexOf(s), active)).join("");
+    } else {
+      html = all.slice().sort(sortFn).map((s) => this._rowHtml(s, all.indexOf(s), active)).join("");
+    }
+    rows.innerHTML = html;
+    rows.querySelectorAll(".row").forEach((node) => {
+      node.onclick = () => this._moreInfo(all[+node.dataset.i].id);
+    });
+  }
+}
+
+customElements.define("supernotify-scenarios-card", SupernotifyScenariosCard);
+
+window.customCards.push({
+  type: "supernotify-scenarios-card",
+  name: "SuperNotify Scenarios Card",
+  description: "Scenarios dashboard: active-now badge, per-delivery override tags, optional category groups.",
 });
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");

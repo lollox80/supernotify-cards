@@ -3,6 +3,21 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0] - 2026-07-04
+
+### Added
+- **New card: `supernotify-scenarios-card`** (same bundle). Scenarios
+  dashboard auto-discovered from exposed entities: prototype emoji per
+  scenario, "active now" badge (from `enquire_active_scenarios`, polled),
+  per-delivery override tags (green enabled / red disabled), action
+  groups and media tags, optional `groups` config to reproduce the
+  prototype categories, more-info on tap.
+
+### Changed
+- **Overview card closer to the prototype dashboard**: new "Snoozed"
+  counter (from `enquire_snoozes`, with expiry time), priority badge on
+  the last notification, channel count hidden when zero.
+
 ## [0.5.0] - 2026-07-03
 
 ### Added

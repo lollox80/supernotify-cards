@@ -140,3 +140,20 @@ and enabled badge. Warns when a recipient has no contact points.
 type: custom:supernotify-recipients-card
 # optional: style: theme
 ```
+
+## supernotify-scenarios-card
+
+Scenarios dashboard, auto-discovered: "active now" badge (polled from
+`enquire_active_scenarios`), per-delivery override tags (enabled/disabled),
+action groups and media tags. Optional `groups` reproduce categories.
+
+```yaml
+type: custom:supernotify-scenarios-card
+# optional:
+groups:
+  - name: 🚨 Priority
+    scenarios: [critical_panic, high_priority, alexa_low_whisper]
+  - name: 🕐 Time bands
+    scenarios: [early_morning, morning, afternoon, evening, night, late_night]
+# scenarios not listed fall into an "Other" group
+```
