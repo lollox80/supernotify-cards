@@ -3,6 +3,15 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] - 2026-07-03
+
+### Added
+- **New card: `supernotify-recipients-card`** (same bundle). Recipients
+  dashboard auto-discovered from exposed entities: alias/name, home or
+  away state read from the linked `person.*` entity, contact tags (email,
+  phone, mobile devices count, delivery overrides count, warning when a
+  recipient has no contact points), enabled badge, more-info on tap.
+
 ## [0.4.0] - 2026-07-03
 
 ### Added

@@ -129,3 +129,14 @@ type: custom:supernotify-deliveries-card
 hide_defaults: true     # hide auto-generated DEFAULT_* deliveries (default true)
 style: theme
 ```
+
+## supernotify-recipients-card
+
+Recipients dashboard, auto-discovered: home/away state from the linked
+`person.*` entity, contact tags (email, phone, devices, delivery overrides)
+and enabled badge. Warns when a recipient has no contact points.
+
+```yaml
+type: custom:supernotify-recipients-card
+# optional: style: theme
+```

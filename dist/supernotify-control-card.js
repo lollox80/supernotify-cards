@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -923,6 +923,150 @@ window.customCards.push({
   type: "supernotify-deliveries-card",
   name: "SuperNotify Deliveries Card",
   description: "Delivery dashboard: auto-discovered rows with transport icon, selection/action/target tags and enabled badge.",
+});
+
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-recipients-card — recipients dashboard
+ * Auto-discovers the recipient entities SuperNotify exposes: name, home
+ * state from the linked person entity, contact tags (email, phone, mobile
+ * devices, delivery overrides) and enabled badge. Tap for full attributes.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+class SupernotifyRecipientsCard extends HTMLElement {
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { style: "supernotify", ...(config || {}) };
+    this._rendered = false;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._rendered || wasDark !== this._dark) this._render();
+    else this._update();
+  }
+
+  getCardSize() {
+    return 4;
+  }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return {
+        brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", line: "var(--divider-color)",
+        panel: "var(--card-background-color)", soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
+      };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", line: "#2b3441",
+          panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", line: "#e3e9f0",
+          panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  _recipients() {
+    const out = [];
+    if (!this._hass) return out;
+    for (const id of Object.keys(this._hass.states)) {
+      const m = id.match(/^[a-z_]+\.supernotify_recipient_(.+)$/);
+      if (!m) continue;
+      const s = this._hass.states[id];
+      out.push({ id, name: m[1], on: s.state === "on", a: s.attributes || {} });
+    }
+    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
+    return out;
+  }
+
+  _moreInfo(entityId) {
+    this.dispatchEvent(new CustomEvent("hass-more-info", {
+      detail: { entityId }, bubbles: true, composed: true,
+    }));
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px;
+               border-bottom: 1px solid ${p.line}; cursor: pointer; border-radius: 8px; }
+        .row:hover { background: ${p.soft}; }
+        .row:last-child { border-bottom: 0; }
+        .em { font-size: 24px; flex-shrink: 0; }
+        .mid { flex: 1; min-width: 0; }
+        .mid b { font-size: 14px; text-transform: capitalize; }
+        .mid .sub { font-size: 11.5px; color: ${p.muted}; }
+        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
+               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+        .tag.warn { color: #c77700; }
+        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750;
+                 flex-shrink: 0; }
+        .b-on { background: rgba(46,158,91,.14); color: ${p.ok}; }
+        .b-off { background: ${p.soft}; color: ${p.muted}; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+      </style>
+      <ha-card>
+        <div id="rows"></div>
+        <div class="ver">supernotify-recipients-card v${VERSION}</div>
+      </ha-card>`;
+    this._update();
+  }
+
+  _update() {
+    if (!this.shadowRoot) return;
+    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const recs = this._recipients();
+    const rows = this.shadowRoot.getElementById("rows");
+    if (!recs.length) {
+      rows.innerHTML = `<span class="badge b-off">no recipient entities found</span>`;
+      return;
+    }
+    rows.innerHTML = recs.map((r, i) => {
+      const personId = r.a.entity_id;
+      const pState = personId ? (this._hass.states[personId] || {}).state : undefined;
+      const home = pState === "home";
+      const tags = [];
+      if (r.a.email) tags.push(`✉️ ${r.a.email}`);
+      if (r.a.phone_number) tags.push(`💬 ${r.a.phone_number}`);
+      const nDev = Array.isArray(r.a.mobile_devices) ? r.a.mobile_devices.length : 0;
+      if (nDev) tags.push(`📱 ${nDev} device${nDev > 1 ? "s" : ""}`);
+      const nOvr = r.a.delivery && typeof r.a.delivery === "object" ? Object.keys(r.a.delivery).length : 0;
+      if (nOvr) tags.push(`🔗 ${nOvr} delivery override${nOvr > 1 ? "s" : ""}`);
+      if (!tags.length) tags.push(`<span class="tag warn">⚠️ no contact points</span>`);
+      const alias = r.a.friendly_name && r.a.friendly_name !== r.name ? r.a.friendly_name : "";
+      return `<div class="row" data-i="${i}">
+        <span class="em">👤</span>
+        <div class="mid"><b>${esc(alias || r.name)}</b>
+          <span class="sub">${esc(personId || "")}${pState !== undefined ? (home ? " · 🏠 home" : " · 🚗 away") : ""}</span>
+          <div class="tags">${tags.map((t) => t.startsWith("<span") ? t : `<span class="tag">${esc(t)}</span>`).join("")}</div>
+        </div>
+        <span class="badge ${r.on ? "b-on" : "b-off"}">${r.on ? "enabled" : "off"}</span>
+      </div>`;
+    }).join("");
+    rows.querySelectorAll(".row").forEach((node) => {
+      node.onclick = () => this._moreInfo(recs[+node.dataset.i].id);
+    });
+  }
+}
+
+customElements.define("supernotify-recipients-card", SupernotifyRecipientsCard);
+
+window.customCards.push({
+  type: "supernotify-recipients-card",
+  name: "SuperNotify Recipients Card",
+  description: "Recipients dashboard: home state, contact tags (email, phone, devices) and enabled badge.",
 });
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");
