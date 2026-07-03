@@ -3,6 +3,17 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.0] - 2026-07-03
+
+### Added
+- **New card: `supernotify-overview-card`** (same bundle file). Dashboard
+  overview with sent/failure counters (from `sensor.supernotify_notifications`
+  and `sensor.supernotify_failures`), active scenarios and last notification
+  (via `supernotify.enquire_*` WebSocket response services), delivery
+  enabled/total count and transport status (from exposed entities).
+  Configurable `poll_seconds` (default 60) and the same `style` option as
+  the control card.
+
 ## [0.1.5] - 2026-07-03
 
 ### Added

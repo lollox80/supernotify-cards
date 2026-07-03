@@ -83,3 +83,18 @@ state exposure is pending upstream).
 
 The Announce tile calls `notify.supernotify` with
 `data: {delivery_selection: fixed, delivery: {<announce_delivery>: {}}}`.
+
+## supernotify-overview-card
+
+Dashboard overview shipped in the same bundle: sent and failure counters
+(`sensor.supernotify_notifications` / `sensor.supernotify_failures`), active
+scenarios and last notification (via the `supernotify.enquire_*` response
+services over WebSocket), delivery counts and transport status (from the
+entities SuperNotify exposes).
+
+```yaml
+type: custom:supernotify-overview-card
+# optional:
+poll_seconds: 60        # refresh interval for enquire_* data
+style: theme            # follow the HA theme instead of the SuperNotify look
+```

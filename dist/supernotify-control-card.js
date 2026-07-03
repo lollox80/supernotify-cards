@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.1.5";
+const VERSION = "0.2.0";
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -394,4 +394,199 @@ window.customCards.push({
   description: "Touch-first control center for SuperNotify: status, quick actions, grouped mode toggles.",
 });
 
-console.info(`%c SUPERNOTIFY-CONTROL-CARD %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-overview-card — dashboard overview
+ * Stats (sent, failures, active scenarios, deliveries), last notification
+ * and transport status. Data from entities exposed by SuperNotify plus
+ * enquire_* services called over WebSocket.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+class SupernotifyOverviewCard extends HTMLElement {
+  static getStubConfig() {
+    return { poll_seconds: 60 };
+  }
+
+  setConfig(config) {
+    if (!config) throw new Error("Invalid configuration");
+    this._config = { poll_seconds: 60, style: "supernotify", ...config };
+    this._rendered = false;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._rendered || wasDark !== this._dark) this._render();
+    else this._update();
+  }
+
+  getCardSize() {
+    return 5;
+  }
+
+  connectedCallback() {
+    const s = (this._config && this._config.poll_seconds) || 60;
+    this._pollTimer = setInterval(() => this._refresh(), s * 1000);
+    this._refresh();
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._pollTimer);
+  }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return {
+        brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color)",
+        crit: "var(--error-color, #e23c3c)",
+        line: "var(--divider-color)", panel: "var(--card-background-color)",
+        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
+      };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#0288d1", ok: "#7fe0a5", warn: "#f0a020", crit: "#ff9a9a",
+          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#f0a020", crit: "#e23c3c",
+          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  _st(id) {
+    const s = this._hass && this._hass.states[id];
+    return s ? s.state : undefined;
+  }
+
+  async _ws(service, data) {
+    const r = await this._hass.callWS({
+      type: "call_service", domain: "supernotify", service,
+      service_data: data || {}, return_response: true,
+    });
+    return (r && r.response) || {};
+  }
+
+  async _refresh() {
+    if (!this._hass) return;
+    try {
+      const [act, last] = await Promise.all([
+        this._ws("enquire_active_scenarios"),
+        this._ws("enquire_last_notification"),
+      ]);
+      this._active = act.scenarios || [];
+      this._last = last && Object.keys(last).length ? last : null;
+    } catch (e) {
+      this._active = this._active || null;
+      this._last = this._last || null;
+    }
+    if (this._rendered) this._update();
+  }
+
+  _scan(kind) {
+    // Entities exposed by SuperNotify: <domain>.supernotify_<kind>_<name>
+    const out = [];
+    if (!this._hass) return out;
+    for (const id of Object.keys(this._hass.states)) {
+      const m = id.match(new RegExp(`^[a-z_]+\\.supernotify_${kind}_(.+)$`));
+      if (m) out.push({ id, name: m[1], state: this._hass.states[id].state });
+    }
+    return out;
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+        .stat { border: 1.5px solid ${p.line}; border-radius: 14px; padding: 12px 14px;
+                background: ${p.panel}; box-shadow: 0 1px 3px rgba(16,42,67,.06); }
+        .stat .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+                   font-weight: 800; color: ${p.muted}; white-space: nowrap; }
+        .stat .v { font-size: 22px; font-weight: 800; margin-top: 3px; }
+        .stat .s { font-size: 11px; color: ${p.muted}; margin-top: 2px; }
+        .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+               font-weight: 800; color: ${p.muted}; margin: 16px 0 8px; }
+        .row { display: flex; align-items: center; justify-content: space-between;
+               gap: 10px; padding: 8px 2px; border-bottom: 1px solid ${p.line};
+               font-size: 13.5px; }
+        .row:last-child { border-bottom: 0; }
+        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750; }
+        .b-ok { background: rgba(46,158,91,.14); color: ${p.ok}; }
+        .b-off { background: ${p.soft}; color: ${p.muted}; }
+        .b-crit { background: rgba(226,60,60,.12); color: ${p.crit}; }
+        .lastmsg { font-size: 13px; }
+        .lastmsg .t { color: ${p.muted}; font-size: 11.5px; }
+        .chip { display: inline-flex; border: 1.5px solid ${p.line}; border-radius: 999px;
+                padding: 5px 12px; font-size: 12px; font-weight: 650; margin: 0 6px 6px 0;
+                background: ${p.soft}; color: ${p.brandD}; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 10px; }
+      </style>
+      <ha-card>
+        <div class="stats" id="stats"></div>
+        <div class="sec">Last notification</div>
+        <div class="lastmsg" id="last">—</div>
+        <div class="sec">Active scenarios</div>
+        <div id="scen">—</div>
+        <div class="sec">Transports</div>
+        <div id="transports"></div>
+        <div class="ver">supernotify-overview-card v${VERSION}</div>
+      </ha-card>`;
+    this._update();
+  }
+
+  _update() {
+    if (!this.shadowRoot) return;
+    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const sent = this._st("sensor.supernotify_notifications");
+    const failures = this._st("sensor.supernotify_failures");
+    const dels = this._scan("delivery");
+    const delsOn = dels.filter((d) => d.state === "on").length;
+    const act = this._active;
+    const stat = (k, v, s, color) =>
+      `<div class="stat"><div class="k">${k}</div><div class="v"${color ? ` style="color:${color}"` : ""}>${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
+    const p = this._palette();
+    this.shadowRoot.getElementById("stats").innerHTML =
+      stat("📨 Sent", sent != null ? esc(sent) : "—", "since startup") +
+      stat("⚠️ Failures", failures != null ? esc(failures) : "—", "", +failures > 0 ? p.crit : p.ok) +
+      stat("🎬 Active scenarios", act ? act.length : "—", "") +
+      stat("📤 Deliveries", dels.length ? `${delsOn}/${dels.length}` : "—", "enabled/total");
+
+    const lastEl = this.shadowRoot.getElementById("last");
+    if (this._last) {
+      const n = this._last;
+      const when = n.created ? esc(String(n.created).replace("T", " ").slice(0, 16)) : "";
+      const msg = esc((n.message || "").slice(0, 90));
+      const ok = (n.failed || 0) === 0;
+      lastEl.innerHTML = `<div class="t">${when}</div><div>${msg}</div>
+        <div style="margin-top:5px"><span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ delivered" : "✖ " + n.failed + " failed"}</span>
+        ${n.delivered != null ? `<span class="badge b-off">${n.delivered} channels</span>` : ""}</div>`;
+    } else {
+      lastEl.textContent = "—";
+    }
+
+    this.shadowRoot.getElementById("scen").innerHTML = act && act.length
+      ? act.map((s) => `<span class="chip">🎬 ${esc(s)}</span>`).join("")
+      : `<span class="badge b-off">none</span>`;
+
+    const trs = this._scan("transport");
+    this.shadowRoot.getElementById("transports").innerHTML = trs.length
+      ? trs.map((t) =>
+          `<div class="row"><div>${esc(t.name)}</div><span class="badge ${t.state === "on" ? "b-ok" : "b-off"}">${t.state === "on" ? "ok" : "off"}</span></div>`
+        ).join("")
+      : `<span class="badge b-off">no transport entities found</span>`;
+  }
+}
+
+customElements.define("supernotify-overview-card", SupernotifyOverviewCard);
+
+window.customCards.push({
+  type: "supernotify-overview-card",
+  name: "SuperNotify Overview Card",
+  description: "Dashboard overview for SuperNotify: sent/failure counters, active scenarios, last notification, transport status.",
+});
+
+console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");
