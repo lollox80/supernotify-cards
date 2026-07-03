@@ -2,6 +2,9 @@
 
 Lovelace cards for [SuperNotify](https://github.com/rhizomatics/supernotify).
 
+See [CHANGELOG.md](CHANGELOG.md) for release notes. The loaded version is
+shown on the card footer.
+
 ## supernotify-control-card
 
 Touch-first control center: status bar, big quick-action tiles and grouped
