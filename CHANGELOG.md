@@ -3,6 +3,15 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.5] - 2026-07-03
+
+### Added
+- **Stateful snooze tile**: the card polls `supernotify.enquire_snoozes`
+  (via WebSocket service call with response) every minute and after each
+  action. While a snooze is active the tile turns amber, shows the expiry
+  time ("Snoozed · until HH:MM") and tapping it clears all snoozes via
+  `supernotify.clear_snoozes`.
+
 ## [0.1.4] - 2026-07-03
 
 ### Added

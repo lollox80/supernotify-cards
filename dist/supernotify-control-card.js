@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.1.4";
+const VERSION = "0.1.5";
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -43,6 +43,34 @@ class SupernotifyControlCard extends HTMLElement {
 
   getCardSize() {
     return 4 + (this._config.groups || []).length;
+  }
+
+  connectedCallback() {
+    this._pollTimer = setInterval(() => this._refreshSnoozes(), 60000);
+    this._refreshSnoozes();
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._pollTimer);
+  }
+
+  async _refreshSnoozes() {
+    if (!this._hass) return;
+    try {
+      const r = await this._hass.callWS({
+        type: "call_service", domain: "supernotify", service: "enquire_snoozes",
+        service_data: {}, return_response: true,
+      });
+      const list = (r && r.response && r.response.snoozes) || [];
+      const raw = JSON.stringify(list);
+      if (raw !== this._snoozesRaw) {
+        this._snoozesRaw = raw;
+        this._snoozes = list;
+        if (this._rendered) this._renderTiles();
+      }
+    } catch (e) {
+      // supernotify may still be loading; retry on next poll
+    }
   }
 
   // ── helpers ────────────────────────────────────────────────────────────
@@ -96,16 +124,26 @@ class SupernotifyControlCard extends HTMLElement {
     return known.filter((e) => this._st(e) === "on");
   }
 
-  _snooze() {
+  async _snooze() {
     // SuperNotify snoozing is event-driven (same mechanism as the push
     // notification buttons): fire a mobile_app_notification_action event
     // with a SUPERNOTIFY_<CMD>_<RECIPIENT>_<TARGET>_<minutes> action name.
     // NONCRITICAL keeps critical notifications flowing during the snooze.
-    const minutes = this._config.snooze_minutes || 30;
-    const action =
-      this._config.snooze_action || `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_${minutes}`;
-    this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
-    this._toast(`Snoozed non-critical notifications for ${minutes} min`);
+    // When a snooze is already active, tapping the tile clears it instead.
+    if ((this._snoozes || []).length) {
+      await this._hass.callWS({
+        type: "call_service", domain: "supernotify", service: "clear_snoozes",
+        service_data: {}, return_response: true,
+      });
+      this._toast("Snoozes cleared");
+    } else {
+      const minutes = this._config.snooze_minutes || 30;
+      const action =
+        this._config.snooze_action || `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_${minutes}`;
+      this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
+      this._toast(`Snoozed non-critical notifications for ${minutes} min`);
+    }
+    setTimeout(() => this._refreshSnoozes(), 800);
   }
 
   _announce() {
@@ -286,9 +324,17 @@ class SupernotifyControlCard extends HTMLElement {
         name: "Do not disturb", sub: on ? "active" : "tap to silence",
         act: () => this._toggle(c.dnd_entity) };
     }
-    if (t === "snooze")
+    if (t === "snooze") {
+      const act = this._snoozes || [];
+      if (act.length) {
+        const until = act[0] && act[0].snooze_until ? act[0].snooze_until.slice(0, 5) : "";
+        return { cls: "warn", icon: "😴", name: "Snoozed",
+          sub: (until ? "until " + until + " · " : "") + "tap to clear",
+          act: () => this._snooze() };
+      }
       return { cls: "", icon: "😴", name: `Snooze ${c.snooze_minutes || 30} min`,
         sub: "pause non-critical", act: () => this._snooze() };
+    }
     if (t === "announce")
       return { cls: "", icon: "📢", name: "Announce", sub: "intercom",
         act: () => this.shadowRoot.getElementById("announceInput").focus() };
