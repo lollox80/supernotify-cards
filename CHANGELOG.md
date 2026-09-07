@@ -3,6 +3,22 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0] - 2026-09-07
+
+### Added
+- **Composer: NO_TARGET warning** — an inline warning now appears when the
+  target holds only areas/floors/labels with no person/device added
+  directly and no explicitly picked channel known to resolve them natively.
+  SuperNotify only resolves indirect target categories for transports that
+  call an HA entity service (`notify_entity`, `alexa_devices`, `html5`,
+  `ntfy`, `kodi`, `media_player`, `tts`, `chime` — see upstream
+  [issue #9](https://github.com/rhizomatics/supernotify/issues/9)); with any
+  other channel, or the default/implicit routing when nothing is picked, the
+  notification can silently end up with no recipient at all.
+- **Deliveries card: "🎯 native area/floor/label" tag** on deliveries whose
+  transport is in that same native-target list, so it's clear at a glance
+  where the composer's target selector fully applies.
+
 ## [0.10.0] - 2026-09-07
 
 ### Added

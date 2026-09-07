@@ -135,8 +135,12 @@ bands:                   # config order = chronological order (cyclic)
 ## supernotify-deliveries-card
 
 Delivery dashboard, auto-discovered from the entities SuperNotify exposes:
-transport icon, selection/action/target tags, enabled badge. Tap a row for
-the full delivery attributes.
+transport icon, selection/action/target tags, enabled badge. A "🎯 native
+area/floor/label" tag marks deliveries whose transport resolves an
+area/floor/label target natively (`notify_entity`, `alexa_devices`, `html5`,
+`ntfy`, `kodi`, `media_player`, `tts`, `chime`) — see the composer card's
+target selector note below for why this matters. Tap a row for the full
+delivery attributes.
 
 ```yaml
 type: custom:supernotify-deliveries-card
@@ -200,6 +204,16 @@ typed fields instead of `notify.supernotify`'s generic `data:` — with
 guard on critical priority. Requires SuperNotify ≥ 2.3.0; on older versions
 use `supernotify-control-card`'s Announce tile or your own automation
 instead.
+
+⚠️ **Areas, floors and labels are not resolved by every channel.** SuperNotify
+only resolves them natively for transports that call an HA entity service —
+`notify_entity`, `alexa_devices`, `html5`, `ntfy`, `kodi`, `media_player`,
+`tts` and `chime` (see [issue #9](https://github.com/rhizomatics/supernotify/issues/9)
+upstream). With any other channel, or with the default/implicit routing when
+no channel is picked, a target made only of areas/floors/labels can silently
+end up with no recipient at all. The card shows an inline warning in this
+case; pick a compatible channel above (the deliveries card flags them) or add
+a person/device directly to the target.
 
 ```yaml
 type: custom:supernotify-composer-card

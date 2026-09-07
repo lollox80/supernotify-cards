@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.10.0";
+const VERSION = "0.11.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -54,6 +54,8 @@ const SN_STRINGS = {
     target_lbl: "Target — people, devices, areas, floors, labels",
     custom_target_lbl: "Custom targets (email, Telegram IDs, …) — comma separated",
     custom_target_ph: "e.g. user@example.com, 123456789",
+    native_target_tag: "🎯 native area/floor/label",
+    target_warn: "⚠️ Areas, floors and labels are only resolved by notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts and chime. With any other channel — or the default routing when no channel is picked above — the notification can silently end up with no target. Pick a compatible channel, or add a person/device directly.",
   },
   it: {
     presence: "Presenza", time_band: "Fascia oraria", quiet: "Silenzioso",
@@ -94,6 +96,8 @@ const SN_STRINGS = {
     target_lbl: "Target — persone, dispositivi, aree, piani, etichette",
     custom_target_lbl: "Target personalizzati (email, ID Telegram, …) — separati da virgola",
     custom_target_ph: "es. utente@esempio.com, 123456789",
+    native_target_tag: "🎯 area/piano/etichetta nativi",
+    target_warn: "⚠️ Aree, piani ed etichette vengono risolti solo da notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts e chime. Con qualsiasi altro canale — o con l'instradamento di default se non scegli nessun canale qui sopra — la notifica può restare senza target senza nessun errore visibile. Scegli un canale compatibile, oppure aggiungi anche una persona/dispositivo diretto.",
   },
 };
 
@@ -914,6 +918,16 @@ window.customCards.push({
  * tags and enabled badge. Tap a row for the full attributes (more-info).
  * ════════════════════════════════════════════════════════════════════════ */
 
+// Transports that resolve area_id/floor_id/label_id natively, because they
+// call an HA entity service rather than the legacy notify platform (verified
+// against services.yaml — see SuperNotify issue #9 upstream). Everything
+// else ignores indirect target categories: has_resolved_target() only sees
+// entity_id/device_id for them, so an area/floor/label-only target can end
+// up NO_TARGET, silently, on those other channels.
+const SN_NATIVE_TARGET_TRANSPORTS = [
+  "notify_entity", "alexa_devices", "html5", "ntfy", "kodi", "media_player", "tts", "chime",
+];
+
 const SN_TRANSPORT_ICONS = {
   mobile_push: "📱", telegram: "✈️", alexa_media_player: "🗣️", alexa_devices: "🗣️",
   google_cast: "📺", pushover: "🔔", email: "✉️", ntfy: "📢", gotify: "📨",
@@ -1043,6 +1057,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       const nTgt = Array.isArray(tgt) ? tgt.length : tgt && typeof tgt === "object" ? Object.keys(tgt).length : tgt ? 1 : 0;
       if (nTgt) tags.push(`🎯 ${nTgt} ${T.fixed_targets}`);
       if (d.a.target_usage && d.a.target_usage !== "no_action") tags.push(`↔️ ${d.a.target_usage}`);
+      if (SN_NATIVE_TARGET_TRANSPORTS.includes(tr)) tags.push(T.native_target_tag);
       const alias = d.a.friendly_name && d.a.friendly_name !== d.name ? d.a.friendly_name : "";
       return `<div class="row" data-i="${i}">
         <span class="em">${em}</span>
@@ -1631,14 +1646,17 @@ class SupernotifyComposerCard extends HTMLElement {
           line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
   }
 
-  _deliveryNames() {
+  _deliveries() {
+    // name + transport (the latter needed to tell whether an explicitly
+    // picked channel actually resolves an area/floor/label target).
     const out = [];
     if (!this._hass) return out;
     for (const id of Object.keys(this._hass.states)) {
       const m = id.match(/^[a-z_]+\.supernotify_delivery_(.+)$/);
-      if (m && !/^default_/i.test(m[1])) out.push(m[1]);
+      if (m && !/^default_/i.test(m[1]))
+        out.push({ name: m[1], transport: (this._hass.states[id].attributes || {}).transport || "" });
     }
-    return out.sort();
+    return out.sort((x, y) => x.name.localeCompare(y.name));
   }
 
   _render() {
@@ -1701,11 +1719,12 @@ class SupernotifyComposerCard extends HTMLElement {
               <option value="critical">${T.prio_critical}</option>
             </select>
             <label>${T.channels_lbl}</label>
-            <div id="chips">${this._deliveryNames().map((d) => `<span class="chip" data-d="${esc(d)}">${esc(d)}</span>`).join("")}</div>
+            <div id="chips">${this._deliveries().map((d) => `<span class="chip" data-d="${esc(d.name)}">${esc(d.name)}</span>`).join("")}</div>
             <label>${T.target_lbl}</label>
             <div id="targetSel"></div>
             <input type="text" id="customTarget" placeholder="${T.custom_target_ph}" style="margin-top:6px">
             <div class="hint" style="margin-top:3px">${T.custom_target_lbl}</div>
+            <div class="hint" id="targetWarn" style="display:none;margin-top:6px;color:${p.warn}"></div>
             <label>${T.camera_lbl}</label>
             <select id="cam"><option value="">${T.none}</option>${this._cameraNames().map((c) => `<option value="${esc(c)}">📷 ${esc(c)}</option>`).join("")}</select>
             <button class="send" id="send">🚀 ${T.send}</button>
@@ -1741,15 +1760,36 @@ class SupernotifyComposerCard extends HTMLElement {
     sr.getElementById("m").addEventListener("input", upd);
     sr.getElementById("p").addEventListener("change", upd);
     sr.getElementById("cam").addEventListener("change", upd);
+    this._deliveryTransport = {};
+    this._deliveries().forEach((d) => { this._deliveryTransport[d.name] = d.transport; });
     sr.querySelectorAll("#chips .chip").forEach((node) => {
       node.onclick = () => {
         const d = node.dataset.d;
         if (this._picked.has(d)) this._picked.delete(d); else this._picked.add(d);
         node.classList.toggle("sel", this._picked.has(d));
+        this._updateTargetWarn();
       };
     });
     sr.getElementById("send").onclick = () => this._send();
     this._mountTargetSelector();
+  }
+
+  // Warn when the target selector holds only "indirect" categories
+  // (area/floor/label) that most transports won't resolve — see
+  // SN_NATIVE_TARGET_TRANSPORTS. Conservative on purpose: also warns when no
+  // channel is explicitly picked, since the default/implicit routing could
+  // include a non-native transport.
+  _updateTargetWarn() {
+    const el = this.shadowRoot && this.shadowRoot.getElementById("targetWarn");
+    if (!el) return;
+    const t = this._targetValue || {};
+    const hasIndirect = ["area_id", "floor_id", "label_id"].some((k) => Array.isArray(t[k]) && t[k].length);
+    const hasDirect = ["entity_id", "device_id"].some((k) => Array.isArray(t[k]) && t[k].length);
+    const pickedAllNative = this._picked.size > 0 &&
+      [...this._picked].every((d) => SN_NATIVE_TARGET_TRANSPORTS.includes(this._deliveryTransport[d]));
+    const show = hasIndirect && !hasDirect && !pickedAllNative;
+    el.style.display = show ? "" : "none";
+    if (show) el.textContent = snT(this._config, this._hass).target_warn;
   }
 
   // Native HA target selector (people/devices/areas/floors/labels), same
@@ -1768,10 +1808,12 @@ class SupernotifyComposerCard extends HTMLElement {
       sel.value = this._targetValue || {};
       sel.addEventListener("value-changed", (ev) => {
         this._targetValue = (ev.detail && ev.detail.value) || {};
+        this._updateTargetWarn();
       });
       container.innerHTML = "";
       container.appendChild(sel);
       this._targetSelEl = sel;
+      this._updateTargetWarn();
     };
     if (customElements.get("ha-selector")) {
       mount();
