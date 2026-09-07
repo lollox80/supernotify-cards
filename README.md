@@ -97,7 +97,10 @@ Active scenarios are read from `binary_sensor.supernotify_scenario_*`. Since
 SuperNotify 2.4.0 these report a live `on`/`off` state (recomputed reactively
 plus a periodic sweep — see `scenario_control` in the SuperNotify config); on
 older versions, or for a scenario configured with `expose_state: false`, they
-stay `unknown` and the counter hides automatically.
+stay `unknown` and the counter hides automatically. The overview-card and
+scenarios-card use the same live state for their "active now" count/badge
+when it's available, falling back to their polled `enquire_active_scenarios`
+check (a `poll_seconds` option, default 60) only on older versions.
 
 The Announce tile calls `notify.supernotify` with
 `data: {delivery_selection: fixed, delivery: {<announce_delivery>: {}}}`.

@@ -3,6 +3,18 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.0] - 2026-09-07
+
+### Changed
+- **Overview card and scenarios card now use Live Scenarios (SuperNotify
+  ≥ 2.4.0) for their "active now" count/badge**: they read the reactive
+  `binary_sensor.supernotify_scenario_*` state directly — instant, no
+  polling delay — instead of waiting for the next `enquire_active_scenarios`
+  poll (up to `poll_seconds`, default 60s stale). Only the control card had
+  this; the other two still called the polled service every time. On
+  SuperNotify < 2.4.0, where that state stays `unknown`, both cards fall
+  back to the polled count exactly as before — no behavior change there.
+
 ## [0.14.0] - 2026-09-07
 
 ### Added

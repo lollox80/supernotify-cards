@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.14.0";
+const VERSION = "0.15.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -529,7 +529,9 @@ window.customCards.push({
  * supernotify-overview-card — dashboard overview
  * Stats (sent, failures, active scenarios, deliveries), last notification
  * and transport status. Data from entities exposed by SuperNotify plus
- * enquire_* services called over WebSocket.
+ * enquire_* services called over WebSocket. Active scenarios prefer the
+ * reactive binary_sensor.supernotify_scenario_* state (SuperNotify >= 2.4.0,
+ * Live Scenarios) over the polled enquire_active_scenarios count.
  * ════════════════════════════════════════════════════════════════════════ */
 
 class SupernotifyOverviewCard extends HTMLElement {
@@ -586,6 +588,22 @@ class SupernotifyOverviewCard extends HTMLElement {
   _st(id) {
     const s = this._hass && this._hass.states[id];
     return s ? s.state : undefined;
+  }
+
+  // SuperNotify >= 2.4.0 (Live Scenarios): binary_sensor.supernotify_scenario_*
+  // reports a real, reactive on/off state — read it directly instead of
+  // waiting for the next enquire_active_scenarios poll. Returns null on
+  // older versions (state stuck at "unknown"), so the caller falls back
+  // to the polled count from _refresh().
+  _activeScenarios() {
+    if (!this._hass) return null;
+    const ids = Object.keys(this._hass.states).filter((e) =>
+      e.startsWith("binary_sensor.supernotify_scenario_")
+    );
+    if (!ids.length) return null;
+    const known = ids.filter((e) => !["unknown", "unavailable"].includes(this._st(e)));
+    if (!known.length) return null;
+    return known.filter((e) => this._st(e) === "on");
   }
 
   async _ws(service, data) {
@@ -679,7 +697,8 @@ class SupernotifyOverviewCard extends HTMLElement {
     const failures = this._st("sensor.supernotify_failures");
     const dels = this._scan("delivery");
     const delsOn = dels.filter((d) => d.state === "on").length;
-    const act = this._active;
+    const reactiveAct = this._activeScenarios();
+    const act = reactiveAct !== null ? reactiveAct : this._active;
     const stat = (k, v, s, color) =>
       `<div class="stat"><div class="k">${k}</div><div class="v"${color ? ` style="color:${color}"` : ""}>${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
     const p = this._palette();
@@ -1239,9 +1258,13 @@ window.customCards.push({
 /* ════════════════════════════════════════════════════════════════════════
  * supernotify-scenarios-card — scenarios dashboard
  * Auto-discovers the scenario entities SuperNotify exposes. "Active now"
- * badge comes from the enquire_active_scenarios response service (polled),
- * per-delivery override tags (enabled/disabled) from entity attributes.
- * Optional groups reproduce the prototype categories.
+ * badge: on SuperNotify >= 2.4.0 (Live Scenarios) it reads the real,
+ * reactive on/off state of binary_sensor.supernotify_scenario_* directly —
+ * instant, no polling. On older versions, where that state stays
+ * "unknown", it falls back to the enquire_active_scenarios response
+ * service (polled every poll_seconds). Per-delivery override tags
+ * (enabled/disabled) come from entity attributes. Optional groups
+ * reproduce the prototype categories.
  * ════════════════════════════════════════════════════════════════════════ */
 
 const SN_SCENARIO_ICONS = {
@@ -1326,9 +1349,20 @@ class SupernotifyScenariosCard extends HTMLElement {
       const m = id.match(/^[a-z_]+\.supernotify_scenario_(.+)$/);
       if (!m) continue;
       const s = this._hass.states[id];
-      out.push({ id, name: m[1], a: s.attributes || {} });
+      out.push({ id, name: m[1], a: s.attributes || {}, state: s.state });
     }
     return out;
+  }
+
+  // SuperNotify >= 2.4.0 (Live Scenarios): binary_sensor.supernotify_scenario_*
+  // now reports a real on/off state, recomputed reactively — no need to wait
+  // for the next enquire_active_scenarios poll. Returns null (not an empty
+  // array) when every scenario is still "unknown"/"unavailable", so the
+  // caller can fall back to the polled list on older SuperNotify versions.
+  _reactiveActive(all) {
+    const known = all.filter((s) => !["unknown", "unavailable"].includes(s.state));
+    if (!known.length) return null;
+    return known.filter((s) => s.state === "on").map((s) => s.name);
   }
 
   _moreInfo(entityId) {
@@ -1406,7 +1440,8 @@ class SupernotifyScenariosCard extends HTMLElement {
   _update() {
     if (!this.shadowRoot) return;
     const all = this._scenarios();
-    const active = this._active || [];
+    const reactive = this._reactiveActive(all);
+    const active = reactive !== null ? reactive : (this._active || []);
     const rows = this.shadowRoot.getElementById("rows");
     if (!all.length) {
       rows.innerHTML = `<span class="tag">${snT(this._config, this._hass).no_scenarios}</span>`;
