@@ -3,6 +3,18 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.0] - 2026-09-07
+
+### Added
+- **New card: `supernotify-automations-card`**, restored — it existed only
+  as a manually-deployed copy on one installation (never committed to this
+  repository), so a HACS update overwriting that installation's files with
+  the tracked repository content removed it. Now tracked here for good.
+  Live list of the automations that call `notify.supernotify`: search,
+  category filters, state and "last triggered", enable/disable toggle.
+  Discovery is hybrid — a scanner script (`tools/genera_vista_automazioni.py`)
+  writes a JSON manifest, the card layers live state on top of it.
+
 ## [0.11.0] - 2026-09-07
 
 ### Added

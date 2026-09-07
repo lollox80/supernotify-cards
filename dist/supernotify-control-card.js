@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.11.0";
+const VERSION = "0.12.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -56,6 +56,10 @@ const SN_STRINGS = {
     custom_target_ph: "e.g. user@example.com, 123456789",
     native_target_tag: "🎯 native area/floor/label",
     target_warn: "⚠️ Areas, floors and labels are only resolved by notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts and chime. With any other channel — or the default routing when no channel is picked above — the notification can silently end up with no target. Pick a compatible channel, or add a person/device directly.",
+    aut_search: "Search automations…", aut_all: "All", aut_none: "No matches",
+    aut_err: "Manifest not found — generate it with tools/genera_vista_automazioni.py",
+    aut_updated: "list updated", aut_count: "automations", never: "never",
+    ago_now: "now", ago_min: "min ago", ago_h: "h ago", ago_d: "d ago",
   },
   it: {
     presence: "Presenza", time_band: "Fascia oraria", quiet: "Silenzioso",
@@ -98,6 +102,10 @@ const SN_STRINGS = {
     custom_target_ph: "es. utente@esempio.com, 123456789",
     native_target_tag: "🎯 area/piano/etichetta nativi",
     target_warn: "⚠️ Aree, piani ed etichette vengono risolti solo da notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts e chime. Con qualsiasi altro canale — o con l'instradamento di default se non scegli nessun canale qui sopra — la notifica può restare senza target senza nessun errore visibile. Scegli un canale compatibile, oppure aggiungi anche una persona/dispositivo diretto.",
+    aut_search: "Cerca automazione…", aut_all: "Tutte", aut_none: "Nessun risultato",
+    aut_err: "Manifest non trovato — generalo con tools/genera_vista_automazioni.py",
+    aut_updated: "elenco aggiornato", aut_count: "automazioni", never: "mai",
+    ago_now: "ora", ago_min: "min fa", ago_h: "h fa", ago_d: "g fa",
   },
 };
 
@@ -1878,6 +1886,285 @@ window.customCards.push({
   type: "supernotify-composer-card",
   name: "SuperNotify Composer Card",
   description: "Try & send: title, message, priority, optional explicit channels, live phone preview.",
+});
+
+/* ======================================================================
+ * SupernotifyAutomationsCard — dynamic list of the automations that send
+ * notifications via notify.supernotify.
+ *
+ * HA cannot expose the config of YAML/package automations (no `id`), so
+ * discovery is hybrid: a scanner script writes a JSON manifest under
+ * /config/www/ and this card layers everything live on top of it —
+ * state, last_triggered, enable/disable toggle, search and category
+ * filters. Regenerate the manifest with tools/genera_vista_automazioni.py.
+ *
+ * Options:
+ *   manifest_url  (default /local/supernotify/automations.json)
+ *   intro         optional intro text (HTML)
+ *   style         "supernotify" (default) | "theme"
+ *   language      override, else follows hass.language
+ * ==================================================================== */
+class SupernotifyAutomationsCard extends HTMLElement {
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = {
+      manifest_url: "/local/supernotify/automations.json",
+      style: "supernotify",
+      ...(config || {}),
+    };
+    this._rendered = false;
+    this._q = "";
+    this._cat = null;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._manifest && !this._loading && !this._err) this._load();
+    if (!this._rendered || wasDark !== this._dark) this._render();
+    else this._updateRows();
+  }
+
+  getCardSize() {
+    return 8;
+  }
+
+  async _load() {
+    this._loading = true;
+    try {
+      const r = await fetch(this._config.manifest_url + "?nc=" + Date.now(),
+        { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      this._manifest = await r.json();
+      this._err = null;
+    } catch (e) {
+      this._err = String((e && e.message) || e);
+    }
+    this._loading = false;
+    this._rendered = false;
+    if (this._hass) this._render();
+  }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return {
+        brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", line: "var(--divider-color)",
+        panel: "var(--card-background-color)", soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        okSoft: "rgba(46,158,91,.10)", ink: "var(--primary-text-color)",
+        muted: "var(--secondary-text-color)",
+      };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#0288d1", ok: "#7fe0a5", line: "#2b3441",
+          panel: "#1a222c", soft: "#16212c", okSoft: "rgba(46,158,91,.15)",
+          ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", line: "#e3e9f0",
+          panel: "#fff", soft: "#eef4fb", okSoft: "#e9f7ee",
+          ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  _esc(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  _rel(iso) {
+    const T = snT(this._config, this._hass);
+    if (!iso) return T.never;
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (s < 90) return T.ago_now;
+    if (s < 5400) return Math.round(s / 60) + " " + T.ago_min;
+    if (s < 129600) return Math.round(s / 3600) + " " + T.ago_h;
+    return Math.round(s / 86400) + " " + T.ago_d;
+  }
+
+  _items() {
+    const list = (this._manifest && this._manifest.automations) || [];
+    return list.map((a) => ({
+      e: a.e, n: a.n || a.e, c: a.c || "—", s: a.s || "",
+      st: this._hass.states[a.e],
+    }));
+  }
+
+  _cats(items) {
+    const seen = [];
+    for (const a of items) if (!seen.includes(a.c)) seen.push(a.c);
+    return seen;
+  }
+
+  _filtered(items) {
+    const q = this._q.trim().toLowerCase();
+    return items.filter((a) =>
+      (!this._cat || a.c === this._cat) &&
+      (!q || a.n.toLowerCase().includes(q) || a.e.includes(q) ||
+        a.s.toLowerCase().includes(q)));
+  }
+
+  _toggle(ent, on) {
+    this._hass.callService("automation", on ? "turn_on" : "turn_off",
+      { entity_id: ent });
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    const T = snT(this._config, this._hass);
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .top { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+        input[type=search] { flex: 1; border: 1.5px solid ${p.line}; border-radius: 10px;
+          padding: 8px 12px; font-size: 13.5px; background: ${p.panel}; color: ${p.ink}; }
+        input[type=search]:focus { outline: none; border-color: ${p.brand}; }
+        .tot { font-size: 12px; font-weight: 750; color: ${p.muted}; white-space: nowrap; }
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+        .chip { border: 1.5px solid ${p.line}; border-radius: 999px; padding: 4px 11px;
+          font-size: 12px; font-weight: 650; cursor: pointer; user-select: none; }
+        .chip.sel { border-color: ${p.brand}; background: ${p.soft}; color: ${p.brandD}; }
+        .grp { font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+          font-weight: 800; color: ${p.muted}; margin: 12px 4px 4px; }
+        .row { display: flex; align-items: center; gap: 10px; padding: 7px 8px;
+          border-radius: 10px; }
+        .row:hover { background: ${p.soft}; }
+        .row.off .nm { opacity: .55; }
+        .who { flex: 1; min-width: 0; }
+        .nm { font-size: 13.5px; font-weight: 650; overflow: hidden;
+          text-overflow: ellipsis; white-space: nowrap; }
+        .sub { font-size: 11px; color: ${p.muted}; }
+        .sw { position: relative; width: 40px; height: 22px; flex: none; }
+        .sw input { opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+        .sw .sl { position: absolute; inset: 0; border-radius: 999px; background: ${p.line};
+          pointer-events: none; transition: background .15s; }
+        .sw .sl::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px;
+          height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+        .sw input:checked + .sl { background: ${p.brand}; }
+        .sw input:checked + .sl::after { left: 21px; }
+        .empty { padding: 18px 8px; color: ${p.muted}; font-size: 13px; }
+        .err { padding: 14px; border: 1.5px dashed ${p.line}; border-radius: 12px;
+          color: ${p.muted}; font-size: 13px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+      </style>
+      <ha-card>
+        ${snIntro(this._config, this._dark)}
+        <div id="body"></div>
+        <div class="ver" id="foot">supernotify-automations-card v${VERSION}</div>
+      </ha-card>`;
+    this._renderBody();
+  }
+
+  _renderBody() {
+    const el = this.shadowRoot.getElementById("body");
+    const T = snT(this._config, this._hass);
+    if (this._err) {
+      el.innerHTML = `<div class="err">⚠️ ${this._esc(T.aut_err)}<br>
+        <span style="opacity:.7">${this._esc(this._config.manifest_url)} — ${this._esc(this._err)}</span></div>`;
+      return;
+    }
+    if (!this._manifest) {
+      el.innerHTML = `<div class="empty">…</div>`;
+      return;
+    }
+    const items = this._items();
+    const cats = this._cats(items);
+    el.innerHTML = `
+      <div class="top">
+        <input type="search" id="q" placeholder="${this._esc(T.aut_search)}"
+          value="${this._esc(this._q)}" aria-label="${this._esc(T.aut_search)}">
+        <span class="tot">${items.length} ${T.aut_count}</span>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div id="list"></div>`;
+    const q = el.querySelector("#q");
+    q.addEventListener("input", () => { this._q = q.value; this._renderList(); });
+    this._renderChips();
+    this._renderList();
+    const gen = this._manifest.generated;
+    if (gen) {
+      const f = this.shadowRoot.getElementById("foot");
+      f.innerText = `${T.aut_updated} ${this._rel(gen)} · supernotify-automations-card v${VERSION}`;
+    }
+  }
+
+  _renderChips() {
+    const el = this.shadowRoot.getElementById("chips");
+    if (!el) return;
+    const T = snT(this._config, this._hass);
+    const items = this._items();
+    const cats = this._cats(items);
+    const chip = (label, val, n) =>
+      `<span class="chip ${this._cat === val ? "sel" : ""}" data-c="${this._esc(val || "")}">${this._esc(label)} · ${n}</span>`;
+    el.innerHTML = chip(T.aut_all, null, items.length) +
+      cats.map((c) => chip(c, c, items.filter((a) => a.c === c).length)).join("");
+    el.querySelectorAll(".chip").forEach((ch) => {
+      ch.addEventListener("click", () => {
+        const v = ch.dataset.c || null;
+        this._cat = this._cat === v ? null : v;
+        this._renderChips();
+        this._renderList();
+      });
+    });
+  }
+
+  _renderList() {
+    const el = this.shadowRoot.getElementById("list");
+    if (!el) return;
+    const T = snT(this._config, this._hass);
+    const rows = this._filtered(this._items());
+    if (!rows.length) {
+      el.innerHTML = `<div class="empty">${this._esc(T.aut_none)}</div>`;
+      return;
+    }
+    let html = "", lastCat = null;
+    for (const a of rows) {
+      if (a.c !== lastCat && !this._cat) {
+        html += `<div class="grp">${this._esc(a.c)}</div>`;
+        lastCat = a.c;
+      }
+      const on = a.st && a.st.state === "on";
+      const lt = a.st && a.st.attributes.last_triggered;
+      html += `
+        <div class="row ${on ? "" : "off"}" data-e="${this._esc(a.e)}">
+          <div class="who"><div class="nm">${this._esc(a.n)}</div>
+            <div class="sub"><span class="lt">${this._esc(this._rel(lt))}</span> · ${this._esc(a.s)}</div></div>
+          <label class="sw"><input type="checkbox" ${on ? "checked" : ""}
+            aria-label="${this._esc(a.n)}"><span class="sl"></span></label>
+        </div>`;
+    }
+    el.innerHTML = html;
+    el.querySelectorAll(".row").forEach((row) => {
+      const inp = row.querySelector("input");
+      inp.addEventListener("change", () => this._toggle(row.dataset.e, inp.checked));
+    });
+  }
+
+  _updateRows() {
+    if (!this.shadowRoot || !this._manifest) return;
+    this.shadowRoot.querySelectorAll(".row[data-e]").forEach((row) => {
+      const st = this._hass.states[row.dataset.e];
+      if (!st) return;
+      const on = st.state === "on";
+      row.classList.toggle("off", !on);
+      const inp = row.querySelector("input");
+      if (inp && inp.checked !== on) inp.checked = on;
+      const lt = row.querySelector(".lt");
+      if (lt) lt.innerText = this._rel(st.attributes.last_triggered);
+    });
+  }
+}
+customElements.define("supernotify-automations-card", SupernotifyAutomationsCard);
+
+window.customCards.push({
+  type: "supernotify-automations-card",
+  name: "SuperNotify Automations Card",
+  description: "Live list of the automations that notify via SuperNotify: search, category filters, enable/disable.",
 });
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");
