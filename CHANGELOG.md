@@ -3,6 +3,32 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.0] - 2026-09-07
+
+### Added
+- **Composer: native HA target selector** — the target field (people,
+  devices, areas, floors, labels) is now a real `ha-selector` with
+  `selector: target:`, the same widget SuperNotify's own `supernotify.notify`
+  action shows in Developer Tools/the automation editor. Replaces the
+  person-only recipient chips.
+- **Composer: custom targets field** — comma-separated free text for
+  recipients with no HA selector (email addresses, Telegram chat IDs, …),
+  sent as `custom_target`.
+- **Composer now sends via the dedicated `supernotify.notify` action**
+  (SuperNotify ≥ 2.3.0) instead of `notify.supernotify`'s generic `data:`
+  field — typed top-level fields (`priority`, `target`, `custom_target`,
+  `camera_entity_id`, `delivery_selection`, `delivery`), full HA `Context`
+  propagation end to end.
+- **Composer: translated priority options** — minimum/low/medium/high/
+  critical now follow the card's Italian/English localization instead of
+  being hardcoded in English.
+
+### Changed
+- README: documented the existing localization (Italian/English, follows
+  `hass.language`, `language:` override), the SuperNotify version needed per
+  feature, and that scenario sensors report a live state from SuperNotify
+  2.4.0 (`scenario_control`) rather than staying `unknown` pending upstream.
+
 ## [0.9.1] - 2026-07-04
 
 ### Changed

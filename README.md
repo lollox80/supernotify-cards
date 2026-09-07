@@ -5,9 +5,18 @@ Lovelace cards for [SuperNotify](https://github.com/rhizomatics/supernotify).
 See [CHANGELOG.md](CHANGELOG.md) for release notes. The loaded version is
 shown on the card footer.
 
+Works with SuperNotify ≥ 2.0.0. The composer card's native target selector
+and its use of the dedicated `supernotify.notify` action need SuperNotify
+≥ 2.3.0; live scenario state (see the control card below) needs ≥ 2.4.0.
+
 All cards accept two common options: `style: theme` (follow the HA theme
 instead of the SuperNotify palette) and `intro: <text>` (HTML allowed),
 which renders an info banner at the top of the card.
+
+**Localization:** every card follows `hass.language` automatically (Italian
+and English so far, English fallback for anything else). Override with
+`language: it` / `language: en` in the card config if you need to pin it
+regardless of the HA UI language.
 
 ## supernotify-control-card
 
@@ -81,9 +90,11 @@ bands:
 | `groups` | no | grouped `input_boolean` toggles with a `name` |
 | `bands` | no | time bands (`input_datetime` start + `input_number` volume) for the status bar |
 
-Active scenarios are read from `binary_sensor.supernotify_scenario_*` and the
-counter hides automatically while those sensors report `unknown` (scenario
-state exposure is pending upstream).
+Active scenarios are read from `binary_sensor.supernotify_scenario_*`. Since
+SuperNotify 2.4.0 these report a live `on`/`off` state (recomputed reactively
+plus a periodic sweep — see `scenario_control` in the SuperNotify config); on
+older versions, or for a scenario configured with `expose_state: false`, they
+stay `unknown` and the counter hides automatically.
 
 The Announce tile calls `notify.supernotify` with
 `data: {delivery_selection: fixed, delivery: {<announce_delivery>: {}}}`.
@@ -177,9 +188,18 @@ type: custom:supernotify-simulator-card
 ## supernotify-composer-card
 
 Try & send: title, message, priority, optional explicit channel chips
-(auto-discovered), live phone preview. Sends a real notification via
-`notify.supernotify` — with `delivery_selection: fixed` when channels are
-picked, and a confirmation guard on critical priority.
+(auto-discovered), a native HA **target selector** (people, devices, areas,
+floors, labels — the same picker HA itself shows for `supernotify.notify`),
+an optional comma-separated **custom targets** field for recipients with no
+HA selector (email addresses, Telegram chat IDs, …), camera snapshot picker
+and a live phone preview.
+
+Sends via the dedicated `supernotify.notify` action (SuperNotify ≥ 2.3.0) —
+typed fields instead of `notify.supernotify`'s generic `data:` — with
+`delivery_selection: fixed` when channels are picked, and a confirmation
+guard on critical priority. Requires SuperNotify ≥ 2.3.0; on older versions
+use `supernotify-control-card`'s Announce tile or your own automation
+instead.
 
 ```yaml
 type: custom:supernotify-composer-card

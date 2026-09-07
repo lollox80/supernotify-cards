@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.9.0";
+const VERSION = "0.10.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -43,13 +43,17 @@ const SN_STRINGS = {
     sim_none: "no deliveries would fire", scenario_tag: "scenario",
     title: "Title", message: "Message", priority: "Priority",
     channels_lbl: "Channels — none picked = normal routing",
-    recipients_lbl: "Recipients — none picked = channel defaults",
     camera_lbl: "Camera snapshot", preview: "Preview",
     no_title: "(no title)", no_message: "(no message)",
     default_prio: "default (medium)",
     comp_hint: "Picked channels are sent with delivery_selection: fixed (only those fire). Critical really is critical — sirens included.",
     critical_confirm: "Send a CRITICAL notification? Sirens and max volume included.",
     write_first: "Write a message first", sent_toast: "Sent 🚀",
+    prio_minimum: "Minimum", prio_low: "Low", prio_medium: "Medium",
+    prio_high: "High", prio_critical: "Critical ⚠️",
+    target_lbl: "Target — people, devices, areas, floors, labels",
+    custom_target_lbl: "Custom targets (email, Telegram IDs, …) — comma separated",
+    custom_target_ph: "e.g. user@example.com, 123456789",
   },
   it: {
     presence: "Presenza", time_band: "Fascia oraria", quiet: "Silenzioso",
@@ -79,13 +83,17 @@ const SN_STRINGS = {
     sim_none: "nessun canale partirebbe", scenario_tag: "scenario",
     title: "Titolo", message: "Messaggio", priority: "Priorità",
     channels_lbl: "Canali — nessuno scelto = instradamento normale",
-    recipients_lbl: "Destinatari — nessuno scelto = default dei canali",
     camera_lbl: "Foto camera", preview: "Anteprima",
     no_title: "(senza titolo)", no_message: "(nessun messaggio)",
     default_prio: "default (media)",
     comp_hint: "I canali scelti partono con delivery_selection: fixed (solo quelli). Il critical è critical davvero — sirene incluse.",
     critical_confirm: "Inviare una notifica CRITICA? Sirene e volume massimo inclusi.",
     write_first: "Scrivi prima un messaggio", sent_toast: "Inviata 🚀",
+    prio_minimum: "Minima", prio_low: "Bassa", prio_medium: "Media",
+    prio_high: "Alta", prio_critical: "Critica ⚠️",
+    target_lbl: "Target — persone, dispositivi, aree, piani, etichette",
+    custom_target_lbl: "Target personalizzati (email, ID Telegram, …) — separati da virgola",
+    custom_target_ph: "es. utente@esempio.com, 123456789",
   },
 };
 
@@ -1592,7 +1600,7 @@ class SupernotifyComposerCard extends HTMLElement {
     this._config = { style: "supernotify", ...(config || {}) };
     this._rendered = false;
     this._picked = new Set();
-    this._pickedRec = new Set();
+    this._targetValue = {};
   }
 
   set hass(hass) {
@@ -1600,6 +1608,7 @@ class SupernotifyComposerCard extends HTMLElement {
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
     if (!this._rendered || wasDark !== this._dark) this._render();
+    else if (this._targetSelEl) this._targetSelEl.hass = hass;
   }
 
   getCardSize() {
@@ -1685,16 +1694,18 @@ class SupernotifyComposerCard extends HTMLElement {
             <label>${T.priority}</label>
             <select id="p">
               <option value="">${T.default_prio}</option>
-              <option value="minimum">minimum</option>
-              <option value="low">low</option>
-              <option value="medium">medium</option>
-              <option value="high">high</option>
-              <option value="critical">critical ⚠️</option>
+              <option value="minimum">${T.prio_minimum}</option>
+              <option value="low">${T.prio_low}</option>
+              <option value="medium">${T.prio_medium}</option>
+              <option value="high">${T.prio_high}</option>
+              <option value="critical">${T.prio_critical}</option>
             </select>
             <label>${T.channels_lbl}</label>
             <div id="chips">${this._deliveryNames().map((d) => `<span class="chip" data-d="${esc(d)}">${esc(d)}</span>`).join("")}</div>
-            <label>${T.recipients_lbl}</label>
-            <div id="recChips">${this._recipientNames().map((r) => `<span class="chip" data-r="${esc(r.person)}">👤 ${esc(r.name)}</span>`).join("")}</div>
+            <label>${T.target_lbl}</label>
+            <div id="targetSel"></div>
+            <input type="text" id="customTarget" placeholder="${T.custom_target_ph}" style="margin-top:6px">
+            <div class="hint" style="margin-top:3px">${T.custom_target_lbl}</div>
             <label>${T.camera_lbl}</label>
             <select id="cam"><option value="">${T.none}</option>${this._cameraNames().map((c) => `<option value="${esc(c)}">📷 ${esc(c)}</option>`).join("")}</select>
             <button class="send" id="send">🚀 ${T.send}</button>
@@ -1737,27 +1748,39 @@ class SupernotifyComposerCard extends HTMLElement {
         node.classList.toggle("sel", this._picked.has(d));
       };
     });
-    sr.querySelectorAll("#recChips .chip").forEach((node) => {
-      node.onclick = () => {
-        const r = node.dataset.r;
-        if (this._pickedRec.has(r)) this._pickedRec.delete(r); else this._pickedRec.add(r);
-        node.classList.toggle("sel", this._pickedRec.has(r));
-      };
-    });
     sr.getElementById("send").onclick = () => this._send();
+    this._mountTargetSelector();
   }
 
-  _recipientNames() {
-    // From the recipient entities SuperNotify exposes: person entity + label.
-    const out = [];
-    if (!this._hass) return out;
-    for (const id of Object.keys(this._hass.states)) {
-      const m = id.match(/^[a-z_]+\.supernotify_recipient_(.+)$/);
-      if (!m) continue;
-      const a = this._hass.states[id].attributes || {};
-      if (a.entity_id) out.push({ person: a.entity_id, name: a.friendly_name || m[1] });
+  // Native HA target selector (people/devices/areas/floors/labels), same
+  // widget HA itself uses in the supernotify.notify Developer Tools/
+  // automation editor UI (services.yaml: target: {selector: {target: {}}}).
+  // ha-selector is part of the core Lovelace frontend bundle, but the
+  // specific target-picker sub-element can still be lazy-loaded, so we wait
+  // for its definition rather than assuming it's ready synchronously.
+  _mountTargetSelector() {
+    const container = this.shadowRoot && this.shadowRoot.getElementById("targetSel");
+    if (!container) return;
+    const mount = () => {
+      const sel = document.createElement("ha-selector");
+      sel.hass = this._hass;
+      sel.selector = { target: {} };
+      sel.value = this._targetValue || {};
+      sel.addEventListener("value-changed", (ev) => {
+        this._targetValue = (ev.detail && ev.detail.value) || {};
+      });
+      container.innerHTML = "";
+      container.appendChild(sel);
+      this._targetSelEl = sel;
+    };
+    if (customElements.get("ha-selector")) {
+      mount();
+    } else {
+      container.textContent = "…";
+      customElements.whenDefined("ha-selector").then(mount).catch(() => {
+        container.textContent = "";
+      });
     }
-    return out.sort((x, y) => x.name.localeCompare(y.name));
   }
 
   _cameraNames() {
@@ -1774,20 +1797,27 @@ class SupernotifyComposerCard extends HTMLElement {
     const priority = sr.getElementById("p").value;
     if (priority === "critical" && !confirm(T.critical_confirm))
       return;
-    const data = {};
-    if (priority) data.priority = priority;
-    if (this._picked.size) {
-      data.delivery_selection = "fixed";
-      data.delivery = {};
-      for (const d of this._picked) data.delivery[d] = {};
-    }
-    const cam = sr.getElementById("cam").value;
-    if (cam) data.media = { camera_entity_id: cam };
+    // Dedicated `supernotify.notify` action (SuperNotify >= 2.3.0): typed,
+    // selector-driven fields instead of notify.supernotify's generic data:.
+    // Context is preserved end-to-end and the target field accepts the
+    // native HA target selector (people/devices/areas/floors/labels).
     const payload = { message };
     if (title) payload.title = title;
-    if (this._pickedRec.size) payload.target = [...this._pickedRec];
-    if (Object.keys(data).length) payload.data = data;
-    this._hass.callService("notify", "supernotify", payload);
+    if (priority) payload.priority = priority;
+    if (this._picked.size) {
+      payload.delivery_selection = "fixed";
+      payload.delivery = {};
+      for (const d of this._picked) payload.delivery[d] = {};
+    }
+    const target = this._targetValue;
+    if (target && Object.keys(target).some((k) => target[k] && target[k].length))
+      payload.target = target;
+    const customRaw = (sr.getElementById("customTarget").value || "").trim();
+    if (customRaw)
+      payload.custom_target = customRaw.split(",").map((s) => s.trim()).filter(Boolean);
+    const cam = sr.getElementById("cam").value;
+    if (cam) payload.camera_entity_id = cam;
+    this._hass.callService("supernotify", "notify", payload);
     this._toast(T.sent_toast);
   }
 
