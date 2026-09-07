@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.13.0";
+const VERSION = "0.14.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -60,6 +60,7 @@ const SN_STRINGS = {
     aut_err: "Manifest not found — generate it with tools/genera_vista_automazioni.py",
     aut_updated: "list updated", aut_count: "automations", never: "never",
     ago_now: "now", ago_min: "min ago", ago_h: "h ago", ago_d: "d ago",
+    aut_disabled_only: "Disabled only",
   },
   it: {
     presence: "Presenza", time_band: "Fascia oraria", quiet: "Silenzioso",
@@ -106,6 +107,7 @@ const SN_STRINGS = {
     aut_err: "Manifest non trovato — generalo con tools/genera_vista_automazioni.py",
     aut_updated: "elenco aggiornato", aut_count: "automazioni", never: "mai",
     ago_now: "ora", ago_min: "min fa", ago_h: "h fa", ago_d: "g fa",
+    aut_disabled_only: "Solo disattivate",
   },
 };
 
@@ -1918,6 +1920,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
     this._rendered = false;
     this._q = "";
     this._cat = null;
+    this._onlyDisabled = false;
   }
 
   set hass(hass) {
@@ -2001,6 +2004,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
     const q = this._q.trim().toLowerCase();
     return items.filter((a) =>
       (!this._cat || a.c === this._cat) &&
+      (!this._onlyDisabled || !(a.st && a.st.state === "on")) &&
       (!q || a.n.toLowerCase().includes(q) || a.e.includes(q) ||
         a.s.toLowerCase().includes(q)));
   }
@@ -2008,6 +2012,12 @@ class SupernotifyAutomationsCard extends HTMLElement {
   _toggle(ent, on) {
     this._hass.callService("automation", on ? "turn_on" : "turn_off",
       { entity_id: ent });
+  }
+
+  _moreInfo(entityId) {
+    this.dispatchEvent(new CustomEvent("hass-more-info", {
+      detail: { entityId }, bubbles: true, composed: true,
+    }));
   }
 
   _render() {
@@ -2029,13 +2039,14 @@ class SupernotifyAutomationsCard extends HTMLElement {
         .chip { border: 1.5px solid ${p.line}; border-radius: 999px; padding: 4px 11px;
           font-size: 12px; font-weight: 650; cursor: pointer; user-select: none; }
         .chip.sel { border-color: ${p.brand}; background: ${p.soft}; color: ${p.brandD}; }
+        .chip.warn.sel { border-color: #e0733a; background: rgba(224,115,58,.12); color: #e0733a; }
         .grp { font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
           font-weight: 800; color: ${p.muted}; margin: 12px 4px 4px; }
         .row { display: flex; align-items: center; gap: 10px; padding: 7px 8px;
           border-radius: 10px; }
         .row:hover { background: ${p.soft}; }
         .row.off .nm { opacity: .55; }
-        .who { flex: 1; min-width: 0; }
+        .who { flex: 1; min-width: 0; cursor: pointer; }
         .nm { font-size: 13.5px; font-weight: 650; overflow: hidden;
           text-overflow: ellipsis; white-space: nowrap; }
         .sub { font-size: 11px; color: ${p.muted}; }
@@ -2099,17 +2110,25 @@ class SupernotifyAutomationsCard extends HTMLElement {
     const T = snT(this._config, this._hass);
     const items = this._items();
     const cats = this._cats(items);
+    const offCount = items.filter((a) => !(a.st && a.st.state === "on")).length;
     const chip = (label, val, n) =>
       `<span class="chip ${this._cat === val ? "sel" : ""}" data-c="${this._esc(val || "")}">${this._esc(label)} · ${n}</span>`;
     el.innerHTML = chip(T.aut_all, null, items.length) +
-      cats.map((c) => chip(c, c, items.filter((a) => a.c === c).length)).join("");
-    el.querySelectorAll(".chip").forEach((ch) => {
+      cats.map((c) => chip(c, c, items.filter((a) => a.c === c).length)).join("") +
+      `<span class="chip warn ${this._onlyDisabled ? "sel" : ""}" id="offOnly">🔕 ${this._esc(T.aut_disabled_only)} · ${offCount}</span>`;
+    el.querySelectorAll(".chip[data-c]").forEach((ch) => {
       ch.addEventListener("click", () => {
         const v = ch.dataset.c || null;
         this._cat = this._cat === v ? null : v;
         this._renderChips();
         this._renderList();
       });
+    });
+    const offCh = el.querySelector("#offOnly");
+    if (offCh) offCh.addEventListener("click", () => {
+      this._onlyDisabled = !this._onlyDisabled;
+      this._renderChips();
+      this._renderList();
     });
   }
 
@@ -2142,6 +2161,8 @@ class SupernotifyAutomationsCard extends HTMLElement {
     el.querySelectorAll(".row").forEach((row) => {
       const inp = row.querySelector("input");
       inp.addEventListener("change", () => this._toggle(row.dataset.e, inp.checked));
+      const who = row.querySelector(".who");
+      if (who) who.addEventListener("click", () => this._moreInfo(row.dataset.e));
     });
   }
 

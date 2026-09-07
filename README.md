@@ -225,7 +225,8 @@ type: custom:supernotify-composer-card
 ## supernotify-automations-card
 
 Live list of the automations that notify via `notify.supernotify`: search,
-category filters, state and "last triggered", enable/disable toggle.
+category filters, a "🔕 disabled only" toggle, state and "last triggered",
+enable/disable, tap a row for the automation's own more-info dialog.
 
 Home Assistant does not expose the config of YAML/package automations (they
 have no `id`), so discovery is hybrid: [`tools/genera_vista_automazioni.py`](tools/genera_vista_automazioni.py)

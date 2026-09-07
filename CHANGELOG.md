@@ -3,6 +3,19 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.0] - 2026-09-07
+
+### Added
+- **Automations card: tap a row to open its more-info dialog** (same
+  `hass-more-info` pattern already used by the deliveries/recipients/
+  scenarios cards) — the toggle switch keeps its own click target so
+  enabling/disabling still works with a single tap.
+- **Automations card: "🔕 disabled only" filter chip**, alongside the
+  category chips, to spot silenced automations quickly in a long list.
+- **CI**: a GitHub Action now runs on every push/PR — `node -c` on the
+  card bundle, `python3 -m py_compile` on the tools scripts, and a JSON
+  validity check on `hacs.json`.
+
 ## [0.13.0] - 2026-09-07
 
 ### Added

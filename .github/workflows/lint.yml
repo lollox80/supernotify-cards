@@ -1,0 +1,31 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check dist/*.js syntax (node -c)
+        run: |
+          set -e
+          for f in dist/*.js; do
+            echo "Checking $f"
+            node -c "$f"
+          done
+
+      - name: Check hacs.json is valid JSON
+        run: python3 -c "import json; json.load(open('hacs.json'))"
+
+      - name: Check tools/*.py syntax
+        run: |
+          set -e
+          for f in tools/*.py; do
+            echo "Checking $f"
+            python3 -m py_compile "$f"
+          done
