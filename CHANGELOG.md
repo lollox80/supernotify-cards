@@ -3,6 +3,14 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.0] - 2026-09-07
+
+### Added
+- **Automations card: version shown in the header**, next to the automation
+  count (`v0.13.0`), not only in the footer below the list — with hundreds
+  of automations the footer is a long scroll away, so this makes it obvious
+  at a glance which version is actually loaded.
+
 ## [0.12.0] - 2026-09-07
 
 ### Added

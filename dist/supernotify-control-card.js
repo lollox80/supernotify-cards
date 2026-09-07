@@ -8,7 +8,7 @@
  * Example config: see README.md
  */
 
-const VERSION = "0.12.0";
+const VERSION = "0.13.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -2078,7 +2078,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
       <div class="top">
         <input type="search" id="q" placeholder="${this._esc(T.aut_search)}"
           value="${this._esc(this._q)}" aria-label="${this._esc(T.aut_search)}">
-        <span class="tot">${items.length} ${T.aut_count}</span>
+        <span class="tot">${items.length} ${T.aut_count} · v${VERSION}</span>
       </div>
       <div class="chips" id="chips"></div>
       <div id="list"></div>`;
