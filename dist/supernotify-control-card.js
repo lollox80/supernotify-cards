@@ -8,6 +8,12 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-08 — v0.17.0. Recipients card: explicit ⚙️ gear icon at the end of each row
+ *   (next to the on/off switch), so tap-for-details is visible instead of implicit on the
+ *   whole row. Tapping it fires the same hass-more-info event as before (native HA dialog,
+ *   read-only — SuperNotify has no recipient Config Flow yet, contacts still live in
+ *   recipients.yaml). New i18n key `details` (en/it).
+ *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_gear.js
  * 2026-09-08 — v0.16.0. SuperNotify 2.4.0-beta1 exposes binary_sensor.supernotify_delivery_*,
  *   _transport_* and _recipient_* as genuinely toggle-able (a state change is picked up by
  *   DeliveryRegistry/PeopleRegistry.handle_entity_state_change and enables/disables the real
@@ -20,7 +26,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.16.0";
+const VERSION = "0.17.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -48,6 +54,7 @@ const SN_STRINGS = {
     fixed_targets: "fixed targets", no_deliveries: "no delivery entities found",
     home: "home", away: "away", devices: "devices", overrides: "delivery overrides",
     no_contact: "no contact points", no_recipients: "no recipient entities found",
+    details: "Details",
     active_now: "active now", disabled: "disabled", other: "Other",
     media: "media", no_scenarios: "no scenario entities found",
     sim_pick: "🎬 Scenarios — tap to simulate", sim_fire: "📤 Deliveries that would fire",
@@ -95,6 +102,7 @@ const SN_STRINGS = {
     fixed_targets: "target fissi", no_deliveries: "nessuna entità delivery trovata",
     home: "in casa", away: "fuori", devices: "dispositivi", overrides: "override delivery",
     no_contact: "nessun recapito", no_recipients: "nessuna entità destinatario trovata",
+    details: "Dettagli",
     active_now: "attivo ora", disabled: "disattivato", other: "Altro",
     media: "media", no_scenarios: "nessuna entità scenario trovata",
     sim_pick: "🎬 Scenari — tocca per simulare", sim_fire: "📤 Canali che partirebbero",
@@ -1420,6 +1428,9 @@ class SupernotifyRecipientsCard extends HTMLElement {
         .b-on { background: rgba(46,158,91,.14); color: ${p.ok}; }
         .b-off { background: ${p.soft}; color: ${p.muted}; }
         ${SN_SWITCH_CSS}
+        .gear { font-size: 17px; opacity: .5; flex-shrink: 0; cursor: pointer;
+                transition: opacity .15s; padding: 2px; }
+        .gear:hover { opacity: 1; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
@@ -1459,6 +1470,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
           <span class="sub">${esc(personId || "")}${pState !== undefined ? (home ? " · 🏠 " + T.home : " · 🚗 " + T.away) : ""}</span>
           <div class="tags">${tags.map((t) => t.startsWith("<span") ? t : `<span class="tag">${esc(t)}</span>`).join("")}</div>
         </div>
+        <span class="gear" title="${esc(T.details)}" aria-label="${esc(T.details)}">⚙️</span>
         <label class="sw" data-id="${esc(r.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
           <input type="checkbox" ${r.on ? "checked" : ""} aria-label="${esc(alias || r.name)}">
           <span class="sl"></span>

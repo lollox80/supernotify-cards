@@ -3,6 +3,15 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.17.0] - 2026-09-08
+
+### Added
+- Recipients card: explicit ⚙️ gear icon at the end of each row, next to the on/off switch,
+  so tap-for-details is visible instead of implicit on the whole row. Tapping it fires the
+  same `hass-more-info` event as before (native HA dialog, read-only — SuperNotify has no
+  recipient Config Flow yet, contacts still live in `recipients.yaml`).
+- New i18n key `details` (en/it).
+
 ## [0.16.0] - 2026-09-08
 
 ### Added
