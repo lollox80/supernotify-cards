@@ -3,6 +3,25 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.0] - 2026-09-08
+
+### Added
+- **Live on/off switches on deliveries-card and recipients-card rows**, replacing the
+  previous read-only badge. Toggling calls the HA REST states endpoint directly
+  (`POST /api/states/<entity_id>` via `hass.callApi`) since SuperNotify's new
+  `binary_sensor.supernotify_delivery_*` / `_recipient_*` entities (2.4.0-beta1) are
+  raw states with no dedicated HA service — SuperNotify's own
+  `DeliveryRegistry`/`PeopleRegistry.handle_entity_state_change()` listener reacts to
+  any state change on the entity, which is exactly what this writes.
+- **New `supernotify-transports-card`**: auto-discovers `binary_sensor.supernotify_transport_*`,
+  shows an error tag when `error_count > 0`, and the same live on/off switch. Transports
+  previously had no dedicated card (only read-only display in the overview card or
+  native HA tiles).
+
+### Changed
+- Shared `snSetBinaryState()` helper and `SN_SWITCH_CSS` block reused by all three
+  toggle-capable cards.
+
 ## [0.15.0] - 2026-09-07
 
 ### Changed

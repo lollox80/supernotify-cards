@@ -6,9 +6,21 @@
  * Vanilla Custom Element, no build step, no dependencies.
  *
  * Example config: see README.md
+ *
+ * CHANGELOG
+ * 2026-09-08 — v0.16.0. SuperNotify 2.4.0-beta1 exposes binary_sensor.supernotify_delivery_*,
+ *   _transport_* and _recipient_* as genuinely toggle-able (a state change is picked up by
+ *   DeliveryRegistry/PeopleRegistry.handle_entity_state_change and enables/disables the real
+ *   delivery/transport/recipient — see custom_components/supernotify/delivery.py and people.py).
+ *   Added: deliveries-card and recipients-card rows now have a live on/off switch instead of a
+ *   read-only badge; new supernotify-transports-card (same pattern, new — transports had no
+ *   dedicated card before). Toggling calls the REST states endpoint directly (POST /api/states/
+ *   <entity_id>, via hass.callApi — there is no HA service for a custom binary_sensor), since
+ *   that's what SuperNotify's own state-change listener is built to react to.
+ *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.15.0";
+const VERSION = "0.16.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -129,6 +141,45 @@ function snIntro(config, dark) {
     border-radius:12px;padding:10px 14px;font-size:12.5px;line-height:1.55;
     margin-bottom:12px">${config.intro}</div>`;
 }
+
+/**
+ * Toggle a SuperNotify delivery/transport/recipient binary_sensor.
+ *
+ * SuperNotify >= 2.4.0-beta1 exposes these as plain states set with
+ * hass.states.async_set() (see hass_api.py expose_entity), not as a real
+ * entity platform — there is no turn_on/turn_off service for them. What
+ * DOES react is DeliveryRegistry/PeopleRegistry.handle_entity_state_change,
+ * subscribed via async_track_state_change_event: it fires on ANY state
+ * change to that entity_id, from any source. So the one thing a card can
+ * do from the browser is write the new state through the REST API
+ * (POST /api/states/<entity_id>) — same mechanism Developer Tools > States
+ * uses. Attributes are included so the row doesn't blank out until the
+ * next expose_entities() refresh.
+ */
+function snSetBinaryState(hass, entityId, on) {
+  const cur = hass.states[entityId];
+  const attributes = (cur && cur.attributes) || {};
+  return hass.callApi("POST", `states/${entityId}`, {
+    state: on ? "on" : "off",
+    attributes,
+  });
+}
+
+/**
+ * Shared CSS for the small pill on/off switch used by the toggle-able
+ * delivery/transport/recipient rows (same look as automations-card's
+ * enable/disable switch).
+ */
+const SN_SWITCH_CSS = `
+  .sw { position: relative; width: 40px; height: 22px; flex: none; }
+  .sw input { opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .sw .sl { position: absolute; inset: 0; border-radius: 999px; background: var(--sn-sw-line, #ccc);
+    pointer-events: none; transition: background .15s; }
+  .sw .sl::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px;
+    height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .sw input:checked + .sl { background: var(--sn-sw-on, #03a9f4); }
+  .sw input:checked + .sl::after { left: 21px; }
+`;
 
 class SupernotifyControlCard extends HTMLElement {
   static getStubConfig() {
@@ -1055,6 +1106,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
                  flex-shrink: 0; }
         .b-on { background: rgba(46,158,91,.14); color: ${p.ok}; }
         .b-off { background: ${p.soft}; color: ${p.muted}; }
+        ${SN_SWITCH_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
@@ -1068,6 +1120,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
     if (!this.shadowRoot) return;
     const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const T = snT(this._config, this._hass);
+    const p = this._palette();
     const dels = this._deliveries();
     const rows = this.shadowRoot.getElementById("rows");
     if (!dels.length) {
@@ -1093,11 +1146,24 @@ class SupernotifyDeliveriesCard extends HTMLElement {
         <div class="mid"><b>${esc(d.name)}</b> <span class="tr">${esc(tr)}${alias ? " · " + esc(alias) : ""}</span>
           <div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
         </div>
-        <span class="badge ${d.on ? "b-on" : "b-off"}">${d.on ? T.enabled : T.off}</span>
+        <label class="sw" data-id="${esc(d.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
+          <input type="checkbox" ${d.on ? "checked" : ""} aria-label="${esc(d.name)}">
+          <span class="sl"></span>
+        </label>
       </div>`;
     }).join("");
     rows.querySelectorAll(".row").forEach((node) => {
-      node.onclick = () => this._moreInfo(dels[+node.dataset.i].id);
+      node.onclick = (e) => {
+        if (e.target.closest(".sw")) return;
+        this._moreInfo(dels[+node.dataset.i].id);
+      };
+    });
+    rows.querySelectorAll(".sw").forEach((label) => {
+      label.addEventListener("click", (e) => e.stopPropagation());
+      const input = label.querySelector("input");
+      input.addEventListener("change", () => {
+        snSetBinaryState(this._hass, label.dataset.id, input.checked);
+      });
     });
   }
 }
@@ -1107,7 +1173,160 @@ customElements.define("supernotify-deliveries-card", SupernotifyDeliveriesCard);
 window.customCards.push({
   type: "supernotify-deliveries-card",
   name: "SuperNotify Deliveries Card",
-  description: "Delivery dashboard: auto-discovered rows with transport icon, selection/action/target tags and enabled badge.",
+  description: "Delivery dashboard: auto-discovered rows with transport icon, selection/action/target tags and a live on/off switch.",
+});
+
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-transports-card — transport adaptors dashboard (NEW, 2026-09-08)
+ * Auto-discovers binary_sensor.supernotify_transport_* (SuperNotify >= 2.2.0
+ * exposed these read-only; >= 2.4.0-beta1 they're genuinely toggle-able —
+ * see DeliveryRegistry.handle_entity_state_change in delivery.py). One row
+ * per transport adaptor: icon, name/alias, error tag if it has ever failed,
+ * live on/off switch. Tap a row for full attributes (more-info).
+ * ════════════════════════════════════════════════════════════════════════ */
+
+class SupernotifyTransportsCard extends HTMLElement {
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { style: "supernotify", ...(config || {}) };
+    this._rendered = false;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._rendered || wasDark !== this._dark) this._render();
+    else this._update();
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return {
+        brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", crit: "var(--error-color, #e23c3c)",
+        line: "var(--divider-color)", panel: "var(--card-background-color)",
+        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
+      };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", crit: "#ff9a9a",
+          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", crit: "#c62828",
+          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  _transports() {
+    const out = [];
+    if (!this._hass) return out;
+    for (const id of Object.keys(this._hass.states)) {
+      const m = id.match(/^[a-z_]+\.supernotify_transport_(.+)$/);
+      if (!m) continue;
+      const s = this._hass.states[id];
+      out.push({ id, name: m[1], on: s.state === "on", a: s.attributes || {} });
+    }
+    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
+    return out;
+  }
+
+  _moreInfo(entityId) {
+    this.dispatchEvent(new CustomEvent("hass-more-info", {
+      detail: { entityId }, bubbles: true, composed: true,
+    }));
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px;
+               border-bottom: 1px solid ${p.line}; cursor: pointer; border-radius: 8px; }
+        .row:hover { background: ${p.soft}; }
+        .row:last-child { border-bottom: 0; }
+        .em { font-size: 22px; flex-shrink: 0; }
+        .mid { flex: 1; min-width: 0; }
+        .mid b { font-size: 14px; }
+        .mid .sub { font-size: 11.5px; color: ${p.muted}; }
+        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
+               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
+               white-space: nowrap; }
+        .tag.err { color: ${p.crit}; border-color: ${p.crit}; background: rgba(226,60,60,.08); }
+        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750; }
+        .b-off { background: ${p.soft}; color: ${p.muted}; }
+        ${SN_SWITCH_CSS}
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+      </style>
+      <ha-card>
+        ${snIntro(this._config, this._dark)}<div id="rows"></div>
+        <div class="ver">supernotify-transports-card v${VERSION}</div>
+      </ha-card>`;
+    this._update();
+  }
+
+  _update() {
+    if (!this.shadowRoot) return;
+    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const T = snT(this._config, this._hass);
+    const p = this._palette();
+    const trs = this._transports();
+    const rows = this.shadowRoot.getElementById("rows");
+    if (!trs.length) {
+      rows.innerHTML = `<span class="badge b-off">${T.no_transports}</span>`;
+      return;
+    }
+    rows.innerHTML = trs.map((t, i) => {
+      const em = SN_TRANSPORT_ICONS[t.name] || "🔌";
+      const tags = [];
+      const errCount = +t.a.error_count || 0;
+      if (errCount > 0) tags.push(`<span class="tag err">⚠️ ${errCount} · ${esc(t.a.last_error_message || "")}</span>`);
+      const alias = t.a.friendly_name && t.a.friendly_name !== t.name ? t.a.friendly_name : "";
+      return `<div class="row" data-i="${i}">
+        <span class="em">${em}</span>
+        <div class="mid"><b>${esc(t.name)}</b>${alias ? ` <span class="sub">· ${esc(alias)}</span>` : ""}
+          ${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}
+        </div>
+        <label class="sw" data-id="${esc(t.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
+          <input type="checkbox" ${t.on ? "checked" : ""} aria-label="${esc(t.name)}">
+          <span class="sl"></span>
+        </label>
+      </div>`;
+    }).join("");
+    rows.querySelectorAll(".row").forEach((node) => {
+      node.onclick = (e) => {
+        if (e.target.closest(".sw")) return;
+        this._moreInfo(trs[+node.dataset.i].id);
+      };
+    });
+    rows.querySelectorAll(".sw").forEach((label) => {
+      label.addEventListener("click", (e) => e.stopPropagation());
+      const input = label.querySelector("input");
+      input.addEventListener("change", () => {
+        snSetBinaryState(this._hass, label.dataset.id, input.checked);
+      });
+    });
+  }
+}
+
+customElements.define("supernotify-transports-card", SupernotifyTransportsCard);
+
+window.customCards.push({
+  type: "supernotify-transports-card",
+  name: "SuperNotify Transports Card",
+  description: "Transport adaptors dashboard: auto-discovered rows with icon, error tag if any, and a live on/off switch.",
 });
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -1200,6 +1419,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
                  flex-shrink: 0; }
         .b-on { background: rgba(46,158,91,.14); color: ${p.ok}; }
         .b-off { background: ${p.soft}; color: ${p.muted}; }
+        ${SN_SWITCH_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
@@ -1213,6 +1433,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
     if (!this.shadowRoot) return;
     const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const T = snT(this._config, this._hass);
+    const p = this._palette();
     const recs = this._recipients();
     const rows = this.shadowRoot.getElementById("rows");
     if (!recs.length) {
@@ -1238,11 +1459,24 @@ class SupernotifyRecipientsCard extends HTMLElement {
           <span class="sub">${esc(personId || "")}${pState !== undefined ? (home ? " · 🏠 " + T.home : " · 🚗 " + T.away) : ""}</span>
           <div class="tags">${tags.map((t) => t.startsWith("<span") ? t : `<span class="tag">${esc(t)}</span>`).join("")}</div>
         </div>
-        <span class="badge ${r.on ? "b-on" : "b-off"}">${r.on ? T.enabled : T.off}</span>
+        <label class="sw" data-id="${esc(r.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
+          <input type="checkbox" ${r.on ? "checked" : ""} aria-label="${esc(alias || r.name)}">
+          <span class="sl"></span>
+        </label>
       </div>`;
     }).join("");
     rows.querySelectorAll(".row").forEach((node) => {
-      node.onclick = () => this._moreInfo(recs[+node.dataset.i].id);
+      node.onclick = (e) => {
+        if (e.target.closest(".sw")) return;
+        this._moreInfo(recs[+node.dataset.i].id);
+      };
+    });
+    rows.querySelectorAll(".sw").forEach((label) => {
+      label.addEventListener("click", (e) => e.stopPropagation());
+      const input = label.querySelector("input");
+      input.addEventListener("change", () => {
+        snSetBinaryState(this._hass, label.dataset.id, input.checked);
+      });
     });
   }
 }
@@ -1252,7 +1486,7 @@ customElements.define("supernotify-recipients-card", SupernotifyRecipientsCard);
 window.customCards.push({
   type: "supernotify-recipients-card",
   name: "SuperNotify Recipients Card",
-  description: "Recipients dashboard: home state, contact tags (email, phone, devices) and enabled badge.",
+  description: "Recipients dashboard: home state, contact tags (email, phone, devices) and a live on/off switch.",
 });
 
 /* ════════════════════════════════════════════════════════════════════════
