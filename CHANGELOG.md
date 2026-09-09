@@ -3,6 +3,22 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.19.0] - 2026-09-10
+
+### Added
+- **New `supernotify-stats-card`** — usage analytics built only from entities that
+  already exist (no extra sensor, no archive parsing): KPIs (notifications in the
+  window, per day, today vs. average, peak hour, top channel, channel errors), inline-SVG
+  bar charts per day / hour / weekday, channels most used with error share, priority and
+  day-period mix, auto-generated insights (share, peak, night share, weekend delta, 7-day
+  trend, errors) and a version strip with installed vs. latest version of SuperNotify and
+  of these cards from the HACS `update.*` entities (brand icon + release link).
+  Per-day series come from the long-term statistics of a daily `utility_meter`; the
+  per-notification detail from the recorder history of the "last notification" helpers;
+  channels from an `input_text` written after delivery via
+  `supernotify.enquire_last_notification` (`a, b, ✖c`, ✖ = errored). README documents the
+  helpers and the two small automations the card expects. i18n en/it.
+
 ## [0.18.0] - 2026-09-09
 
 ### Removed

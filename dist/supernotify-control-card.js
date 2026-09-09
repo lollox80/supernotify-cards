@@ -8,6 +8,21 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-10 — v0.19.0. New supernotify-stats-card: usage analytics built ONLY from entities
+ *   that already exist (no extra sensor, archive retention untouched — Lollo's choice).
+ *   Daily series from the long-term statistics of the daily utility_meter
+ *   (sensor.supernotify_inviate_oggi); hour/weekday/priority/day-period/channel detail from
+ *   the recorder history of the "last notification" helpers (one change of
+ *   input_datetime.supernotify_last_time = one notification, joined with the value the other
+ *   helpers had at that moment). Channels come from input_text.supernotify_last_channels, now
+ *   written AFTER delivery by the new automation "Supernotify - Log canali consegnati"
+ *   (packages/supernotify/ultima_notifica.yaml) as "a, b, ✖c" — ✖ marks a channel that
+ *   errored; older "auto (scenari)" values count as unknown. KPIs (total, per day, today vs
+ *   average, peak hour, top channel, channel errors), inline-SVG bar charts, priority/period
+ *   chips, auto-generated insights (share, peak, night share, weekend delta, 7-day trend,
+ *   errors) and a version strip from the HACS update entities (installed vs latest, release
+ *   link, brand icon) for both SuperNotify and these cards. i18n en/it.
+ *   Backup of the pre-change file: X:\sn_backups\stats_card_20260910\supernotify-control-card_pre_stats.js
  * 2026-09-09 — v0.18.0. Overview card: removed the "Transports" section (name + ok/off badge
  *   per transport) — it duplicated what supernotify-transports-card already shows in the
  *   dedicated "Transport" dashboard view (same on/off state, rendered as a live switch), so
@@ -32,7 +47,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.18.0";
+const VERSION = "0.19.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -2465,6 +2480,557 @@ window.customCards.push({
   type: "supernotify-automations-card",
   name: "SuperNotify Automations Card",
   description: "Live list of the automations that notify via SuperNotify: search, category filters, enable/disable.",
+});
+
+
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-stats-card — usage analytics (NEW, 2026-09-10)
+ * Everything is derived from entities that already exist, no extra sensor:
+ *   • daily series   → long-term statistics of the daily utility_meter
+ *                      (sent_today_entity, default sensor.supernotify_inviate_oggi),
+ *                      so it survives recorder purges;
+ *   • per-notification detail (hour, weekday, priority, day period, channels)
+ *                    → recorder history of the "last notification" helpers
+ *                      written by the user's logging automation: one change of
+ *                      input_datetime.supernotify_last_time = one notification,
+ *                      joined with the value the other helpers had at that time;
+ *   • channels       → input_text.supernotify_last_channels, written AFTER
+ *                      delivery by the "Log canali consegnati" automation as
+ *                      "a, b, ✖c" (✖ = that channel errored). Older values
+ *                      like "auto (scenari)" are counted as "unknown";
+ *   • versions       → HACS update entities (update.supernotify_update and
+ *                      update.supernotify_cards_update): installed vs latest,
+ *                      release link, brand icon.
+ * Charts are inline SVG, no libraries. Palette follows the other cards.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+const SN_STATS_STRINGS = {
+  en: {
+    st_title: "Usage", st_days: "days", st_total: "Notifications", st_avg: "per day",
+    st_today: "Today", st_vs_avg: "vs. average", st_peak_hour: "Peak hour", st_top_channel: "Top channel",
+    st_errors: "Channel errors", st_of_sends: "of channel sends", st_daily: "Per day", st_hourly: "By hour of day",
+    st_weekday: "By weekday", st_channels: "Channels — most used", st_priority: "Priority", st_period: "Day period",
+    st_insights: "Insights", st_no_data: "No history yet — data appears after the first notifications.",
+    st_unknown: "unknown", st_loading: "loading…", st_versions: "Versions",
+    st_installed: "installed", st_latest: "latest", st_uptodate: "up to date", st_update: "update available",
+    st_restart: "restart required", st_cards: "cards", st_logged: "logged",
+    st_wd: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    st_i_share: "{p}% of all channel sends go through {c}.",
+    st_i_peak: "Busiest hour is {h}:00 ({n} notifications in {d} days).",
+    st_i_night: "{p}% of notifications arrive between 23:00 and 07:00 — consider a DND scenario if that's unwanted.",
+    st_i_night_ok: "Only {p}% of notifications arrive at night (23–07): quiet hours are working.",
+    st_i_weekend: "Weekend days carry {p}% {dir} notifications than weekdays.",
+    st_i_errors: "{n} channel errors in {d} days, mostly on {c}.",
+    st_i_noerr: "No channel errors in the last {d} days.",
+    st_i_prio: "{p}% of notifications are {prio} priority.",
+    st_i_trend: "Last 7 days: {n}/day, {dir} {p}% vs. the 7 before.",
+    st_more: "more", st_less: "fewer", st_up: "up", st_down: "down",
+  },
+  it: {
+    st_title: "Utilizzo", st_days: "giorni", st_total: "Notifiche", st_avg: "al giorno",
+    st_today: "Oggi", st_vs_avg: "vs. media", st_peak_hour: "Ora di punta", st_top_channel: "Canale principale",
+    st_errors: "Errori canale", st_of_sends: "degli invii per canale", st_daily: "Per giorno", st_hourly: "Per ora del giorno",
+    st_weekday: "Per giorno della settimana", st_channels: "Canali — più usati", st_priority: "Priorità", st_period: "Periodo del giorno",
+    st_insights: "Osservazioni", st_no_data: "Ancora nessuna cronologia — i dati compaiono dopo le prime notifiche.",
+    st_unknown: "sconosciuto", st_loading: "caricamento…", st_versions: "Versioni",
+    st_installed: "installata", st_latest: "ultima", st_uptodate: "aggiornato", st_update: "aggiornamento disponibile",
+    st_restart: "riavvio richiesto", st_cards: "card", st_logged: "registrate",
+    st_wd: ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
+    st_i_share: "{c} assorbe il {p}% degli invii per canale.",
+    st_i_peak: "Ora più carica: le {h}:00 ({n} notifiche in {d} giorni).",
+    st_i_night: "Notifiche notturne (23–07): {p}% — se non le vuoi, valuta uno scenario DND.",
+    st_i_night_ok: "Notifiche notturne (23–07): solo {p}% — le fasce di silenzio funzionano.",
+    st_i_weekend: "Nel weekend arrivano {p}% notifiche {dir} rispetto ai giorni feriali.",
+    st_i_errors: "{n} errori di canale in {d} giorni, soprattutto su {c}.",
+    st_i_noerr: "Nessun errore di canale negli ultimi {d} giorni.",
+    st_i_prio: "Priorità {prio}: {p}% delle notifiche.",
+    st_i_trend: "Ultimi 7 giorni: {n}/giorno, {dir} del {p}% rispetto ai 7 precedenti.",
+    st_more: "in più", st_less: "in meno", st_up: "in aumento", st_down: "in calo",
+  },
+};
+Object.assign(SN_STRINGS.en, SN_STATS_STRINGS.en);
+Object.assign(SN_STRINGS.it, SN_STATS_STRINGS.it);
+
+const SN_PRIO_COLORS = { critical: "#e23c3c", high: "#f0a020", medium: "#03a9f4", low: "#8fa1b4", minimum: "#c3ccd6" };
+
+class SupernotifyStatsCard extends HTMLElement {
+  static getStubConfig() {
+    return { days: 14 };
+  }
+
+  setConfig(config) {
+    this._config = {
+      style: "supernotify",
+      days: 14,
+      time_entity: "input_datetime.supernotify_last_time",
+      priority_entity: "input_text.supernotify_last_priority",
+      channels_entity: "input_text.supernotify_last_channels",
+      period_entity: "input_text.supernotify_last_day_period",
+      sent_today_entity: "sensor.supernotify_inviate_oggi",
+      update_entity: "update.supernotify_update",
+      cards_update_entity: "update.supernotify_cards_update",
+      refresh_minutes: 10,
+      top_channels: 8,
+      ...(config || {}),
+    };
+    this._rendered = false;
+    this._data = null;
+  }
+
+  set hass(hass) {
+    const first = !this._hass;
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._rendered || wasDark !== this._dark) this._render();
+    else this._updateVersions();
+    if (first) this._load();
+  }
+
+  connectedCallback() {
+    const m = (this._config && this._config.refresh_minutes) || 10;
+    this._timer = setInterval(() => this._load(), m * 60000);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._timer);
+  }
+
+  getCardSize() {
+    return 12;
+  }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return { brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color)", crit: "var(--error-color, #e23c3c)",
+        line: "var(--divider-color)", panel: "var(--card-background-color)",
+        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)" };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", warn: "#f0a020", crit: "#ff9a9a",
+          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#f0a020", crit: "#e23c3c",
+          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  // ── data ──────────────────────────────────────────────────────────────
+
+  async _load() {
+    if (!this._hass || this._loading) return;
+    this._loading = true;
+    const c = this._config;
+    const days = Math.max(2, +c.days || 14);
+    const now = new Date();
+    const start = new Date(now.getTime() - days * 86400000);
+    start.setHours(0, 0, 0, 0);
+    const ids = [c.time_entity, c.priority_entity, c.channels_entity, c.period_entity].filter(Boolean);
+    let hist = {};
+    let stats = {};
+    try {
+      [hist, stats] = await Promise.all([
+        this._hass.callWS({
+          type: "history/history_during_period",
+          start_time: start.toISOString(), end_time: now.toISOString(),
+          entity_ids: ids, minimal_response: true, no_attributes: true, significant_changes_only: false,
+        }),
+        c.sent_today_entity
+          ? this._hass.callWS({
+              type: "recorder/statistics_during_period",
+              start_time: start.toISOString(), end_time: now.toISOString(),
+              statistic_ids: [c.sent_today_entity], period: "day", types: ["change"],
+            }).catch(() => ({}))
+          : Promise.resolve({}),
+      ]);
+    } catch (e) {
+      this._error = String(e && (e.message || e));
+    }
+    this._data = this._compute(hist || {}, stats || {}, start, now, days);
+    this._loading = false;
+    if (this._rendered) this._draw();
+  }
+
+  // history rows: {s: state, lu: seconds}. The first row is the state at
+  // start_time (its lu is older than start) — used only as the carry-in value.
+  _rows(hist, id) {
+    const raw = (id && hist[id]) || [];
+    return raw.map((r) => ({ s: r.s, t: (r.lu || r.lc || 0) * 1000 })).sort((a, b) => a.t - b.t);
+  }
+
+  _valueAt(rows, t, slackMs) {
+    // last row with time <= t + slack
+    let v = null;
+    for (const r of rows) {
+      if (r.t <= t + slackMs) v = r.s; else break;
+    }
+    return v;
+  }
+
+  _compute(hist, stats, start, now, days) {
+    const c = this._config;
+    const startMs = start.getTime();
+    const spine = this._rows(hist, c.time_entity).filter((r) => r.t >= startMs && r.s && r.s !== "unknown");
+    const prio = this._rows(hist, c.priority_entity);
+    const chan = this._rows(hist, c.channels_entity);
+    const per = this._rows(hist, c.period_entity);
+
+    const perHour = new Array(24).fill(0);
+    const perWd = new Array(7).fill(0);
+    const perDayHist = {};
+    const prioCount = {};
+    const periodCount = {};
+    const chanOk = {};
+    const chanKo = {};
+    let chanKnown = 0;
+    let chanUnknown = 0;
+    let night = 0;
+
+    spine.forEach((ev, i) => {
+      const d = new Date(ev.t);
+      perHour[d.getHours()]++;
+      perWd[(d.getDay() + 6) % 7]++;
+      const key = this._dayKey(d);
+      perDayHist[key] = (perDayHist[key] || 0) + 1;
+      if (d.getHours() >= 23 || d.getHours() < 7) night++;
+      const p = (this._valueAt(prio, ev.t, 2000) || "").toLowerCase();
+      if (p) prioCount[p] = (prioCount[p] || 0) + 1;
+      const dp = this._valueAt(per, ev.t, 2000);
+      if (dp) periodCount[dp] = (periodCount[dp] || 0) + 1;
+      // channels: value written for THIS notification — the last change before
+      // the next notification (the post-delivery automation writes it a moment
+      // after the spine), else the carried-over value (unchanged string).
+      const next = i + 1 < spine.length ? spine[i + 1].t : Infinity;
+      let cv = null;
+      for (const r of chan) {
+        if (r.t <= ev.t + 2000) { cv = r.s; continue; }
+        if (r.t < next) { cv = r.s; continue; }
+        break;
+      }
+      const parsed = this._parseChannels(cv);
+      if (!parsed) { chanUnknown++; return; }
+      chanKnown++;
+      parsed.ok.forEach((n) => { chanOk[n] = (chanOk[n] || 0) + 1; });
+      parsed.ko.forEach((n) => { chanKo[n] = (chanKo[n] || 0) + 1; });
+    });
+
+    // daily series: prefer long-term statistics (complete + independent from
+    // purge), fall back to the spine count when the meter has no stats.
+    const statRows = (c.sent_today_entity && stats[c.sent_today_entity]) || [];
+    const perDay = [];
+    const dayCursor = new Date(start);
+    const todayKey = this._dayKey(now);
+    const statByKey = {};
+    statRows.forEach((r) => { statByKey[this._dayKey(new Date(r.start))] = Math.round(+r.change || 0); });
+    // today: long-term statistics are compiled hourly, so prefer the live
+    // state of the daily meter (it resets at midnight = today's count).
+    const liveToday = c.sent_today_entity && this._hass.states[c.sent_today_entity];
+    const liveVal = liveToday && !["unknown", "unavailable"].includes(liveToday.state) ? Math.round(+liveToday.state) : null;
+    while (dayCursor <= now) {
+      const k = this._dayKey(dayCursor);
+      let v = statByKey[k];
+      if (k === todayKey && liveVal != null && (v == null || liveVal >= v)) v = liveVal;
+      if (v == null) v = perDayHist[k] || 0;
+      perDay.push({ key: k, d: new Date(dayCursor), n: v, today: k === todayKey });
+      dayCursor.setDate(dayCursor.getDate() + 1);
+    }
+    const completeDays = perDay.filter((x) => !x.today);
+    const total = perDay.reduce((a, x) => a + x.n, 0);
+    const avg = completeDays.length ? completeDays.reduce((a, x) => a + x.n, 0) / completeDays.length : 0;
+    const today = perDay.length ? perDay[perDay.length - 1].n : 0;
+    const last7 = completeDays.slice(-7);
+    const prev7 = completeDays.slice(-14, -7);
+    const m7 = last7.length ? last7.reduce((a, x) => a + x.n, 0) / last7.length : 0;
+    const mp7 = prev7.length ? prev7.reduce((a, x) => a + x.n, 0) / prev7.length : 0;
+
+    const peakHour = perHour.indexOf(Math.max(...perHour));
+    const channels = Object.keys(chanOk).map((n) => ({ name: n, ok: chanOk[n], ko: chanKo[n] || 0 }));
+    Object.keys(chanKo).forEach((n) => { if (!chanOk[n]) channels.push({ name: n, ok: 0, ko: chanKo[n] }); });
+    channels.sort((a, b) => (b.ok + b.ko) - (a.ok + a.ko));
+    const sends = channels.reduce((a, x) => a + x.ok + x.ko, 0);
+    const errors = channels.reduce((a, x) => a + x.ko, 0);
+    const wdCount = perWd.slice(0, 5).reduce((a, b) => a + b, 0);
+    const weCount = perWd[5] + perWd[6];
+    // normalise on the days that actually have recorded events (recorder
+    // history can start later than the window, e.g. after a DB purge)
+    const daysWithData = perDay.filter((x) => perDayHist[x.key]);
+    const wdDays = daysWithData.filter((x) => (x.d.getDay() + 6) % 7 < 5).length;
+    const weDays = daysWithData.filter((x) => (x.d.getDay() + 6) % 7 >= 5).length;
+
+    return {
+      days, spineCount: spine.length, perHour, perWd, perDay, prioCount, periodCount, channels, sends, errors,
+      chanKnown, chanUnknown, total, avg, today, peakHour, night, m7, mp7,
+      wdPerDay: wdDays ? wdCount / wdDays : null, wePerDay: weDays ? weCount / weDays : null,
+    };
+  }
+
+  _parseChannels(s) {
+    if (!s || typeof s !== "string") return null;
+    const t = s.trim();
+    if (!t || /^auto\b/i.test(t) || /^nessun/i.test(t) || t === "unknown" || t === "—") return null;
+    const ok = [];
+    const ko = [];
+    t.split(",").map((x) => x.trim()).filter(Boolean).forEach((x) => {
+      const clean = x.replace(/…$/, "");
+      if (/^[✖✗]/.test(clean)) ko.push(clean.replace(/^[✖✗]\s*/, ""));
+      else ok.push(clean);
+    });
+    if (!ok.length && !ko.length) return null;
+    return { ok, ko };
+  }
+
+  _dayKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  // ── render ────────────────────────────────────────────────────────────
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    const T = snT(this._config, this._hass);
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .hdr { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .hdr h3 { margin: 0; font-size: 15px; font-weight: 800; }
+        .hdr .win { font-size: 11.5px; color: ${p.muted}; }
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; margin-top: 12px; }
+        .kpi { border: 1.5px solid ${p.line}; border-radius: 14px; padding: 10px 12px; background: ${p.panel}; }
+        .kpi .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted}; white-space: nowrap; }
+        .kpi .v { font-size: 21px; font-weight: 800; margin-top: 2px; }
+        .kpi .s { font-size: 11px; color: ${p.muted}; margin-top: 1px; }
+        .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted}; margin: 16px 0 6px; display:flex; justify-content: space-between; }
+        .sec .n { font-weight: 650; text-transform: none; letter-spacing: 0; }
+        .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+        svg { width: 100%; height: auto; display: block; overflow: visible; }
+        .bars text { font-size: 9px; fill: ${p.muted}; }
+        .bars .val { font-size: 9.5px; fill: ${p.ink}; font-weight: 700; }
+        .hrow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 0; }
+        .hrow .nm { width: 38%; min-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hrow .tr { flex: 1; height: 12px; background: ${p.soft}; border-radius: 6px; overflow: hidden; display: flex; }
+        .hrow .ok { background: ${p.brand}; height: 100%; }
+        .hrow .ko { background: ${p.crit}; height: 100%; }
+        .hrow .ct { width: 64px; text-align: right; font-variant-numeric: tabular-nums; font-size: 11.5px; color: ${p.muted}; }
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .chip { display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid ${p.line}; border-radius: 999px; padding: 4px 10px; font-size: 11.5px; font-weight: 650; background: ${p.soft}; color: ${p.brandD}; }
+        .chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .ins { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.55; }
+        .ins li { margin: 2px 0; }
+        .ver { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid ${p.line}; }
+        .vbox { display: flex; align-items: center; gap: 10px; border: 1.5px solid ${p.line}; border-radius: 12px; padding: 8px 12px; flex: 1; min-width: 220px; text-decoration: none; color: inherit; }
+        .vbox img { width: 28px; height: 28px; border-radius: 6px; }
+        .vbox .ic { width: 28px; height: 28px; border-radius: 6px; display:flex; align-items:center; justify-content:center; font-size: 18px; background: ${p.soft}; }
+        .vbox b { font-size: 13px; }
+        .vbox .sm { font-size: 11px; color: ${p.muted}; }
+        .badge { border-radius: 999px; padding: 2px 9px; font-size: 10.5px; font-weight: 750; margin-left: auto; white-space: nowrap; }
+        .b-ok { background: rgba(46,158,91,.14); color: ${p.ok}; }
+        .b-upd { background: rgba(240,160,32,.16); color: ${p.warn}; }
+        .empty { color: ${p.muted}; font-size: 12.5px; padding: 8px 0; }
+        .foot { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+      </style>
+      <ha-card>
+        ${snIntro(this._config, this._dark)}
+        <div class="hdr"><h3>📊 ${T.st_title}</h3><span class="win" id="win">${T.st_loading}</span></div>
+        <div id="body"><div class="empty">${T.st_loading}</div></div>
+        <div class="ver" id="ver"></div>
+        <div class="foot">supernotify-stats-card v${VERSION}</div>
+      </ha-card>`;
+    this._updateVersions();
+    if (this._data) this._draw();
+  }
+
+  _fmt(n, dec) {
+    return Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: dec == null ? 0 : dec });
+  }
+
+  _esc(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  }
+
+  _t(key, vars) {
+    const T = snT(this._config, this._hass);
+    let s = T[key] || key;
+    Object.keys(vars || {}).forEach((k) => { s = s.replace(new RegExp(`\\{${k}\\}`, "g"), vars[k]); });
+    return s;
+  }
+
+  _draw() {
+    const sr = this.shadowRoot;
+    if (!sr) return;
+    const d = this._data;
+    const T = snT(this._config, this._hass);
+    const p = this._palette();
+    const esc = (s) => this._esc(s);
+    sr.getElementById("win").textContent = `${d.days} ${T.st_days}`;
+    const body = sr.getElementById("body");
+    if (!d.total && !d.spineCount) {
+      body.innerHTML = `<div class="empty">${T.st_no_data}${this._error ? ` <small>(${esc(this._error)})</small>` : ""}</div>`;
+      return;
+    }
+    const top = d.channels[0];
+    const delta = d.avg ? Math.round(((d.today - d.avg) / d.avg) * 100) : 0;
+    const kpi = (k, v, s, color) =>
+      `<div class="kpi"><div class="k">${k}</div><div class="v"${color ? ` style="color:${color}"` : ""}>${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
+    const errRate = d.sends ? Math.round((d.errors / d.sends) * 1000) / 10 : 0;
+    const kpis =
+      kpi("📨 " + T.st_total, this._fmt(d.total), `≈ ${this._fmt(d.avg, 1)} ${T.st_avg}`) +
+      kpi("📅 " + T.st_today, this._fmt(d.today), d.avg ? `${delta >= 0 ? "+" : ""}${delta}% ${T.st_vs_avg}` : "", d.avg && Math.abs(delta) >= 50 ? p.warn : undefined) +
+      kpi("⏰ " + T.st_peak_hour, d.spineCount ? `${String(d.peakHour).padStart(2, "0")}:00` : "—", d.spineCount ? `${d.perHour[d.peakHour]} ${T.st_total.toLowerCase()}` : "") +
+      kpi("🏆 " + T.st_top_channel, top ? esc(top.name) : "—", top && d.sends ? `${Math.round(((top.ok + top.ko) / d.sends) * 100)}%` : "") +
+      kpi("⚠️ " + T.st_errors, this._fmt(d.errors), d.sends ? `${errRate}% ${T.st_of_sends}` : "", d.errors ? p.crit : p.ok);
+
+    // daily bars
+    const daily = this._barsSvg(d.perDay.map((x) => ({ l: `${x.d.getDate()}/${x.d.getMonth() + 1}`, v: x.n, hi: x.today })), p, { avg: d.avg });
+    // hourly
+    const hourly = this._barsSvg(d.perHour.map((v, h) => ({ l: h % 3 === 0 ? String(h) : "", v, hi: h === d.peakHour })), p, { thin: true });
+    // weekday
+    const wd = this._barsSvg(d.perWd.map((v, i) => ({ l: T.st_wd[i], v })), p, {});
+    // channels
+    const maxCh = d.channels.length ? d.channels[0].ok + d.channels[0].ko : 1;
+    const chRows = d.channels.slice(0, this._config.top_channels).map((ch) => {
+      const tot = ch.ok + ch.ko;
+      return `<div class="hrow"><span class="nm" title="${esc(ch.name)}">${this._iconFor(ch.name)} ${esc(ch.name)}</span>
+        <span class="tr"><span class="ok" style="width:${(ch.ok / maxCh) * 100}%"></span><span class="ko" style="width:${(ch.ko / maxCh) * 100}%"></span></span>
+        <span class="ct">${tot}${ch.ko ? ` <span style="color:${p.crit}">✖${ch.ko}</span>` : ""}</span></div>`;
+    }).join("");
+    const chNote = d.chanUnknown
+      ? `<div class="empty" style="font-size:11px">${d.chanKnown}/${d.chanKnown + d.chanUnknown} ${T.st_total.toLowerCase()} · ${d.chanUnknown} ${T.st_unknown}</div>`
+      : "";
+    // priority chips
+    const prioOrder = ["critical", "high", "medium", "low", "minimum"];
+    const prioTot = Object.values(d.prioCount).reduce((a, b) => a + b, 0) || 1;
+    const prioChips = prioOrder.filter((k) => d.prioCount[k]).map((k) =>
+      `<span class="chip"><i style="background:${SN_PRIO_COLORS[k]}"></i>${T["prio_" + k] || k} ${Math.round((d.prioCount[k] / prioTot) * 100)}%</span>`).join("") || `<span class="empty">—</span>`;
+    const perTot = Object.values(d.periodCount).reduce((a, b) => a + b, 0) || 1;
+    const perChips = Object.keys(d.periodCount).sort((a, b) => d.periodCount[b] - d.periodCount[a]).map((k) =>
+      `<span class="chip">${esc(k)} ${Math.round((d.periodCount[k] / perTot) * 100)}%</span>`).join("") || `<span class="empty">—</span>`;
+
+    body.innerHTML = `
+      <div class="kpis">${kpis}</div>
+      <div class="sec"><span>${T.st_daily}</span><span class="n">${this._fmt(d.total)}</span></div>
+      <div class="bars">${daily}</div>
+      <div class="grid2">
+        <div><div class="sec"><span>${T.st_hourly}</span><span class="n">${this._fmt(d.spineCount)} ${T.st_logged}</span></div><div class="bars">${hourly}</div></div>
+        <div><div class="sec"><span>${T.st_weekday}</span><span class="n">${this._fmt(d.spineCount)} ${T.st_logged}</span></div><div class="bars">${wd}</div></div>
+      </div>
+      <div class="sec"><span>${T.st_channels}</span><span class="n">${this._fmt(d.sends)}</span></div>
+      ${chRows || `<div class="empty">${T.st_no_data}</div>`}${chNote}
+      <div class="grid2">
+        <div><div class="sec"><span>${T.st_priority}</span></div><div class="chips">${prioChips}</div></div>
+        <div><div class="sec"><span>${T.st_period}</span></div><div class="chips">${perChips}</div></div>
+      </div>
+      <div class="sec"><span>💡 ${T.st_insights}</span></div>
+      <ul class="ins">${this._insights(d).map((s) => `<li>${s}</li>`).join("")}</ul>`;
+  }
+
+  // Channel names are DELIVERY names; look the transport up on the delivery
+  // entity so the icon matches the deliveries card.
+  _iconFor(deliveryName) {
+    const st = this._hass && this._hass.states[`binary_sensor.supernotify_delivery_${deliveryName}`];
+    const tr = (st && st.attributes && st.attributes.transport) || deliveryName;
+    return SN_TRANSPORT_ICONS[tr] || "📤";
+  }
+
+  _barsSvg(items, p, opt) {
+    const n = items.length || 1;
+    const W = 600, H = 110, padB = 18, padT = 14;
+    const max = Math.max(1, ...items.map((i) => i.v));
+    const gap = opt.thin ? 2 : 4;
+    const bw = (W - gap * (n - 1)) / n;
+    const y = (v) => padT + (H - padT - padB) * (1 - v / max);
+    let s = `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">`;
+    if (opt.avg) {
+      const ya = y(opt.avg);
+      s += `<line x1="0" x2="${W}" y1="${ya}" y2="${ya}" stroke="${p.muted}" stroke-dasharray="4 4" stroke-width="1" opacity=".7"/>`;
+    }
+    items.forEach((it, i) => {
+      const x = i * (bw + gap);
+      const h = Math.max(it.v ? 2 : 0, H - padB - y(it.v));
+      const fill = it.hi ? p.brandD : p.brand;
+      s += `<rect x="${x}" y="${H - padB - h}" width="${bw}" height="${h}" rx="3" fill="${fill}" opacity="${it.hi ? 1 : 0.8}"/>`;
+      if (it.v && (n <= 16 || it.hi)) s += `<text class="val" x="${x + bw / 2}" y="${H - padB - h - 3}" text-anchor="middle">${it.v}</text>`;
+      if (it.l) s += `<text x="${x + bw / 2}" y="${H - 4}" text-anchor="middle">${this._esc(it.l)}</text>`;
+    });
+    return s + "</svg>";
+  }
+
+  _insights(d) {
+    const T = snT(this._config, this._hass);
+    const out = [];
+    const top = d.channels[0];
+    if (top && d.sends) out.push(this._t("st_i_share", { p: Math.round(((top.ok + top.ko) / d.sends) * 100), c: this._esc(top.name) }));
+    if (d.spineCount) {
+      out.push(this._t("st_i_peak", { h: String(d.peakHour).padStart(2, "0"), n: d.perHour[d.peakHour], d: d.days }));
+      const np = Math.round((d.night / d.spineCount) * 100);
+      out.push(this._t(np >= 15 ? "st_i_night" : "st_i_night_ok", { p: np }));
+      if (d.wdPerDay > 0 && d.wePerDay != null) {
+        const diff = Math.round(((d.wePerDay - d.wdPerDay) / d.wdPerDay) * 100);
+        if (Math.abs(diff) >= 15) out.push(this._t("st_i_weekend", { p: Math.abs(diff), dir: diff > 0 ? T.st_more : T.st_less }));
+      }
+      const prioTot = Object.values(d.prioCount).reduce((a, b) => a + b, 0);
+      const topPrio = Object.keys(d.prioCount).sort((a, b) => d.prioCount[b] - d.prioCount[a])[0];
+      if (topPrio && prioTot) out.push(this._t("st_i_prio", { p: Math.round((d.prioCount[topPrio] / prioTot) * 100), prio: (T["prio_" + topPrio] || topPrio).toLowerCase() }));
+    }
+    if (d.mp7 > 0 && d.m7 >= 0) {
+      const tr = Math.round(((d.m7 - d.mp7) / d.mp7) * 100);
+      out.push(this._t("st_i_trend", { n: this._fmt(d.m7, 1), dir: tr >= 0 ? T.st_up : T.st_down, p: Math.abs(tr) }));
+    }
+    if (d.sends) {
+      if (d.errors) {
+        const worst = d.channels.slice().sort((a, b) => b.ko - a.ko)[0];
+        out.push(this._t("st_i_errors", { n: d.errors, d: d.days, c: this._esc(worst ? worst.name : "—") }));
+      } else out.push(this._t("st_i_noerr", { d: d.days }));
+    }
+    return out;
+  }
+
+  _updateVersions() {
+    const sr = this.shadowRoot;
+    if (!sr || !this._hass) return;
+    const el = sr.getElementById("ver");
+    if (!el) return;
+    const T = snT(this._config, this._hass);
+    const box = (id, fallbackName, fallbackVer, emoji) => {
+      const st = this._hass.states[id];
+      if (!st) {
+        if (!fallbackVer) return "";
+        return `<div class="vbox"><span class="ic">${emoji}</span><div><b>${this._esc(fallbackName)}</b><div class="sm">v${this._esc(fallbackVer)}</div></div></div>`;
+      }
+      const a = st.attributes || {};
+      const inst = a.installed_version || "—";
+      const latest = a.latest_version || "—";
+      const upd = st.state === "on";
+      const restart = /restart/i.test(a.release_summary || "");
+      const name = (a.title || a.friendly_name || fallbackName || "").replace(/\s*update$/i, "");
+      const icon = a.entity_picture
+        ? `<img src="${this._esc(a.entity_picture)}" alt="">`
+        : `<span class="ic">${emoji}</span>`;
+      const badge = upd
+        ? `<span class="badge b-upd">⬆ ${T.st_update}</span>`
+        : `<span class="badge b-ok">✔ ${restart ? T.st_restart : T.st_uptodate}</span>`;
+      const sub = upd
+        ? `${T.st_installed} ${this._esc(inst)} → ${T.st_latest} <b>${this._esc(latest)}</b>`
+        : `${this._esc(inst)} · ${T.st_latest} ${this._esc(latest)}`;
+      const href = a.release_url ? ` href="${this._esc(a.release_url)}" target="_blank" rel="noopener"` : "";
+      return `<a class="vbox"${href}>${icon}<div><b>${this._esc(name)}</b><div class="sm">${sub}</div></div>${badge}</a>`;
+    };
+    el.innerHTML =
+      box(this._config.update_entity, "SuperNotify", null, "🔔") +
+      box(this._config.cards_update_entity, "SuperNotify Cards", VERSION, "🃏");
+  }
+}
+
+customElements.define("supernotify-stats-card", SupernotifyStatsCard);
+
+window.customCards.push({
+  type: "supernotify-stats-card",
+  name: "SuperNotify Stats Card",
+  description: "Usage analytics from existing entities: per-day/hour/weekday, channels most used with errors, priority and period mix, insights, installed vs latest version.",
 });
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");
