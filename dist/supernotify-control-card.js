@@ -8,6 +8,12 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-09 — v0.18.0. Overview card: removed the "Transports" section (name + ok/off badge
+ *   per transport) — it duplicated what supernotify-transports-card already shows in the
+ *   dedicated "Transport" dashboard view (same on/off state, rendered as a live switch), so
+ *   transport status now lives in one place only. No i18n keys removed (`transports` and
+ *   `no_transports` are still used by the transports card). Card description updated.
+ *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260909\supernotify-control-card_pre_overview_transports.js
  * 2026-09-08 — v0.17.0. Recipients card: explicit ⚙️ gear icon at the end of each row
  *   (next to the on/off switch), so tap-for-details is visible instead of implicit on the
  *   whole row. Tapping it fires the same hass-more-info event as before (native HA dialog,
@@ -26,7 +32,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.17.0";
+const VERSION = "0.18.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -586,8 +592,9 @@ window.customCards.push({
 
 /* ════════════════════════════════════════════════════════════════════════
  * supernotify-overview-card — dashboard overview
- * Stats (sent, failures, active scenarios, deliveries), last notification
- * and transport status. Data from entities exposed by SuperNotify plus
+ * Stats (sent, failures, active scenarios, deliveries) and last notification.
+ * Transport status lives in supernotify-transports-card only (since 0.18.0).
+ * Data from entities exposed by SuperNotify plus
  * enquire_* services called over WebSocket. Active scenarios prefer the
  * reactive binary_sensor.supernotify_scenario_* state (SuperNotify >= 2.4.0,
  * Live Scenarios) over the polled enquire_active_scenarios count.
@@ -742,8 +749,6 @@ class SupernotifyOverviewCard extends HTMLElement {
         <div class="lastmsg" id="last">—</div>
         <div class="sec">${snT(this._config, this._hass).act_scen}</div>
         <div id="scen">—</div>
-        <div class="sec">${snT(this._config, this._hass).transports}</div>
-        <div id="transports"></div>
         <div class="ver">supernotify-overview-card v${VERSION}</div>
       </ha-card>`;
     this._update();
@@ -802,13 +807,6 @@ class SupernotifyOverviewCard extends HTMLElement {
     this.shadowRoot.getElementById("scen").innerHTML = act && act.length
       ? act.map((s) => `<span class="chip">🎬 ${esc(s)}</span>`).join("")
       : `<span class="badge b-off">${T.none}</span>`;
-
-    const trs = this._scan("transport");
-    this.shadowRoot.getElementById("transports").innerHTML = trs.length
-      ? trs.map((t) =>
-          `<div class="row"><div>${esc(t.name)}</div><span class="badge ${t.state === "on" ? "b-ok" : "b-off"}">${t.state === "on" ? "ok" : "off"}</span></div>`
-        ).join("")
-      : `<span class="badge b-off">${T.no_transports}</span>`;
   }
 }
 
@@ -817,7 +815,7 @@ customElements.define("supernotify-overview-card", SupernotifyOverviewCard);
 window.customCards.push({
   type: "supernotify-overview-card",
   name: "SuperNotify Overview Card",
-  description: "Dashboard overview for SuperNotify: sent/failure counters, active scenarios, last notification, transport status.",
+  description: "Dashboard overview for SuperNotify: sent/failure counters, active scenarios, last notification.",
 });
 
 /* ════════════════════════════════════════════════════════════════════════

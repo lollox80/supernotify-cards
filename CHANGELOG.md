@@ -3,6 +3,18 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.18.0] - 2026-09-09
+
+### Removed
+- Overview card: the "Transports" section (one row per transport with an ok/off badge).
+  It duplicated what `supernotify-transports-card` already shows in the dedicated
+  "Transport" dashboard view — same on/off state, rendered there as a live switch — so
+  transport status now lives in one place only. The i18n keys `transports` /
+  `no_transports` are kept (still used by the transports card).
+
+### Changed
+- Overview card description no longer mentions transport status.
+
 ## [0.17.0] - 2026-09-08
 
 ### Added
