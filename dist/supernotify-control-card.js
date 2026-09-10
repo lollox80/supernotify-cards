@@ -8,6 +8,13 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-10 — v0.20.0. Overview card: new health strip on top (option `health`, default true):
+ *   one chip per thing worth a glance — SuperNotify version (up to date / update available /
+ *   restart required, from the HACS update entity `update_entity`), engine failures, transports
+ *   with error_count > 0, channels switched off, DND active (`quiet_entity`, optional), active
+ *   snoozes; a single green "all good" chip when nothing is wrong. Stats card: channel rows show
+ *   the delivery `alias` (friendly_name) when configured, technical name underneath. New i18n keys
+ *   h_* (en/it). Backup of the pre-change file: X:\sn_backups\stats_card_20260910\supernotify-control-card_pre_health.js
  * 2026-09-10 — v0.19.0. New supernotify-stats-card: usage analytics built ONLY from entities
  *   that already exist (no extra sensor, archive retention untouched — Lollo's choice).
  *   Daily series from the long-term statistics of the daily utility_meter
@@ -47,7 +54,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.19.0";
+const VERSION = "0.20.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -76,6 +83,9 @@ const SN_STRINGS = {
     home: "home", away: "away", devices: "devices", overrides: "delivery overrides",
     no_contact: "no contact points", no_recipients: "no recipient entities found",
     details: "Details",
+    h_update: "update available:", h_restart: "restart Home Assistant to finish the update",
+    h_uptodate: "up to date", h_transport_err: "transports with errors", h_channels_off: "channels off",
+    h_all_good: "All good", h_health: "Health",
     active_now: "active now", disabled: "disabled", other: "Other",
     media: "media", no_scenarios: "no scenario entities found",
     sim_pick: "🎬 Scenarios — tap to simulate", sim_fire: "📤 Deliveries that would fire",
@@ -124,6 +134,9 @@ const SN_STRINGS = {
     home: "in casa", away: "fuori", devices: "dispositivi", overrides: "override delivery",
     no_contact: "nessun recapito", no_recipients: "nessuna entità destinatario trovata",
     details: "Dettagli",
+    h_update: "aggiornamento disponibile:", h_restart: "riavvia Home Assistant per completare l'aggiornamento",
+    h_uptodate: "aggiornato", h_transport_err: "transport con errori", h_channels_off: "canali spenti",
+    h_all_good: "Tutto ok", h_health: "Stato",
     active_now: "attivo ora", disabled: "disattivato", other: "Altro",
     media: "media", no_scenarios: "nessuna entità scenario trovata",
     sim_pick: "🎬 Scenari — tocca per simulare", sim_fire: "📤 Canali che partirebbero",
@@ -622,7 +635,13 @@ class SupernotifyOverviewCard extends HTMLElement {
 
   setConfig(config) {
     if (!config) throw new Error("Invalid configuration");
-    this._config = { poll_seconds: 60, style: "supernotify", ...config };
+    this._config = {
+      poll_seconds: 60, style: "supernotify",
+      health: true,                                   // traffic-light strip on top (0.20.0)
+      update_entity: "update.supernotify_update",     // HACS update entity for the version light
+      quiet_entity: null,                             // e.g. binary_sensor.notifier_dnd
+      ...config,
+    };
     this._rendered = false;
   }
 
@@ -636,6 +655,35 @@ class SupernotifyOverviewCard extends HTMLElement {
 
   getCardSize() {
     return 5;
+  }
+
+  // Health strip (0.20.0): one glance = is everything fine? Each light is a
+  // chip; when nothing is wrong a single green "all good" chip is shown.
+  _health() {
+    const T = snT(this._config, this._hass);
+    const c = this._config;
+    const chips = [];
+    const upd = c.update_entity && this._hass.states[c.update_entity];
+    if (upd) {
+      const a = upd.attributes || {};
+      if (upd.state === "on") chips.push({ k: "warn", t: `⬆ ${T.h_update} ${a.latest_version || ""}`, href: a.release_url });
+      else if (/restart/i.test(a.release_summary || "")) chips.push({ k: "warn", t: `🔄 ${T.h_restart}` });
+      else chips.push({ k: "ok", t: `✔ SuperNotify ${a.installed_version || ""} ${T.h_uptodate}` });
+    }
+    const failures = +this._st("sensor.supernotify_failures") || 0;
+    if (failures > 0) chips.push({ k: "crit", t: `✖ ${failures} ${T.failures.toLowerCase()}` });
+    const trErr = this._scan("transport").filter((t) => {
+      const st = this._hass.states[t.id];
+      return st && st.state !== "unavailable" && +((st.attributes || {}).error_count || 0) > 0;
+    });
+    if (trErr.length) chips.push({ k: "crit", t: `⚠️ ${trErr.length} ${T.h_transport_err}`, title: trErr.map((t) => t.name).join(", ") });
+    const delsOff = this._scan("delivery").filter((d) => d.state === "off" && !/^default_/i.test(d.name));
+    if (delsOff.length) chips.push({ k: "off", t: `🔕 ${delsOff.length} ${T.h_channels_off}`, title: delsOff.map((d) => d.name).join(", ") });
+    if (c.quiet_entity && this._st(c.quiet_entity) === "on") chips.push({ k: "warn", t: `🌙 ${T.dnd} ${T.active}` });
+    const snz = this._snoozes || [];
+    if (snz.length) chips.push({ k: "warn", t: `😴 ${snz.length} ${T.snoozed.toLowerCase()}` });
+    if (!chips.some((x) => x.k !== "ok" && x.k !== "off")) chips.unshift({ k: "ok", t: `✔ ${T.h_all_good}` });
+    return chips;
   }
 
   connectedCallback() {
@@ -757,9 +805,17 @@ class SupernotifyOverviewCard extends HTMLElement {
                 padding: 5px 12px; font-size: 12px; font-weight: 650; margin: 0 6px 6px 0;
                 background: ${p.soft}; color: ${p.brandD}; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 10px; }
+        .health { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .health:empty { display: none; }
+        .hc { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 11px;
+              font-size: 11.5px; font-weight: 700; text-decoration: none; }
+        .hc.ok { background: rgba(46,158,91,.14); color: ${p.ok}; }
+        .hc.warn { background: rgba(240,160,32,.16); color: ${p.warn}; }
+        .hc.crit { background: rgba(226,60,60,.12); color: ${p.crit}; }
+        .hc.off { background: ${p.soft}; color: ${p.muted}; }
       </style>
       <ha-card>
-        ${snIntro(this._config, this._dark)}<div class="stats" id="stats"></div>
+        ${snIntro(this._config, this._dark)}<div class="health" id="health"></div><div class="stats" id="stats"></div>
         <div class="sec">${snT(this._config, this._hass).last_notif}</div>
         <div class="lastmsg" id="last">—</div>
         <div class="sec">${snT(this._config, this._hass).act_scen}</div>
@@ -794,6 +850,14 @@ class SupernotifyOverviewCard extends HTMLElement {
         yd != null ? T.yesterday + ": " + esc(Math.round(+yd)) : "");
     } else {
       sentStat = stat("📨 " + T.sent, sent != null ? esc(sent) : "—", T.since_startup);
+    }
+    const healthEl = this.shadowRoot.getElementById("health");
+    if (healthEl) {
+      healthEl.innerHTML = this._config.health
+        ? this._health().map((h) => h.href
+            ? `<a class="hc ${h.k}" href="${esc(h.href)}" target="_blank" rel="noopener">${esc(h.t)}</a>`
+            : `<span class="hc ${h.k}"${h.title ? ` title="${esc(h.title)}"` : ""}>${esc(h.t)}</span>`).join("")
+        : "";
     }
     this.shadowRoot.getElementById("stats").innerHTML =
       sentStat +
@@ -830,7 +894,7 @@ customElements.define("supernotify-overview-card", SupernotifyOverviewCard);
 window.customCards.push({
   type: "supernotify-overview-card",
   name: "SuperNotify Overview Card",
-  description: "Dashboard overview for SuperNotify: sent/failure counters, active scenarios, last notification.",
+  description: "Dashboard overview for SuperNotify: health strip (version, failures, transport errors, DND, snoozes), sent/failure counters, active scenarios, last notification.",
 });
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -2812,6 +2876,7 @@ class SupernotifyStatsCard extends HTMLElement {
         .bars .val { font-size: 9.5px; fill: ${p.ink}; font-weight: 700; }
         .hrow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 0; }
         .hrow .nm { width: 38%; min-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hrow .nm small { font-size: 10.5px; font-weight: 400; }
         .hrow .tr { flex: 1; height: 12px; background: ${p.soft}; border-radius: 6px; overflow: hidden; display: flex; }
         .hrow .ok { background: ${p.brand}; height: 100%; }
         .hrow .ko { background: ${p.crit}; height: 100%; }
@@ -2894,7 +2959,8 @@ class SupernotifyStatsCard extends HTMLElement {
     const maxCh = d.channels.length ? d.channels[0].ok + d.channels[0].ko : 1;
     const chRows = d.channels.slice(0, this._config.top_channels).map((ch) => {
       const tot = ch.ok + ch.ko;
-      return `<div class="hrow"><span class="nm" title="${esc(ch.name)}">${this._iconFor(ch.name)} ${esc(ch.name)}</span>
+      const alias = this._aliasFor(ch.name);
+      return `<div class="hrow"><span class="nm" title="${esc(ch.name)}">${this._iconFor(ch.name)} ${alias ? `${esc(alias)} <small style="color:${p.muted}">${esc(ch.name)}</small>` : esc(ch.name)}</span>
         <span class="tr"><span class="ok" style="width:${(ch.ok / maxCh) * 100}%"></span><span class="ko" style="width:${(ch.ko / maxCh) * 100}%"></span></span>
         <span class="ct">${tot}${ch.ko ? ` <span style="color:${p.crit}">✖${ch.ko}</span>` : ""}</span></div>`;
     }).join("");
@@ -2934,6 +3000,15 @@ class SupernotifyStatsCard extends HTMLElement {
     const st = this._hass && this._hass.states[`binary_sensor.supernotify_delivery_${deliveryName}`];
     const tr = (st && st.attributes && st.attributes.transport) || deliveryName;
     return SN_TRANSPORT_ICONS[tr] || "📤";
+  }
+
+  // Delivery `alias:` (surfaced as friendly_name on the delivery entity). The
+  // engine's auto-generated "<name> Delivery Configuration" is not an alias.
+  _aliasFor(deliveryName) {
+    const st = this._hass && this._hass.states[`binary_sensor.supernotify_delivery_${deliveryName}`];
+    const fn = st && st.attributes && st.attributes.friendly_name;
+    if (!fn || fn === deliveryName || fn === st.entity_id || /Delivery Configuration$/i.test(fn)) return null;
+    return fn;
   }
 
   _barsSvg(items, p, opt) {
@@ -3030,7 +3105,7 @@ customElements.define("supernotify-stats-card", SupernotifyStatsCard);
 window.customCards.push({
   type: "supernotify-stats-card",
   name: "SuperNotify Stats Card",
-  description: "Usage analytics from existing entities: per-day/hour/weekday, channels most used with errors, priority and period mix, insights, installed vs latest version.",
+  description: "Usage analytics from existing entities: per-day/hour/weekday, channels most used (alias-aware) with errors, priority and period mix, insights, installed vs latest version.",
 });
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");

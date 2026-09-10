@@ -3,6 +3,17 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.20.0] - 2026-09-10
+
+### Added
+- Overview card: **health strip** on top (`health: true` by default) — one chip per thing
+  worth a glance: SuperNotify version (up to date / update available / restart required, from
+  the HACS update entity `update_entity`, default `update.supernotify_update`), engine
+  failures, transports with `error_count > 0`, channels switched off, DND active (new optional
+  `quiet_entity`), active snoozes. A single green "All good" chip when nothing is wrong.
+- Stats card: channel rows show the delivery `alias:` (surfaced as `friendly_name` on the
+  delivery entity) when configured, with the technical name underneath.
+
 ## [0.19.0] - 2026-09-10
 
 ### Added
