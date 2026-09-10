@@ -48,6 +48,9 @@ presence_entity: person.lorenzo
 dnd_entity: input_boolean.notifier_dnd
 announce_delivery: alexa_announce
 snooze_minutes: 30
+last_notification: true
+last_notification_entity: input_text.supernotify_last_title
+repeat_entity: input_button.supernotify_show_last
 tiles:
   - dnd
   - snooze
@@ -70,6 +73,7 @@ groups:
       - input_boolean.notifier_holidays
       - input_boolean.notifier_dnd_workdays
   - name: People and home
+    collapsed: true
     entities:
       - input_boolean.modo_ospite
       - input_boolean.tata_presente
@@ -92,6 +96,12 @@ bands:
 | `tiles` | no | list of `dnd`, `snooze`, `announce`, or `{toggle, name, icon}` |
 | `groups` | no | grouped `input_boolean` toggles with a `name` |
 | `bands` | no | time bands (`input_datetime` start + `input_number` volume) for the status bar |
+| `last_notification` | no | `true` shows the native last-notification block (title, message, priority, relative time, channels ✔/✖ with delivery alias) |
+| `last_notification_entity` | no | `input_text` holding the last title (fallback when the engine has no title) |
+| `last_notification_strip` | no | regex removed from the message, e.g. `\\s*🕐 Ora:.*$` to drop a timestamp line |
+| `repeat_entity` | no | `input_button` (or `script`) pressed by the "Repeat" button of the block |
+| `collapsible` | no | groups fold on header tap with an active/total counter (default `true`); per-group `collapsed: true` folds by default |
+| `tile_columns` | no | force N tile columns (default: auto-fit, min 84 px) |
 
 Active scenarios are read from `binary_sensor.supernotify_scenario_*`. Since
 SuperNotify 2.4.0 these report a live `on`/`off` state (recomputed reactively

@@ -3,6 +3,26 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.0] - 2026-09-11
+
+### Added
+- Control card: **native "last notification" block** (`last_notification: true`), meant to
+  replace a markdown card: title from `last_notification_entity`, message (optional
+  `last_notification_strip` regex, e.g. to drop a trailing timestamp line), priority chip,
+  relative time, channels with ✔/✖ (+ skipped count) labelled with the delivery `alias:`,
+  optional repeat button (`repeat_entity`, an `input_button`). Refreshed on every change of
+  `sensor.supernotify_notifications` and once a minute.
+- Control card: **collapsible groups** — each group header shows `active/total` and folds on
+  tap; a folded group still shows its ON pills. State is kept per browser (localStorage);
+  `collapsible: false` disables it, per-group `collapsed: true` folds it by default.
+- Control card: **snooze countdown** — while a snooze is active the tile shows "⏳ N min left"
+  (refreshed every 30 s) next to the end time.
+
+### Changed
+- Control card: tiles sit on a uniform grid (auto-fit, min 84 px — five tiles fit one row in a
+  two-column section); `tile_columns: N` forces a fixed number of columns. Slightly smaller
+  tile labels.
+
 ## [0.20.0] - 2026-09-10
 
 ### Added

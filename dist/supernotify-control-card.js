@@ -8,6 +8,20 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-11 — v0.21.0. Control card only. (1) Tiles now sit on a uniform grid
+ *   (auto-fit, min 84px — five tiles fit one row in a 2-column section; `tile_columns: N` forces N columns).
+ *   (2) Snooze tile shows a live countdown ("⏳ N min left", refreshed every 30 s) while a snooze is
+ *   active — snooze_until comes from enquire_snoozes as local "HH:MM:SS". (3) Mode groups are
+ *   collapsible: header shows active/total, tap to fold; a folded group still shows its ON pills;
+ *   state kept in localStorage (`collapsible: false` disables, per-group `collapsed: true` folds by
+ *   default). (4) New native "last notification" block (`last_notification: true`), meant to replace
+ *   the markdown card: title from `last_notification_entity`, message (optional
+ *   `last_notification_strip` regex removes e.g. a trailing timestamp line), priority chip, relative
+ *   time from enquire_last_notification.created, channels with ✔/✖ (+ skipped count) using the
+ *   delivery `alias` (shared helper snDeliveryAlias), optional repeat button (`repeat_entity`,
+ *   an input_button). Refreshed on every change of sensor.supernotify_notifications and each minute.
+ *   New i18n keys (en/it): grp_active, repeat, skipped_n, left, no_notif.
+ *   Backup of the pre-change file: X:\sn_backups\cards_021_20260911\supernotify-control-card_pre_021.js
  * 2026-09-10 — v0.20.0. Overview card: new health strip on top (option `health`, default true):
  *   one chip per thing worth a glance — SuperNotify version (up to date / update available /
  *   restart required, from the HACS update entity `update_entity`), engine failures, transports
@@ -54,7 +68,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.20.0";
+const VERSION = "0.21.0";
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -111,6 +125,8 @@ const SN_STRINGS = {
     aut_updated: "list updated", aut_count: "automations", never: "never",
     ago_now: "now", ago_min: "min ago", ago_h: "h ago", ago_d: "d ago",
     aut_disabled_only: "Disabled only",
+    grp_active: "active", repeat: "Repeat", skipped_n: "skipped", left: "left",
+    no_notif: "no notification yet",
   },
   it: {
     presence: "Presenza", time_band: "Fascia oraria", quiet: "Silenzioso",
@@ -162,6 +178,8 @@ const SN_STRINGS = {
     aut_updated: "elenco aggiornato", aut_count: "automazioni", never: "mai",
     ago_now: "ora", ago_min: "min fa", ago_h: "h fa", ago_d: "g fa",
     aut_disabled_only: "Solo disattivate",
+    grp_active: "attivi", repeat: "Ripeti", skipped_n: "saltati", left: "rimasti",
+    no_notif: "nessuna notifica ancora",
   },
 };
 
@@ -208,6 +226,28 @@ function snSetBinaryState(hass, entityId, on) {
 }
 
 /**
+ * Delivery `alias:` (surfaced as friendly_name on the delivery binary_sensor).
+ * The engine's auto-generated "<name> Delivery Configuration" is not an alias.
+ * Returns null when no alias is configured.
+ */
+function snDeliveryAlias(hass, deliveryName) {
+  const st = hass && hass.states[`binary_sensor.supernotify_delivery_${deliveryName}`];
+  const fn = st && st.attributes && st.attributes.friendly_name;
+  if (!fn || fn === deliveryName || fn === st.entity_id || /Delivery Configuration$/i.test(fn)) return null;
+  return fn;
+}
+
+/** "3 min ago" style relative label from a Date (i18n via T). */
+function snAgo(date, T) {
+  const m = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (m < 1) return T.ago_now;
+  if (m < 60) return `${m} ${T.ago_min}`;
+  const hh = String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
+  if (m < 1440) return `${Math.floor(m / 60)} ${T.ago_h} · ${hh}`;
+  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")} ${hh}`;
+}
+
+/**
  * Shared CSS for the small pill on/off switch used by the toggle-able
  * delivery/transport/recipient rows (same look as automations-card's
  * enable/disable switch).
@@ -241,9 +281,12 @@ class SupernotifyControlCard extends HTMLElement {
       tiles: ["dnd", "snooze", "announce"],
       groups: [],
       style: "supernotify", // "supernotify" = prototype look; "theme" = follow HA theme
+      collapsible: true,     // groups fold on header tap (active/total counter)
+      last_notification: false, // native "last notification" block (replaces a markdown card)
       ...config,
     };
     this._rendered = false;
+    this._collapsed = null; // lazily loaded from localStorage
   }
 
   set hass(hass) {
@@ -252,19 +295,52 @@ class SupernotifyControlCard extends HTMLElement {
     this._dark = !!(hass.themes && hass.themes.darkMode);
     if (!this._rendered || wasDark !== this._dark) this._render();
     else this._update();
+    if (this._config.last_notification) {
+      const cnt = this._st("sensor.supernotify_notifications");
+      if (cnt !== this._lastCount) { this._lastCount = cnt; this._refreshLast(); }
+    }
+    // first hass after connect: connectedCallback may have run without hass
+    if (!this._booted) { this._booted = true; this._refreshSnoozes(); }
   }
 
   getCardSize() {
-    return 4 + (this._config.groups || []).length;
+    return 4 + (this._config.groups || []).length + (this._config.last_notification ? 2 : 0);
   }
 
   connectedCallback() {
-    this._pollTimer = setInterval(() => this._refreshSnoozes(), 60000);
+    this._pollTimer = setInterval(() => { this._refreshSnoozes(); this._refreshLast(); }, 60000);
+    // 30 s tick: snooze countdown + relative time of the last notification
+    this._tickTimer = setInterval(() => {
+      if (!this._rendered) return;
+      if ((this._snoozes || []).length) this._renderTiles();
+      if (this._config.last_notification) this._renderLast();
+    }, 30000);
     this._refreshSnoozes();
+    this._refreshLast();
   }
 
   disconnectedCallback() {
     clearInterval(this._pollTimer);
+    clearInterval(this._tickTimer);
+  }
+
+  async _refreshLast() {
+    if (!this._hass || !this._config.last_notification) return;
+    try {
+      const r = await this._hass.callWS({
+        type: "call_service", domain: "supernotify", service: "enquire_last_notification",
+        service_data: {}, return_response: true,
+      });
+      const n = r && r.response && Object.keys(r.response).length ? r.response : null;
+      const raw = n ? (n.id || "") + "|" + (n.delivered || 0) + "|" + (n.failed || 0) : "";
+      if (raw !== this._lastRaw) {
+        this._lastRaw = raw;
+        this._last = n;
+        if (this._rendered) this._renderLast();
+      }
+    } catch (e) {
+      // supernotify may still be loading; retry on next poll
+    }
   }
 
   async _refreshSnoozes() {
@@ -425,20 +501,22 @@ class SupernotifyControlCard extends HTMLElement {
         .sl { font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
               font-weight: 800; color: ${p.muted}; white-space: nowrap; }
         .sv { font-size: 14px; font-weight: 750; white-space: nowrap; }
-        .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-                 gap: 12px; }
+        .tiles { display: grid; gap: 10px;
+                 grid-template-columns: ${this._config.tile_columns
+                   ? `repeat(${+this._config.tile_columns}, minmax(0, 1fr))`
+                   : "repeat(auto-fit, minmax(84px, 1fr))"}; }
         .ctile { border: 1.5px solid ${p.line}; border-radius: 16px;
-                 background: ${p.panel}; padding: 16px 10px;
+                 background: ${p.panel}; padding: 14px 8px;
                  text-align: center; cursor: pointer; user-select: none;
-                 min-height: 100px; display: flex; flex-direction: column;
+                 min-height: 96px; display: flex; flex-direction: column;
                  align-items: center; justify-content: center; gap: 5px;
                  transition: transform .1s, border-color .15s;
                  box-shadow: 0 1px 3px rgba(16,42,67,.06); }
         .ctile:hover { border-color: ${p.brand}; transform: translateY(-1px); }
         .ctile:active { transform: scale(.97); }
         .ctile .ti { --mdc-icon-size: 30px; font-size: 30px; line-height: 1.1; }
-        .ctile b { font-size: 13.5px; }
-        .ctile .ts { font-size: 11.5px; color: ${p.muted}; }
+        .ctile b { font-size: 12.5px; line-height: 1.2; }
+        .ctile .ts { font-size: 11px; color: ${p.muted}; line-height: 1.25; }
         .ctile.on { background: ${p.brand}; border-color: ${p.brandD}; color: #fff; }
         .ctile.on .ts { color: rgba(255,255,255,.88); }
         .ctile.warn { background: ${p.warn}; border-color: #d98d10; color: #fff; }
@@ -453,7 +531,32 @@ class SupernotifyControlCard extends HTMLElement {
           border: 0; border-radius: 10px; background: ${p.brand}; color: #fff;
           font-weight: 700; padding: 10px 16px; cursor: pointer; font-size: 13px; }
         .mgroup { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-                  font-weight: 800; color: ${p.muted}; margin: 14px 0 8px; }
+                  font-weight: 800; color: ${p.muted}; margin: 14px 0 8px;
+                  display: flex; align-items: center; gap: 8px; }
+        .mgroup.clk { cursor: pointer; user-select: none; }
+        .mgroup .gc { font-size: 10.5px; font-weight: 700; letter-spacing: 0; text-transform: none;
+                      border-radius: 999px; padding: 2px 8px; background: ${p.soft}; color: ${p.brandD}; }
+        .mgroup .gc.zero { background: transparent; border: 1px solid ${p.line}; color: ${p.muted}; }
+        .mgroup .gv { margin-left: auto; font-size: 12px; opacity: .8; transition: transform .15s; }
+        .mgroup.fold .gv { transform: rotate(-90deg); }
+        .lastn { border: 1px solid ${p.line}; border-radius: 14px; padding: 12px 14px;
+                 margin-bottom: 14px; background: ${p.panel}; box-shadow: 0 1px 3px rgba(16,42,67,.06); }
+        .lastn .lh { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .lastn .lt { font-size: 14.5px; font-weight: 750; flex: 1; min-width: 0;
+                     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lastn .lm { font-size: 13px; line-height: 1.45; white-space: pre-line; color: ${p.ink}; }
+        .lastn .lf { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px;
+                     font-size: 11.5px; color: ${p.muted}; }
+        .lastn .lb { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px;
+                     padding: 3px 9px; font-weight: 700; font-size: 11px; background: ${p.soft}; }
+        .lastn .lb.ok { color: ${p.ok}; background: rgba(46,158,91,.12); }
+        .lastn .lb.err { color: #e23c3c; background: rgba(226,60,60,.12); }
+        .lastn .lb.mut { color: ${p.muted}; background: transparent; border: 1px solid ${p.line}; }
+        .lastn .rep { margin-left: auto; border: 1.5px solid ${p.line}; background: ${p.panel};
+                      color: ${p.brandD}; border-radius: 999px; padding: 5px 12px; font-size: 12px;
+                      font-weight: 700; cursor: pointer; }
+        .lastn .rep:hover { border-color: ${p.brand}; }
+        .lastn .rep:active { transform: scale(.96); }
         .mpill { display: inline-flex; align-items: center; gap: 7px;
                  border: 1.5px solid ${p.line}; background: ${p.panel};
                  border-radius: 999px; padding: 9px 15px; font-size: 13px; font-weight: 650;
@@ -473,6 +576,7 @@ class SupernotifyControlCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div class="statusbar" id="statusbar"></div>
+        ${this._config.last_notification ? `<div class="lastn" id="lastn"></div>` : ""}
         <div class="tiles" id="tiles"></div>
         ${(this._config.tiles || []).includes("announce") ? `<div class="announce" id="announceRow">
           <ha-icon icon="mdi:bullhorn"></ha-icon>
@@ -496,8 +600,55 @@ class SupernotifyControlCard extends HTMLElement {
   _update() {
     if (!this.shadowRoot) return;
     this._renderStatus();
+    if (this._config.last_notification) this._renderLast();
     this._renderTiles();
     this._renderGroups();
+  }
+
+  _renderLast() {
+    const el = this.shadowRoot.getElementById("lastn");
+    if (!el) return;
+    const c = this._config;
+    const T = snT(c, this._hass);
+    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const n = this._last;
+    const titleFromEntity = c.last_notification_entity ? this._st(c.last_notification_entity) : undefined;
+    const title = (n && n.title) || (titleFromEntity && !["unknown", "unavailable", ""].includes(titleFromEntity) ? titleFromEntity : "");
+    let msg = (n && n.message) || "";
+    if (c.last_notification_strip) {
+      try { msg = msg.replace(new RegExp(c.last_notification_strip, "m"), "").trim(); } catch (e) { /* bad regex: ignore */ }
+    }
+    if (!n && !title) { el.innerHTML = `<div class="lm" style="opacity:.7">${T.no_notif}</div>`; return; }
+    const prioCol = { critical: "#e23c3c", high: "#f0a020", medium: "#03a9f4", low: "#8fa1b4", minimum: "#c3ccd6" };
+    const prio = n && n.priority
+      ? `<span class="lb" style="color:${prioCol[n.priority] || "inherit"}">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "";
+    let when = "";
+    if (n && n.created) { const d = new Date(n.created); if (!isNaN(d)) when = `<span class="lb mut">🕐 ${esc(snAgo(d, T))}</span>`; }
+    const chips = [];
+    let skipped = 0;
+    if (n && n.deliveries && typeof n.deliveries === "object") {
+      for (const [name, d] of Object.entries(n.deliveries)) {
+        const ok = d && Array.isArray(d.success) && d.success.length;
+        const err = d && Array.isArray(d.error) && d.error.length;
+        if (!ok && !err) { skipped++; continue; }
+        const label = snDeliveryAlias(this._hass, name) || name;
+        chips.push(`<span class="lb ${err ? "err" : "ok"}">${err ? "✖" : "✔"} ${esc(label)}</span>`);
+      }
+    }
+    if (skipped) chips.push(`<span class="lb mut">${skipped} ${T.skipped_n}</span>`);
+    const rep = c.repeat_entity
+      ? `<button class="rep" id="repBtn">🔁 ${T.repeat}</button>` : "";
+    el.innerHTML = `
+      <div class="lh"><span class="lt">${esc(title) || "📨 " + T.last_notif}</span>${prio}${when}</div>
+      ${msg ? `<div class="lm">${esc(msg)}</div>` : ""}
+      <div class="lf">${chips.join("")}${rep}</div>`;
+    const btn = el.querySelector("#repBtn");
+    if (btn) btn.onclick = () => {
+      const [dom] = c.repeat_entity.split(".");
+      const svc = dom === "input_button" ? "press" : dom === "script" ? "turn_on" : "press";
+      this._hass.callService(dom, svc, { entity_id: c.repeat_entity });
+      this._toast("🔁 " + T.repeat);
+    };
   }
 
   _renderStatus() {
@@ -551,8 +702,19 @@ class SupernotifyControlCard extends HTMLElement {
     if (t === "snooze") {
       const act = this._snoozes || [];
       if (act.length) {
-        const until = act[0] && act[0].snooze_until ? act[0].snooze_until.slice(0, 5) : "";
-        return { cls: "warn", icon: "😴", name: T.snoozed,
+        // snooze_until is a local "HH:MM:SS" string (snoozer.py export()).
+        const raw = act[0] && act[0].snooze_until ? String(act[0].snooze_until) : "";
+        const until = raw.slice(0, 5);
+        let left = "";
+        const m = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        if (m) {
+          const now = new Date();
+          const end = new Date(now); end.setHours(+m[1], +m[2], +(m[3] || 0), 0);
+          if (end < now) end.setDate(end.getDate() + 1);
+          const mins = Math.max(0, Math.round((end - now) / 60000));
+          left = `⏳ ${mins} ${T.min} ${T.left}`;
+        }
+        return { cls: "warn", icon: "😴", name: left || T.snoozed,
           sub: (until ? T.until + " " + until + " · " : "") + T.tap_clear,
           act: () => this._snooze() };
       }
@@ -587,24 +749,62 @@ class SupernotifyControlCard extends HTMLElement {
     });
   }
 
+  _collapseKey() {
+    // one localStorage slot per card instance (config-derived, stable across reloads)
+    return "sn-ctl-fold:" + ((this._config.groups || []).map((g) => g.name || "").join("|") || "default");
+  }
+
+  _loadCollapsed() {
+    if (this._collapsed) return this._collapsed;
+    const set = new Set();
+    (this._config.groups || []).forEach((g, i) => { if (g.collapsed) set.add(i); });
+    try {
+      const saved = JSON.parse(localStorage.getItem(this._collapseKey()) || "null");
+      if (Array.isArray(saved)) { set.clear(); saved.forEach((i) => set.add(+i)); }
+    } catch (e) { /* storage unavailable */ }
+    this._collapsed = set;
+    return set;
+  }
+
+  _toggleGroup(i) {
+    const set = this._loadCollapsed();
+    if (set.has(i)) set.delete(i); else set.add(i);
+    try { localStorage.setItem(this._collapseKey(), JSON.stringify([...set])); } catch (e) { /* ignore */ }
+    this._renderGroups();
+  }
+
   _renderGroups() {
     const el = this.shadowRoot.getElementById("groups");
+    const T = snT(this._config, this._hass);
+    const foldable = this._config.collapsible !== false;
+    const folded = foldable ? this._loadCollapsed() : new Set();
     el.innerHTML = (this._config.groups || [])
-      .map((g) => {
-        const pills = (g.entities || [])
-          .map((ent) => {
-            const id = typeof ent === "string" ? ent : ent.entity;
-            const name = typeof ent === "string" ? this._friendly(id) : ent.name || this._friendly(id);
-            const on = this._on(id);
-            return `<span class="mpill ${on ? "on" : ""}" data-e="${id}" role="switch" aria-checked="${on}">
-                      <span class="pd"></span>${name}</span>`;
-          })
+      .map((g, gi) => {
+        const ents = (g.entities || []).map((ent) => {
+          const id = typeof ent === "string" ? ent : ent.entity;
+          const name = typeof ent === "string" ? this._friendly(id) : ent.name || this._friendly(id);
+          return { id, name, on: this._on(id) };
+        });
+        const nOn = ents.filter((e) => e.on).length;
+        const isFold = folded.has(gi);
+        // a folded group keeps its ON pills visible: you still see what's active
+        const shown = isFold ? ents.filter((e) => e.on) : ents;
+        const pills = shown
+          .map((e) => `<span class="mpill ${e.on ? "on" : ""}" data-e="${e.id}" role="switch" aria-checked="${e.on}">
+                      <span class="pd"></span>${e.name}</span>`)
           .join("");
-        return `<div class="mgroup">${g.name || ""}</div><div>${pills}</div>`;
+        const counter = `<span class="gc ${nOn ? "" : "zero"}">${nOn}/${ents.length} ${T.grp_active}</span>`;
+        const chev = foldable ? `<span class="gv">▾</span>` : "";
+        return `<div class="mgroup ${foldable ? "clk" : ""} ${isFold ? "fold" : ""}" data-g="${gi}" role="${foldable ? "button" : ""}"
+                     ${foldable ? `aria-expanded="${!isFold}" tabindex="0"` : ""}>${g.name || ""}${counter}${chev}</div><div>${pills}</div>`;
       })
       .join("");
     el.querySelectorAll(".mpill").forEach((node) => {
       node.onclick = () => this._toggle(node.dataset.e);
+    });
+    if (foldable) el.querySelectorAll(".mgroup.clk").forEach((node) => {
+      node.onclick = () => this._toggleGroup(+node.dataset.g);
+      node.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this._toggleGroup(+node.dataset.g); } };
     });
   }
 }
@@ -615,7 +815,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "supernotify-control-card",
   name: "SuperNotify Control Card",
-  description: "Touch-first control center for SuperNotify: status, quick actions, grouped mode toggles.",
+  description: "Touch-first control center for SuperNotify: status, last notification, quick actions (snooze countdown), collapsible mode groups.",
 });
 
 /* ════════════════════════════════════════════════════════════════════════
