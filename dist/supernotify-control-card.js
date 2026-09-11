@@ -8,6 +8,19 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-11 — v0.23.0. New supernotify-archive-card: the notification history, at last.
+ *   SuperNotify writes one JSON file per notification under /config/supernotify/archive, but a
+ *   browser card cannot read the filesystem (and media_source only serves audio/image/video —
+ *   a signed URL for a .json returns 404). So a small script (tools/sn_archive_index.py) is run
+ *   by a command_line sensor and publishes a compact index (last 40 notifications, ~8 KB) in the
+ *   attributes of sensor.supernotify_archivio: the card reads those, so the data travels over the
+ *   authenticated WebSocket and no file is exposed under /local. The index shares two lookup
+ *   tables (`chan`, `scen`) that rows reference by position, which roughly halves its size.
+ *   The card groups rows by day, shows time, title, message, per-channel outcome (delivered /
+ *   failed / skipped with reason), priority and duration, and expands a row for scenarios and ids.
+ *   Free-text search plus filters (all / problems only / today). This is a BRIDGE: when
+ *   SuperNotify gains a native service (enquire_archive) the card will switch to it.
+ *   New i18n block SN_ARCH_STRINGS (en/it).
  * 2026-09-11 — v0.22.0. Per-card versions (Lollo's request): new SN_CARD_VERSIONS map, one entry
  *   per card, bumped only when that card changes; every footer now prints its own card version
  *   instead of the bundle VERSION (which stays for HACS/releases, the stats-card version strip and
@@ -74,7 +87,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.22.0"; // bundle / HACS release
+const VERSION = "0.23.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -96,6 +109,7 @@ const SN_CARD_VERSIONS = {
   composer: "0.11.0",
   automations: "0.14.0",
   stats: "0.20.0",
+  archive: "0.23.0",
 };
 
 /**
@@ -3337,3 +3351,268 @@ window.customCards.push({
 });
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");
+class SupernotifyArchiveCard extends HTMLElement {
+  static getStubConfig() {
+    return { entity: "sensor.supernotify_archivio" };
+  }
+
+  setConfig(config) {
+    this._config = {
+      entity: "sensor.supernotify_archivio",
+      style: "supernotify",
+      ...config,
+    };
+    this._q = "";
+    this._filter = "all";
+    this._open = new Set();
+    this._rendered = false;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    const st = hass.states[this._config.entity];
+    const stamp = st ? st.last_updated : "none";
+    if (!this._rendered || wasDark !== this._dark) this._render();
+    else if (stamp !== this._stamp) this._renderList();
+    this._stamp = stamp;
+  }
+
+  getCardSize() { return 12; }
+
+  _loc() { return (this._config.language || (this._hass && this._hass.language) || undefined); }
+
+  _T() { return SN_ARCH_STRINGS[((this._config.language || (this._hass && this._hass.language) || "en").split("-")[0])] || SN_ARCH_STRINGS.en; }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return { brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color)", crit: "var(--error-color, #e23c3c)",
+        line: "var(--divider-color)", panel: "var(--card-background-color)",
+        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)" };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", warn: "#f0a020", crit: "#ff9a9a",
+          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#f0a020", crit: "#e23c3c",
+          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  /**
+   * L'indice pubblicato negli attributi di sensor.supernotify_archivio dal
+   * sensore command_line che lancia tools/sn_archive_index.py:
+   *   chan: ["mobile_push", …]   tabella dei nomi di canale
+   *   scen: ["dnd_globale", …]   tabella dei nomi di scenario
+   *   items: [{ id, t (epoch s), ti (titolo), m (messaggio), mt (troncato),
+   *             p (priorita', assente = medium), o (esito, assente = success),
+   *             d/f/s (consegnati/falliti/saltati, assenti se 0),
+   *             c: [indice | [indice,"e"] | [indice,"s",motivo]],
+   *             sc: [indici scenario], ms (durata) }]
+   * Le tabelle condivise e i default omessi sono cio' che tiene l'indice sotto
+   * i ~16 KB oltre i quali gli attributi di stato diventano un peso per HA.
+   */
+  _index() {
+    const st = this._hass && this._hass.states[this._config.entity];
+    if (!st) return null;
+    const a = st.attributes || {};
+    return { items: a.items || [], chan: a.chan || [], scen: a.scen || [],
+      total: a.total_files, oldest: a.oldest, generated: a.generated, error: a.error };
+  }
+
+  /** Canali di una riga, nel formato dell'indice, espansi in oggetti leggibili. */
+  _channels(row, idx) {
+    return (row.c || []).map((c) => {
+      if (typeof c === "number") return { name: idx.chan[c] || "?", state: "ok" };
+      const [i, e, r] = c;
+      return { name: idx.chan[i] || "?", state: e === "e" ? "err" : "skip", reason: r };
+    });
+  }
+
+  _dayLabel(d, T) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const day = new Date(d); day.setHours(0, 0, 0, 0);
+    const diff = Math.round((today - day) / 86400000);
+    if (diff === 0) return T.today;
+    if (diff === 1) return T.yesterday;
+    return day.toLocaleDateString(this._loc(), { weekday: "long", day: "numeric", month: "long" });
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    const T = this._T();
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+        .srch { flex: 1; min-width: 180px; border: 1.5px solid ${p.line}; border-radius: 10px;
+                padding: 9px 12px; font-size: 13px; background: ${p.panel}; color: ${p.ink}; }
+        .srch:focus { outline: none; border-color: ${p.brand}; box-shadow: 0 0 0 3px rgba(3,169,244,.14); }
+        .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+        .chip { border: 1.5px solid ${p.line}; background: ${p.panel}; border-radius: 999px;
+                padding: 7px 13px; font-size: 12.5px; font-weight: 650; cursor: pointer; user-select: none; }
+        .chip:hover { border-color: ${p.brand}; }
+        .chip.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
+        .meta { font-size: 11px; color: ${p.muted}; margin-bottom: 10px; }
+        .day { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800;
+               color: ${p.muted}; margin: 14px 0 6px; position: sticky; top: 0; background: ${p.panel}; padding: 4px 0; }
+        .row { border: 1px solid ${p.line}; border-radius: 12px; padding: 9px 12px; margin-bottom: 6px;
+               cursor: pointer; }
+        .row:hover { border-color: ${p.brand}; }
+        .r1 { display: flex; gap: 9px; align-items: baseline; }
+        .hm { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 12.5px; color: ${p.muted}; flex: none; }
+        .ti { font-weight: 700; font-size: 13.5px; flex: 1; min-width: 0; overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+        .msg { font-size: 12.5px; color: ${p.muted}; margin: 3px 0 0 46px; line-height: 1.4;
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .row.open .msg { white-space: normal; }
+        .tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 0 46px; }
+        .tg { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px;
+              padding: 2px 8px; font-size: 10.5px; font-weight: 700; background: ${p.soft}; color: ${p.muted}; }
+        .tg.ok { color: ${p.ok}; background: rgba(46,158,91,.12); }
+        .tg.err { color: ${p.crit}; background: rgba(226,60,60,.12); }
+        .tg.skip { color: ${p.muted}; background: transparent; border: 1px dashed ${p.line}; }
+        .tg.pr { color: ${p.warn}; background: rgba(240,160,32,.14); }
+        .det { margin: 8px 0 2px 46px; font-size: 11.5px; color: ${p.muted}; display: none; }
+        .row.open .det { display: block; }
+        .det b { color: ${p.ink}; font-weight: 650; }
+        .empty { text-align: center; color: ${p.muted}; font-size: 13px; padding: 22px 0; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 10px; }
+      </style>
+      <ha-card>
+        ${snIntro(this._config, this._dark)}
+        <div class="head">
+          <input class="srch" id="q" placeholder="${T.search}">
+          <div class="chips" id="chips"></div>
+        </div>
+        <div class="meta" id="meta"></div>
+        <div id="list"></div>
+        <div class="ver">supernotify-archive-card v${SN_CARD_VERSIONS.archive}</div>
+      </ha-card>`;
+    const q = this.shadowRoot.getElementById("q");
+    q.addEventListener("input", () => { this._q = q.value.toLowerCase(); this._renderList(); });
+    this._renderChips();
+    this._renderList();
+  }
+
+  _renderChips() {
+    const T = this._T();
+    const defs = [["all", T.f_all], ["problems", T.f_problems], ["today", T.f_today]];
+    const el = this.shadowRoot.getElementById("chips");
+    el.innerHTML = defs.map(([k, label]) =>
+      `<span class="chip ${this._filter === k ? "on" : ""}" data-k="${k}">${label}</span>`).join("");
+    el.querySelectorAll(".chip").forEach((n) => {
+      n.onclick = () => { this._filter = n.dataset.k; this._renderChips(); this._renderList(); };
+    });
+  }
+
+  _renderList() {
+    const el = this.shadowRoot && this.shadowRoot.getElementById("list");
+    if (!el) return;
+    const T = this._T();
+    const p = this._palette();
+    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const idx = this._index();
+    const meta = this.shadowRoot.getElementById("meta");
+    if (!idx) {
+      meta.textContent = "";
+      el.innerHTML = `<div class="empty"><b>${T.no_sensor}</b> — <code>${esc(this._config.entity)}</code><br>${T.no_sensor_hint}</div>`;
+      return;
+    }
+    if (idx.error) {
+      el.innerHTML = `<div class="empty">⚠️ ${esc(idx.error)}</div>`;
+      return;
+    }
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const rows = idx.items.filter((r) => {
+      if (this._filter === "today" && r.t * 1000 < todayStart.getTime()) return false;
+      if (this._filter === "problems" && !(r.f || r.s || r.o)) return false;
+      if (this._q) {
+        const hay = ((r.ti || "") + " " + (r.m || "")).toLowerCase();
+        if (!hay.includes(this._q)) return false;
+      }
+      return true;
+    });
+    const parts = [];
+    const gen = idx.generated ? new Date(idx.generated).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit" }) : "";
+    const old = idx.oldest ? new Date(idx.oldest).toLocaleDateString(this._loc()) : "";
+    meta.innerHTML = `${idx.items.length} ${T.of} ${idx.total || "?"} ${T.in_archive}` +
+      (old ? ` · ${T.since}: ${old}` : "") + (gen ? ` · ${T.updated} ${gen}` : "");
+    if (!rows.length) {
+      el.innerHTML = `<div class="empty">${T.none}</div>`;
+      return;
+    }
+    let lastDay = "";
+    rows.forEach((r, i) => {
+      const d = new Date(r.t * 1000);
+      const day = this._dayLabel(d, T);
+      if (day !== lastDay) { parts.push(`<div class="day">${esc(day)}</div>`); lastDay = day; }
+      const hm = d.toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit" });
+      const chans = this._channels(r, idx).map((c) =>
+        `<span class="tg ${c.state}">${c.state === "ok" ? "✔" : c.state === "err" ? "✖" : "⊘"} ${esc(c.name)}` +
+        `${c.reason ? " · " + esc(c.reason) : ""}</span>`).join("");
+      const prio = r.p ? `<span class="tg pr">${esc(r.p)}</span>` : "";
+      const scen = (r.sc || []).map((s) => esc(idx.scen[s] || "?")).join(", ");
+      const open = this._open.has(r.id) ? " open" : "";
+      parts.push(
+        `<div class="row${open}" data-id="${esc(r.id)}">
+           <div class="r1"><span class="hm">${hm}</span><span class="ti">${esc(r.ti || "—")}</span>${prio}</div>
+           ${r.m ? `<div class="msg">${esc(r.m)}${r.mt ? "…" : ""}</div>` : ""}
+           <div class="tags">${chans}</div>
+           <div class="det">
+             ${scen ? `<div><b>${T.scenarios}:</b> ${scen}</div>` : ""}
+             <div>${r.d ? `<b>${r.d}</b> ${T.delivered} ` : ""}${r.f ? `· <b>${r.f}</b> ${T.failed} ` : ""}${r.s ? `· <b>${r.s}</b> ${T.skipped} ` : ""}
+             ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""} · ${T.id} <code>${esc(r.id)}</code>${r.mt ? ` · ${T.truncated}` : ""}</div>
+           </div>
+         </div>`);
+    });
+    el.innerHTML = parts.join("");
+    el.querySelectorAll(".row").forEach((node) => {
+      node.onclick = () => {
+        const id = node.dataset.id;
+        if (this._open.has(id)) { this._open.delete(id); node.classList.remove("open"); }
+        else { this._open.add(id); node.classList.add("open"); }
+      };
+    });
+  }
+}
+
+customElements.define("supernotify-archive-card", SupernotifyArchiveCard);
+
+window.customCards.push({
+  type: "supernotify-archive-card",
+  name: "SuperNotify Archive Card",
+  description: "Notification history from the SuperNotify archive: search, filters, per-channel outcome.",
+});
+
+const SN_ARCH_STRINGS = {
+  en: {
+    title: "Notification history", search: "Search title or message…",
+    f_all: "All", f_problems: "Problems only", f_today: "Today",
+    none: "no notification matches", no_sensor: "sensor not found",
+    no_sensor_hint: "This card needs the command_line sensor that indexes the archive (see README).",
+    of: "of", in_archive: "in the archive", since: "oldest", updated: "index updated",
+    today: "Today", yesterday: "Yesterday",
+    delivered: "delivered", failed: "failed", skipped: "skipped",
+    scenarios: "Scenarios in force", truncated: "message truncated in the index",
+    dur: "took", id: "id",
+  },
+  it: {
+    title: "Storico notifiche", search: "Cerca nel titolo o nel messaggio…",
+    f_all: "Tutte", f_problems: "Solo con problemi", f_today: "Oggi",
+    none: "nessuna notifica corrisponde", no_sensor: "sensore non trovato",
+    no_sensor_hint: "Questa card ha bisogno del sensore command_line che indicizza l'archivio (vedi README).",
+    of: "di", in_archive: "nell'archivio", since: "più vecchia", updated: "indice aggiornato",
+    today: "Oggi", yesterday: "Ieri",
+    delivered: "consegnata", failed: "fallita", skipped: "saltata",
+    scenarios: "Scenari in vigore", truncated: "messaggio troncato nell'indice",
+    dur: "in", id: "id",
+  },
+};
+
+

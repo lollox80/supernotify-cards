@@ -3,6 +3,24 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.23.0] - 2026-09-11
+
+### Added
+- **New `supernotify-archive-card`** — the notification history. SuperNotify writes one JSON
+  file per notification under `/config/supernotify/archive`, but a card cannot read the
+  filesystem: `media_source` only serves audio/image/video (a signed URL for a `.json` returns
+  404). So a small script (`tools/sn_archive_index.py`, shipped here) is run by a `command_line`
+  sensor and publishes a compact index of the last 40 notifications (~8 KB) in the attributes of
+  `sensor.supernotify_archivio`; the card reads those, so the data travels over the
+  authenticated WebSocket and nothing is exposed under `/local`. Rows are grouped by day and
+  show time, title, message, per-channel outcome (delivered / failed / skipped with reason),
+  priority and duration; a row expands to the scenarios in force and the notification id.
+  Free-text search and filters (all / problems only / today). i18n en/it.
+  The index halves its size by sharing two lookup tables (`chan`, `scen`) that rows cite by
+  position, and by omitting defaults (priority `medium`, outcome `success`, counters at zero).
+  This is a **bridge**: when SuperNotify gains a native `enquire_archive` service the card will
+  read that instead and the script can go. README documents the sensor and the recorder exclude.
+
 ## [0.22.0] - 2026-09-11
 
 ### Changed
