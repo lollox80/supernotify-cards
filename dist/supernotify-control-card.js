@@ -8,6 +8,12 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-11 — v0.22.0. Per-card versions (Lollo's request): new SN_CARD_VERSIONS map, one entry
+ *   per card, bumped only when that card changes; every footer now prints its own card version
+ *   instead of the bundle VERSION (which stays for HACS/releases, the stats-card version strip and
+ *   the console banner). Initial values = the release in which each card last changed, from
+ *   CHANGELOG.md. New tools/check_card_versions.py compares each card's source region with the
+ *   previous commit and fails when it changed without a bump (run by the release script and CI).
  * 2026-09-11 — v0.21.0. Control card only. (1) Tiles now sit on a uniform grid
  *   (auto-fit, min 84px — five tiles fit one row in a 2-column section; `tile_columns: N` forces N columns).
  *   (2) Snooze tile shows a live countdown ("⏳ N min left", refreshed every 30 s) while a snooze is
@@ -68,7 +74,29 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.21.0";
+const VERSION = "0.22.0"; // bundle / HACS release
+
+/**
+ * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
+ * above is what HACS tracks and moves at every release). Each card footer
+ * prints its own entry, so "v0.16.0" on the deliveries card means the card
+ * has not changed since 0.16.0 even if the bundle is newer.
+ * tools/check_card_versions.py fails the release when a card's code changed
+ * without a bump here.
+ */
+const SN_CARD_VERSIONS = {
+  control: "0.21.0",
+  overview: "0.20.0",
+  bands: "0.9.0",
+  deliveries: "0.16.0",
+  transports: "0.16.0",
+  recipients: "0.17.0",
+  scenarios: "0.15.0",
+  simulator: "0.9.0",
+  composer: "0.11.0",
+  automations: "0.14.0",
+  stats: "0.20.0",
+};
 
 /**
  * Minimal i18n: strings follow hass.language (override with `language:` in
@@ -584,7 +612,7 @@ class SupernotifyControlCard extends HTMLElement {
           <button id="announceBtn">${snT(this._config, this._hass).send}</button>
         </div>` : ""}
         <div id="groups"></div>
-        <div class="ver">supernotify-control-card v${VERSION}</div>
+        <div class="ver">supernotify-control-card v${SN_CARD_VERSIONS.control}</div>
         <div class="toast" id="toast"></div>
       </ha-card>`;
     const abtn = this.shadowRoot.getElementById("announceBtn");
@@ -1020,7 +1048,7 @@ class SupernotifyOverviewCard extends HTMLElement {
         <div class="lastmsg" id="last">—</div>
         <div class="sec">${snT(this._config, this._hass).act_scen}</div>
         <div id="scen">—</div>
-        <div class="ver">supernotify-overview-card v${VERSION}</div>
+        <div class="ver">supernotify-overview-card v${SN_CARD_VERSIONS.overview}</div>
       </ha-card>`;
     this._update();
   }
@@ -1224,7 +1252,7 @@ class SupernotifyBandsCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows"></div>
-        <div class="ver">supernotify-bands-card v${VERSION}</div>
+        <div class="ver">supernotify-bands-card v${SN_CARD_VERSIONS.bands}</div>
       </ha-card>`;
     this._update();
   }
@@ -1396,7 +1424,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows"></div>
-        <div class="ver">supernotify-deliveries-card v${VERSION}</div>
+        <div class="ver">supernotify-deliveries-card v${SN_CARD_VERSIONS.deliveries}</div>
       </ha-card>`;
     this._update();
   }
@@ -1557,7 +1585,7 @@ class SupernotifyTransportsCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows"></div>
-        <div class="ver">supernotify-transports-card v${VERSION}</div>
+        <div class="ver">supernotify-transports-card v${SN_CARD_VERSIONS.transports}</div>
       </ha-card>`;
     this._update();
   }
@@ -1712,7 +1740,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows"></div>
-        <div class="ver">supernotify-recipients-card v${VERSION}</div>
+        <div class="ver">supernotify-recipients-card v${SN_CARD_VERSIONS.recipients}</div>
       </ha-card>`;
     this._update();
   }
@@ -1928,7 +1956,7 @@ class SupernotifyScenariosCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows"></div>
-        <div class="ver">supernotify-scenarios-card v${VERSION}</div>
+        <div class="ver">supernotify-scenarios-card v${SN_CARD_VERSIONS.scenarios}</div>
       </ha-card>`;
     this._update();
   }
@@ -2118,7 +2146,7 @@ class SupernotifySimulatorCard extends HTMLElement {
         <div class="sec">${snT(this._config, this._hass).sim_fire}</div>
         <div id="result">—</div>
         <div class="hint">${snT(this._config, this._hass).sim_hint}</div>
-        <div class="ver">supernotify-simulator-card v${VERSION}</div>
+        <div class="ver">supernotify-simulator-card v${SN_CARD_VERSIONS.simulator}</div>
       </ha-card>`;
     this._refresh();
   }
@@ -2310,7 +2338,7 @@ class SupernotifyComposerCard extends HTMLElement {
           </div>
         </div>
         <div class="toast" id="toast"></div>
-        <div style="text-align:right;font-size:10px;color:${p.muted};opacity:.7;margin-top:8px">supernotify-composer-card v${VERSION}</div>
+        <div style="text-align:right;font-size:10px;color:${p.muted};opacity:.7;margin-top:8px">supernotify-composer-card v${SN_CARD_VERSIONS.composer}</div>
       </ha-card>`;
     const sr = this.shadowRoot;
     const upd = () => {
@@ -2624,7 +2652,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
       <ha-card>
         ${snIntro(this._config, this._dark)}
         <div id="body"></div>
-        <div class="ver" id="foot">supernotify-automations-card v${VERSION}</div>
+        <div class="ver" id="foot">supernotify-automations-card v${SN_CARD_VERSIONS.automations}</div>
       </ha-card>`;
     this._renderBody();
   }
@@ -2647,7 +2675,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
       <div class="top">
         <input type="search" id="q" placeholder="${this._esc(T.aut_search)}"
           value="${this._esc(this._q)}" aria-label="${this._esc(T.aut_search)}">
-        <span class="tot">${items.length} ${T.aut_count} · v${VERSION}</span>
+        <span class="tot">${items.length} ${T.aut_count} · v${SN_CARD_VERSIONS.automations}</span>
       </div>
       <div class="chips" id="chips"></div>
       <div id="list"></div>`;
@@ -2658,7 +2686,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
     const gen = this._manifest.generated;
     if (gen) {
       const f = this.shadowRoot.getElementById("foot");
-      f.innerText = `${T.aut_updated} ${this._rel(gen)} · supernotify-automations-card v${VERSION}`;
+      f.innerText = `${T.aut_updated} ${this._rel(gen)} · supernotify-automations-card v${SN_CARD_VERSIONS.automations}`;
     }
   }
 
@@ -3103,7 +3131,7 @@ class SupernotifyStatsCard extends HTMLElement {
         <div class="hdr"><h3>📊 ${T.st_title}</h3><span class="win" id="win">${T.st_loading}</span></div>
         <div id="body"><div class="empty">${T.st_loading}</div></div>
         <div class="ver" id="ver"></div>
-        <div class="foot">supernotify-stats-card v${VERSION}</div>
+        <div class="foot">supernotify-stats-card v${SN_CARD_VERSIONS.stats}</div>
       </ha-card>`;
     this._updateVersions();
     if (this._data) this._draw();

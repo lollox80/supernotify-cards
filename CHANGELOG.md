@@ -3,6 +3,23 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.22.0] - 2026-09-11
+
+### Changed
+- **Per-card versions.** Each card now has its own version (`SN_CARD_VERSIONS` in the
+  bundle), bumped only when that card changes, and prints only that in its footer — so
+  "v0.16.0" on the deliveries card means the card has not changed since 0.16.0 even if the
+  bundle is newer. The bundle version (this changelog, the HACS release tag, the stats-card
+  version strip, the console banner) keeps moving at every release. Initial values are the
+  release in which each card last changed: control 0.21.0, overview 0.20.0, stats 0.20.0,
+  recipients 0.17.0, deliveries 0.16.0, transports 0.16.0, scenarios 0.15.0,
+  automations 0.14.0, composer 0.11.0, bands 0.9.0, simulator 0.9.0.
+
+### Added
+- `tools/check_card_versions.py`: splits the bundle into per-card regions, compares each
+  with the previous commit and fails when a card's code changed without a bump. Run by the
+  CI workflow on every push/PR.
+
 ## [0.21.0] - 2026-09-11
 
 ### Added

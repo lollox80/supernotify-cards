@@ -21,6 +21,14 @@ and English so far, English fallback for anything else). Override with
 `language: it` / `language: en` in the card config if you need to pin it
 regardless of the HA UI language.
 
+## Versions
+
+The bundle has one release version (HACS, this repo's tags) and **each card has its own
+version**, shown in its footer and bumped only when that card changes. A card footer that
+says `v0.16.0` while the bundle is at `0.22.0` simply means that card has not changed since
+0.16.0. `tools/check_card_versions.py` (run in CI) fails when a card's code changes without a
+bump in `SN_CARD_VERSIONS`.
+
 ## supernotify-control-card
 
 Touch-first control center: status bar, big quick-action tiles and grouped
