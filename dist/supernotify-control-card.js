@@ -91,7 +91,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.23.1"; // bundle / HACS release
+const VERSION = "0.24.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -104,7 +104,7 @@ const VERSION = "0.23.1"; // bundle / HACS release
 const SN_CARD_VERSIONS = {
   control: "0.21.0",
   overview: "0.20.0",
-  bands: "0.9.0",
+  bands: "0.10.0",
   deliveries: "0.17.0",
   transports: "0.16.0",
   recipients: "0.17.0",
@@ -137,6 +137,7 @@ const SN_STRINGS = {
     transports: "Transports", delivered: "delivered", failed: "failed",
     channels: "channels", none: "none", no_transports: "no transport entities found",
     start: "start", volume: "volume", now: "now", crosses: "crosses midnight",
+    no_voice: "no voice", mute_hint: "A band at <b>0%</b> sends <b>no voice announcement</b> at all (Alexa and TTS off, push and dashboard still delivered). Critical and high-priority alerts always speak.",
     enabled: "enabled", implicit: "implicit", explicit: "explicit",
     by_scenario: "by scenario", fallback: "fallback", fallback_err: "fallback on error",
     fixed_targets: "fixed targets", no_deliveries: "no delivery entities found",
@@ -190,6 +191,7 @@ const SN_STRINGS = {
     transports: "Transport", delivered: "consegnata", failed: "fallite",
     channels: "canali", none: "nessuno", no_transports: "nessuna entità transport trovata",
     start: "inizio", volume: "volume", now: "ora", crosses: "attraversa mezzanotte",
+    no_voice: "niente voce", mute_hint: "Una fascia a <b>0%</b> <b>non manda proprio</b> l'annuncio vocale (Alexa e TTS spenti; push e notifica a schermo arrivano lo stesso). Gli avvisi critici e urgenti parlano sempre.",
     enabled: "attiva", implicit: "implicita", explicit: "esplicita",
     by_scenario: "da scenario", fallback: "fallback", fallback_err: "fallback su errore",
     fixed_targets: "target fissi", no_deliveries: "nessuna entità delivery trovata",
@@ -1258,6 +1260,12 @@ class SupernotifyBandsCard extends HTMLElement {
         .who .rng { font-size: 11.5px; color: ${p.muted}; margin-top: 1px; }
         .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px;
                  font-weight: 750; background: rgba(46,158,91,.16); color: ${p.ok}; }
+        .badge.mute { background: rgba(160,160,160,.20); color: ${p.muted}; }
+        .badge[hidden] { display: none; }
+        .row.mute .who b { opacity: .62; }
+        .row.mute input[type=range] { accent-color: ${p.muted}; }
+        .hint { font-size: 11.5px; line-height: 1.45; color: ${p.muted};
+                border-top: 1px dashed ${p.line}; margin-top: 10px; padding-top: 8px; }
         .fld { display: flex; flex-direction: column; gap: 2px; }
         .fld .k { font-size: 10px; letter-spacing: .05em; text-transform: uppercase;
                   font-weight: 800; color: ${p.muted}; }
@@ -1270,6 +1278,7 @@ class SupernotifyBandsCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows"></div>
+        <div class="hint">🔇 ${snT(this._config, this._hass).mute_hint}</div>
         <div class="ver">supernotify-bands-card v${SN_CARD_VERSIONS.bands}</div>
       </ha-card>`;
     this._update();
@@ -1286,8 +1295,9 @@ class SupernotifyBandsCard extends HTMLElement {
     rows.innerHTML = bands.map((b, i) => {
       const next = bands[(i + 1) % bands.length];
       const isAct = b.key === active;
-      return `<div class="row ${isAct ? "act" : ""}">
-        <div class="who"><b>${b.icon} ${b.name}</b>${isAct ? ` <span class="badge">${T.now}</span>` : ""}
+      const isMute = b.vol === 0;
+      return `<div class="row ${isAct ? "act" : ""} ${isMute ? "mute" : ""}" data-row="${b.key}">
+        <div class="who"><b>${b.icon} ${b.name}</b>${isAct ? ` <span class="badge">${T.now}</span>` : ""}<span class="badge mute" data-m="${b.key}" ${isMute ? "" : "hidden"}>&nbsp;🔇 ${T.no_voice}</span>
           <div class="rng">${b.hhmm || "—"} → ${next.hhmm || "—"}${i === bands.length - 1 ? " · " + T.crosses : ""}</div>
         </div>
         <div class="fld"><span class="k">${T.start}</span>
@@ -1305,6 +1315,12 @@ class SupernotifyBandsCard extends HTMLElement {
         this._dragging = true;
         const l = rows.querySelector(`[data-l="${inp.dataset.k}"]`);
         if (l) l.textContent = inp.value;
+        // Mostra/nasconde subito il badge "niente voce" senza aspettare il re-render.
+        const mute = +inp.value === 0;
+        const badge = rows.querySelector(`[data-m="${inp.dataset.k}"]`);
+        if (badge) badge.hidden = !mute;
+        const row = rows.querySelector(`[data-row="${inp.dataset.k}"]`);
+        if (row) row.classList.toggle("mute", mute);
       };
       inp.onchange = () => {
         this._dragging = false;
