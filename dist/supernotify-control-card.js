@@ -8,6 +8,10 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-15 — v0.23.1. deliveries-card v0.17.0: SuperNotify 2.5.0 renamed the delivery
+ *   attribute `selection` to `inclusion` (and made it a list), so the channel tag silently
+ *   fell back to "implicit" for every delivery. Now reads `inclusion` with `selection` as
+ *   fallback, and labels each entry of the list instead of the joined string.
  * 2026-09-11 — v0.23.0. New supernotify-archive-card: the notification history, at last.
  *   SuperNotify writes one JSON file per notification under /config/supernotify/archive, but a
  *   browser card cannot read the filesystem (and media_source only serves audio/image/video —
@@ -87,7 +91,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.23.0"; // bundle / HACS release
+const VERSION = "0.23.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -101,7 +105,7 @@ const SN_CARD_VERSIONS = {
   control: "0.21.0",
   overview: "0.20.0",
   bands: "0.9.0",
-  deliveries: "0.16.0",
+  deliveries: "0.17.0",
   transports: "0.16.0",
   recipients: "0.17.0",
   scenarios: "0.15.0",
@@ -1458,9 +1462,12 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       const tr = d.a.transport || "";
       const em = SN_TRANSPORT_ICONS[tr] || "📤";
       const tags = [];
-      let sel = d.a.selection;
-      if (Array.isArray(sel)) sel = sel.join(", ");
-      tags.push(`🔀 ${snSelectionLabel(sel, T) || sel || T.implicit}`);
+      // SuperNotify 2.5 renamed the `selection` attribute to `inclusion` (now a list);
+      // older versions still expose `selection`, so read both.
+      let sel = d.a.inclusion ?? d.a.selection;
+      if (Array.isArray(sel)) sel = sel.map((s) => snSelectionLabel(s, T) || s).join(", ");
+      else sel = snSelectionLabel(sel, T) || sel;
+      tags.push(`🔀 ${sel || T.implicit}`);
       if (d.a.action) tags.push(`⚙️ ${d.a.action}`);
       const tgt = d.a.target;
       const nTgt = Array.isArray(tgt) ? tgt.length : tgt && typeof tgt === "object" ? Object.keys(tgt).length : tgt ? 1 : 0;
