@@ -91,7 +91,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.25.0"; // bundle / HACS release
+const VERSION = "0.26.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -104,7 +104,7 @@ const VERSION = "0.25.0"; // bundle / HACS release
 const SN_CARD_VERSIONS = {
   control: "0.22.0",
   overview: "0.20.0",
-  bands: "0.11.0",
+  bands: "0.12.0",
   deliveries: "0.17.0",
   transports: "0.16.0",
   recipients: "0.17.0",
@@ -1300,20 +1300,61 @@ class SupernotifyBandsCard extends HTMLElement {
     const active = this._activeKey(bands);
     const T = snT(this._config, this._hass);
     const rows = this.shadowRoot.getElementById("rows");
-    rows.innerHTML = bands.map((b, i) => {
-      const next = bands[(i + 1) % bands.length];
-      const isAct = b.key === active;
-      const isMute = b.vol === 0;
-      return `<div class="row ${isAct ? "act" : ""} ${isMute ? "mute" : ""}" data-row="${b.key}">
-        <div class="who"><b>${b.icon} ${b.name}</b>${isAct ? ` <span class="badge">${T.now}</span>` : ""}<span class="badge mute" data-m="${b.key}" ${isMute ? "" : "hidden"}>&nbsp;🔇 ${T.no_voice}</span>
-          <div class="rng">${b.hhmm || "—"} → ${next.hhmm || "—"}${i === bands.length - 1 ? " · " + T.crosses : ""}</div>
+
+    // Build the row DOM once. Home Assistant calls `set hass` on every state
+    // change in the system, so rebuilding here would tear down the
+    // <input type=time> under the user and close the native time picker the
+    // moment it opens. Only a change in the set or order of bands rebuilds.
+    const sig = bands.map((b) => b.key + ":" + (b.min === null ? "-" : b.min)).join("|");
+    if (rows.dataset.sig !== sig) {
+      rows.innerHTML = bands.map((b, i) => {
+        const next = bands[(i + 1) % bands.length];
+        const isAct = b.key === active;
+        const isMute = b.vol === 0;
+        return `<div class="row ${isAct ? "act" : ""} ${isMute ? "mute" : ""}" data-row="${b.key}">
+        <div class="who"><b>${b.icon} ${b.name}</b> <span class="badge" data-now ${isAct ? "" : "hidden"}>${T.now}</span><span class="badge mute" data-m="${b.key}" ${isMute ? "" : "hidden"}>&nbsp;\u{1F507} ${T.no_voice}</span>
+          <div class="rng">${b.hhmm || "\u2014"} \u2192 ${next.hhmm || "\u2014"}${i === bands.length - 1 ? " \u00b7 " + T.crosses : ""}</div>
         </div>
         <div class="fld"><span class="k">${T.start}</span>
           <input type="time" value="${b.hhmm}" data-e="${b.start}"></div>
-        <div class="fld volwrap"><span class="k">${T.volume} <span data-l="${b.key}">${b.vol != null ? b.vol : "—"}</span>%</span>
+        <div class="fld volwrap"><span class="k">${T.volume} <span data-l="${b.key}">${b.vol != null ? b.vol : "\u2014"}</span>%</span>
           <input type="range" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}"></div>
       </div>`;
-    }).join("");
+      }).join("");
+      rows.dataset.sig = sig;
+      this._bind(rows);
+    }
+
+    // Patch values in place, never touching whatever has focus.
+    const focused = this.shadowRoot.activeElement;
+    bands.forEach((b, i) => {
+      const next = bands[(i + 1) % bands.length];
+      const row = rows.querySelector(`[data-row="${b.key}"]`);
+      if (!row) return;
+      const isAct = b.key === active;
+      const isMute = b.vol === 0;
+      row.classList.toggle("act", isAct);
+      row.classList.toggle("mute", isMute);
+      const nowb = row.querySelector("[data-now]");
+      if (nowb) nowb.hidden = !isAct;
+      const mb = row.querySelector(`[data-m="${b.key}"]`);
+      if (mb) mb.hidden = !isMute;
+      const rng = row.querySelector(".rng");
+      if (rng) {
+        rng.textContent = `${b.hhmm || "\u2014"} \u2192 ${next.hhmm || "\u2014"}`
+          + (i === bands.length - 1 ? " \u00b7 " + T.crosses : "");
+      }
+      const ti = row.querySelector("input[type=time]");
+      if (ti && ti !== focused && ti.value !== b.hhmm) ti.value = b.hhmm;
+      const ri = row.querySelector("input[type=range]");
+      const rv = b.vol != null ? b.vol : 0;
+      if (ri && ri !== focused && +ri.value !== rv) ri.value = rv;
+      const lab = row.querySelector(`[data-l="${b.key}"]`);
+      if (lab) lab.textContent = b.vol != null ? b.vol : "\u2014";
+    });
+  }
+
+  _bind(rows) {
     rows.querySelectorAll("input[type=time]").forEach((inp) => {
       inp.onchange = () => this._setStart(inp.dataset.e, inp.value);
     });
