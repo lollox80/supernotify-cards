@@ -91,7 +91,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.24.0"; // bundle / HACS release
+const VERSION = "0.25.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -102,9 +102,9 @@ const VERSION = "0.24.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.21.0",
+  control: "0.22.0",
   overview: "0.20.0",
-  bands: "0.10.0",
+  bands: "0.11.0",
   deliveries: "0.17.0",
   transports: "0.16.0",
   recipients: "0.17.0",
@@ -436,7 +436,7 @@ class SupernotifyControlCard extends HTMLElement {
         const raw = this._st(b.start) || "";
         const [h, m] = raw.split(":");
         if (h === undefined || m === undefined) return null;
-        return { name, min: +h * 60 + +m, volume: b.volume };
+        return { name: b.name || name, min: +h * 60 + +m, volume: b.volume };
       })
       .filter(Boolean)
       .sort((a, b) => a.min - b.min);
@@ -1215,6 +1215,14 @@ class SupernotifyBandsCard extends HTMLElement {
         min: h !== undefined && m !== undefined ? +h * 60 + +m : null,
         vol: b.volume ? Math.round(+this._st(b.volume) || 0) : null,
       };
+    }).sort((x, y) => {
+      // Sort by start time, never by config order: Home Assistant
+      // reserialises the card config with its keys sorted alphabetically,
+      // so the order written in YAML does not survive a save. Bands with
+      // no readable start time go last.
+      if (x.min === null) return y.min === null ? 0 : 1;
+      if (y.min === null) return -1;
+      return x.min - y.min;
     });
   }
 
