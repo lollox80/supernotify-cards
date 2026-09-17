@@ -91,7 +91,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.26.0"; // bundle / HACS release
+const VERSION = "0.27.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -113,7 +113,7 @@ const SN_CARD_VERSIONS = {
   composer: "0.11.0",
   automations: "0.14.0",
   stats: "0.20.0",
-  archive: "0.23.0",
+  archive: "0.24.0",
 };
 
 /**
@@ -3550,6 +3550,7 @@ class SupernotifyArchiveCard extends HTMLElement {
         .tg.err { color: ${p.crit}; background: rgba(226,60,60,.12); }
         .tg.skip { color: ${p.muted}; background: transparent; border: 1px dashed ${p.line}; }
         .tg.pr { color: ${p.warn}; background: rgba(240,160,32,.14); }
+        .tg.wh { color: ${p.brandD}; background: ${p.soft}; }
         .det { margin: 8px 0 2px 46px; font-size: 11.5px; color: ${p.muted}; display: none; }
         .row.open .det { display: block; }
         .det b { color: ${p.ink}; font-weight: 650; }
@@ -3575,6 +3576,10 @@ class SupernotifyArchiveCard extends HTMLElement {
   _renderChips() {
     const T = this._T();
     const defs = [["all", T.f_all], ["problems", T.f_problems], ["today", T.f_today]];
+    // Il filtro del sussurro compare solo se l'archivio ne contiene: a
+    // sussurro spento e' rumore, se qualcuno lo riaccende si nota.
+    const withIdx = this._index();
+    if (withIdx && (withIdx.items || []).some((r) => r.w)) defs.push(["whisper", T.f_whisper]);
     const el = this.shadowRoot.getElementById("chips");
     el.innerHTML = defs.map(([k, label]) =>
       `<span class="chip ${this._filter === k ? "on" : ""}" data-k="${k}">${label}</span>`).join("");
@@ -3604,6 +3609,7 @@ class SupernotifyArchiveCard extends HTMLElement {
     const rows = idx.items.filter((r) => {
       if (this._filter === "today" && r.t * 1000 < todayStart.getTime()) return false;
       if (this._filter === "problems" && !(r.f || r.s || r.o)) return false;
+      if (this._filter === "whisper" && !r.w) return false;
       if (this._q) {
         const hay = ((r.ti || "") + " " + (r.m || "")).toLowerCase();
         if (!hay.includes(this._q)) return false;
@@ -3629,11 +3635,12 @@ class SupernotifyArchiveCard extends HTMLElement {
         `<span class="tg ${c.state}">${c.state === "ok" ? "✔" : c.state === "err" ? "✖" : "⊘"} ${esc(c.name)}` +
         `${c.reason ? " · " + esc(c.reason) : ""}</span>`).join("");
       const prio = r.p ? `<span class="tg pr">${esc(r.p)}</span>` : "";
+      const wh = r.w ? `<span class="tg wh">\u{1F92B} ${T.wh}</span>` : "";
       const scen = (r.sc || []).map((s) => esc(idx.scen[s] || "?")).join(", ");
       const open = this._open.has(r.id) ? " open" : "";
       parts.push(
         `<div class="row${open}" data-id="${esc(r.id)}">
-           <div class="r1"><span class="hm">${hm}</span><span class="ti">${esc(r.ti || "—")}</span>${prio}</div>
+           <div class="r1"><span class="hm">${hm}</span><span class="ti">${esc(r.ti || "—")}</span>${prio}${wh}</div>
            ${r.m ? `<div class="msg">${esc(r.m)}${r.mt ? "…" : ""}</div>` : ""}
            <div class="tags">${chans}</div>
            <div class="det">
@@ -3666,6 +3673,7 @@ const SN_ARCH_STRINGS = {
   en: {
     title: "Notification history", search: "Search title or message…",
     f_all: "All", f_problems: "Problems only", f_today: "Today",
+    f_whisper: "Whispered", wh: "whispered",
     none: "no notification matches", no_sensor: "sensor not found",
     no_sensor_hint: "This card needs the command_line sensor that indexes the archive (see README).",
     of: "of", in_archive: "in the archive", since: "oldest", updated: "index updated",
@@ -3677,6 +3685,7 @@ const SN_ARCH_STRINGS = {
   it: {
     title: "Storico notifiche", search: "Cerca nel titolo o nel messaggio…",
     f_all: "Tutte", f_problems: "Solo con problemi", f_today: "Oggi",
+    f_whisper: "Sussurrate", wh: "sussurrata",
     none: "nessuna notifica corrisponde", no_sensor: "sensore non trovato",
     no_sensor_hint: "Questa card ha bisogno del sensore command_line che indicizza l'archivio (vedi README).",
     of: "di", in_archive: "nell'archivio", since: "più vecchia", updated: "indice aggiornato",

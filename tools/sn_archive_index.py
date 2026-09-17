@@ -94,6 +94,26 @@ def _channels_of(doc, pool):
     return out
 
 
+def _whispered(doc):
+    """True se una consegna RIUSCITA ha usato un message_template sussurrato.
+
+    L'SSML <amazon:effect name="whispered"> arriva da uno scenario e finisce in
+    deliveries[*].success[*].data.message_template: non e' un campo top level,
+    quindi la card non potrebbe dedurlo da sola. Serve come sentinella: il
+    sussurro e' stato rimosso da scenarios.yaml v4.0, se ricompare si vede.
+    """
+    for res in (doc.get("deliveries") or {}).values():
+        if not isinstance(res, dict):
+            continue
+        for call in res.get("success") or []:
+            if not isinstance(call, dict):
+                continue
+            tpl = str((call.get("data") or {}).get("message_template") or "")
+            if "whispered" in tpl:
+                return True
+    return False
+
+
 def _item_of(doc, mtime, message_chars, chan_pool, scen_pool):
     """Solo cio' che non e' ricostruibile: i valori di default vengono omessi
     (priorita' medium, esito success, contatori a zero) e li rimette la card."""
@@ -137,6 +157,8 @@ def _item_of(doc, mtime, message_chars, chan_pool, scen_pool):
     ms = (doc.get("stats") or {}).get("total_duration_ms")
     if isinstance(ms, (int, float)) and ms:
         item["ms"] = round(float(ms), 1)
+    if _whispered(doc):
+        item["w"] = True                   # annuncio uscito sussurrato (SSML)
     return item
 
 
