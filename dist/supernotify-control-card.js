@@ -91,7 +91,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.28.0"; // bundle / HACS release
+const VERSION = "0.29.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -105,7 +105,7 @@ const SN_CARD_VERSIONS = {
   control: "0.22.0",
   overview: "0.20.0",
   bands: "0.12.0",
-  deliveries: "0.17.0",
+  deliveries: "0.18.0",
   transports: "0.16.0",
   recipients: "0.17.0",
   scenarios: "0.15.0",
@@ -138,8 +138,10 @@ const SN_STRINGS = {
     channels: "channels", none: "none", no_transports: "no transport entities found",
     start: "start", volume: "volume", now: "now", crosses: "crosses midnight",
     no_voice: "no voice", mute_hint: "A band at <b>0%</b> sends <b>no voice announcement</b> at all (Alexa and TTS off, push and dashboard still delivered). Critical and high-priority alerts always speak.",
-    enabled: "enabled", implicit: "implicit", explicit: "explicit",
-    by_scenario: "by scenario", fallback: "fallback", fallback_err: "fallback on error",
+    enabled: "enabled", implicit: "always on", explicit: "on request",
+    by_scenario: "scenario only", fallback: "backup", fallback_err: "backup on error",
+    inc_sum: "of these channels", inc_always: "start on their own",
+    inc_req: "only when asked for", inc_scen: "only with a scenario",
     fixed_targets: "fixed targets", no_deliveries: "no delivery entities found",
     home: "home", away: "away", devices: "devices", overrides: "delivery overrides",
     no_contact: "no contact points", no_recipients: "no recipient entities found",
@@ -192,8 +194,10 @@ const SN_STRINGS = {
     channels: "canali", none: "nessuno", no_transports: "nessuna entità transport trovata",
     start: "inizio", volume: "volume", now: "ora", crosses: "attraversa mezzanotte",
     no_voice: "niente voce", mute_hint: "Una fascia a <b>0%</b> <b>non manda proprio</b> l'annuncio vocale (Alexa e TTS spenti; push e notifica a schermo arrivano lo stesso). Gli avvisi critici e urgenti parlano sempre.",
-    enabled: "attiva", implicit: "implicita", explicit: "esplicita",
-    by_scenario: "da scenario", fallback: "fallback", fallback_err: "fallback su errore",
+    enabled: "attiva", implicit: "sempre attivo", explicit: "solo su richiesta",
+    by_scenario: "solo con scenario", fallback: "riserva", fallback_err: "riserva su errore",
+    inc_sum: "di questi canali", inc_always: "partono da soli",
+    inc_req: "solo se richiesti", inc_scen: "solo con uno scenario",
     fixed_targets: "target fissi", no_deliveries: "nessuna entità delivery trovata",
     home: "in casa", away: "fuori", devices: "dispositivi", overrides: "override delivery",
     no_contact: "nessun recapito", no_recipients: "nessuna entità destinatario trovata",
@@ -1504,6 +1508,12 @@ class SupernotifyDeliveriesCard extends HTMLElement {
         .b-off { background: ${p.soft}; color: ${p.muted}; }
         ${SN_SWITCH_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .tag.always { border-color: ${p.ok}; color: ${p.ok};
+                      background: rgba(46,158,91,.12); }
+        .incsum { font-size: 11.5px; line-height: 1.5; color: ${p.muted};
+                  background: ${p.soft}; border-radius: 9px;
+                  padding: 7px 10px; margin-bottom: 10px; }
+        .incsum b { color: ${p.ink}; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows"></div>
@@ -1523,16 +1533,32 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       rows.innerHTML = `<span class="badge b-off">${T.no_deliveries}</span>`;
       return;
     }
-    rows.innerHTML = dels.map((d, i) => {
+    // Riepilogo: la domanda vera e' "quali canali partono senza che io li chieda".
+    const inc = (d) => {
+      const r = d.a.inclusion ?? d.a.selection;
+      return Array.isArray(r) ? r : r ? [r] : ["default"];
+    };
+    const nAlways = dels.filter((d) => inc(d).includes("default")).length;
+    const nScen = dels.filter((d) => inc(d).includes("scenario")).length;
+    const nReq = dels.length - nAlways - nScen;
+    const sum = `<div class="incsum">${dels.length} ${T.inc_sum}: `
+      + `<b>${nAlways}</b> ${T.inc_always}`
+      + (nReq ? ` · <b>${nReq}</b> ${T.inc_req}` : "")
+      + (nScen ? ` · <b>${nScen}</b> ${T.inc_scen}` : "")
+      + `</div>`;
+    rows.innerHTML = sum + dels.map((d, i) => {
       const tr = d.a.transport || "";
       const em = SN_TRANSPORT_ICONS[tr] || "📤";
       const tags = [];
       // SuperNotify 2.5 renamed the `selection` attribute to `inclusion` (now a list);
       // older versions still expose `selection`, so read both.
-      let sel = d.a.inclusion ?? d.a.selection;
-      if (Array.isArray(sel)) sel = sel.map((s) => snSelectionLabel(s, T) || s).join(", ");
-      else sel = snSelectionLabel(sel, T) || sel;
-      tags.push(`🔀 ${sel || T.implicit}`);
+      let raw = d.a.inclusion ?? d.a.selection;
+      const incList = Array.isArray(raw) ? raw : raw ? [raw] : ["default"];
+      // `default` = nessuno la chiede e parte lo stesso: e' la riga che spiega
+      // perche' una notifica e' uscita da un canale che non avevi nominato.
+      const always = incList.includes("default");
+      const sel = incList.map((s) => snSelectionLabel(s, T) || s).join(", ");
+      tags.push([`🔀 ${sel || T.implicit}`, always ? "always" : ""]);
       if (d.a.action) tags.push(`⚙️ ${d.a.action}`);
       const tgt = d.a.target;
       const nTgt = Array.isArray(tgt) ? tgt.length : tgt && typeof tgt === "object" ? Object.keys(tgt).length : tgt ? 1 : 0;
@@ -1543,7 +1569,10 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       return `<div class="row" data-i="${i}">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(d.name)}</b> <span class="tr">${esc(tr)}${alias ? " · " + esc(alias) : ""}</span>
-          <div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+          <div class="tags">${tags.map((t) => {
+            const [txt, cls] = Array.isArray(t) ? t : [t, ""];
+            return `<span class="tag ${cls}">${esc(txt)}</span>`;
+          }).join("")}</div>
         </div>
         <label class="sw" data-id="${esc(d.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
           <input type="checkbox" ${d.on ? "checked" : ""} aria-label="${esc(d.name)}">
