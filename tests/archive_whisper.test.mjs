@@ -68,5 +68,25 @@ ok(!chips2.includes("Sussurrate"), "a sussurro spento il filtro NON compare");
 ok(b.shadowRoot.querySelectorAll(".tg.wh").length === 0, "nessun tag sussurro");
 ok(b.shadowRoot.querySelectorAll(".row").length === 3, "le tre righe ci sono comunque");
 
+// --- "Alexa ha detto": il testo pronunciato, quando differisce -------------
+const parlato = {
+  count: 2, total: 1063, generated: new Date().toISOString(),
+  chan: ["alexa_announce"], scen: ["morning"],
+  items: [
+    { id: "bef3175c", t: now - 120, ti: "Garage Chiuso",
+      m: "🚪 Garage chiuso 🕐 Ora: 09:37:05 del 18/09/2026", c: [0], sc: [0],
+      sp: "Il garage è stato chiuso." },
+    { id: "a9a66762", t: now - 3600, ti: "Buongiorno Info",
+      m: "Sono le 09:15, A Montese ci sono 15.5 °C", c: [0], sc: [0] },
+  ],
+};
+const c = mk(parlato);
+const dette = [...c.shadowRoot.querySelectorAll(".said")];
+console.log("blocchi 'ha detto':", dette.map((n) => n.textContent.trim()).join(" | "));
+ok(dette.length === 1, "solo la notifica con testo diverso mostra cosa è stato detto");
+ok(/Alexa ha detto/.test(dette[0].textContent), "etichetta in italiano");
+ok(dette[0].textContent.includes("Il garage è stato chiuso."), "riporta il testo pronunciato");
+ok(dette[0].closest(".det") !== null, "sta nel dettaglio, non nella riga chiusa");
+
 console.log(fail ? `\n${fail} TEST FALLITI` : "\nTUTTI I TEST OK");
 process.exit(fail ? 1 : 0);

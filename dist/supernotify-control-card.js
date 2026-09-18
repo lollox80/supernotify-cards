@@ -91,7 +91,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.27.0"; // bundle / HACS release
+const VERSION = "0.28.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -113,7 +113,7 @@ const SN_CARD_VERSIONS = {
   composer: "0.11.0",
   automations: "0.14.0",
   stats: "0.20.0",
-  archive: "0.24.0",
+  archive: "0.25.0",
 };
 
 /**
@@ -3551,6 +3551,10 @@ class SupernotifyArchiveCard extends HTMLElement {
         .tg.skip { color: ${p.muted}; background: transparent; border: 1px dashed ${p.line}; }
         .tg.pr { color: ${p.warn}; background: rgba(240,160,32,.14); }
         .tg.wh { color: ${p.brandD}; background: ${p.soft}; }
+        .said { margin-top: 4px; padding: 6px 9px; border-radius: 9px;
+                background: ${p.soft}; border-left: 3px solid ${p.brand};
+                font-size: 12px; line-height: 1.45; }
+        .said b { color: ${p.brandD}; }
         .det { margin: 8px 0 2px 46px; font-size: 11.5px; color: ${p.muted}; display: none; }
         .row.open .det { display: block; }
         .det b { color: ${p.ink}; font-weight: 650; }
@@ -3644,6 +3648,7 @@ class SupernotifyArchiveCard extends HTMLElement {
            ${r.m ? `<div class="msg">${esc(r.m)}${r.mt ? "…" : ""}</div>` : ""}
            <div class="tags">${chans}</div>
            <div class="det">
+             ${r.sp ? `<div class="said">\u{1F50A} <b>${T.said}:</b> \u00ab${esc(r.sp)}\u00bb</div>` : ""}
              ${scen ? `<div><b>${T.scenarios}:</b> ${scen}</div>` : ""}
              <div>${r.d ? `<b>${r.d}</b> ${T.delivered} ` : ""}${r.f ? `· <b>${r.f}</b> ${T.failed} ` : ""}${r.s ? `· <b>${r.s}</b> ${T.skipped} ` : ""}
              ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""} · ${T.id} <code>${esc(r.id)}</code>${r.mt ? ` · ${T.truncated}` : ""}</div>
@@ -3673,7 +3678,7 @@ const SN_ARCH_STRINGS = {
   en: {
     title: "Notification history", search: "Search title or message…",
     f_all: "All", f_problems: "Problems only", f_today: "Today",
-    f_whisper: "Whispered", wh: "whispered",
+    f_whisper: "Whispered", wh: "whispered", said: "Alexa said",
     none: "no notification matches", no_sensor: "sensor not found",
     no_sensor_hint: "This card needs the command_line sensor that indexes the archive (see README).",
     of: "of", in_archive: "in the archive", since: "oldest", updated: "index updated",
@@ -3685,7 +3690,7 @@ const SN_ARCH_STRINGS = {
   it: {
     title: "Storico notifiche", search: "Cerca nel titolo o nel messaggio…",
     f_all: "Tutte", f_problems: "Solo con problemi", f_today: "Oggi",
-    f_whisper: "Sussurrate", wh: "sussurrata",
+    f_whisper: "Sussurrate", wh: "sussurrata", said: "Alexa ha detto",
     none: "nessuna notifica corrisponde", no_sensor: "sensore non trovato",
     no_sensor_hint: "Questa card ha bisogno del sensore command_line che indicizza l'archivio (vedi README).",
     of: "di", in_archive: "nell'archivio", since: "più vecchia", updated: "indice aggiornato",

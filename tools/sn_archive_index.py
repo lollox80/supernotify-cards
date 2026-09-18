@@ -28,6 +28,12 @@ DEFAULT_PATH = "/config/supernotify/archive"
 # comincia a soffrire (DB e WebSocket), quindi si resta volutamente stretti.
 DEFAULT_LIMIT = 40
 DEFAULT_MESSAGE_CHARS = 130
+# Il testo pronunciato da Alexa viene incluso solo quando differisce dal
+# messaggio, e troncato: gli attributi di un sensore devono stare sotto ~16 KB
+# e l'indice ne usa gia' ~8 con 40 notifiche.
+SPOKEN_CHARS = 110
+# Soglia oltre la quale si comincia a sacrificare `sp` (vedi main()).
+MAX_BYTES = 13000
 
 
 def _title_of(doc, message):
@@ -92,6 +98,37 @@ def _channels_of(doc, pool):
             else:
                 out.append([idx, "s"])
     return out
+
+
+def _spoken_of(doc, limit):
+    """Il testo che Alexa ha PRONUNCIATO, quando e' diverso dal messaggio.
+
+    Non e' il `message` della notifica: `spoken_message` nei data, le opzioni
+    della delivery (message_usage, simplify_text) e gli eventuali
+    message_template degli scenari lo riscrivono. La verita' e' l'argomento
+    passato al servizio, in deliveries[*].success[*].calls[*].action_data.message
+    (fallback: success[*].message). Esempio reale: la notifica dice
+    "Garage chiuso - Ora: 09:37:05", Alexa dice "Il garage e' stato chiuso.".
+
+    Torna None se coincide col messaggio gia' in elenco: inutile ripeterlo, e
+    gli attributi del sensore devono restare sotto ~16 KB.
+    """
+    for name, res in (doc.get("deliveries") or {}).items():
+        if not isinstance(res, dict) or ("alexa" not in name and "tts" not in name):
+            continue
+        for call in res.get("success") or []:
+            if not isinstance(call, dict):
+                continue
+            said = None
+            for c in call.get("calls") or []:
+                if isinstance(c, dict):
+                    said = ((c.get("action_data") or {}).get("message")) or said
+                    if said:
+                        break
+            said = said or call.get("message")
+            if said:
+                return " ".join(str(said).split())[:limit]
+    return None
 
 
 def _whispered(doc):
@@ -159,6 +196,17 @@ def _item_of(doc, mtime, message_chars, chan_pool, scen_pool):
         item["ms"] = round(float(ms), 1)
     if _whispered(doc):
         item["w"] = True                   # annuncio uscito sussurrato (SSML)
+    # sp = cosa ha detto davvero Alexa, solo quando e' DAVVERO diverso da quello
+    # che si legge gia' in elenco. Confronto normalizzato (solo lettere e cifre):
+    # senza, un aforisma che differisce per un punto occuperebbe 110 byte per
+    # niente.
+    said = _spoken_of(doc, SPOKEN_CHARS)
+    if said:
+        flat = lambda s: "".join(c for c in str(s).lower() if c.isalnum())
+        fs = flat(said)
+        if fs and not any(fs.startswith(f[:len(fs)]) or f.startswith(fs)
+                          for f in (flat(message), flat(body), flat(title)) if f):
+            item["sp"] = said
     return item
 
 
@@ -173,6 +221,8 @@ def main():
     ap.add_argument("--path", default=os.environ.get("SN_ARCHIVE_PATH", DEFAULT_PATH))
     ap.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
     ap.add_argument("--message-chars", type=int, default=DEFAULT_MESSAGE_CHARS)
+    ap.add_argument("--max-bytes", type=int, default=MAX_BYTES,
+                    help="oltre questa dimensione si sacrifica `sp` (test: abbassarlo)")
     args = ap.parse_args()
 
     result = {"count": 0, "generated": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -205,6 +255,27 @@ def main():
     result["count"] = len(result["items"])
     if errors:
         result["unreadable"] = errors
+
+    # Freno di sicurezza sul peso. Gli attributi di un sensore devono stare
+    # sotto ~16 KB: il contenuto varia (un giorno di messaggi lunghi puo'
+    # sforare da solo), quindi se si supera la soglia si sacrifica per primo
+    # `sp` — il testo pronunciato — partendo dalle notifiche piu' vecchie,
+    # che e' l'informazione meno urgente. Meglio un indice completo con
+    # qualche `sp` in meno che un sensore che esplode.
+    def weigh():
+        # in BYTE, non in caratteri: accenti ed emoji dei titoli pesano 2-4x
+        return len(json.dumps(result, ensure_ascii=False,
+                              separators=(",", ":")).encode("utf-8"))
+
+    dropped = 0
+    for item in reversed(result["items"]):
+        if weigh() <= args.max_bytes:
+            break
+        if item.pop("sp", None) is not None:
+            dropped += 1
+    if dropped:
+        result["sp_dropped"] = dropped
+
     print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
     return 0
 
