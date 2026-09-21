@@ -119,6 +119,9 @@ stay `unknown` and the counter hides automatically. The overview-card and
 scenarios-card use the same live state for their "active now" count/badge
 when it's available, falling back to their polled `enquire_active_scenarios`
 check (a `poll_seconds` option, default 60) only on older versions.
+From SuperNotify 2.7.0 a scenario also has a `switch.supernotify_scenario_*`
+(enabled or not): a scenario counts as active only when its conditions hold
+**and** its switch is not off.
 
 The Announce tile calls `notify.supernotify` with
 `data: {delivery_selection: fixed, delivery: {<announce_delivery>: {}}}`.
@@ -184,7 +187,11 @@ style: theme
 
 Recipients dashboard, auto-discovered: home/away state from the linked
 `person.*` entity, contact tags (email, phone, devices, delivery overrides)
-and enabled badge. Warns when a recipient has no contact points.
+and a live on/off switch. Warns when a recipient has no contact points.
+On SuperNotify ≥ 2.7.0 each recipient is read from its
+`switch.supernotify_recipient_*` and toggled with `switch.turn_on/turn_off`
+(the deprecated `binary_sensor` mirror is ignored); older versions fall back
+to the `binary_sensor`.
 
 ```yaml
 type: custom:supernotify-recipients-card
@@ -193,8 +200,10 @@ type: custom:supernotify-recipients-card
 
 ## supernotify-scenarios-card
 
-Scenarios dashboard, auto-discovered: "active now" badge (polled from
-`enquire_active_scenarios`), per-delivery override tags (enabled/disabled),
+Scenarios dashboard, auto-discovered: "active now" badge (live from
+`binary_sensor.supernotify_scenario_*`, polled from `enquire_active_scenarios`
+on older versions), a live on/off switch per scenario (SuperNotify ≥ 2.7.0,
+`switch.supernotify_scenario_*`), per-delivery override tags (enabled/disabled),
 action groups and media tags. Optional `groups` reproduce categories.
 
 ```yaml

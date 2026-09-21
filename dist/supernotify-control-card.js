@@ -8,6 +8,23 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-21 — v0.30.0. SuperNotify 2.7.0 (beta5+) gives every scenario and recipient a real
+ *   `switch.supernotify_{scenario,recipient}_<name>` (enable/disable), keeps the recipient
+ *   binary_sensor only as a deprecated mirror, and keeps the scenario binary_sensor only for
+ *   scenarios with conditions, now meaning "conditions hold right now". The cards matched both
+ *   domains with /^[a-z_]+\.supernotify_…/, so every recipient and scenario was listed twice,
+ *   the recipient toggle wrote a fake state (POST /api/states) that no longer enables anything,
+ *   and enabled switches (all "on") were counted as active scenarios.
+ *   - new helpers snToggle() (switch.* -> switch.turn_on/turn_off service, anything else ->
+ *     old snSetBinaryState fallback), snCleanName() (drops "SuperNotify ", the "Scenario /
+ *     Recipient / Condizione scenario" prefix and the " abilitato / Enabled" suffix from the
+ *     translated friendly_name) and snScenarioActive() (binary_sensor on AND switch not off);
+ *   - recipients-card 0.18.0: one row per recipient, switch preferred, toggle via service;
+ *   - scenarios-card 0.16.0: one row per scenario merging switch (enabled + attributes) and
+ *     binary_sensor (condition state); new live on/off switch per row; "active now" requires
+ *     the scenario to be enabled too;
+ *   - control-card 0.22.1 / overview-card 0.20.1: active-scenario count ignores disabled ones.
+ *   Older SuperNotify (binary_sensor only) keeps working through the fallbacks.
  * 2026-09-15 — v0.23.1. deliveries-card v0.17.0: SuperNotify 2.5.0 renamed the delivery
  *   attribute `selection` to `inclusion` (and made it a list), so the channel tag silently
  *   fell back to "implicit" for every delivery. Now reads `inclusion` with `selection` as
@@ -91,7 +108,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.29.0"; // bundle / HACS release
+const VERSION = "0.30.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -102,13 +119,13 @@ const VERSION = "0.29.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.22.0",
-  overview: "0.20.0",
+  control: "0.22.1",
+  overview: "0.20.1",
   bands: "0.12.0",
   deliveries: "0.18.0",
   transports: "0.16.0",
-  recipients: "0.17.0",
-  scenarios: "0.15.0",
+  recipients: "0.18.0",
+  scenarios: "0.16.0",
   simulator: "0.9.0",
   composer: "0.11.0",
   automations: "0.14.0",
@@ -275,6 +292,49 @@ function snSetBinaryState(hass, entityId, on) {
     state: on ? "on" : "off",
     attributes,
   });
+}
+
+/**
+ * Turn an entity on/off. SuperNotify >= 2.7.0 exposes scenarios and
+ * recipients as real `switch` entities: those go through the switch service
+ * (the only way that actually enables/disables them). Anything else (the
+ * delivery/transport binary_sensors, or older SuperNotify) keeps the raw
+ * state write above.
+ */
+function snToggle(hass, entityId, on) {
+  if (entityId && entityId.startsWith("switch.")) {
+    return hass.callService("switch", on ? "turn_on" : "turn_off", { entity_id: entityId });
+  }
+  return snSetBinaryState(hass, entityId, on);
+}
+
+/**
+ * Human name from a SuperNotify friendly_name. Since 2.7.0 entity names are
+ * translated and type-first ("SuperNotify Recipient Lorenzo abilitato",
+ * "SuperNotify Condizione scenario Morning"): strip the integration name,
+ * the type prefix and the "enabled" suffix. Returns "" when nothing is left
+ * or the name is just the technical one.
+ */
+function snCleanName(fn, techName) {
+  if (!fn) return "";
+  const n = String(fn)
+    .replace(/^SuperNotify\s+/i, "")
+    .replace(/^(Condizione scenario|Scenario Condition|Scenario|Recipient|Destinatario)\s+/i, "")
+    .replace(/\s+(abilitato|abilitata|attivo|enabled)$/i, "")
+    .trim();
+  return n && n !== techName ? n : "";
+}
+
+/**
+ * Is a scenario active right now? binary_sensor.supernotify_scenario_<name>
+ * (only for scenarios with conditions) says whether its conditions hold, but
+ * not whether it is enabled - that is switch.supernotify_scenario_<name>
+ * (SuperNotify >= 2.7.0). Active = conditions hold AND not switched off.
+ */
+function snScenarioActive(hass, bsId) {
+  if (!hass || !hass.states[bsId] || hass.states[bsId].state !== "on") return false;
+  const sw = hass.states[bsId.replace(/^binary_sensor\./, "switch.")];
+  return !sw || sw.state !== "off";
 }
 
 /**
@@ -462,7 +522,7 @@ class SupernotifyControlCard extends HTMLElement {
     if (!ids.length) return null;
     const known = ids.filter((e) => !["unknown", "unavailable"].includes(this._st(e)));
     if (!known.length) return null; // scenario state not exposed yet
-    return known.filter((e) => this._st(e) === "on");
+    return known.filter((e) => snScenarioActive(this._hass, e));
   }
 
   async _snooze() {
@@ -984,7 +1044,7 @@ class SupernotifyOverviewCard extends HTMLElement {
     if (!ids.length) return null;
     const known = ids.filter((e) => !["unknown", "unavailable"].includes(this._st(e)));
     if (!known.length) return null;
-    return known.filter((e) => this._st(e) === "on");
+    return known.filter((e) => snScenarioActive(this._hass, e));
   }
 
   async _ws(service, data) {
@@ -1803,14 +1863,19 @@ class SupernotifyRecipientsCard extends HTMLElement {
   }
 
   _recipients() {
-    const out = [];
-    if (!this._hass) return out;
+    // SuperNotify >= 2.7.0 has both switch.* (the real control) and a
+    // deprecated binary_sensor.* mirror per recipient: one row each,
+    // switch preferred; binary_sensor only on older versions.
+    const byName = new Map();
+    if (!this._hass) return [];
     for (const id of Object.keys(this._hass.states)) {
-      const m = id.match(/^[a-z_]+\.supernotify_recipient_(.+)$/);
+      const m = id.match(/^(switch|binary_sensor)\.supernotify_recipient_(.+)$/);
       if (!m) continue;
+      if (byName.has(m[2]) && m[1] !== "switch") continue;
       const s = this._hass.states[id];
-      out.push({ id, name: m[1], on: s.state === "on", a: s.attributes || {} });
+      byName.set(m[2], { id, name: m[2], on: s.state === "on", a: s.attributes || {} });
     }
+    const out = [...byName.values()];
     out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
     return out;
   }
@@ -1883,7 +1948,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
       const nOvr = r.a.delivery && typeof r.a.delivery === "object" ? Object.keys(r.a.delivery).length : 0;
       if (nOvr) tags.push(`🔗 ${nOvr} ${T.overrides}`);
       if (!tags.length) tags.push(`<span class="tag warn">⚠️ ${T.no_contact}</span>`);
-      const alias = r.a.friendly_name && r.a.friendly_name !== r.name ? r.a.friendly_name : "";
+      const alias = snCleanName(r.a.friendly_name, r.name);
       return `<div class="row" data-i="${i}">
         <span class="em">👤</span>
         <div class="mid"><b>${esc(alias || r.name)}</b>
@@ -1907,7 +1972,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
       label.addEventListener("click", (e) => e.stopPropagation());
       const input = label.querySelector("input");
       input.addEventListener("change", () => {
-        snSetBinaryState(this._hass, label.dataset.id, input.checked);
+        snToggle(this._hass, label.dataset.id, input.checked);
       });
     });
   }
@@ -2009,15 +2074,27 @@ class SupernotifyScenariosCard extends HTMLElement {
   }
 
   _scenarios() {
-    const out = [];
-    if (!this._hass) return out;
+    // One entry per scenario. SuperNotify >= 2.7.0: switch.* = enabled (and
+    // the full attributes), binary_sensor.* = conditions hold (only for
+    // scenarios with conditions). Older versions: binary_sensor only.
+    const byName = new Map();
+    if (!this._hass) return [];
     for (const id of Object.keys(this._hass.states)) {
-      const m = id.match(/^[a-z_]+\.supernotify_scenario_(.+)$/);
+      const m = id.match(/^(switch|binary_sensor)\.supernotify_scenario_(.+)$/);
       if (!m) continue;
       const s = this._hass.states[id];
-      out.push({ id, name: m[1], a: s.attributes || {}, state: s.state });
+      const e = byName.get(m[2]) || { name: m[2], id, a: s.attributes || {}, state: "unknown", swId: null, enabled: undefined };
+      if (m[1] === "switch") {
+        e.swId = id; e.id = id; e.a = s.attributes || {};
+        e.enabled = s.state === "on";
+      } else {
+        e.state = s.state;
+        if (!e.swId) { e.id = id; e.a = s.attributes || {}; }
+      }
+      byName.set(m[2], e);
     }
-    return out;
+    for (const e of byName.values()) if (e.enabled === undefined) e.enabled = e.a.enabled !== false;
+    return [...byName.values()];
   }
 
   // SuperNotify >= 2.4.0 (Live Scenarios): binary_sensor.supernotify_scenario_*
@@ -2028,7 +2105,7 @@ class SupernotifyScenariosCard extends HTMLElement {
   _reactiveActive(all) {
     const known = all.filter((s) => !["unknown", "unavailable"].includes(s.state));
     if (!known.length) return null;
-    return known.filter((s) => s.state === "on").map((s) => s.name);
+    return known.filter((s) => s.state === "on" && s.enabled).map((s) => s.name);
   }
 
   _moreInfo(entityId) {
@@ -2067,6 +2144,8 @@ class SupernotifyScenariosCard extends HTMLElement {
                  flex-shrink: 0; }
         .b-act { background: rgba(46,158,91,.16); color: ${p.ok}; }
         .b-dis { background: rgba(226,60,60,.10); color: ${p.crit}; }
+        .row.dis .mid { opacity: .55; }
+        ${SN_SWITCH_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
@@ -2091,15 +2170,22 @@ class SupernotifyScenariosCard extends HTMLElement {
     const ags = Array.isArray(s.a.action_groups) ? s.a.action_groups : [];
     if (ags.length) tags.push(`<span class="tag">🔘 ${esc(ags.join(", "))}</span>`);
     if (s.a.media) tags.push(`<span class="tag">📷 ${T.media}</span>`);
-    const alias = s.a.friendly_name && s.a.friendly_name !== s.name ? s.a.friendly_name : "";
-    return `<div class="row ${isAct ? "act" : ""}" data-i="${i}">
+    const alias = snCleanName(s.a.friendly_name, s.name);
+    const p = this._palette();
+    // SuperNotify >= 2.7.0: live switch; older versions: read-only badge.
+    const ctl = s.swId
+      ? `<label class="sw" data-id="${esc(s.swId)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
+          <input type="checkbox" ${s.enabled ? "checked" : ""} aria-label="${esc(alias || s.name)}">
+          <span class="sl"></span></label>`
+      : (s.enabled === false ? `<span class="badge b-dis">${T.disabled}</span>` : "");
+    return `<div class="row ${isAct ? "act" : ""} ${s.enabled === false ? "dis" : ""}" data-i="${i}">
       <span class="em">${em}</span>
       <div class="mid"><b>${esc(alias || s.name)}</b>
         ${alias ? `<span style="font-size:11px;color:inherit;opacity:.6"> · ${esc(s.name)}</span>` : ""}
         <div class="tags">${tags.join("")}</div>
       </div>
       ${isAct ? `<span class="badge b-act">${T.active_now}</span>` : ""}
-      ${s.a.enabled === false ? `<span class="badge b-dis">${T.disabled}</span>` : ""}
+      ${ctl}
     </div>`;
   }
 
@@ -2138,7 +2224,17 @@ class SupernotifyScenariosCard extends HTMLElement {
     }
     rows.innerHTML = html;
     rows.querySelectorAll(".row").forEach((node) => {
-      node.onclick = () => this._moreInfo(all[+node.dataset.i].id);
+      node.onclick = (e) => {
+        if (e.target.closest(".sw")) return;
+        this._moreInfo(all[+node.dataset.i].id);
+      };
+    });
+    rows.querySelectorAll(".sw").forEach((label) => {
+      label.addEventListener("click", (e) => e.stopPropagation());
+      const input = label.querySelector("input");
+      input.addEventListener("change", () => {
+        snToggle(this._hass, label.dataset.id, input.checked);
+      });
     });
   }
 }
@@ -2148,7 +2244,7 @@ customElements.define("supernotify-scenarios-card", SupernotifyScenariosCard);
 window.customCards.push({
   type: "supernotify-scenarios-card",
   name: "SuperNotify Scenarios Card",
-  description: "Scenarios dashboard: active-now badge, per-delivery override tags, optional category groups.",
+  description: "Scenarios dashboard: active-now badge, live on/off switch, per-delivery override tags, optional category groups.",
 });
 
 /* ════════════════════════════════════════════════════════════════════════

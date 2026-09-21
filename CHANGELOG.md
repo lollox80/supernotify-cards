@@ -3,6 +3,27 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.30.0] - 2026-09-21
+
+### Fixed
+- **SuperNotify 2.7.0 switches.** From 2.7.0 (beta5+) every scenario and recipient has a real
+  `switch.supernotify_{scenario,recipient}_<name>`; the recipient `binary_sensor` is only a
+  deprecated mirror and the scenario `binary_sensor` exists only for scenarios with conditions,
+  meaning "conditions hold now". The cards matched both domains, so:
+  - recipients-card (0.18.0): each recipient was listed twice and the toggle wrote a fake state
+    that no longer enables anything. Now one row per recipient, switch preferred, toggled with
+    `switch.turn_on` / `switch.turn_off`;
+  - scenarios-card (0.16.0): each scenario was listed twice and every enabled switch counted as
+    "active now". Now one row per scenario (switch + condition sensor merged); "active now"
+    needs conditions true **and** the scenario enabled;
+  - control-card (0.22.1) and overview-card (0.20.1): active-scenario count skips disabled ones.
+- Names drop the translated "SuperNotify Scenario / Recipient … abilitato" wrapping.
+
+### Added
+- scenarios-card: live on/off switch on each row (SuperNotify ≥ 2.7.0).
+
+Older SuperNotify versions (binary_sensor only) keep working through fallbacks.
+
 ## [0.23.0] - 2026-09-11
 
 ### Added
