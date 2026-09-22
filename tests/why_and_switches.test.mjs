@@ -102,6 +102,9 @@ assert.ok(tc.shadowRoot.querySelector(".rstb"));
 const wc = mount("supernotify-why-card");
 assert.strictEqual(dom.window.__snWhyCards, 1);
 assert.ok(wc.shadowRoot.querySelectorAll(".it").length > 0, "elenco notifiche");
+await flush();
+// si apre da sola sull'ultima notifica
+assert.deepStrictEqual(calls.splice(0), [["ws", "shell_command", "sn_archive_detail", IDX.items[0].id]]);
 const rc = mount("supernotify-recipients-card");
 const lor = [...rc.shadowRoot.querySelectorAll(".row")].find((r) => r.textContent.includes("Lorenzo"));
 const last = lor.querySelector(".last");
@@ -109,9 +112,9 @@ assert.ok(last && last.textContent.includes("ultimo avviso"), "ultimo avviso");
 assert.ok(last.textContent.includes(IDX.items[0].ti), "titolo dall'archivio");
 const jes = [...rc.shadowRoot.querySelectorAll(".row")].find((r) => r.textContent.includes("Jessica"));
 assert.ok(jes.textContent.includes("nessun avviso"));
-last.click();               // -> evento -> la card Perché? carica il dettaglio
+last.click();               // -> evento -> la card Perché? mostra il dettaglio (già in cache)
 await flush();
-assert.deepStrictEqual(calls.splice(0), [["ws", "shell_command", "sn_archive_detail", IDX.items[0].id]]);
+assert.deepStrictEqual(calls.splice(0), []);
 const det = wc.shadowRoot.getElementById("det").textContent;
 assert.ok(det.includes("Scenari in vigore") && det.includes("Persone a casa"), "scenari con nome pulito");
 assert.ok(det.includes("in casa") && det.includes("Lorenzo"), "presenza");

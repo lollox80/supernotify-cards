@@ -3,6 +3,12 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.43.1] - 2026-09-22
+
+### Changed
+- why-card (0.3.1): opens the latest notification by itself (`auto_select: false` to wait for a
+  pick), so it is never an empty box next to the archive.
+
 ## [0.43.0] - 2026-09-22
 
 ### Added
