@@ -8,6 +8,28 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-22 — v0.40.0. Ready for SuperNotify PR #207 (delivery/transport switches) and a new
+ *   "Why?" card.
+ *   - shared: snEntityRows() merges switch.* and binary_sensor.* per delivery/transport/
+ *     recipient (switch preferred, keyed by the `name` attribute), so the rows are not doubled
+ *     once #207 adds switches; snCleanName() also drops the "Delivery / Transport" prefix;
+ *     snDeliveryAlias() reads the switch too; snResetOverridesButton() finds
+ *     button.supernotify_reset_overrides; snWhyOpen() asks a supernotify-why-card on the
+ *     page to show one notification.
+ *   - deliveries-card 0.19.0 / transports-card 0.17.0: one row per channel, toggle through
+ *     switch.turn_on/off when the switch exists (raw state write only on older SuperNotify),
+ *     "transport off" tag from the `transport_enabled` attribute, "Reset overrides" button
+ *     when SuperNotify has it.
+ *   - recipients-card 0.19.0: last notification received, from notify.recipient_<name>
+ *     (SuperNotify 2.7.0 stamps it on every delivery), with the matching archive title;
+ *     tapping it opens that notification in the Why? card, or the entity otherwise.
+ *   - archive-card 0.26.0: a "Why?" link on an expanded row.
+ *   - NEW supernotify-why-card 0.1.0: for one notification, the scenarios in force, who was
+ *     home, what the call asked for, and for every channel whether it went out, why not,
+ *     and to which targets - plus the channels that did not even start, with the reason
+ *     reconstructed from the current configuration, and the full selection trace when the
+ *     archive has it (diagnostics). Detail fetched on demand through
+ *     shell_command.sn_archive_detail (tools/sn_archive_index.py --detail).
  * 2026-09-22 — v0.30.1. SuperNotify 2.7.0 stable (commit 9065d8e) gives a scenario WITHOUT
  *   conditions a *manual* binary_sensor ("Scenario manuale <name>" / "Scenario Manual <name>",
  *   translation_key scenario_manual): read/write, restored across restarts, and the scenario
@@ -119,7 +141,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.30.1"; // bundle / HACS release
+const VERSION = "0.40.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -133,15 +155,16 @@ const SN_CARD_VERSIONS = {
   control: "0.22.1",
   overview: "0.20.1",
   bands: "0.12.0",
-  deliveries: "0.18.0",
-  transports: "0.16.0",
-  recipients: "0.18.0",
+  deliveries: "0.19.0",
+  transports: "0.17.0",
+  recipients: "0.19.0",
   scenarios: "0.17.0",
   simulator: "0.9.0",
   composer: "0.11.0",
   automations: "0.14.0",
   stats: "0.20.0",
-  archive: "0.25.0",
+  archive: "0.26.0",
+  why: "0.1.0",
 };
 
 /**
@@ -179,6 +202,8 @@ const SN_STRINGS = {
     h_all_good: "All good", h_health: "Health",
     active_now: "active now", disabled: "disabled", other: "Other",
     manual: "manual", apply_now: "apply now", enabled_lbl: "enabled",
+    reset_overrides: "Reset overrides", reset_done: "overrides reset",
+    transport_off: "transport off", last_notified: "last notified", never_notified: "never notified",
     media: "media", no_scenarios: "no scenario entities found",
     sim_pick: "🎬 Scenarios — tap to simulate", sim_fire: "📤 Deliveries that would fire",
     sim_hint: "Real engine data (enquire services). Priority-based delivery filtering happens engine-side and is not simulated here. Disabled wins over enabled, like the runtime merge.",
@@ -236,6 +261,8 @@ const SN_STRINGS = {
     h_all_good: "Tutto ok", h_health: "Stato",
     active_now: "attivo ora", disabled: "disattivato", other: "Altro",
     manual: "manuale", apply_now: "applica ora", enabled_lbl: "abilitato",
+    reset_overrides: "Ripristina override", reset_done: "override ripristinati",
+    transport_off: "transport spento", last_notified: "ultimo avviso", never_notified: "nessun avviso",
     media: "media", no_scenarios: "nessuna entità scenario trovata",
     sim_pick: "🎬 Scenari — tocca per simulare", sim_fire: "📤 Canali che partirebbero",
     sim_hint: "Dati reali del motore (servizi enquire). Il filtro per priorità delle delivery avviene lato motore e non è simulato qui. Lo spegnimento vince sull'accensione, come nel merge reale.",
@@ -332,7 +359,7 @@ function snCleanName(fn, techName) {
   if (!fn) return "";
   const n = String(fn)
     .replace(/^SuperNotify\s+/i, "")
-    .replace(/^(Condizione scenario|Scenario Condition|Scenario manuale|Scenario Manual|Scenario|Recipient|Destinatario)\s+/i, "")
+    .replace(/^(Condizione scenario|Scenario Condition|Scenario manuale|Scenario Manual|Scenario|Recipient|Destinatario|Delivery|Transport)\s+/i, "")
     .replace(/\s+(abilitato|abilitata|attivo|enabled)$/i, "")
     .trim();
   return n && n !== techName ? n : "";
@@ -371,10 +398,57 @@ function snIsManualScenario(hass, bsId) {
  * Returns null when no alias is configured.
  */
 function snDeliveryAlias(hass, deliveryName) {
-  const st = hass && hass.states[`binary_sensor.supernotify_delivery_${deliveryName}`];
-  const fn = st && st.attributes && st.attributes.friendly_name;
-  if (!fn || fn === deliveryName || fn === st.entity_id || /Delivery Configuration$/i.test(fn)) return null;
-  return fn;
+  // SuperNotify >= PR #207: the switch carries the translated, alias-based name
+  // ("SuperNotify Delivery Notifica sul telefono abilitata"); older versions put
+  // the raw alias in the binary_sensor friendly_name.
+  for (const dom of ["switch", "binary_sensor"]) {
+    const st = hass && hass.states[`${dom}.supernotify_delivery_${deliveryName}`];
+    const fn = st && st.attributes && st.attributes.friendly_name;
+    if (!fn || fn === st.entity_id || /Delivery Configuration$/i.test(fn)) continue;
+    const clean = snCleanName(fn, deliveryName);
+    if (clean) return clean;
+  }
+  return null;
+}
+
+/**
+ * One row per SuperNotify delivery / transport / recipient. SuperNotify >= PR #207
+ * (and >= 2.7.0 for recipients) has a real switch.* plus, on older installs, a
+ * deprecated binary_sensor.* mirror: merge them by name, switch preferred, so the
+ * rows are not doubled. `name` is the model name (the `name` attribute when there is
+ * one: switch entity_ids are slugified).
+ */
+function snEntityRows(hass, kind) {
+  const byName = new Map();
+  if (!hass) return [];
+  const re = new RegExp(`^(switch|binary_sensor)\\.supernotify_${kind}_(.+)$`);
+  for (const id of Object.keys(hass.states)) {
+    const m = id.match(re);
+    if (!m) continue;
+    const s = hass.states[id];
+    const a = s.attributes || {};
+    const name = kind === "recipient" ? m[2] : String(a.name || m[2]);
+    const prev = byName.get(name);
+    if (prev && prev.isSwitch) continue;
+    byName.set(name, { id, name, on: s.state === "on", a, isSwitch: m[1] === "switch" });
+  }
+  return [...byName.values()];
+}
+
+/** button.supernotify_reset_overrides (SuperNotify >= PR #207), or null. */
+function snResetOverridesButton(hass) {
+  const id = "button.supernotify_reset_overrides";
+  return hass && hass.states[id] ? id : null;
+}
+
+/**
+ * Ask a supernotify-why-card on the page to show one notification (archive id or
+ * its 8-char prefix). Returns false when there is no such card to answer.
+ */
+function snWhyOpen(id) {
+  if (!id || !window.__snWhyCards) return false;
+  window.dispatchEvent(new CustomEvent("supernotify-why", { detail: { id } }));
+  return true;
 }
 
 /** "3 min ago" style relative label from a Date (i18n via T). */
@@ -1548,16 +1622,10 @@ class SupernotifyDeliveriesCard extends HTMLElement {
   }
 
   _deliveries() {
-    const out = [];
-    if (!this._hass) return out;
-    for (const id of Object.keys(this._hass.states)) {
-      const m = id.match(/^[a-z_]+\.supernotify_delivery_(.+)$/);
-      if (!m) continue;
-      const name = m[1];
-      if (this._config.hide_defaults && /^default_/i.test(name)) continue;
-      const s = this._hass.states[id];
-      out.push({ id, name, on: s.state === "on", a: s.attributes || {} });
-    }
+    // one row per delivery: switch.* (SuperNotify >= PR #207) preferred over the
+    // binary_sensor.* that older versions expose
+    const out = snEntityRows(this._hass, "delivery")
+      .filter((d) => !(this._config.hide_defaults && /^default_/i.test(d.name)));
     // enabled first, then alphabetical — like the prototype list
     out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
     return out;
@@ -1602,6 +1670,10 @@ class SupernotifyDeliveriesCard extends HTMLElement {
                   background: ${p.soft}; border-radius: 9px;
                   padding: 7px 10px; margin-bottom: 10px; }
         .incsum b { color: ${p.ink}; }
+        .tag.off { color: #c62828; border-color: rgba(198,40,40,.35); background: rgba(198,40,40,.08); }
+        .rst { text-align: right; margin: -4px 0 8px; }
+        .rstb { font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; border-radius: 8px;
+                border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; padding: 4px 10px; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows"></div>
@@ -1629,11 +1701,13 @@ class SupernotifyDeliveriesCard extends HTMLElement {
     const nAlways = dels.filter((d) => inc(d).includes("default")).length;
     const nScen = dels.filter((d) => inc(d).includes("scenario")).length;
     const nReq = dels.length - nAlways - nScen;
+    const resetBtn = snResetOverridesButton(this._hass);
     const sum = `<div class="incsum">${dels.length} ${T.inc_sum}: `
       + `<b>${nAlways}</b> ${T.inc_always}`
       + (nReq ? ` · <b>${nReq}</b> ${T.inc_req}` : "")
       + (nScen ? ` · <b>${nScen}</b> ${T.inc_scen}` : "")
-      + `</div>`;
+      + `</div>`
+      + (resetBtn ? `<div class="rst"><button class="rstb">↺ ${esc(T.reset_overrides)}</button></div>` : "");
     rows.innerHTML = sum + dels.map((d, i) => {
       const tr = d.a.transport || "";
       const em = SN_TRANSPORT_ICONS[tr] || "📤";
@@ -1653,7 +1727,9 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       if (nTgt) tags.push(`🎯 ${nTgt} ${T.fixed_targets}`);
       if (d.a.target_usage && d.a.target_usage !== "no_action") tags.push(`↔️ ${d.a.target_usage}`);
       if (SN_NATIVE_TARGET_TRANSPORTS.includes(tr)) tags.push(T.native_target_tag);
-      const alias = d.a.friendly_name && d.a.friendly_name !== d.name ? d.a.friendly_name : "";
+      // SuperNotify >= PR #207: a delivery switched on is still unused while its transport is off
+      if (d.a.transport_enabled === false) tags.push([`⛔ ${T.transport_off}`, "off"]);
+      const alias = snDeliveryAlias(this._hass, d.name) || "";
       return `<div class="row" data-i="${i}">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(d.name)}</b> <span class="tr">${esc(tr)}${alias ? " · " + esc(alias) : ""}</span>
@@ -1678,9 +1754,11 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       label.addEventListener("click", (e) => e.stopPropagation());
       const input = label.querySelector("input");
       input.addEventListener("change", () => {
-        snSetBinaryState(this._hass, label.dataset.id, input.checked);
+        snToggle(this._hass, label.dataset.id, input.checked);
       });
     });
+    const rb = rows.querySelector(".rstb");
+    if (rb) rb.onclick = () => this._hass.callService("button", "press", { entity_id: resetBtn });
   }
 }
 
@@ -1741,14 +1819,7 @@ class SupernotifyTransportsCard extends HTMLElement {
   }
 
   _transports() {
-    const out = [];
-    if (!this._hass) return out;
-    for (const id of Object.keys(this._hass.states)) {
-      const m = id.match(/^[a-z_]+\.supernotify_transport_(.+)$/);
-      if (!m) continue;
-      const s = this._hass.states[id];
-      out.push({ id, name: m[1], on: s.state === "on", a: s.attributes || {} });
-    }
+    const out = snEntityRows(this._hass, "transport");
     out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
     return out;
   }
@@ -1785,6 +1856,9 @@ class SupernotifyTransportsCard extends HTMLElement {
         .b-off { background: ${p.soft}; color: ${p.muted}; }
         ${SN_SWITCH_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .rst { text-align: right; margin: 0 0 8px; }
+        .rstb { font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; border-radius: 8px;
+                border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; padding: 4px 10px; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows"></div>
@@ -1804,12 +1878,15 @@ class SupernotifyTransportsCard extends HTMLElement {
       rows.innerHTML = `<span class="badge b-off">${T.no_transports}</span>`;
       return;
     }
-    rows.innerHTML = trs.map((t, i) => {
+    const resetBtn = snResetOverridesButton(this._hass);
+    rows.innerHTML = (resetBtn ? `<div class="rst"><button class="rstb">↺ ${esc(T.reset_overrides)}</button></div>` : "")
+      + trs.map((t, i) => {
       const em = SN_TRANSPORT_ICONS[t.name] || "🔌";
       const tags = [];
       const errCount = +t.a.error_count || 0;
       if (errCount > 0) tags.push(`<span class="tag err">⚠️ ${errCount} · ${esc(t.a.last_error_message || "")}</span>`);
-      const alias = t.a.friendly_name && t.a.friendly_name !== t.name ? t.a.friendly_name : "";
+      let alias = snCleanName(t.a.friendly_name, t.name);
+      if (/Transport Adaptor$/i.test(alias)) alias = "";
       return `<div class="row" data-i="${i}">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(t.name)}</b>${alias ? ` <span class="sub">· ${esc(alias)}</span>` : ""}
@@ -1831,9 +1908,11 @@ class SupernotifyTransportsCard extends HTMLElement {
       label.addEventListener("click", (e) => e.stopPropagation());
       const input = label.querySelector("input");
       input.addEventListener("change", () => {
-        snSetBinaryState(this._hass, label.dataset.id, input.checked);
+        snToggle(this._hass, label.dataset.id, input.checked);
       });
     });
+    const rb = rows.querySelector(".rstb");
+    if (rb) rb.onclick = () => this._hass.callService("button", "press", { entity_id: snResetOverridesButton(this._hass) });
   }
 }
 
@@ -1894,16 +1973,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
     // SuperNotify >= 2.7.0 has both switch.* (the real control) and a
     // deprecated binary_sensor.* mirror per recipient: one row each,
     // switch preferred; binary_sensor only on older versions.
-    const byName = new Map();
-    if (!this._hass) return [];
-    for (const id of Object.keys(this._hass.states)) {
-      const m = id.match(/^(switch|binary_sensor)\.supernotify_recipient_(.+)$/);
-      if (!m) continue;
-      if (byName.has(m[2]) && m[1] !== "switch") continue;
-      const s = this._hass.states[id];
-      byName.set(m[2], { id, name: m[2], on: s.state === "on", a: s.attributes || {} });
-    }
-    const out = [...byName.values()];
+    const out = snEntityRows(this._hass, "recipient");
     out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
     return out;
   }
@@ -1945,6 +2015,9 @@ class SupernotifyRecipientsCard extends HTMLElement {
                 transition: opacity .15s; padding: 2px; }
         .gear:hover { opacity: 1; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .last { margin-top: 5px; font-size: 11.5px; color: ${p.muted}; cursor: pointer; }
+        .last b { color: ${p.ink}; }
+        .last.none { cursor: default; opacity: .7; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows"></div>
@@ -1977,11 +2050,16 @@ class SupernotifyRecipientsCard extends HTMLElement {
       if (nOvr) tags.push(`🔗 ${nOvr} ${T.overrides}`);
       if (!tags.length) tags.push(`<span class="tag warn">⚠️ ${T.no_contact}</span>`);
       const alias = snCleanName(r.a.friendly_name, r.name);
+      const last = this._lastNotified(r.name);
+      const lastHtml = last
+        ? `<div class="last" data-why="${esc(last.id || "")}" data-ent="${esc(last.entity)}">🔔 ${esc(T.last_notified)}: <b>${esc(snAgo(last.when, T))}</b>${last.title ? ` · ${esc(last.title)}` : ""}</div>`
+        : (this._hass.states[`notify.recipient_${r.name}`] ? `<div class="last none">🔕 ${esc(T.never_notified)}</div>` : "");
       return `<div class="row" data-i="${i}">
         <span class="em">👤</span>
         <div class="mid"><b>${esc(alias || r.name)}</b>
           <span class="sub">${esc(personId || "")}${pState !== undefined ? (home ? " · 🏠 " + T.home : " · 🚗 " + T.away) : ""}</span>
           <div class="tags">${tags.map((t) => t.startsWith("<span") ? t : `<span class="tag">${esc(t)}</span>`).join("")}</div>
+          ${lastHtml}
         </div>
         <span class="gear" title="${esc(T.details)}" aria-label="${esc(T.details)}">⚙️</span>
         <label class="sw" data-id="${esc(r.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
@@ -2003,6 +2081,34 @@ class SupernotifyRecipientsCard extends HTMLElement {
         snToggle(this._hass, label.dataset.id, input.checked);
       });
     });
+    rows.querySelectorAll(".last[data-ent]").forEach((node) => {
+      node.onclick = (e) => {
+        e.stopPropagation();
+        if (!snWhyOpen(node.dataset.why)) this._moreInfo(node.dataset.ent);
+      };
+    });
+  }
+
+  /**
+   * SuperNotify 2.7.0 stamps notify.recipient_<name> (state = ISO time, with the
+   * notification's context) on every delivery that reaches the recipient. The
+   * archive index (sensor.supernotify_archivio) gives the title: the notification
+   * created closest to that time, within 2 minutes.
+   */
+  _lastNotified(name) {
+    const entity = `notify.recipient_${name}`;
+    const st = this._hass.states[entity];
+    const when = st && st.state ? new Date(st.state) : null;
+    if (!when || isNaN(when.getTime())) return null;
+    const idx = this._hass.states[this._config.archive_entity || "sensor.supernotify_archivio"];
+    const items = (idx && idx.attributes && idx.attributes.items) || [];
+    const ts = when.getTime() / 1000;
+    let best = null;
+    for (const it of items) {
+      const d = Math.abs((it.t || 0) - ts);
+      if (d <= 120 && (!best || d < best.d)) best = { d, it };
+    }
+    return { when, entity, id: best ? best.it.id : null, title: best ? best.it.ti : null };
   }
 }
 
@@ -3727,6 +3833,7 @@ class SupernotifyArchiveCard extends HTMLElement {
         .det b { color: ${p.ink}; font-weight: 650; }
         .empty { text-align: center; color: ${p.muted}; font-size: 13px; padding: 22px 0; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 10px; }
+        .why { color: ${p.brandD}; font-weight: 650; cursor: pointer; text-decoration: underline; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}
@@ -3819,10 +3926,14 @@ class SupernotifyArchiveCard extends HTMLElement {
              ${scen ? `<div><b>${T.scenarios}:</b> ${scen}</div>` : ""}
              <div>${r.d ? `<b>${r.d}</b> ${T.delivered} ` : ""}${r.f ? `· <b>${r.f}</b> ${T.failed} ` : ""}${r.s ? `· <b>${r.s}</b> ${T.skipped} ` : ""}
              ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""} · ${T.id} <code>${esc(r.id)}</code>${r.mt ? ` · ${T.truncated}` : ""}</div>
+             ${window.__snWhyCards ? `<div><a class="why" data-why="${esc(r.id)}">🔎 ${T.why}</a></div>` : ""}
            </div>
          </div>`);
     });
     el.innerHTML = parts.join("");
+    el.querySelectorAll(".why").forEach((a) => {
+      a.onclick = (e) => { e.stopPropagation(); snWhyOpen(a.dataset.why); };
+    });
     el.querySelectorAll(".row").forEach((node) => {
       node.onclick = () => {
         const id = node.dataset.id;
@@ -3852,7 +3963,7 @@ const SN_ARCH_STRINGS = {
     today: "Today", yesterday: "Yesterday",
     delivered: "delivered", failed: "failed", skipped: "skipped",
     scenarios: "Scenarios in force", truncated: "message truncated in the index",
-    dur: "took", id: "id",
+    dur: "took", id: "id", why: "Why? - full detail",
   },
   it: {
     title: "Storico notifiche", search: "Cerca nel titolo o nel messaggio…",
@@ -3864,8 +3975,479 @@ const SN_ARCH_STRINGS = {
     today: "Oggi", yesterday: "Ieri",
     delivered: "consegnata", failed: "fallita", skipped: "saltata",
     scenarios: "Scenari in vigore", truncated: "messaggio troncato nell'indice",
-    dur: "in", id: "id",
+    dur: "in", id: "id", why: "Perché? - dettaglio completo",
   },
 };
 
 
+
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-why-card — "Why?" for one notification
+ *
+ * The question it answers: why did this notification go out (or not) on
+ * this channel, to these targets? Everything comes from what SuperNotify
+ * archived for that notification:
+ *   - the list: the archive index in sensor.supernotify_archivio (same as
+ *     supernotify-archive-card);
+ *   - the detail, fetched on demand for the selected notification through
+ *     shell_command.sn_archive_detail, which runs
+ *     tools/sn_archive_index.py --detail <id> and returns its JSON as the
+ *     service response (so it never weighs on any entity's attributes).
+ * Channels that did not start at all are not in the archive: for those the
+ * reason is reconstructed from the current configuration (delivery switch,
+ * transport, inclusion, the scenarios in force, the call's own overrides)
+ * and labelled as such. When the archive holds the full selection trace
+ * (SuperNotify diagnostics), that is shown too and wins.
+ * Other cards open a notification here with snWhyOpen(id).
+ * ════════════════════════════════════════════════════════════════════════ */
+
+class SupernotifyWhyCard extends HTMLElement {
+  static getStubConfig() {
+    return { entity: "sensor.supernotify_archivio", service: "shell_command.sn_archive_detail" };
+  }
+
+  setConfig(config) {
+    this._config = {
+      entity: "sensor.supernotify_archivio",
+      service: "shell_command.sn_archive_detail",
+      limit: 15,
+      style: "supernotify",
+      ...(config || {}),
+    };
+    this._cache = this._cache || new Map();
+    this._rendered = false;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    const st = hass.states[this._config.entity];
+    const stamp = st ? st.last_updated : "none";
+    if (!this._rendered || wasDark !== this._dark) this._render();
+    else if (stamp !== this._stamp) this._renderList();
+    this._stamp = stamp;
+  }
+
+  getCardSize() { return 12; }
+
+  connectedCallback() {
+    window.__snWhyCards = (window.__snWhyCards || 0) + 1;
+    this._onWhy = (e) => {
+      const id = e.detail && e.detail.id;
+      if (!id) return;
+      this._select(String(id).slice(0, 8));
+      this.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    window.addEventListener("supernotify-why", this._onWhy);
+  }
+
+  disconnectedCallback() {
+    window.__snWhyCards = Math.max(0, (window.__snWhyCards || 1) - 1);
+    window.removeEventListener("supernotify-why", this._onWhy);
+  }
+
+  _T() {
+    const lang = ((this._config.language || (this._hass && this._hass.language) || "en").split("-")[0]);
+    return SN_WHY_STRINGS[lang] || SN_WHY_STRINGS.en;
+  }
+
+  _loc() { return this._config.language || (this._hass && this._hass.language) || undefined; }
+
+  _palette() {
+    if (this._config.style === "theme") {
+      return { brand: "var(--primary-color)", brandD: "var(--primary-color)",
+        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color, #f0a020)", crit: "var(--error-color, #e23c3c)",
+        line: "var(--divider-color)", panel: "var(--card-background-color)",
+        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)" };
+    }
+    return this._dark
+      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", warn: "#f0c060", crit: "#ff9a9a",
+          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
+      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#b26a00", crit: "#c62828",
+          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+  }
+
+  _index() {
+    const st = this._hass && this._hass.states[this._config.entity];
+    if (!st) return null;
+    const a = st.attributes || {};
+    return { items: a.items || [], chan: a.chan || [] };
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    const T = this._T();
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; font-size: 13px; }
+        h3 { margin: 0 0 8px; font-size: 15px; }
+        .list { max-height: 230px; overflow-y: auto; border: 1px solid ${p.line}; border-radius: 10px; }
+        .it { display: flex; gap: 8px; align-items: center; padding: 7px 10px; cursor: pointer;
+              border-bottom: 1px solid ${p.line}; }
+        .it:last-child { border-bottom: 0; }
+        .it:hover { background: ${p.soft}; }
+        .it.sel { background: ${p.soft}; box-shadow: inset 3px 0 0 ${p.brand}; }
+        .it .hm { color: ${p.muted}; font-variant-numeric: tabular-nums; flex-shrink: 0; font-size: 12px; }
+        .it .ti { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .d-ok { background: ${p.ok}; } .d-warn { background: ${p.warn}; } .d-err { background: ${p.crit}; }
+        .det { margin-top: 12px; }
+        .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800;
+               color: ${p.muted}; margin: 14px 0 6px; }
+        .hd b { font-size: 14px; } .hd .meta { color: ${p.muted}; font-size: 12px; margin-top: 2px; }
+        .msg { margin-top: 6px; line-height: 1.45; }
+        .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        .chip { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; border-radius: 7px;
+                padding: 2px 8px; font-size: 11.5px; font-weight: 650; }
+        .chip.strong { border-color: ${p.brand}; }
+        .chip.off { color: ${p.crit}; }
+        .ch { border: 1px solid ${p.line}; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
+        .ch .r1 { display: flex; gap: 8px; align-items: baseline; }
+        .ch .st { flex-shrink: 0; font-weight: 800; }
+        .st.ok { color: ${p.ok}; } .st.skip, .st.supp { color: ${p.warn}; } .st.err { color: ${p.crit}; }
+        .ch .nm { font-weight: 700; } .ch .al { color: ${p.muted}; font-size: 12px; }
+        .ch .why { margin-top: 3px; } .ch .src { margin-top: 3px; color: ${p.muted}; font-size: 12px; }
+        .ch .tg { margin-top: 4px; font-size: 12px; color: ${p.muted}; word-break: break-word; }
+        .ch.not { opacity: .85; border-style: dashed; }
+        .note { color: ${p.muted}; font-size: 11.5px; margin-top: 4px; line-height: 1.45; }
+        .trace { font-size: 12px; } .trace code { font-size: 11px; }
+        .trace .stg { display: flex; gap: 6px; padding: 2px 0; }
+        .trace .stg span:first-child { color: ${p.muted}; min-width: 190px; font-family: monospace; font-size: 11px; }
+        .empty { color: ${p.muted}; padding: 10px; text-align: center; }
+        .err { color: ${p.crit}; }
+        code { background: ${p.soft}; padding: 1px 4px; border-radius: 4px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+      </style>
+      <ha-card>
+        ${snIntro(this._config, this._dark)}
+        <h3>🔎 ${T.title}</h3>
+        <div class="list" id="list"></div>
+        <div class="det" id="det"><div class="empty">${T.pick}</div></div>
+        <div class="ver">supernotify-why-card v${SN_CARD_VERSIONS.why}</div>
+      </ha-card>`;
+    this._renderList();
+    if (this._sel) this._renderDetail();
+  }
+
+  _outcomeClass(r) {
+    const c = r.c || [];
+    if (r.f || c.some((x) => Array.isArray(x) && x[1] === "e")) return "d-err";
+    if (!r.d) return "d-warn";
+    // a channel with no usable target (e.g. html5 with no subscription) is routine
+    // on a partial delivery; a dupe or any other skip reason is worth a look
+    const odd = c.some((x) => Array.isArray(x) && x[1] === "s" && !/^(nessun target|no_target)$/i.test(x[2] || ""));
+    return r.o === "dupe" || odd ? "d-warn" : "d-ok";
+  }
+
+  _renderList() {
+    const el = this.shadowRoot && this.shadowRoot.getElementById("list");
+    if (!el) return;
+    const T = this._T();
+    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const idx = this._index();
+    if (!idx) {
+      el.innerHTML = `<div class="empty">${T.no_sensor} <code>${esc(this._config.entity)}</code></div>`;
+      return;
+    }
+    const items = idx.items.slice(0, this._config.limit);
+    if (!items.length) { el.innerHTML = `<div class="empty">${T.none}</div>`; return; }
+    el.innerHTML = items.map((r) => {
+      const d = new Date(r.t * 1000);
+      const hm = d.toLocaleString(this._loc(), { weekday: "short", hour: "2-digit", minute: "2-digit" });
+      return `<div class="it${this._sel === r.id ? " sel" : ""}" data-id="${esc(r.id)}">
+        <span class="dot ${this._outcomeClass(r)}"></span><span class="hm">${esc(hm)}</span>
+        <span class="ti">${esc(r.ti || r.m || "—")}</span></div>`;
+    }).join("");
+    el.querySelectorAll(".it").forEach((n) => { n.onclick = () => this._select(n.dataset.id); });
+  }
+
+  async _select(id) {
+    this._sel = id;
+    this._renderList();
+    if (!this._cache.has(id)) {
+      this._loading = id;
+      this._renderDetail();
+      this._cache.set(id, await this._fetch(id));
+      this._loading = null;
+    }
+    if (this._sel === id) this._renderDetail();
+  }
+
+  async _fetch(id) {
+    const [domain, service] = String(this._config.service).split(".");
+    const svc = this._hass.services && this._hass.services[domain];
+    if (!svc || !svc[service]) return { ok: false, error: "no_service" };
+    try {
+      const r = await this._hass.callWS({
+        type: "call_service", domain, service, service_data: { id }, return_response: true,
+      });
+      const out = r && r.response && r.response.stdout;
+      if (!out) return { ok: false, error: (r && r.response && r.response.stderr) || "empty" };
+      return JSON.parse(out);
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || String(e) };
+    }
+  }
+
+  // -- configuration lookups, for the channels that did not start ---------
+
+  _deliveryRows() {
+    const m = new Map();
+    for (const d of snEntityRows(this._hass, "delivery")) m.set(d.name, d);
+    return m;
+  }
+
+  _scenarioDeliveries(name) {
+    for (const dom of ["switch", "binary_sensor"]) {
+      const st = this._hass.states[`${dom}.supernotify_scenario_${name}`];
+      if (st && st.attributes && st.attributes.delivery && typeof st.attributes.delivery === "object") {
+        return st.attributes.delivery;
+      }
+    }
+    return {};
+  }
+
+  _scenarioLabel(name) {
+    for (const dom of ["switch", "binary_sensor"]) {
+      const st = this._hass.states[`${dom}.supernotify_scenario_${name}`];
+      const c = st && snCleanName(st.attributes.friendly_name, name);
+      if (c) return c;
+    }
+    return name;
+  }
+
+  _personLabel(pid) {
+    const st = this._hass.states[pid];
+    return (st && st.attributes && st.attributes.friendly_name) || String(pid).replace(/^person\./, "");
+  }
+
+  /** Which scenarios in force switch a delivery on, and which switch it off. */
+  _scenarioSources(dname, scen) {
+    const on = [], off = [];
+    for (const s of scen) {
+      const cfg = this._scenarioDeliveries(s)[dname];
+      if (cfg === undefined) continue;
+      if (cfg && cfg.enabled === false) off.push(s); else on.push(s);
+    }
+    return { on, off };
+  }
+
+  _inclusion(row) {
+    const r = row && (row.a.inclusion ?? row.a.selection);
+    return Array.isArray(r) ? r : r ? [r] : ["default"];
+  }
+
+  /** Best reconstruction of why a delivery never started, from the current configuration. */
+  _whyNotStarted(dname, row, n, scen, T) {
+    const ov = (n.ov || {})[dname];
+    if (ov && ov.en === false) return T.r_call_off;
+    const tsel = n.trace && n.trace.sel;
+    if (tsel) {
+      const hit = (k) => Array.isArray(tsel[k]) && tsel[k].includes(dname);
+      if (hit("override_disable_deliveries")) return T.r_call_off;
+      if (hit("scenario_disable_deliveries")) return T.r_scen_off;
+    }
+    if (row && !row.on) return T.r_disabled;
+    if (row && row.a.transport_enabled === false) return T.r_transport_off;
+    const src = this._scenarioSources(dname, scen);
+    if (src.off.length) return `${T.r_scen_off}: ${src.off.map((s) => this._scenarioLabel(s)).join(", ")}`;
+    const inc = this._inclusion(row);
+    if (!inc.includes("default") && !src.on.length && !ov) {
+      if (inc.includes("scenario")) return T.r_only_scen;
+      if (inc.some((x) => String(x).startsWith("fallback"))) return T.r_only_fallback;
+      return T.r_only_explicit;
+    }
+    if (n.p && row && Array.isArray(row.a.priority) && !row.a.priority.includes(n.p)) return T.r_priority;
+    return T.r_unknown;
+  }
+
+  _reasonText(code, T) {
+    if (!code) return "";
+    const key = String(code).toUpperCase();
+    return (T.reasons && T.reasons[key]) || String(code);
+  }
+
+  _renderDetail() {
+    const el = this.shadowRoot && this.shadowRoot.getElementById("det");
+    if (!el) return;
+    const T = this._T();
+    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    if (!this._sel) { el.innerHTML = `<div class="empty">${T.pick}</div>`; return; }
+    if (this._loading === this._sel) { el.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
+    const res = this._cache.get(this._sel) || {};
+    if (!res.ok) {
+      const msg = res.error === "no_service"
+        ? `${T.no_service} <code>${esc(this._config.service)}</code>. ${T.no_service_hint}`
+        : esc(res.error || T.none);
+      el.innerHTML = `<div class="empty err">${msg}</div>`;
+      return;
+    }
+    const n = res.n || {};
+    const sc = n.sc || {};
+    const scen = sc.sel || sc.on || [];
+    const rows = this._deliveryRows();
+    const tgText = (tg) => Object.entries(tg || {}).map(([cat, vals]) =>
+      `${esc(T.cats[cat] || cat)}: ${vals.map((v) => esc(String(v).replace(/^(mobile_app_|person\.|media_player\.|notify\.)/, ""))).join(", ")}`).join(" · ");
+    const out = [];
+
+    // header
+    const d = new Date((n.t || 0) * 1000);
+    const when = d.toLocaleString(this._loc(), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    out.push(`<div class="hd"><b>${esc(n.ti || "—")}</b>
+      <div class="meta">${esc(when)} · ${T.priority} <b>${esc(n.p || "medium")}</b> · ${T.outcome} <b>${esc(T.outcomes[n.o] || n.o || "—")}</b>${n.dupe ? ` · ♻ ${T.dupe}` : ""}${n.v ? ` · SuperNotify ${esc(n.v)}` : ""}</div>
+      ${n.m ? `<div class="msg">${esc(n.m)}</div>` : ""}
+      ${n.sp ? `<div class="note">🔊 ${esc(n.sp)}</div>` : ""}</div>`);
+
+    // scenarios
+    out.push(`<div class="sec">🎬 ${T.scenarios}</div>`);
+    const chip = (s, cls) => `<span class="chip ${cls || ""}">${esc(this._scenarioLabel(s))}</span>`;
+    const parts = [];
+    if (scen.length) parts.push(`<div class="chips">${scen.map((s) => chip(s)).join("")}</div>`);
+    else parts.push(`<div class="note">${T.no_scenarios}</div>`);
+    if ((sc.ap || []).length) parts.push(`<div class="note">${T.applied}: ${sc.ap.map((s) => esc(this._scenarioLabel(s))).join(", ")}</div>`);
+    if ((sc.rq || []).length) parts.push(`<div class="note">${T.required}: ${sc.rq.map((s) => esc(this._scenarioLabel(s))).join(", ")}</div>`);
+    if ((sc.cs || []).length) parts.push(`<div class="note">${T.constrain}: ${sc.cs.map((s) => esc(this._scenarioLabel(s))).join(", ")}</div>`);
+    out.push(parts.join(""));
+
+    // presence
+    if (n.occ) {
+      const home = (n.occ.home || []).map((pid) => esc(this._personLabel(pid))).join(", ") || "—";
+      const away = (n.occ.away || []).map((pid) => esc(this._personLabel(pid))).join(", ");
+      out.push(`<div class="sec">🏠 ${T.presence}</div><div>${T.home}: <b>${home}</b>${away ? ` · ${T.away}: ${away}` : ""}</div>`);
+    }
+
+    // channels in the archive
+    out.push(`<div class="sec">📤 ${T.channels}</div>`);
+    const seen = new Set();
+    const icon = { ok: "✔", skip: "⊘", supp: "♻", err: "✖" };
+    for (const ch of n.dl || []) {
+      seen.add(ch.n);
+      const row = rows.get(ch.n);
+      const alias = snDeliveryAlias(this._hass, ch.n);
+      const src = this._scenarioSources(ch.n, scen);
+      const ov = (n.ov || {})[ch.n];
+      const by = [];
+      if (this._inclusion(row).includes("default")) by.push(T.src_default);
+      if (src.on.length) by.push(`${T.src_scen} ${src.on.map((s) => this._scenarioLabel(s)).join(", ")}`);
+      if (ov && ov.en) by.push(T.src_call);
+      let why = "";
+      if (ch.r === "ok") why = T.st_ok + (ch.calls ? ` (${ch.calls} ${T.calls})` : "");
+      else if (ch.r === "err") why = `${T.st_err}${ch.err ? ": " + esc(ch.err.join(" / ")) : ""}`;
+      else why = `${ch.r === "supp" ? T.st_supp : T.st_skip}: ${esc(this._reasonText(ch.why, T))}${ch.tr ? ` (${T.target_required} ${esc(ch.tr)})` : ""}`;
+      out.push(`<div class="ch"><div class="r1"><span class="st ${ch.r}">${icon[ch.r] || "?"}</span>
+        <span class="nm">${esc(ch.n)}</span>${alias ? `<span class="al">${esc(alias)}</span>` : ""}</div>
+        <div class="why">${why}</div>
+        ${by.length ? `<div class="src">${T.started_by}: ${esc(by.join(" · "))}</div>` : ""}
+        ${src.off.length ? `<div class="src">${T.scen_would_off}: ${esc(src.off.map((s) => this._scenarioLabel(s)).join(", "))}</div>` : ""}
+        ${ch.tg ? `<div class="tg">🎯 ${tgText(ch.tg)}</div>` : ""}
+        ${ov && ov.tg && tgText(ov.tg) !== tgText(ch.tg) ? `<div class="tg">📝 ${T.call_targets}: ${tgText(ov.tg)}</div>` : ""}
+      </div>`);
+    }
+    if (!(n.dl || []).length) out.push(`<div class="note">${T.no_channels}</div>`);
+
+    // channels that never started
+    const notStarted = [...rows.keys()].filter((k) => !seen.has(k) && !/^default_/i.test(k));
+    if (notStarted.length) {
+      out.push(`<div class="sec">🚫 ${T.not_started}</div>`);
+      for (const k of notStarted.sort()) {
+        const row = rows.get(k);
+        const alias = snDeliveryAlias(this._hass, k);
+        out.push(`<div class="ch not"><div class="r1"><span class="st">·</span><span class="nm">${esc(k)}</span>${alias ? `<span class="al">${esc(alias)}</span>` : ""}</div>
+          <div class="why">${esc(this._whyNotStarted(k, row, n, scen, T))}</div></div>`);
+      }
+      out.push(`<div class="note">${n.trace ? T.from_trace : T.from_config}</div>`);
+    }
+
+    // full trace
+    if (n.trace) {
+      out.push(`<div class="sec">🧭 ${T.trace}</div><div class="trace">`);
+      for (const [stage, list] of Object.entries(n.trace.sel || {})) {
+        out.push(`<div class="stg"><span>${esc(stage)}</span><span>${esc((list || []).join(", ") || "—")}</span></div>`);
+      }
+      for (const [dname, chain] of Object.entries(n.trace.res || {})) {
+        out.push(`<div class="note"><b>${esc(dname)}</b></div>`);
+        for (const [stage, val] of chain) {
+          out.push(`<div class="stg"><span>${esc(stage)}</span><span>${typeof val === "object" ? tgText(val) || "∅" : esc(val)}</span></div>`);
+        }
+      }
+      out.push(`</div>`);
+    } else {
+      out.push(`<div class="note">ℹ️ ${T.no_trace}</div>`);
+    }
+    if (n.ctx && n.ctx.id) out.push(`<div class="note">context <code>${esc(n.ctx.id)}</code>${n.ctx.parent_id ? ` ← <code>${esc(n.ctx.parent_id)}</code>` : ""}</div>`);
+    el.innerHTML = out.join("");
+  }
+}
+
+customElements.define("supernotify-why-card", SupernotifyWhyCard);
+
+window.customCards.push({
+  type: "supernotify-why-card",
+  name: "SuperNotify Why?",
+  description: "Why a notification went out, or not, on each channel: scenarios, presence, targets and the selection trace.",
+});
+
+const SN_WHY_STRINGS = {
+  en: {
+    title: "Why?", pick: "Pick a notification to see why it went where it went.",
+    loading: "loading…", none: "no notification", no_sensor: "sensor not found:",
+    no_service: "Missing service", no_service_hint: "Add the shell_command sn_archive_detail (see README) and restart Home Assistant.",
+    priority: "priority", outcome: "outcome", dupe: "duplicate",
+    outcomes: { success: "delivered", partial_delivery: "partly delivered", dupe: "duplicate", failed: "failed", no_delivery: "not delivered" },
+    scenarios: "Scenarios in force", no_scenarios: "no scenario in force",
+    applied: "forced by the call", required: "required by the call", constrain: "limited by the call to",
+    presence: "Presence", home: "home", away: "away",
+    channels: "Channels", no_channels: "no channel was selected",
+    st_ok: "delivered", st_err: "failed", st_skip: "skipped", st_supp: "suppressed", calls: "calls",
+    target_required: "target required:", started_by: "selected by", scen_would_off: "switched off by (overruled)",
+    src_default: "always on (default)", src_scen: "scenario", src_call: "the call itself",
+    call_targets: "targets in the call",
+    cats: { entity_id: "entities", mobile_app_id: "devices", person_id: "people", email: "email", phone: "phone", device_id: "devices" },
+    not_started: "Channels that did not start",
+    r_call_off: "excluded by the call", r_scen_off: "switched off by a scenario in force",
+    r_disabled: "switched off", r_transport_off: "its transport is off",
+    r_only_scen: "starts only when a scenario turns it on", r_only_fallback: "only a fallback",
+    r_only_explicit: "starts only when asked for by name", r_priority: "not for this priority",
+    r_unknown: "not reconstructable without the trace",
+    from_config: "Reasons for channels that did not start are reconstructed from the configuration as it is NOW, not as it was then.",
+    from_trace: "Reasons come from the selection trace archived with the notification.",
+    trace: "Selection trace", no_trace: "The full selection trace is only archived when SuperNotify diagnostics are set to ALL.",
+    reasons: { NO_TARGET: "no usable target", DUPE: "duplicate of a recent notification", PRIORITY: "not for this priority",
+      SNOOZE: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule", ERROR: "error",
+      DELIVERY_DISABLED: "switched off", SCENARIO: "scenario" },
+  },
+  it: {
+    title: "Perché?", pick: "Scegli una notifica per vedere perché è andata dove è andata.",
+    loading: "carico…", none: "nessuna notifica", no_sensor: "sensore non trovato:",
+    no_service: "Manca il servizio", no_service_hint: "Aggiungi lo shell_command sn_archive_detail (vedi README) e riavvia Home Assistant.",
+    priority: "priorità", outcome: "esito", dupe: "doppione",
+    outcomes: { success: "consegnata", partial_delivery: "consegnata in parte", dupe: "doppione", failed: "fallita", no_delivery: "non consegnata" },
+    scenarios: "Scenari in vigore", no_scenarios: "nessuno scenario in vigore",
+    applied: "forzati dalla chiamata", required: "richiesti dalla chiamata", constrain: "limitati dalla chiamata a",
+    presence: "Presenza", home: "in casa", away: "fuori",
+    channels: "Canali", no_channels: "nessun canale selezionato",
+    st_ok: "consegnata", st_err: "fallita", st_skip: "saltata", st_supp: "scartata", calls: "chiamate",
+    target_required: "target richiesto:", started_by: "scelto da", scen_would_off: "spento da (ma ha perso)",
+    src_default: "sempre attivo (default)", src_scen: "scenario", src_call: "la chiamata stessa",
+    call_targets: "target nella chiamata",
+    cats: { entity_id: "entità", mobile_app_id: "dispositivi", person_id: "persone", email: "email", phone: "telefono", device_id: "dispositivi" },
+    not_started: "Canali che non sono partiti",
+    r_call_off: "escluso dalla chiamata", r_scen_off: "spento da uno scenario in vigore",
+    r_disabled: "spento", r_transport_off: "il suo transport è spento",
+    r_only_scen: "parte solo se uno scenario lo accende", r_only_fallback: "è solo un canale di riserva",
+    r_only_explicit: "parte solo se chiesto per nome", r_priority: "non per questa priorità",
+    r_unknown: "non ricostruibile senza il trace",
+    from_config: "I motivi dei canali non partiti sono ricostruiti dalla configurazione di ADESSO, non da quella di allora.",
+    from_trace: "I motivi vengono dal trace di selezione archiviato con la notifica.",
+    trace: "Trace di selezione", no_trace: "Il trace completo della selezione viene archiviato solo con la diagnostica di SuperNotify impostata su ALL.",
+    reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione di una notifica recente", PRIORITY: "non per questa priorità",
+      SNOOZE: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza", ERROR: "errore",
+      DELIVERY_DISABLED: "spento", SCENARIO: "scenario" },
+  },
+};

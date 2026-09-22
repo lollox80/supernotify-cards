@@ -3,6 +3,27 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.40.0] - 2026-09-22
+
+### Added
+- **New supernotify-why-card** (0.1.0): for one notification, the scenarios in force, who was
+  home, what the call asked for, and for every channel whether it went out, why not, to which
+  targets and what selected it; also the channels that did not start, with the reason
+  reconstructed from the current configuration, and the full selection trace when the archive
+  has it. Detail fetched on demand through `shell_command.sn_archive_detail`
+  (`tools/sn_archive_index.py --detail`).
+- recipients-card (0.19.0): last notification received by each recipient, from
+  `notify.recipient_<name>` (SuperNotify 2.7.0), with the archive title; tap to open it in the
+  Why? card.
+- archive-card (0.26.0): a Why? link on an expanded row.
+
+### Changed
+- deliveries-card (0.19.0) and transports-card (0.17.0) ready for the delivery/transport switches
+  of SuperNotify PR #207: one row per channel (switch preferred over the binary_sensor mirror),
+  toggle through `switch.turn_on/off`, a "transport off" tag, and a Reset overrides button when
+  `button.supernotify_reset_overrides` exists. Older SuperNotify keeps working as before.
+- `tools/sn_archive_index.py`: a suppressed channel (e.g. a duplicate) now carries its reason.
+
 ## [0.30.1] - 2026-09-22
 
 ### Added

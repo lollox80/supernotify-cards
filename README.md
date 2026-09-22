@@ -332,6 +332,42 @@ so the JSON file is already on disk).
 The script takes `--limit` (default 40), `--path` and `--message-chars`; it never raises, so a
 missing folder or a corrupt file shows up as an attribute instead of breaking the sensor.
 
+With a `supernotify-why-card` on the same view, an expanded row gets a **🔎 Why?** link.
+
+## supernotify-why-card
+
+"Why did this notification go where it went?" Pick a notification (or open it from the archive
+card or the recipients card) to see the scenarios in force, who was home, and for **every
+channel** whether it went out, why not, to which targets and what selected it — plus the channels
+that did not start at all, with the reason. When SuperNotify diagnostics are set to `ALL`, the
+full selection trace archived with the notification is shown too.
+
+```yaml
+type: custom:supernotify-why-card
+entity: sensor.supernotify_archivio            # default - the list comes from the archive index
+service: shell_command.sn_archive_detail       # default - fetches one notification's detail
+```
+
+| Option | Required | Description |
+|---|---|---|
+| `entity` | no | sensor holding the archive index (see supernotify-archive-card) |
+| `service` | no | service returning the detail (default `shell_command.sn_archive_detail`) |
+| `limit` | no | notifications in the list (default 15) |
+| `intro`, `style`, `language` | no | as for the other cards |
+
+The detail is read on demand, so it never weighs on any entity's attributes. It needs the same
+`tools/sn_archive_index.py` as the archive card and a shell command returning its output
+(restart Home Assistant after adding it):
+
+```yaml
+shell_command:
+  sn_archive_detail: "python3 /config/tools/sn_archive_index.py --detail {{ id }}"
+```
+
+The channels that did not start are not in the archive: their reason is reconstructed from the
+configuration as it is now (delivery and transport switches, inclusion, the scenarios in force,
+the call's own overrides) and is labelled as such, unless the archived trace says otherwise.
+
 ## supernotify-stats-card
 
 Usage analytics built **only from entities that already exist** — no extra

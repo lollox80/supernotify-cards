@@ -3,6 +3,13 @@
 sn_archive_index.py - indice compatto dell'archivio SuperNotify per Home Assistant.
 
 CHANGELOG
+  2026-09-22 (Cowork) - Modalita' --detail ID per la card "Perche'?"
+    (supernotify-why-card): stampa il dettaglio di UNA notifica - scenari attivi e
+    applicati, presenza, override della chiamata, esito e motivo di ogni canale con
+    i target finali, e il trace completo quando la diagnostica lo ha archiviato. Si
+    chiama su richiesta da uno shell_command con risposta (packages/supernotify/
+    archivio.yaml), quindi non pesa sugli attributi del sensore. Nell'indice, un canale
+    "suppressed" (es. doppione) ora riporta il suo motivo invece di un "s" muto.
   2026-09-11 (Cowork) - Prima versione. Legge i file JSON scritti da SuperNotify in
     /config/supernotify/archive e stampa su stdout un JSON con le ultime N notifiche,
     ridotte all'essenziale. Serve al sensore command_line "SuperNotify archivio"
@@ -12,6 +19,7 @@ CHANGELOG
     passera' a quello e questo script si potra' togliere.
 
 Uso:  python3 sn_archive_index.py [--limit N] [--path DIR] [--message-chars N]
+      python3 sn_archive_index.py --detail <id o prefisso dell'id> [--path DIR]
 Output: {"count", "generated", "total_files", "oldest", "items": [...]}
 Non solleva mai: in caso di errore stampa un JSON con "error" e count 0, cosi' il
 sensore resta valido e il problema si legge dall'attributo.
@@ -20,6 +28,7 @@ sensore resta valido e il problema si legge dall'attributo.
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -48,6 +57,9 @@ def _title_of(doc, message):
 
 # Motivi di scarto accorciati: il testo esteso resta nel file JSON.
 REASONS = {
+    "DUPE": "doppione",
+    "NO_TARGET": "nessun target",
+    "ERROR": "errore",
     "DELIVERY_CONDITION": "condizione",
     "SCENARIO": "scenario",
     "OCCUPANCY": "presenza",
@@ -92,6 +104,13 @@ def _channels_of(doc, pool):
         else:
             skipped = res.get("skipped") or {}
             raw = skipped.get("suppression_reason") or skipped.get("skip_reason")
+            if not raw:
+                # "suppressed" = lista di envelope scartati (es. doppione): il motivo
+                # sta in ciascuno, come skip_reason
+                for env in res.get("suppressed") or []:
+                    if isinstance(env, dict) and env.get("skip_reason"):
+                        raw = env["skip_reason"]
+                        break
             if raw:
                 key = str(raw).upper()
                 out.append([idx, "s", REASONS.get(key, str(raw)[:18].lower())])
@@ -210,6 +229,213 @@ def _item_of(doc, mtime, message_chars, chan_pool, scen_pool):
     return item
 
 
+# ---------------------------------------------------------------------------
+# --detail: una sola notifica, per la card "Perche'?"
+# ---------------------------------------------------------------------------
+
+ID_RE = re.compile(r"^[0-9a-fA-F-]{6,36}$")
+DETAIL_TEXT = 400        # messaggio e testo pronunciato
+DETAIL_VALUE = 160       # singoli valori di target/eccezioni
+
+
+def _short(value, limit=DETAIL_VALUE):
+    text = " ".join(str(value).split())
+    return text if len(text) <= limit else text[: limit - 1] + "\u2026"
+
+
+def _targets_of(target):
+    """{categoria: [valori]} senza categorie vuote; accetta dict o lista di dict."""
+    out = {}
+    for t in target if isinstance(target, list) else [target]:
+        if not isinstance(t, dict):
+            continue
+        for cat, vals in t.items():
+            vals = vals if isinstance(vals, list) else [vals]
+            for v in vals:
+                if v is None:
+                    continue
+                bucket = out.setdefault(str(cat), [])
+                v = _short(v, 80)
+                if v not in bucket:
+                    bucket.append(v)
+    return out
+
+
+def _delivery_detail(name, res):
+    """Esito di un canale: ok / err / skip / supp, motivo, target finali, chiamate."""
+    d = {"n": name}
+    if not isinstance(res, dict):
+        d["r"] = "?"
+        return d
+    envelopes = []
+    if res.get("error"):
+        d["r"] = "err"
+        envelopes = res.get("error") or []
+    elif res.get("success"):
+        d["r"] = "ok"
+        envelopes = res.get("success") or []
+    elif res.get("suppressed"):
+        d["r"] = "supp"
+        envelopes = res.get("suppressed") or []
+    else:
+        skipped = res.get("skipped") or {}
+        d["r"] = "skip"
+        if skipped.get("suppression_reason"):
+            d["why"] = str(skipped["suppression_reason"])
+        if skipped.get("target_required"):
+            d["tr"] = str(skipped["target_required"])
+        tg = _targets_of(skipped.get("targets") or [])
+        if tg:
+            d["tg"] = tg
+        return d
+    targets, calls, errors = [], 0, []
+    for env in envelopes:
+        if not isinstance(env, dict):
+            continue
+        if env.get("target"):
+            targets.append(env["target"])
+        if env.get("skip_reason") and "why" not in d:
+            d["why"] = str(env["skip_reason"])
+        calls += len(env.get("calls") or [])
+        for call in env.get("failedcalls") or []:
+            if isinstance(call, dict) and call.get("exception"):
+                errors.append(_short(call["exception"]))
+    tg = _targets_of(targets)
+    if tg:
+        d["tg"] = tg
+    if calls:
+        d["calls"] = calls
+    if errors:
+        d["err"] = errors[:3]
+    return d
+
+
+def _trace_of(doc):
+    """Il trace completo, solo se la diagnostica lo ha messo nel file."""
+    trace = doc.get("debug_trace")
+    if not isinstance(trace, dict):
+        return None
+    out = {}
+    sel = trace.get("delivery_selection")
+    if isinstance(sel, dict) and sel:
+        out["sel"] = {k: list(v) if isinstance(v, (list, tuple)) else v for k, v in sel.items()}
+    res = trace.get("resolved")
+    if isinstance(res, dict) and res:
+        chains = {}
+        for name, stages in res.items():
+            if not isinstance(stages, dict):
+                continue
+            chain = []
+            for stage, value in stages.items():
+                if value == "NO_CHANGE":
+                    continue            # solo le tappe che cambiano qualcosa
+                chain.append([stage, _targets_of(value) if isinstance(value, (dict, list)) else _short(value)])
+            if chain:
+                chains[name] = chain
+        if chains:
+            out["res"] = chains
+    exc = trace.get("delivery_exceptions")
+    if isinstance(exc, dict) and exc:
+        out["exc"] = {k: _short(json.dumps(v, ensure_ascii=False), 300) for k, v in exc.items()}
+    return out or None
+
+
+def detail_of(doc, mtime):
+    message = (doc.get("message") or "").strip()
+    created = doc.get("created")
+    stamp = int(mtime)
+    if created:
+        try:
+            stamp = int(datetime.fromisoformat(str(created)).timestamp())
+        except ValueError:
+            pass
+    out = {
+        "id": doc.get("id"),
+        "t": stamp,
+        "ti": _title_of(doc, message),
+        "m": _short(message, DETAIL_TEXT),
+        "p": doc.get("priority") or "medium",
+        "o": doc.get("outcome") or "",
+        "sel": doc.get("delivery_selection") or "",
+        "v": doc.get("version") or "",
+    }
+    if doc.get("spoken_message"):
+        out["sp"] = _short(doc["spoken_message"], DETAIL_TEXT)
+    if doc.get("dupe"):
+        out["dupe"] = True
+    scen = {}
+    for key, field in (("on", "enabled_scenarios"), ("sel", "selected_scenario_names"),
+                       ("ap", "applied_scenario_names"), ("rq", "required_scenario_names"),
+                       ("cs", "constrain_scenario_names")):
+        val = doc.get(field)
+        if isinstance(val, dict):
+            val = list(val.keys())
+        if val:
+            scen[key] = list(val)
+    if scen:
+        out["sc"] = scen
+    occ = doc.get("occupancy") or {}
+    flags = (doc.get("condition_variables") or {}).get("occupancy") or []
+    home = [p.get("person") for p in occ.get("home") or [] if isinstance(p, dict)]
+    away = [p.get("person") for p in occ.get("not_home") or [] if isinstance(p, dict)]
+    if home or away or flags:
+        out["occ"] = {"home": home, "away": away, "flags": list(flags)}
+    overrides = {}
+    for name, ov in (doc.get("delivery_overrides") or {}).items():
+        if not isinstance(ov, dict):
+            continue
+        entry = {"en": ov.get("enabled") is not False}
+        tg = _targets_of(ov.get("target") or {})
+        if tg:
+            entry["tg"] = tg
+        if ov.get("data"):
+            entry["data"] = sorted(str(k) for k in ov["data"])[:8]
+        overrides[name] = entry
+    if overrides:
+        out["ov"] = overrides
+    out["dl"] = [_delivery_detail(n, r) for n, r in (doc.get("deliveries") or {}).items()]
+    if doc.get("delivery_exceptions"):
+        out["dx"] = _short(json.dumps(doc["delivery_exceptions"], ensure_ascii=False), 400)
+    ctx = doc.get("original_context") or {}
+    if isinstance(ctx, dict) and ctx.get("id"):
+        out["ctx"] = {k: ctx.get(k) for k in ("id", "parent_id", "user_id") if ctx.get(k)}
+    trace = _trace_of(doc)
+    if trace:
+        out["trace"] = trace
+    return out
+
+
+def run_detail(path, wanted):
+    """Trova il file dell'id (nome = <data>_<uuid>.json) e ne stampa il dettaglio."""
+    result = {"ok": False}
+    if not ID_RE.match(wanted or ""):
+        result["error"] = "id non valido"
+        return result
+    wanted = wanted.lower()
+    try:
+        with os.scandir(path) as it:
+            matches = [(e.path, e.stat().st_mtime) for e in it
+                       if e.is_file() and e.name.endswith(".json") and "_" in e.name
+                       and e.name.split("_", 1)[1].lower().startswith(wanted)]
+    except OSError as err:
+        result["error"] = f"cartella archivio non leggibile: {err}"
+        return result
+    if not matches:
+        result["error"] = "notifica non piu' in archivio"
+        return result
+    matches.sort(key=lambda x: x[1], reverse=True)
+    file_path, mtime = matches[0]
+    try:
+        with open(file_path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except (OSError, ValueError) as err:
+        result["error"] = f"file illeggibile: {err}"
+        return result
+    result["ok"] = True
+    result["n"] = detail_of(doc, mtime)
+    return result
+
+
 def main():
     # I titoli sono pieni di emoji: senza questo, su una console non UTF-8
     # (Windows cp1252) il print finale muore con UnicodeEncodeError.
@@ -223,7 +449,17 @@ def main():
     ap.add_argument("--message-chars", type=int, default=DEFAULT_MESSAGE_CHARS)
     ap.add_argument("--max-bytes", type=int, default=MAX_BYTES,
                     help="oltre questa dimensione si sacrifica `sp` (test: abbassarlo)")
+    ap.add_argument("--detail", default=None,
+                    help="stampa il dettaglio di una sola notifica (id o suo prefisso)")
     args = ap.parse_args()
+
+    if args.detail is not None:
+        try:
+            out = run_detail(args.path, args.detail.strip())
+        except Exception as err:  # noqa: BLE001 - la card deve sempre ricevere JSON
+            out = {"ok": False, "error": f"errore interno: {err}"}
+        print(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
+        return 0
 
     result = {"count": 0, "generated": datetime.now().astimezone().isoformat(timespec="seconds"),
               "total_files": 0, "oldest": None, "items": []}
