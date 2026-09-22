@@ -8,6 +8,8 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-22 — v0.43.1. why-card 0.3.1: opens the latest notification by itself
+ *   (`auto_select: false` to wait for a pick), so it is never an empty box next to the archive.
  * 2026-09-22 — v0.43.0. Less empty space on the Archive and Timetable views.
  *   - archive-card 0.28.0 / why-card 0.3.0: optional `max_height` (any CSS length, e.g.
  *     `calc(100vh - 330px)`) keeps the list / the detail within the screen, scrolling inside,
@@ -170,7 +172,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.43.0"; // bundle / HACS release
+const VERSION = "0.43.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -193,7 +195,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.15.0",
   stats: "0.22.0",
   archive: "0.28.0",
-  why: "0.3.0",
+  why: "0.3.1",
 };
 
 /**
@@ -4268,6 +4270,11 @@ class SupernotifyWhyCard extends HTMLElement {
         <span class="ti">${esc(r.ti || r.m || "—")}</span></div>`;
     }).join("");
     el.querySelectorAll(".it").forEach((n) => { n.onclick = () => this._select(n.dataset.id); });
+    // open the latest notification by itself, once, so the card is never an empty box
+    if (!this._sel && !this._autoDone && this._config.auto_select !== false) {
+      this._autoDone = true;
+      this._select(items[0].id);
+    }
   }
 
   async _select(id) {
