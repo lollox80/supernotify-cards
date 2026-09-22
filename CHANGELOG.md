@@ -3,6 +3,17 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.42.0] - 2026-09-22
+
+### Changed
+- Layout uses the width the card gets, on a PC as on a phone: the lists of the recipients,
+  transports, deliveries, scenarios, automations and archive cards flow into as many columns as
+  fit the card (one on a phone or in a narrow section, two or three in a wide one).
+- composer and stats cards fold their two-column parts on the card's own width (container
+  queries), so they also fold in a narrow dashboard column on a desktop.
+- stats-card: per-day labels thinned out on long windows; more room for channel names on
+  narrow cards. deliveries-card: Reset overrides sits on the summary line.
+
 ## [0.41.1] - 2026-09-22
 
 ### Fixed

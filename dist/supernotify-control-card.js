@@ -8,6 +8,16 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-22 — v0.42.0. Layout that uses the width it gets, on a PC as on a phone.
+ *   - shared SN_FLOW_CSS: the lists of the recipients, transports, deliveries, scenarios,
+ *     automations and archive cards flow into as many columns as fit the CARD's width
+ *     (auto-fill, 340px min, CSS grid), headings and summaries spanning the full row - one
+ *     column on a phone or in a narrow section, two or three in a wide one;
+ *   - composer and stats cards: the two-column parts collapse on the card's own width
+ *     (container queries) instead of the browser window's, so they also fold in a narrow
+ *     dashboard column on a desktop;
+ *   - stats-card: day labels of the per-day chart thinned out on long windows (30 days no
+ *     longer overlap), channel names get more room on narrow cards.
  * 2026-09-22 — v0.41.1. overview-card 0.20.2: the "active scenarios" chips showed the raw
  *   binary_sensor entity_id (the reactive path returns ids); they show the scenario's name again.
  * 2026-09-22 — v0.41.0. stats-card 0.21.0: 7 / 14 / 30 day switch in the header (`periods:`
@@ -155,7 +165,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.41.1"; // bundle / HACS release
+const VERSION = "0.42.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -169,15 +179,15 @@ const SN_CARD_VERSIONS = {
   control: "0.22.1",
   overview: "0.20.2",
   bands: "0.12.0",
-  deliveries: "0.19.0",
-  transports: "0.17.0",
-  recipients: "0.19.0",
-  scenarios: "0.17.0",
+  deliveries: "0.20.0",
+  transports: "0.18.0",
+  recipients: "0.20.0",
+  scenarios: "0.18.0",
   simulator: "0.9.0",
-  composer: "0.11.0",
-  automations: "0.14.1",
-  stats: "0.21.0",
-  archive: "0.26.0",
+  composer: "0.12.0",
+  automations: "0.15.0",
+  stats: "0.22.0",
+  archive: "0.27.0",
   why: "0.2.0",
 };
 
@@ -480,6 +490,19 @@ function snAgo(date, T) {
  * delivery/transport/recipient rows (same look as automations-card's
  * enable/disable switch).
  */
+/**
+ * Lists that flow into as many columns as fit the card's own width: one on a
+ * phone or in a narrow dashboard section, two or three in a wide one. Headings,
+ * summaries and empty states (the direct children listed below) span the row.
+ */
+const SN_FLOW_CSS = `
+  :host { display: block; container-type: inline-size; }
+  .flow { display: grid; column-gap: 18px; align-items: start;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+  .flow > .sec, .flow > .grp, .flow > .day, .flow > .incsum, .flow > .rst, .flow > .empty,
+  .flow > .badge, .flow > .tag, .flow > .err { grid-column: 1 / -1; }
+`;
+
 const SN_SWITCH_CSS = `
   .sw { position: relative; width: 40px; height: 22px; flex: none; }
   .sw input { opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
@@ -1689,6 +1712,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
         .b-on { background: rgba(46,158,91,.14); color: ${p.ok}; }
         .b-off { background: ${p.soft}; color: ${p.muted}; }
         ${SN_SWITCH_CSS}
+        ${SN_FLOW_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
         .tag.always { border-color: ${p.ok}; color: ${p.ok};
                       background: rgba(46,158,91,.12); }
@@ -1696,13 +1720,15 @@ class SupernotifyDeliveriesCard extends HTMLElement {
                   background: ${p.soft}; border-radius: 9px;
                   padding: 7px 10px; margin-bottom: 10px; }
         .incsum b { color: ${p.ink}; }
+        .incsum { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .incsum .rstb { flex: none; }
         .tag.off { color: #c62828; border-color: rgba(198,40,40,.35); background: rgba(198,40,40,.08); }
         .rst { text-align: right; margin: -4px 0 8px; }
         .rstb { font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; border-radius: 8px;
                 border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; padding: 4px 10px; }
       </style>
       <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows"></div>
+        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         <div class="ver">supernotify-deliveries-card v${SN_CARD_VERSIONS.deliveries}</div>
       </ha-card>`;
     this._update();
@@ -1728,12 +1754,13 @@ class SupernotifyDeliveriesCard extends HTMLElement {
     const nScen = dels.filter((d) => inc(d).includes("scenario")).length;
     const nReq = dels.length - nAlways - nScen;
     const resetBtn = snResetOverridesButton(this._hass);
-    const sum = `<div class="incsum">${dels.length} ${T.inc_sum}: `
+    const sum = `<div class="incsum"><span>${dels.length} ${T.inc_sum}: `
       + `<b>${nAlways}</b> ${T.inc_always}`
       + (nReq ? ` · <b>${nReq}</b> ${T.inc_req}` : "")
       + (nScen ? ` · <b>${nScen}</b> ${T.inc_scen}` : "")
-      + `</div>`
-      + (resetBtn ? `<div class="rst"><button class="rstb">↺ ${esc(T.reset_overrides)}</button></div>` : "");
+      + `</span>`
+      + (resetBtn ? `<button class="rstb">↺ ${esc(T.reset_overrides)}</button>` : "")
+      + `</div>`;
     rows.innerHTML = sum + dels.map((d, i) => {
       const tr = d.a.transport || "";
       const em = SN_TRANSPORT_ICONS[tr] || "📤";
@@ -1881,13 +1908,14 @@ class SupernotifyTransportsCard extends HTMLElement {
         .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750; }
         .b-off { background: ${p.soft}; color: ${p.muted}; }
         ${SN_SWITCH_CSS}
+        ${SN_FLOW_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
         .rst { text-align: right; margin: 0 0 8px; }
         .rstb { font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; border-radius: 8px;
                 border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; padding: 4px 10px; }
       </style>
       <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows"></div>
+        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         <div class="ver">supernotify-transports-card v${SN_CARD_VERSIONS.transports}</div>
       </ha-card>`;
     this._update();
@@ -2037,6 +2065,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
         .b-on { background: rgba(46,158,91,.14); color: ${p.ok}; }
         .b-off { background: ${p.soft}; color: ${p.muted}; }
         ${SN_SWITCH_CSS}
+        ${SN_FLOW_CSS}
         .gear { font-size: 17px; opacity: .5; flex-shrink: 0; cursor: pointer;
                 transition: opacity .15s; padding: 2px; }
         .gear:hover { opacity: 1; }
@@ -2046,7 +2075,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
         .last.none { cursor: default; opacity: .7; }
       </style>
       <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows"></div>
+        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         <div class="ver">supernotify-recipients-card v${SN_CARD_VERSIONS.recipients}</div>
       </ha-card>`;
     this._update();
@@ -2310,10 +2339,11 @@ class SupernotifyScenariosCard extends HTMLElement {
         .row.dis .mid { opacity: .55; }
         .mlbl { font-size: 10.5px; color: ${p.muted}; flex-shrink: 0; }
         ${SN_SWITCH_CSS}
+        ${SN_FLOW_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows"></div>
+        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         <div class="ver">supernotify-scenarios-card v${SN_CARD_VERSIONS.scenarios}</div>
       </ha-card>`;
     this._update();
@@ -2649,10 +2679,10 @@ class SupernotifyComposerCard extends HTMLElement {
     const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; }
+        :host { display: block; container-type: inline-size; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
         .grid2 { display: grid; grid-template-columns: 1fr 220px; gap: 16px; }
-        @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+        @container (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
         label { display: block; font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
                 font-weight: 800; color: ${p.muted}; margin: 10px 0 4px; }
         label:first-child { margin-top: 0; }
@@ -3033,6 +3063,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
         .err { padding: 14px; border: 1.5px dashed ${p.line}; border-radius: 12px;
           color: ${p.muted}; font-size: 13px; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        ${SN_FLOW_CSS}
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}
@@ -3063,7 +3094,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
         <span class="tot">${items.length} ${T.aut_count} · v${SN_CARD_VERSIONS.automations}</span>
       </div>
       <div class="chips" id="chips"></div>
-      <div id="list"></div>`;
+      <div id="list" class="flow"></div>`;
     const q = el.querySelector("#q");
     q.addEventListener("input", () => { this._q = q.value; this._renderList(); });
     this._renderChips();
@@ -3490,7 +3521,7 @@ class SupernotifyStatsCard extends HTMLElement {
     const T = snT(this._config, this._hass);
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; }
+        :host { display: block; container-type: inline-size; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
         .hdr { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
         .hdr h3 { margin: 0; font-size: 15px; font-weight: 800; }
@@ -3507,7 +3538,8 @@ class SupernotifyStatsCard extends HTMLElement {
         .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted}; margin: 16px 0 6px; display:flex; justify-content: space-between; }
         .sec .n { font-weight: 650; text-transform: none; letter-spacing: 0; }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+        @container (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+        @container (max-width: 460px) { .hrow .nm { width: 46%; min-width: 90px; } .hrow .ct { width: 48px; } }
         svg { width: 100%; height: auto; display: block; overflow: visible; }
         .bars text { font-size: 9px; fill: ${p.muted}; }
         .bars .val { font-size: 9.5px; fill: ${p.ink}; font-weight: 700; }
@@ -3596,7 +3628,11 @@ class SupernotifyStatsCard extends HTMLElement {
       kpi("⚠️ " + T.st_errors, this._fmt(d.errors), d.sends ? `${errRate}% ${T.st_of_sends}` : "", d.errors ? p.crit : p.ok);
 
     // daily bars
-    const daily = this._barsSvg(d.perDay.map((x) => ({ l: `${x.d.getDate()}/${x.d.getMonth() + 1}`, v: x.n, hi: x.today })), p, { avg: d.avg });
+    // long windows: label one day in k so the labels never overlap (30 days -> every 2nd)
+    const every = Math.max(1, Math.ceil(d.perDay.length / 16));
+    const daily = this._barsSvg(d.perDay.map((x, i) => ({
+      l: (d.perDay.length - 1 - i) % every === 0 ? `${x.d.getDate()}/${x.d.getMonth() + 1}` : "",
+      v: x.n, hi: x.today })), p, { avg: d.avg });
     // hourly
     const hourly = this._barsSvg(d.perHour.map((v, h) => ({ l: h % 3 === 0 ? String(h) : "", v, hi: h === d.peakHour })), p, { thin: true });
     // weekday
@@ -3893,6 +3929,7 @@ class SupernotifyArchiveCard extends HTMLElement {
         .empty { text-align: center; color: ${p.muted}; font-size: 13px; padding: 22px 0; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 10px; }
         .why { color: ${p.brandD}; font-weight: 650; cursor: pointer; text-decoration: underline; }
+        ${SN_FLOW_CSS}
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}
@@ -3901,7 +3938,7 @@ class SupernotifyArchiveCard extends HTMLElement {
           <div class="chips" id="chips"></div>
         </div>
         <div class="meta" id="meta"></div>
-        <div id="list"></div>
+        <div id="list" class="flow"></div>
         <div class="ver">supernotify-archive-card v${SN_CARD_VERSIONS.archive}</div>
       </ha-card>`;
     const q = this.shadowRoot.getElementById("q");
