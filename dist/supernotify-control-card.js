@@ -8,6 +8,13 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-22 — v0.41.0. stats-card 0.21.0: 7 / 14 / 30 day switch in the header (`periods:`
+ *   to change the choices, `days:` the default; the choice is remembered per browser). The
+ *   daily series comes from long-term statistics, so it covers the whole window; hours,
+ *   channels and priorities come from recorder history, and when that is shorter than the
+ *   window the card now says over how many days they were computed.
+ *   automations-card 0.14.1: no change of its own - the stats strings sit in its part of the
+ *   bundle, so the version check counts them as its code.
  * 2026-09-22 — v0.40.1. why-card 0.2.0: the trace is only recorded when the call itself has
  *   `debug: true` (and archived with diagnostics) - the note said diagnostics alone. When the
  *   trace carries `delivery_provenance` (per-delivery enabled_by / disabled_by sources, proposed
@@ -146,7 +153,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.40.1"; // bundle / HACS release
+const VERSION = "0.41.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -166,8 +173,8 @@ const SN_CARD_VERSIONS = {
   scenarios: "0.17.0",
   simulator: "0.9.0",
   composer: "0.11.0",
-  automations: "0.14.0",
-  stats: "0.20.0",
+  automations: "0.14.1",
+  stats: "0.21.0",
   archive: "0.26.0",
   why: "0.2.0",
 };
@@ -3162,7 +3169,8 @@ window.customCards.push({
 
 const SN_STATS_STRINGS = {
   en: {
-    st_title: "Usage", st_days: "days", st_total: "Notifications", st_avg: "per day",
+    st_title: "Usage", st_days: "days", st_days_short: "d",
+    st_hist_note: "hours, channels and priorities over the last {n} days of history", st_total: "Notifications", st_avg: "per day",
     st_today: "Today", st_vs_avg: "vs. average", st_peak_hour: "Peak hour", st_top_channel: "Top channel",
     st_errors: "Channel errors", st_of_sends: "of channel sends", st_daily: "Per day", st_hourly: "By hour of day",
     st_weekday: "By weekday", st_channels: "Channels — most used", st_priority: "Priority", st_period: "Day period",
@@ -3183,7 +3191,8 @@ const SN_STATS_STRINGS = {
     st_more: "more", st_less: "fewer", st_up: "up", st_down: "down",
   },
   it: {
-    st_title: "Utilizzo", st_days: "giorni", st_total: "Notifiche", st_avg: "al giorno",
+    st_title: "Utilizzo", st_days: "giorni", st_days_short: "gg",
+    st_hist_note: "ore, canali e priorità sugli ultimi {n} giorni di cronologia", st_total: "Notifiche", st_avg: "al giorno",
     st_today: "Oggi", st_vs_avg: "vs. media", st_peak_hour: "Ora di punta", st_top_channel: "Canale principale",
     st_errors: "Errori canale", st_of_sends: "degli invii per canale", st_daily: "Per giorno", st_hourly: "Per ora del giorno",
     st_weekday: "Per giorno della settimana", st_channels: "Canali — più usati", st_priority: "Priorità", st_period: "Periodo del giorno",
@@ -3227,10 +3236,25 @@ class SupernotifyStatsCard extends HTMLElement {
       cards_update_entity: "update.supernotify_cards_update",
       refresh_minutes: 10,
       top_channels: 8,
+      periods: [7, 14, 30],
       ...(config || {}),
     };
+    // the window picked in the header wins over `days`, and is remembered per browser
+    let saved = null;
+    try { saved = +window.localStorage.getItem("supernotify-stats-days"); } catch (e) { /* private mode */ }
+    const periods = (this._config.periods || []).map(Number).filter((n) => n >= 2);
+    this._days = saved && periods.includes(saved) ? saved : Math.max(2, +this._config.days || 14);
     this._rendered = false;
     this._data = null;
+  }
+
+  _setDays(n) {
+    if (n === this._days) return;
+    this._days = n;
+    try { window.localStorage.setItem("supernotify-stats-days", String(n)); } catch (e) { /* ignore */ }
+    this._data = null;
+    if (this._rendered) this._render();
+    this._load(true);
   }
 
   set hass(hass) {
@@ -3273,11 +3297,13 @@ class SupernotifyStatsCard extends HTMLElement {
 
   // ── data ──────────────────────────────────────────────────────────────
 
-  async _load() {
-    if (!this._hass || this._loading) return;
+  async _load(force) {
+    if (!this._hass) return;
+    if (this._loading && !force) return;
+    const seq = (this._seq = (this._seq || 0) + 1);
     this._loading = true;
     const c = this._config;
-    const days = Math.max(2, +c.days || 14);
+    const days = Math.max(2, +this._days || +c.days || 14);
     const now = new Date();
     const start = new Date(now.getTime() - days * 86400000);
     start.setHours(0, 0, 0, 0);
@@ -3302,6 +3328,7 @@ class SupernotifyStatsCard extends HTMLElement {
     } catch (e) {
       this._error = String(e && (e.message || e));
     }
+    if (seq !== this._seq) return;          // a newer window was picked meanwhile
     this._data = this._compute(hist || {}, stats || {}, start, now, days);
     this._loading = false;
     if (this._rendered) this._draw();
@@ -3414,7 +3441,7 @@ class SupernotifyStatsCard extends HTMLElement {
     const weDays = daysWithData.filter((x) => (x.d.getDay() + 6) % 7 >= 5).length;
 
     return {
-      days, spineCount: spine.length, perHour, perWd, perDay, prioCount, periodCount, channels, sends, errors,
+      days, histDays: daysWithData.length, spineCount: spine.length, perHour, perWd, perDay, prioCount, periodCount, channels, sends, errors,
       chanKnown, chanUnknown, total, avg, today, peakHour, night, m7, mp7,
       wdPerDay: wdDays ? wdCount / wdDays : null, wePerDay: weDays ? weCount / weDays : null,
     };
@@ -3454,6 +3481,10 @@ class SupernotifyStatsCard extends HTMLElement {
         .hdr { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
         .hdr h3 { margin: 0; font-size: 15px; font-weight: 800; }
         .hdr .win { font-size: 11.5px; color: ${p.muted}; }
+        .per { display: inline-flex; gap: 4px; margin-left: auto; }
+        .pb { font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; border-radius: 999px;
+              border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.muted}; padding: 3px 10px; }
+        .pb.on { background: ${p.brand}; border-color: ${p.brand}; color: #fff; }
         .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; margin-top: 12px; }
         .kpi { border: 1.5px solid ${p.line}; border-radius: 14px; padding: 10px 12px; background: ${p.panel}; }
         .kpi .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted}; white-space: nowrap; }
@@ -3492,11 +3523,15 @@ class SupernotifyStatsCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}
-        <div class="hdr"><h3>📊 ${T.st_title}</h3><span class="win" id="win">${T.st_loading}</span></div>
+        <div class="hdr"><h3>📊 ${T.st_title}</h3>
+          <span class="per">${(this._config.periods || []).map(Number).filter((n) => n >= 2).map((n) =>
+            `<button class="pb${n === this._days ? " on" : ""}" data-d="${n}">${n} ${T.st_days_short}</button>`).join("")}</span>
+          <span class="win" id="win">${T.st_loading}</span></div>
         <div id="body"><div class="empty">${T.st_loading}</div></div>
         <div class="ver" id="ver"></div>
         <div class="foot">supernotify-stats-card v${SN_CARD_VERSIONS.stats}</div>
       </ha-card>`;
+    this.shadowRoot.querySelectorAll(".pb").forEach((b) => { b.onclick = () => this._setDays(+b.dataset.d); });
     this._updateVersions();
     if (this._data) this._draw();
   }
@@ -3523,7 +3558,12 @@ class SupernotifyStatsCard extends HTMLElement {
     const T = snT(this._config, this._hass);
     const p = this._palette();
     const esc = (s) => this._esc(s);
-    sr.getElementById("win").textContent = `${d.days} ${T.st_days}`;
+    // daily series = long-term statistics (whole window); hours / channels /
+    // priorities = recorder history, which may keep fewer days than the window
+    const completeDays = Math.max(1, d.days);
+    sr.getElementById("win").textContent = d.histDays && d.histDays < completeDays
+      ? this._t("st_hist_note", { n: d.histDays })
+      : "";
     const body = sr.getElementById("body");
     if (!d.total && !d.spineCount) {
       body.innerHTML = `<div class="empty">${T.st_no_data}${this._error ? ` <small>(${esc(this._error)})</small>` : ""}</div>`;

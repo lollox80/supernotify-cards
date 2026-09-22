@@ -3,6 +3,14 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.41.0] - 2026-09-22
+
+### Added
+- stats-card (0.21.0): 7 / 14 / 30 day switch in the header (`periods:` for other choices,
+  `days:` for the default); the choice is remembered per browser. When recorder history is
+  shorter than the window, the card says over how many days hours, channels and priorities were
+  computed (the daily series comes from long-term statistics and covers the whole window).
+
 ## [0.40.1] - 2026-09-22
 
 ### Fixed

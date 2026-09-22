@@ -394,6 +394,7 @@ Data sources:
 type: custom:supernotify-stats-card
 # optional (defaults shown):
 days: 14
+periods: [7, 14, 30]    # window switch in the header; the choice is remembered per browser
 time_entity: input_datetime.supernotify_last_time
 priority_entity: input_text.supernotify_last_priority
 channels_entity: input_text.supernotify_last_channels
