@@ -3,6 +3,18 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.30.1] - 2026-09-22
+
+### Added
+- **Manual scenarios (SuperNotify 2.7.0).** A scenario without conditions now has a read/write
+  "Scenario manuale / Scenario Manual" `binary_sensor`: while it is on (and the scenario is
+  enabled) the scenario applies, and its state is restored across restarts.
+  - scenarios-card (0.17.0): such a scenario shows a "✋ manual" tag and a second switch,
+    "apply now", which writes the binary_sensor state (how SuperNotify expects it to be driven
+    from outside); the "enabled" switch is unchanged. Detection uses the entity registry
+    `translation_key` (`scenario_manual`), with the translated name as fallback.
+- Names also drop the "Scenario manuale / Scenario Manual" prefix.
+
 ## [0.30.0] - 2026-09-21
 
 ### Fixed

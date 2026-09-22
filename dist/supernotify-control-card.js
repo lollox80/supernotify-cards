@@ -8,6 +8,17 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-22 — v0.30.1. SuperNotify 2.7.0 stable (commit 9065d8e) gives a scenario WITHOUT
+ *   conditions a *manual* binary_sensor ("Scenario manuale <name>" / "Scenario Manual <name>",
+ *   translation_key scenario_manual): read/write, restored across restarts, and the scenario
+ *   applies while it is on (and the scenario switch is on). Before, such scenarios had no
+ *   binary_sensor at all.
+ *   - snCleanName() also drops the "Scenario manuale / Scenario Manual" prefix;
+ *   - new snIsManualScenario(): registry translation_key (hass.entities) with the
+ *     friendly_name prefix as fallback;
+ *   - scenarios-card 0.17.0: a manual scenario gets a "✋ manual" tag and a second switch
+ *     ("apply now") that writes the binary_sensor state - the documented way to drive it
+ *     from outside SuperNotify; the enable switch stays as it is.
  * 2026-09-21 — v0.30.0. SuperNotify 2.7.0 (beta5+) gives every scenario and recipient a real
  *   `switch.supernotify_{scenario,recipient}_<name>` (enable/disable), keeps the recipient
  *   binary_sensor only as a deprecated mirror, and keeps the scenario binary_sensor only for
@@ -108,7 +119,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.30.0"; // bundle / HACS release
+const VERSION = "0.30.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -125,7 +136,7 @@ const SN_CARD_VERSIONS = {
   deliveries: "0.18.0",
   transports: "0.16.0",
   recipients: "0.18.0",
-  scenarios: "0.16.0",
+  scenarios: "0.17.0",
   simulator: "0.9.0",
   composer: "0.11.0",
   automations: "0.14.0",
@@ -167,6 +178,7 @@ const SN_STRINGS = {
     h_uptodate: "up to date", h_transport_err: "transports with errors", h_channels_off: "channels off",
     h_all_good: "All good", h_health: "Health",
     active_now: "active now", disabled: "disabled", other: "Other",
+    manual: "manual", apply_now: "apply now", enabled_lbl: "enabled",
     media: "media", no_scenarios: "no scenario entities found",
     sim_pick: "🎬 Scenarios — tap to simulate", sim_fire: "📤 Deliveries that would fire",
     sim_hint: "Real engine data (enquire services). Priority-based delivery filtering happens engine-side and is not simulated here. Disabled wins over enabled, like the runtime merge.",
@@ -223,6 +235,7 @@ const SN_STRINGS = {
     h_uptodate: "aggiornato", h_transport_err: "transport con errori", h_channels_off: "canali spenti",
     h_all_good: "Tutto ok", h_health: "Stato",
     active_now: "attivo ora", disabled: "disattivato", other: "Altro",
+    manual: "manuale", apply_now: "applica ora", enabled_lbl: "abilitato",
     media: "media", no_scenarios: "nessuna entità scenario trovata",
     sim_pick: "🎬 Scenari — tocca per simulare", sim_fire: "📤 Canali che partirebbero",
     sim_hint: "Dati reali del motore (servizi enquire). Il filtro per priorità delle delivery avviene lato motore e non è simulato qui. Lo spegnimento vince sull'accensione, come nel merge reale.",
@@ -319,7 +332,7 @@ function snCleanName(fn, techName) {
   if (!fn) return "";
   const n = String(fn)
     .replace(/^SuperNotify\s+/i, "")
-    .replace(/^(Condizione scenario|Scenario Condition|Scenario|Recipient|Destinatario)\s+/i, "")
+    .replace(/^(Condizione scenario|Scenario Condition|Scenario manuale|Scenario Manual|Scenario|Recipient|Destinatario)\s+/i, "")
     .replace(/\s+(abilitato|abilitata|attivo|enabled)$/i, "")
     .trim();
   return n && n !== techName ? n : "";
@@ -327,14 +340,29 @@ function snCleanName(fn, techName) {
 
 /**
  * Is a scenario active right now? binary_sensor.supernotify_scenario_<name>
- * (only for scenarios with conditions) says whether its conditions hold, but
- * not whether it is enabled - that is switch.supernotify_scenario_<name>
+ * says whether its conditions hold (or, for a scenario without conditions,
+ * whether its manual state is on - SuperNotify >= 2.7.0), but not whether
+ * it is enabled - that is switch.supernotify_scenario_<name>
  * (SuperNotify >= 2.7.0). Active = conditions hold AND not switched off.
  */
 function snScenarioActive(hass, bsId) {
   if (!hass || !hass.states[bsId] || hass.states[bsId].state !== "on") return false;
   const sw = hass.states[bsId.replace(/^binary_sensor\./, "switch.")];
   return !sw || sw.state !== "off";
+}
+
+/**
+ * SuperNotify >= 2.7.0: a scenario without conditions has a *manual*
+ * binary_sensor (translation_key "scenario_manual") whose state is the control
+ * - writing it on/off makes the scenario apply or not. The entity registry
+ * entry (hass.entities) says so; the translated friendly_name is the fallback.
+ */
+function snIsManualScenario(hass, bsId) {
+  const reg = hass && hass.entities && hass.entities[bsId];
+  if (reg && reg.translation_key) return reg.translation_key === "scenario_manual";
+  const st = hass && hass.states[bsId];
+  const fn = st && st.attributes && st.attributes.friendly_name;
+  return !!fn && /^(SuperNotify\s+)?(Scenario manuale|Scenario Manual)\s/i.test(fn);
 }
 
 /**
@@ -2075,20 +2103,23 @@ class SupernotifyScenariosCard extends HTMLElement {
 
   _scenarios() {
     // One entry per scenario. SuperNotify >= 2.7.0: switch.* = enabled (and
-    // the full attributes), binary_sensor.* = conditions hold (only for
-    // scenarios with conditions). Older versions: binary_sensor only.
+    // the full attributes), binary_sensor.* = conditions hold, or - for a
+    // scenario without conditions - the manual on/off state (bsId + manual).
+    // Older versions: binary_sensor only.
     const byName = new Map();
     if (!this._hass) return [];
     for (const id of Object.keys(this._hass.states)) {
       const m = id.match(/^(switch|binary_sensor)\.supernotify_scenario_(.+)$/);
       if (!m) continue;
       const s = this._hass.states[id];
-      const e = byName.get(m[2]) || { name: m[2], id, a: s.attributes || {}, state: "unknown", swId: null, enabled: undefined };
+      const e = byName.get(m[2]) || { name: m[2], id, a: s.attributes || {}, state: "unknown", swId: null, bsId: null, manual: false, enabled: undefined };
       if (m[1] === "switch") {
         e.swId = id; e.id = id; e.a = s.attributes || {};
         e.enabled = s.state === "on";
       } else {
         e.state = s.state;
+        e.bsId = id;
+        e.manual = snIsManualScenario(this._hass, id);
         if (!e.swId) { e.id = id; e.a = s.attributes || {}; }
       }
       byName.set(m[2], e);
@@ -2145,6 +2176,7 @@ class SupernotifyScenariosCard extends HTMLElement {
         .b-act { background: rgba(46,158,91,.16); color: ${p.ok}; }
         .b-dis { background: rgba(226,60,60,.10); color: ${p.crit}; }
         .row.dis .mid { opacity: .55; }
+        .mlbl { font-size: 10.5px; color: ${p.muted}; flex-shrink: 0; }
         ${SN_SWITCH_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
@@ -2170,14 +2202,21 @@ class SupernotifyScenariosCard extends HTMLElement {
     const ags = Array.isArray(s.a.action_groups) ? s.a.action_groups : [];
     if (ags.length) tags.push(`<span class="tag">🔘 ${esc(ags.join(", "))}</span>`);
     if (s.a.media) tags.push(`<span class="tag">📷 ${T.media}</span>`);
+    if (s.manual) tags.unshift(`<span class="tag">✋ ${T.manual}</span>`);
     const alias = snCleanName(s.a.friendly_name, s.name);
     const p = this._palette();
     // SuperNotify >= 2.7.0: live switch; older versions: read-only badge.
     const ctl = s.swId
       ? `<label class="sw" data-id="${esc(s.swId)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
-          <input type="checkbox" ${s.enabled ? "checked" : ""} aria-label="${esc(alias || s.name)}">
+          <input type="checkbox" ${s.enabled ? "checked" : ""} aria-label="${esc(alias || s.name)}" title="${T.enabled_lbl}">
           <span class="sl"></span></label>`
       : (s.enabled === false ? `<span class="badge b-dis">${T.disabled}</span>` : "");
+    // Manual scenario (no conditions): its binary_sensor state IS the control.
+    const man = s.manual && s.bsId
+      ? `<span class="mlbl">${T.apply_now}</span><label class="sw man" data-id="${esc(s.bsId)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.ok}">
+          <input type="checkbox" ${s.state === "on" ? "checked" : ""} aria-label="${esc((alias || s.name) + " - " + T.apply_now)}" title="${T.apply_now}">
+          <span class="sl"></span></label>`
+      : "";
     return `<div class="row ${isAct ? "act" : ""} ${s.enabled === false ? "dis" : ""}" data-i="${i}">
       <span class="em">${em}</span>
       <div class="mid"><b>${esc(alias || s.name)}</b>
@@ -2185,6 +2224,7 @@ class SupernotifyScenariosCard extends HTMLElement {
         <div class="tags">${tags.join("")}</div>
       </div>
       ${isAct ? `<span class="badge b-act">${T.active_now}</span>` : ""}
+      ${man}
       ${ctl}
     </div>`;
   }
@@ -2233,6 +2273,8 @@ class SupernotifyScenariosCard extends HTMLElement {
       label.addEventListener("click", (e) => e.stopPropagation());
       const input = label.querySelector("input");
       input.addEventListener("change", () => {
+        // switch.* -> switch service; the manual binary_sensor -> state write,
+        // which SuperNotify applies back to the scenario.
         snToggle(this._hass, label.dataset.id, input.checked);
       });
     });
