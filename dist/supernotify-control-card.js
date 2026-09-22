@@ -8,6 +8,11 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-22 — v0.40.1. why-card 0.2.0: the trace is only recorded when the call itself has
+ *   `debug: true` (and archived with diagnostics) - the note said diagnostics alone. When the
+ *   trace carries `delivery_provenance` (per-delivery enabled_by / disabled_by sources, proposed
+ *   upstream), "selected by" and the reasons of the channels that did not start come from it
+ *   instead of being reconstructed from today's configuration.
  * 2026-09-22 — v0.40.0. Ready for SuperNotify PR #207 (delivery/transport switches) and a new
  *   "Why?" card.
  *   - shared: snEntityRows() merges switch.* and binary_sensor.* per delivery/transport/
@@ -141,7 +146,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.40.0"; // bundle / HACS release
+const VERSION = "0.40.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -164,7 +169,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.14.0",
   stats: "0.20.0",
   archive: "0.26.0",
-  why: "0.1.0",
+  why: "0.2.0",
 };
 
 /**
@@ -4227,6 +4232,19 @@ class SupernotifyWhyCard extends HTMLElement {
     return (st && st.attributes && st.attributes.friendly_name) || String(pid).replace(/^person\./, "");
   }
 
+  /**
+   * Label for a source in the trace's delivery_provenance: default / call /
+   * scenario:<name> / recipient:<name>.
+   */
+  _provLabel(src, T) {
+    const [kind, name] = String(src).split(/:(.*)/s);
+    if (kind === "default") return T.src_default;
+    if (kind === "call") return T.src_call;
+    if (kind === "scenario") return `${T.src_scen} ${this._scenarioLabel(name)}`;
+    if (kind === "recipient") return `${T.src_recipient} ${name}`;
+    return String(src);
+  }
+
   /** Which scenarios in force switch a delivery on, and which switch it off. */
   _scenarioSources(dname, scen) {
     const on = [], off = [];
@@ -4245,6 +4263,10 @@ class SupernotifyWhyCard extends HTMLElement {
 
   /** Best reconstruction of why a delivery never started, from the current configuration. */
   _whyNotStarted(dname, row, n, scen, T) {
+    const prov = n.trace && n.trace.prov && n.trace.prov[dname];
+    if (prov && (prov.disabled_by || []).length) {
+      return `${T.r_off_by}: ${prov.disabled_by.map((s) => this._provLabel(s, T)).join(", ")}`;
+    }
     const ov = (n.ov || {})[dname];
     if (ov && ov.en === false) return T.r_call_off;
     const tsel = n.trace && n.trace.sel;
@@ -4332,10 +4354,16 @@ class SupernotifyWhyCard extends HTMLElement {
       const alias = snDeliveryAlias(this._hass, ch.n);
       const src = this._scenarioSources(ch.n, scen);
       const ov = (n.ov || {})[ch.n];
-      const by = [];
-      if (this._inclusion(row).includes("default")) by.push(T.src_default);
-      if (src.on.length) by.push(`${T.src_scen} ${src.on.map((s) => this._scenarioLabel(s)).join(", ")}`);
-      if (ov && ov.en) by.push(T.src_call);
+      const prov = n.trace && n.trace.prov && n.trace.prov[ch.n];
+      let by = [];
+      if (prov) {
+        by = (prov.enabled_by || []).map((s) => this._provLabel(s, T));
+        src.off = (prov.disabled_by || []).map((s) => String(s).replace(/^scenario:/, ""));
+      } else {
+        if (this._inclusion(row).includes("default")) by.push(T.src_default);
+        if (src.on.length) by.push(`${T.src_scen} ${src.on.map((s) => this._scenarioLabel(s)).join(", ")}`);
+        if (ov && ov.en) by.push(T.src_call);
+      }
       let why = "";
       if (ch.r === "ok") why = T.st_ok + (ch.calls ? ` (${ch.calls} ${T.calls})` : "");
       else if (ch.r === "err") why = `${T.st_err}${ch.err ? ": " + esc(ch.err.join(" / ")) : ""}`;
@@ -4407,6 +4435,7 @@ const SN_WHY_STRINGS = {
     st_ok: "delivered", st_err: "failed", st_skip: "skipped", st_supp: "suppressed", calls: "calls",
     target_required: "target required:", started_by: "selected by", scen_would_off: "switched off by (overruled)",
     src_default: "always on (default)", src_scen: "scenario", src_call: "the call itself",
+    src_recipient: "recipient", r_off_by: "switched off by",
     call_targets: "targets in the call",
     cats: { entity_id: "entities", mobile_app_id: "devices", person_id: "people", email: "email", phone: "phone", device_id: "devices" },
     not_started: "Channels that did not start",
@@ -4417,7 +4446,7 @@ const SN_WHY_STRINGS = {
     r_unknown: "not reconstructable without the trace",
     from_config: "Reasons for channels that did not start are reconstructed from the configuration as it is NOW, not as it was then.",
     from_trace: "Reasons come from the selection trace archived with the notification.",
-    trace: "Selection trace", no_trace: "The full selection trace is only archived when SuperNotify diagnostics are set to ALL.",
+    trace: "Selection trace", no_trace: "The full selection trace is only recorded when the notify call has debug: true, and archived when the archive diagnostics include it.",
     reasons: { NO_TARGET: "no usable target", DUPE: "duplicate of a recent notification", PRIORITY: "not for this priority",
       SNOOZE: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule", ERROR: "error",
       DELIVERY_DISABLED: "switched off", SCENARIO: "scenario" },
@@ -4435,6 +4464,7 @@ const SN_WHY_STRINGS = {
     st_ok: "consegnata", st_err: "fallita", st_skip: "saltata", st_supp: "scartata", calls: "chiamate",
     target_required: "target richiesto:", started_by: "scelto da", scen_would_off: "spento da (ma ha perso)",
     src_default: "sempre attivo (default)", src_scen: "scenario", src_call: "la chiamata stessa",
+    src_recipient: "destinatario", r_off_by: "spento da",
     call_targets: "target nella chiamata",
     cats: { entity_id: "entità", mobile_app_id: "dispositivi", person_id: "persone", email: "email", phone: "telefono", device_id: "dispositivi" },
     not_started: "Canali che non sono partiti",
@@ -4445,7 +4475,7 @@ const SN_WHY_STRINGS = {
     r_unknown: "non ricostruibile senza il trace",
     from_config: "I motivi dei canali non partiti sono ricostruiti dalla configurazione di ADESSO, non da quella di allora.",
     from_trace: "I motivi vengono dal trace di selezione archiviato con la notifica.",
-    trace: "Trace di selezione", no_trace: "Il trace completo della selezione viene archiviato solo con la diagnostica di SuperNotify impostata su ALL.",
+    trace: "Trace di selezione", no_trace: "Il trace completo viene registrato solo se la chiamata ha debug: true, e archiviato se la diagnostica dell'archivio lo include.",
     reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione di una notifica recente", PRIORITY: "non per questa priorità",
       SNOOZE: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza", ERROR: "errore",
       DELIVERY_DISABLED: "spento", SCENARIO: "scenario" },

@@ -3,6 +3,17 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.40.1] - 2026-09-22
+
+### Fixed
+- why-card (0.2.0): the selection trace is only recorded when the notify call has `debug: true`;
+  the note said diagnostics alone were enough.
+
+### Added
+- why-card: when the trace carries `delivery_provenance` (which source switched each delivery
+  on or off, proposed upstream), "selected by" and the reasons of the channels that did not start
+  come from it. `tools/sn_archive_index.py --detail` passes it through.
+
 ## [0.40.0] - 2026-09-22
 
 ### Added

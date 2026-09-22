@@ -21,7 +21,7 @@ const IDX = {
     { id: "46b4982c", t: T0 - 300, ti: "Movimento", o: "dupe", s: 2, c: [[0, "s", "nessun target"], [1, "s", "doppione"]] },
   ],
 };
-const DET = JSON.stringify({ ok: true, n: {
+let DET = JSON.stringify({ ok: true, n: {
   id: "1bf885a2-b66f-11f1-90a2-46ffb2cb0bcb", t: T0, ti: "Batteria scarica", m: "Sensore corridoio 1%",
   p: "medium", o: "partial_delivery", sel: "implicit", v: "2.7.0",
   sc: { on: ["multi_home", "afternoon"], sel: ["multi_home", "afternoon"] },
@@ -132,6 +132,20 @@ const firstRow = ac.shadowRoot.querySelector(".row");
 firstRow.click();
 const why = ac.shadowRoot.querySelector(".why");
 assert.ok(why, "link Perché? con la why-card presente");
+
+// ---- trace con delivery_provenance: vince sulla ricostruzione ----
+const withProv = JSON.parse(DET);
+withProv.n.trace = { prov: {
+  mobile_push: { enabled_by: ["scenario:multi_home", "default"] },
+  tts: { enabled_by: ["default"], disabled_by: ["scenario:afternoon"] },
+} };
+DET = JSON.stringify(withProv);
+wc._cache.clear();
+await wc._select(IDX.items[0].id);
+const det2 = wc.shadowRoot.getElementById("det").textContent;
+assert.ok(/mobile_push[\s\S]*scelto da: scenario Persone a casa · sempre attivo/.test(det2), "fonti dal trace");
+assert.ok(/tts[\s\S]*spento da: scenario Afternoon/.test(det2), "spento da scenario (trace)");
+assert.ok(det2.includes("trace di selezione archiviato"), "nota: dal trace");
 
 // ---- servizio mancante ----
 delete hass.services.shell_command;

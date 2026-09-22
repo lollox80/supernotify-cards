@@ -3,6 +3,8 @@
 sn_archive_index.py - indice compatto dell'archivio SuperNotify per Home Assistant.
 
 CHANGELOG
+  2026-09-22 (Cowork, 2) - --detail riporta anche delivery_provenance del trace (chi ha
+    acceso o spento ogni canale), quando SuperNotify lo registra.
   2026-09-22 (Cowork) - Modalita' --detail ID per la card "Perche'?"
     (supernotify-why-card): stampa il dettaglio di UNA notifica - scenari attivi e
     applicati, presenza, override della chiamata, esito e motivo di ogni canale con
@@ -334,6 +336,10 @@ def _trace_of(doc):
                 chains[name] = chain
         if chains:
             out["res"] = chains
+    prov = trace.get("delivery_provenance")
+    if isinstance(prov, dict) and prov:
+        # chi ha acceso/spento ogni canale (SuperNotify con la PR "delivery provenance")
+        out["prov"] = {k: v for k, v in prov.items() if isinstance(v, dict)}
     exc = trace.get("delivery_exceptions")
     if isinstance(exc, dict) and exc:
         out["exc"] = {k: _short(json.dumps(v, ensure_ascii=False), 300) for k, v in exc.items()}
