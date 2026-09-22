@@ -8,6 +8,9 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-22 — v0.43.3. stats-card 0.22.1: channel icon and alias read the delivery switch,
+ *   falling back to the binary_sensor. They only read the binary_sensor, so on SuperNotify 2.8
+ *   with the deprecated mirrors deleted the Statistics card lost the channel names and icons.
  * 2026-09-22 — v0.43.2. Reset overrides button found by its registry translation_key: with
  *   SuperNotify 2.8.0 in an Italian HA it is button.supernotify_ripristina_override, not
  *   button.supernotify_reset_overrides, so the deliveries and transports cards did not show it.
@@ -175,7 +178,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.43.2"; // bundle / HACS release
+const VERSION = "0.43.3"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -196,7 +199,7 @@ const SN_CARD_VERSIONS = {
   simulator: "0.9.0",
   composer: "0.12.0",
   automations: "0.15.0",
-  stats: "0.22.0",
+  stats: "0.22.1",
   archive: "0.28.0",
   why: "0.3.1",
 };
@@ -428,6 +431,19 @@ function snIsManualScenario(hass, bsId) {
 
 /**
  * Delivery `alias:` (surfaced as friendly_name on the delivery binary_sensor).
+ * The engine's auto-generated "<name> Delivery Configuration" is not an alias.
+ * Returns null when no alias is configured.
+ */
+function snDeliveryEntity(hass, deliveryName) {
+  for (const dom of ["switch", "binary_sensor"]) {
+    const st = hass && hass.states[`${dom}.supernotify_delivery_${deliveryName}`];
+    if (st) return st;
+  }
+  return null;
+}
+
+/**
+ * Delivery `alias:` (surfaced as friendly_name on the delivery entity).
  * The engine's auto-generated "<name> Delivery Configuration" is not an alias.
  * Returns null when no alias is configured.
  */
@@ -3704,18 +3720,15 @@ class SupernotifyStatsCard extends HTMLElement {
   // Channel names are DELIVERY names; look the transport up on the delivery
   // entity so the icon matches the deliveries card.
   _iconFor(deliveryName) {
-    const st = this._hass && this._hass.states[`binary_sensor.supernotify_delivery_${deliveryName}`];
+    const st = snDeliveryEntity(this._hass, deliveryName);
     const tr = (st && st.attributes && st.attributes.transport) || deliveryName;
     return SN_TRANSPORT_ICONS[tr] || "📤";
   }
 
-  // Delivery `alias:` (surfaced as friendly_name on the delivery entity). The
-  // engine's auto-generated "<name> Delivery Configuration" is not an alias.
+  // Delivery `alias:` (surfaced as friendly_name on the delivery entity).
   _aliasFor(deliveryName) {
-    const st = this._hass && this._hass.states[`binary_sensor.supernotify_delivery_${deliveryName}`];
-    const fn = st && st.attributes && st.attributes.friendly_name;
-    if (!fn || fn === deliveryName || fn === st.entity_id || /Delivery Configuration$/i.test(fn)) return null;
-    return fn;
+    const alias = snDeliveryAlias(this._hass, deliveryName);
+    return alias && alias !== deliveryName ? alias : null;
   }
 
   _barsSvg(items, p, opt) {

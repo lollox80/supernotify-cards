@@ -3,6 +3,14 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.43.3] - 2026-09-22
+
+### Fixed
+- stats-card (0.22.1): the channel icon and the delivery alias are read from the delivery switch,
+  falling back to the deprecated `binary_sensor`. They only read the `binary_sensor`, so on
+  SuperNotify 2.8 with the deprecated mirrors removed the Statistics card showed the technical
+  channel names and a default icon.
+
 ## [0.43.2] - 2026-09-22
 
 ### Fixed

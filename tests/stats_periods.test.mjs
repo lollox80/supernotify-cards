@@ -49,5 +49,26 @@ document.body.appendChild(c2);
 c2.hass = hass;
 await flush();
 assert.ok([...c2.shadowRoot.querySelectorAll(".pb")][2].classList.contains("on"));
+// 0.22.1: icona e alias dei canali letti dallo switch (i binary_sensor mirror sono deprecati
+// e su 2.8 possono essere stati cancellati)
+const hass3 = {
+  ...hass,
+  states: {
+    "switch.supernotify_delivery_mobile_push": {
+      state: "on",
+      entity_id: "switch.supernotify_delivery_mobile_push",
+      attributes: { name: "mobile_push", transport: "mobile_push", friendly_name: "SuperNotify Delivery Notifica sul telefono abilitata" },
+    },
+  },
+};
+const c3 = document.createElement("supernotify-stats-card");
+c3.setConfig({});
+document.body.appendChild(c3);
+c3.hass = hass3;
+await flush();
+assert.strictEqual(c3._aliasFor("mobile_push"), "Notifica sul telefono", "alias dallo switch");
+assert.strictEqual(c3._aliasFor("telegram"), null, "nessun alias senza entita");
+assert.notStrictEqual(c3._iconFor("mobile_push"), c3._iconFor("delivery_inesistente"), "icona dal transport dello switch");
+
 console.log("stats_periods: OK");
 process.exit(0);

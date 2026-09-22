@@ -3,6 +3,9 @@
 sn_archive_index.py - indice compatto dell'archivio SuperNotify per Home Assistant.
 
 CHANGELOG
+  2026-09-22 (Cowork, 3) - delivery_provenance letto anche in cima al file, dove
+    SuperNotify 2.8 (PR #210) lo mette per OGNI notifica, non solo con debug: true;
+    resta la lettura dal trace per i file archiviati prima.
   2026-09-22 (Cowork, 2) - --detail riporta anche delivery_provenance del trace (chi ha
     acceso o spento ogni canale), quando SuperNotify lo registra.
   2026-09-22 (Cowork) - Modalita' --detail ID per la card "Perche'?"
@@ -312,6 +315,15 @@ def _delivery_detail(name, res):
     return d
 
 
+def _prov_of(doc):
+    """Chi ha acceso o spento ogni canale. Da SuperNotify 2.8 (PR #210) e' in cima al file
+    e c'e' per OGNI notifica; prima stava dentro al trace e solo con debug: true."""
+    for prov in (doc.get("delivery_provenance"), (doc.get("debug_trace") or {}).get("delivery_provenance")):
+        if isinstance(prov, dict) and prov:
+            return {k: v for k, v in prov.items() if isinstance(v, dict)}
+    return None
+
+
 def _trace_of(doc):
     """Il trace completo, solo se la diagnostica lo ha messo nel file."""
     trace = doc.get("debug_trace")
@@ -336,10 +348,6 @@ def _trace_of(doc):
                 chains[name] = chain
         if chains:
             out["res"] = chains
-    prov = trace.get("delivery_provenance")
-    if isinstance(prov, dict) and prov:
-        # chi ha acceso/spento ogni canale (SuperNotify con la PR "delivery provenance")
-        out["prov"] = {k: v for k, v in prov.items() if isinstance(v, dict)}
     exc = trace.get("delivery_exceptions")
     if isinstance(exc, dict) and exc:
         out["exc"] = {k: _short(json.dumps(v, ensure_ascii=False), 300) for k, v in exc.items()}
@@ -408,6 +416,10 @@ def detail_of(doc, mtime):
     trace = _trace_of(doc)
     if trace:
         out["trace"] = trace
+    prov = _prov_of(doc)
+    if prov:
+        # la card lo legge sempre in trace.prov, che ci sia o no il resto del trace
+        out.setdefault("trace", {})["prov"] = prov
     return out
 
 
