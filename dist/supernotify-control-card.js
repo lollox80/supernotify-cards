@@ -8,6 +8,9 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-22 — v0.43.2. Reset overrides button found by its registry translation_key: with
+ *   SuperNotify 2.8.0 in an Italian HA it is button.supernotify_ripristina_override, not
+ *   button.supernotify_reset_overrides, so the deliveries and transports cards did not show it.
  * 2026-09-22 — v0.43.1. why-card 0.3.1: opens the latest notification by itself
  *   (`auto_select: false` to wait for a pick), so it is never an empty box next to the archive.
  * 2026-09-22 — v0.43.0. Less empty space on the Archive and Timetable views.
@@ -172,7 +175,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.43.1"; // bundle / HACS release
+const VERSION = "0.43.2"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -466,10 +469,23 @@ function snEntityRows(hass, kind) {
   return [...byName.values()];
 }
 
-/** button.supernotify_reset_overrides (SuperNotify >= PR #207), or null. */
+/**
+ * The SuperNotify "Reset overrides" button (SuperNotify >= 2.8.0), or null.
+ * Its entity_id follows the language HA was set up in (translation_key
+ * "reset_overrides": button.supernotify_ripristina_override in Italian), so it
+ * is found in the entity registry by platform + translation_key, with the
+ * English id as the fallback when the registry is not available.
+ */
 function snResetOverridesButton(hass) {
+  if (!hass) return null;
+  const reg = hass.entities || {};
+  for (const id of Object.keys(reg)) {
+    const e = reg[id];
+    if (id.startsWith("button.") && e && e.platform === "supernotify"
+        && e.translation_key === "reset_overrides" && hass.states[id]) return id;
+  }
   const id = "button.supernotify_reset_overrides";
-  return hass && hass.states[id] ? id : null;
+  return hass.states[id] ? id : null;
 }
 
 /**

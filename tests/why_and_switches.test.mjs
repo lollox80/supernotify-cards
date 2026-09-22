@@ -39,6 +39,7 @@ const now = new Date();
 const hass = {
   language: "it", themes: { darkMode: false },
   services: { shell_command: { sn_archive_detail: {} }, switch: {}, button: {} },
+  entities: { "button.supernotify_ripristina_override": { platform: "supernotify", translation_key: "reset_overrides" } },
   states: {
     // PR #207: switch + binary_sensor mirror for the same delivery -> one row
     "switch.supernotify_delivery_mobile_push": { state: "on", attributes: { ...del("mobile_push"), transport_enabled: true, friendly_name: "SuperNotify Delivery Notifica sul telefono abilitata" } },
@@ -49,7 +50,7 @@ const hass = {
     "binary_sensor.supernotify_delivery_sirena": { state: "on", attributes: { ...del("sirena", { transport: "generic", inclusion: ["explicit"] }) } },
     "switch.supernotify_transport_mobile_push": { state: "on", attributes: { name: "mobile_push", friendly_name: "SuperNotify Transport mobile_push abilitato" } },
     "binary_sensor.supernotify_transport_mobile_push": { state: "on", attributes: { name: "mobile_push" } },
-    "button.supernotify_reset_overrides": { state: "unknown", attributes: {} },
+    "button.supernotify_ripristina_override": { state: "unknown", attributes: {} }, // 2.8.0 in an Italian HA
     "switch.supernotify_recipient_lorenzo": { state: "on", attributes: { entity_id: "person.lorenzo", friendly_name: "SuperNotify Recipient Lorenzo (admin) abilitato" } },
     "switch.supernotify_recipient_jessica": { state: "off", attributes: { entity_id: "person.jessica", friendly_name: "SuperNotify Recipient Jessica abilitato" } },
     "notify.recipient_lorenzo": { state: new Date(IDX.items[0].t * 1000 + 3000).toISOString(), attributes: {} },
@@ -87,7 +88,7 @@ dc.shadowRoot.querySelector(".rstb").click();
 assert.deepStrictEqual(calls.splice(0), [
   ["svc", "switch", "turn_off", "switch.supernotify_delivery_mobile_push"],
   ["api", "POST", "states/binary_sensor.supernotify_delivery_tts", "on"],
-  ["svc", "button", "press", "button.supernotify_reset_overrides"],
+  ["svc", "button", "press", "button.supernotify_ripristina_override"],
 ]);
 
 // ---- transports ----

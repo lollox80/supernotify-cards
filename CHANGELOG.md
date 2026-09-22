@@ -3,6 +3,14 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.43.2] - 2026-09-22
+
+### Fixed
+- deliveries and transports cards: the **Reset overrides** button is found through the entity
+  registry (platform `supernotify`, translation_key `reset_overrides`). With SuperNotify 2.8.0
+  its entity_id follows the language Home Assistant was set up in, e.g.
+  `button.supernotify_ripristina_override` in Italian, so the cards did not show it.
+
 ## [0.43.1] - 2026-09-22
 
 ### Changed
