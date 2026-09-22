@@ -8,6 +8,11 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-22 — v0.43.0. Less empty space on the Archive and Timetable views.
+ *   - archive-card 0.28.0 / why-card 0.3.0: optional `max_height` (any CSS length, e.g.
+ *     `calc(100vh - 330px)`) keeps the list / the detail within the screen, scrolling inside,
+ *     so the two cards side by side end at about the same height instead of one running on;
+ *   - bands-card 0.13.0: the bands flow into two columns when the card is wide.
  * 2026-09-22 — v0.42.0. Layout that uses the width it gets, on a PC as on a phone.
  *   - shared SN_FLOW_CSS: the lists of the recipients, transports, deliveries, scenarios,
  *     automations and archive cards flow into as many columns as fit the CARD's width
@@ -165,7 +170,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.42.0"; // bundle / HACS release
+const VERSION = "0.43.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -178,7 +183,7 @@ const VERSION = "0.42.0"; // bundle / HACS release
 const SN_CARD_VERSIONS = {
   control: "0.22.1",
   overview: "0.20.2",
-  bands: "0.12.0",
+  bands: "0.13.0",
   deliveries: "0.20.0",
   transports: "0.18.0",
   recipients: "0.20.0",
@@ -187,8 +192,8 @@ const SN_CARD_VERSIONS = {
   composer: "0.12.0",
   automations: "0.15.0",
   stats: "0.22.0",
-  archive: "0.27.0",
-  why: "0.2.0",
+  archive: "0.28.0",
+  why: "0.3.0",
 };
 
 /**
@@ -1498,9 +1503,11 @@ class SupernotifyBandsCard extends HTMLElement {
         .volwrap { min-width: 150px; }
         input[type=range] { width: 100%; accent-color: ${p.brand}; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        ${SN_FLOW_CSS}
+        .flow { column-gap: 22px; }
       </style>
       <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows"></div>
+        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         <div class="hint">🔇 ${snT(this._config, this._hass).mute_hint}</div>
         <div class="ver">supernotify-bands-card v${SN_CARD_VERSIONS.bands}</div>
       </ha-card>`;
@@ -3938,7 +3945,7 @@ class SupernotifyArchiveCard extends HTMLElement {
           <div class="chips" id="chips"></div>
         </div>
         <div class="meta" id="meta"></div>
-        <div id="list" class="flow"></div>
+        <div id="list" class="flow"${this._config.max_height ? ` style="max-height:${String(this._config.max_height).replace(/[<>"]/g, "")};overflow-y:auto;padding-right:4px"` : ""}></div>
         <div class="ver">supernotify-archive-card v${SN_CARD_VERSIONS.archive}</div>
       </ha-card>`;
     const q = this.shadowRoot.getElementById("q");
@@ -4224,7 +4231,7 @@ class SupernotifyWhyCard extends HTMLElement {
         ${snIntro(this._config, this._dark)}
         <h3>🔎 ${T.title}</h3>
         <div class="list" id="list"></div>
-        <div class="det" id="det"><div class="empty">${T.pick}</div></div>
+        <div class="det" id="det"${this._config.max_height ? ` style="max-height:${String(this._config.max_height).replace(/[<>"]/g, "")};overflow-y:auto;padding-right:4px"` : ""}><div class="empty">${T.pick}</div></div>
         <div class="ver">supernotify-why-card v${SN_CARD_VERSIONS.why}</div>
       </ha-card>`;
     this._renderList();

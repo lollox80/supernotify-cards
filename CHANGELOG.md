@@ -3,6 +3,16 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.43.0] - 2026-09-22
+
+### Added
+- archive-card (0.28.0) and why-card (0.3.0): optional `max_height` (any CSS length, e.g.
+  `calc(100vh - 330px)`) keeps the list / the detail within the screen and scrolls inside, so two
+  cards side by side end at about the same height.
+
+### Changed
+- bands-card (0.13.0): the bands flow into two columns when the card is wide.
+
 ## [0.42.0] - 2026-09-22
 
 ### Changed
