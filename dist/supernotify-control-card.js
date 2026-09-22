@@ -8,6 +8,8 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-22 — v0.41.1. overview-card 0.20.2: the "active scenarios" chips showed the raw
+ *   binary_sensor entity_id (the reactive path returns ids); they show the scenario's name again.
  * 2026-09-22 — v0.41.0. stats-card 0.21.0: 7 / 14 / 30 day switch in the header (`periods:`
  *   to change the choices, `days:` the default; the choice is remembered per browser). The
  *   daily series comes from long-term statistics, so it covers the whole window; hours,
@@ -153,7 +155,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.41.0"; // bundle / HACS release
+const VERSION = "0.41.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -165,7 +167,7 @@ const VERSION = "0.41.0"; // bundle / HACS release
  */
 const SN_CARD_VERSIONS = {
   control: "0.22.1",
-  overview: "0.20.1",
+  overview: "0.20.2",
   bands: "0.12.0",
   deliveries: "0.19.0",
   transports: "0.17.0",
@@ -1310,8 +1312,20 @@ class SupernotifyOverviewCard extends HTMLElement {
     }
 
     this.shadowRoot.getElementById("scen").innerHTML = act && act.length
-      ? act.map((s) => `<span class="chip">🎬 ${esc(s)}</span>`).join("")
+      ? act.map((s) => `<span class="chip">🎬 ${esc(this._scenLabel(s))}</span>`).join("")
       : `<span class="badge b-off">${T.none}</span>`;
+  }
+
+  /** Scenario name for a chip: entity ids (reactive path) become the translated alias. */
+  _scenLabel(s) {
+    const m = String(s).match(/^binary_sensor\.supernotify_scenario_(.+)$/);
+    if (!m) return s;
+    for (const dom of ["switch", "binary_sensor"]) {
+      const st = this._hass.states[`${dom}.supernotify_scenario_${m[1]}`];
+      const clean = st && snCleanName(st.attributes.friendly_name, m[1]);
+      if (clean) return clean;
+    }
+    return m[1];
   }
 }
 

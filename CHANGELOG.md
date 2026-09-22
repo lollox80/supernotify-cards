@@ -3,6 +3,12 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.41.1] - 2026-09-22
+
+### Fixed
+- overview-card (0.20.2): the active-scenario chips showed the raw `binary_sensor` entity_id;
+  they show the scenario name again.
+
 ## [0.41.0] - 2026-09-22
 
 ### Added
