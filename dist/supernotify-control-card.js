@@ -8,6 +8,11 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-23 — v0.43.4. why-card 0.3.2: reads `delivery_provenance` where SuperNotify 2.8
+ *   (PR #210) archives it, for every notification and not only with `debug: true`.
+ *   - the "selection trace" section is only drawn when there really is a trace, instead of an
+ *     empty box next to the channels;
+ *   - `call` and `recipient:<name>` are no longer listed as scenarios that switch a channel off.
  * 2026-09-22 — v0.43.3. stats-card 0.22.1: channel icon and alias read the delivery switch,
  *   falling back to the binary_sensor. They only read the binary_sensor, so on SuperNotify 2.8
  *   with the deprecated mirrors deleted the Statistics card lost the channel names and icons.
@@ -178,7 +183,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.43.3"; // bundle / HACS release
+const VERSION = "0.43.4"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -201,7 +206,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.15.0",
   stats: "0.22.1",
   archive: "0.28.0",
-  why: "0.3.1",
+  why: "0.3.2",
 };
 
 /**
@@ -502,6 +507,16 @@ function snResetOverridesButton(hass) {
   }
   const id = "button.supernotify_reset_overrides";
   return hass.states[id] ? id : null;
+}
+
+/**
+ * Who switched each channel on or off, for one archived notification. SuperNotify 2.8
+ * (PR #210) archives it for every notification, and the index script returns it as `prov`;
+ * before that it was inside the debug trace, and only with `debug: true`.
+ */
+function snProvOf(n) {
+  const prov = (n && n.prov) || (n && n.trace && n.trace.prov);
+  return prov && Object.keys(prov).length ? prov : null;
 }
 
 /**
@@ -4397,7 +4412,7 @@ class SupernotifyWhyCard extends HTMLElement {
 
   /** Best reconstruction of why a delivery never started, from the current configuration. */
   _whyNotStarted(dname, row, n, scen, T) {
-    const prov = n.trace && n.trace.prov && n.trace.prov[dname];
+    const prov = (snProvOf(n) || {})[dname];
     if (prov && (prov.disabled_by || []).length) {
       return `${T.r_off_by}: ${prov.disabled_by.map((s) => this._provLabel(s, T)).join(", ")}`;
     }
@@ -4488,11 +4503,15 @@ class SupernotifyWhyCard extends HTMLElement {
       const alias = snDeliveryAlias(this._hass, ch.n);
       const src = this._scenarioSources(ch.n, scen);
       const ov = (n.ov || {})[ch.n];
-      const prov = n.trace && n.trace.prov && n.trace.prov[ch.n];
-      let by = [];
+      const prov = (snProvOf(n) || {})[ch.n];
+      let by = [], offBy = [];
       if (prov) {
         by = (prov.enabled_by || []).map((s) => this._provLabel(s, T));
-        src.off = (prov.disabled_by || []).map((s) => String(s).replace(/^scenario:/, ""));
+        // only scenario:<name> belongs under "scenarios that would switch it off": call and
+        // recipient:<name> are their own sources, shown as they are
+        const dis = (prov.disabled_by || []).map(String);
+        src.off = dis.filter((d) => /^scenario:/.test(d)).map((d) => d.replace(/^scenario:/, ""));
+        offBy = dis.filter((d) => !/^scenario:/.test(d)).map((d) => this._provLabel(d, T));
       } else {
         if (this._inclusion(row).includes("default")) by.push(T.src_default);
         if (src.on.length) by.push(`${T.src_scen} ${src.on.map((s) => this._scenarioLabel(s)).join(", ")}`);
@@ -4507,6 +4526,7 @@ class SupernotifyWhyCard extends HTMLElement {
         <div class="why">${why}</div>
         ${by.length ? `<div class="src">${T.started_by}: ${esc(by.join(" · "))}</div>` : ""}
         ${src.off.length ? `<div class="src">${T.scen_would_off}: ${esc(src.off.map((s) => this._scenarioLabel(s)).join(", "))}</div>` : ""}
+        ${offBy.length ? `<div class="src">${T.r_off_by}: ${esc(offBy.join(", "))}</div>` : ""}
         ${ch.tg ? `<div class="tg">🎯 ${tgText(ch.tg)}</div>` : ""}
         ${ov && ov.tg && tgText(ov.tg) !== tgText(ch.tg) ? `<div class="tg">📝 ${T.call_targets}: ${tgText(ov.tg)}</div>` : ""}
       </div>`);
@@ -4523,11 +4543,12 @@ class SupernotifyWhyCard extends HTMLElement {
         out.push(`<div class="ch not"><div class="r1"><span class="st">·</span><span class="nm">${esc(k)}</span>${alias ? `<span class="al">${esc(alias)}</span>` : ""}</div>
           <div class="why">${esc(this._whyNotStarted(k, row, n, scen, T))}</div></div>`);
       }
-      out.push(`<div class="note">${n.trace ? T.from_trace : T.from_config}</div>`);
+      out.push(`<div class="note">${snProvOf(n) || n.trace ? T.from_trace : T.from_config}</div>`);
     }
 
-    // full trace
-    if (n.trace) {
+    // full trace - only with debug: true, and `prov` alone is not a trace
+    const hasTrace = n.trace && (Object.keys(n.trace.sel || {}).length || Object.keys(n.trace.res || {}).length);
+    if (hasTrace) {
       out.push(`<div class="sec">🧭 ${T.trace}</div><div class="trace">`);
       for (const [stage, list] of Object.entries(n.trace.sel || {})) {
         out.push(`<div class="stg"><span>${esc(stage)}</span><span>${esc((list || []).join(", ") || "—")}</span></div>`);

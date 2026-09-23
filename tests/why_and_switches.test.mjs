@@ -151,6 +151,21 @@ assert.ok(/mobile_push[\s\S]*scelto da: scenario Persone a casa · sempre attivo
 assert.ok(/tts[\s\S]*spento da: scenario Afternoon/.test(det2), "spento da scenario (trace)");
 assert.ok(det2.includes("trace di selezione archiviato"), "nota: dal trace");
 
+// ---- 0.3.2: provenance fuori dal trace (SuperNotify 2.8 / PR #210) ----
+const provOnly = JSON.parse(DET);
+delete provOnly.n.trace;
+provOnly.n.prov = {
+  mobile_push: { enabled_by: ["scenario:multi_home", "default"] },
+  tts: { enabled_by: ["default"], disabled_by: ["scenario:afternoon", "call"] },
+};
+DET = JSON.stringify(provOnly);
+wc._cache.clear();
+await wc._select(IDX.items[0].id);
+const det3 = wc.shadowRoot.getElementById("det").textContent;
+assert.ok(/mobile_push[\s\S]*scelto da: scenario Persone a casa/.test(det3), "fonti senza trace");
+assert.ok(/tts[\s\S]*spento da[\s\S]*chiamata/.test(det3), "call non finisce tra gli scenari");
+assert.ok(!det3.includes("Trace di selezione"), "nessuna sezione trace vuota");
+
 // ---- servizio mancante ----
 delete hass.services.shell_command;
 wc._cache.clear();

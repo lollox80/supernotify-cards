@@ -3,6 +3,8 @@
 sn_archive_index.py - indice compatto dell'archivio SuperNotify per Home Assistant.
 
 CHANGELOG
+  2026-09-23 (Cowork) - il provenance esce come chiave "prov" a se stante: metterlo dentro
+    "trace" faceva credere alla card che ci fosse un trace, e disegnava una sezione vuota.
   2026-09-22 (Cowork, 3) - delivery_provenance letto anche in cima al file, dove
     SuperNotify 2.8 (PR #210) lo mette per OGNI notifica, non solo con debug: true;
     resta la lettura dal trace per i file archiviati prima.
@@ -418,8 +420,8 @@ def detail_of(doc, mtime):
         out["trace"] = trace
     prov = _prov_of(doc)
     if prov:
-        # la card lo legge sempre in trace.prov, che ci sia o no il resto del trace
-        out.setdefault("trace", {})["prov"] = prov
+        # fuori dal trace: c'e' per ogni notifica, il trace solo con debug: true
+        out["prov"] = prov
     return out
 
 

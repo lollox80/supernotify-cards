@@ -3,6 +3,14 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.43.4] - 2026-09-23
+
+### Fixed
+- why-card (0.3.2): `delivery_provenance` read from where SuperNotify 2.8 archives it (top level,
+  every notification) as well as from the debug trace; the "selection trace" section is only drawn
+  when a trace was archived, instead of an empty box; `call` and `recipient:<name>` are no longer
+  shown as scenarios that would switch a channel off.
+
 ## [0.43.3] - 2026-09-22
 
 ### Fixed
