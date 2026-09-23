@@ -3,6 +3,9 @@
 sn_archive_index.py - indice compatto dell'archivio SuperNotify per Home Assistant.
 
 CHANGELOG
+  2026-09-23 (Cowork, 2) - un singolo file d'archivio malformato non fa piu' morire lo
+    script: prima un JSON che non era un oggetto (o con un campo di tipo inatteso) alzava
+    AttributeError, non catturato, e il sensore restava senza NESSUNA notifica.
   2026-09-23 (Cowork) - il provenance esce come chiave "prov" a se stante: metterlo dentro
     "trace" faceva credere alla card che ci fosse un trace, e disegnava una sezione vuota.
   2026-09-22 (Cowork, 3) - delivery_provenance letto anche in cima al file, dove
@@ -448,11 +451,17 @@ def run_detail(path, wanted):
     try:
         with open(file_path, encoding="utf-8") as fh:
             doc = json.load(fh)
-    except (OSError, ValueError) as err:
+        if not isinstance(doc, dict):
+            raise TypeError("non e' un oggetto JSON")
+    except Exception as err:
         result["error"] = f"file illeggibile: {err}"
         return result
+    try:
+        result["n"] = detail_of(doc, mtime)
+    except Exception as err:
+        result["error"] = f"dettaglio non leggibile: {err}"
+        return result
     result["ok"] = True
-    result["n"] = detail_of(doc, mtime)
     return result
 
 
@@ -503,9 +512,13 @@ def main():
         try:
             with open(path, encoding="utf-8") as fh:
                 doc = json.load(fh)
+            if not isinstance(doc, dict):
+                raise TypeError("non e' un oggetto JSON")
             result["items"].append(_item_of(doc, mtime, args.message_chars, chan_pool, scen_pool))
-        except (OSError, ValueError, TypeError):
-            errors += 1  # un file corrotto non deve far sparire tutto l'indice
+        except Exception:
+            # un file corrotto non deve far sparire tutto l'indice: qualsiasi errore su
+            # UN file (anche AttributeError su un campo di tipo inatteso) lo salta e basta
+            errors += 1
     result["chan"] = chan_pool.names
     result["scen"] = scen_pool.names
     result["count"] = len(result["items"])
