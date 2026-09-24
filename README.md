@@ -255,8 +255,17 @@ end up with no recipient at all. The card shows an inline warning in this
 case; pick a compatible channel above (the deliveries card flags them) or add
 a person/device directly to the target.
 
+**Try without sending** (🔍): shows which channels would fire right now and to
+whom, which would be skipped and why, the active scenarios, and whether the
+notification would be suppressed or fall back — without sending anything. It
+calls SuperNotify's dry-run action (being added upstream, see
+[issue #218](https://github.com/rhizomatics/supernotify/issues/218)); the button
+stays hidden until Home Assistant has that action. If the released action ends
+up with another name, set it with `dry_run_action:`.
+
 ```yaml
 type: custom:supernotify-composer-card
+# dry_run_action: enquire_dry_run   # optional, name of the dry-run action
 ```
 
 ## supernotify-automations-card

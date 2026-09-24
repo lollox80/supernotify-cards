@@ -8,6 +8,14 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-24 — v0.44.0. composer-card 0.13.0: "Try without sending" button, ready for the
+ *   dry-run action jeyrb is adding to SuperNotify (issue #218, engine.async_dry_run()).
+ *   - hidden until Home Assistant has the action (`supernotify.enquire_dry_run`, or the name
+ *     set with `dry_run_action:`), so the card looks the same as before on older versions;
+ *   - sends the same fields as the Send button and shows, without sending anything, which
+ *     channels would fire and to whom, which would be skipped and why, the active scenarios,
+ *     and whether the notification would be suppressed or fall back;
+ *   - the send payload is now built in one place (_payload) for both buttons.
  * 2026-09-23 — v0.43.4. why-card 0.3.2: reads `delivery_provenance` where SuperNotify 2.8
  *   (PR #210) archives it, for every notification and not only with `debug: true`.
  *   - the "selection trace" section is only drawn when there really is a trace, instead of an
@@ -183,7 +191,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.43.4"; // bundle / HACS release
+const VERSION = "0.44.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -202,7 +210,7 @@ const SN_CARD_VERSIONS = {
   recipients: "0.20.0",
   scenarios: "0.18.0",
   simulator: "0.9.0",
-  composer: "0.12.0",
+  composer: "0.13.0",
   automations: "0.15.0",
   stats: "0.22.1",
   archive: "0.28.0",
@@ -258,6 +266,12 @@ const SN_STRINGS = {
     comp_hint: "Picked channels are sent with delivery_selection: fixed (only those fire). Critical really is critical — sirens included.",
     critical_confirm: "Send a CRITICAL notification? Sirens and max volume included.",
     write_first: "Write a message first", sent_toast: "Sent 🚀",
+    dry_btn: "Try without sending", dry_title: "If you sent it now",
+    dry_err: "Dry run failed", dry_would: "would send", dry_skip: "skipped",
+    dry_nobody: "no recipient, direct targets only", dry_targets: "targets",
+    dry_suppressed: "The notification would be suppressed", dry_fallback: "No channel would fire: fallback to",
+    dry_none: "No channel selected", dry_scen: "Active scenarios", dry_raw: "Raw response",
+    dry_prio: "Priority",
     prio_minimum: "Minimum", prio_low: "Low", prio_medium: "Medium",
     prio_high: "High", prio_critical: "Critical ⚠️",
     target_lbl: "Target — people, devices, areas, floors, labels",
@@ -317,6 +331,12 @@ const SN_STRINGS = {
     comp_hint: "I canali scelti partono con delivery_selection: fixed (solo quelli). Il critical è critical davvero — sirene incluse.",
     critical_confirm: "Inviare una notifica CRITICA? Sirene e volume massimo inclusi.",
     write_first: "Scrivi prima un messaggio", sent_toast: "Inviata 🚀",
+    dry_btn: "Prova senza inviare", dry_title: "Se la inviassi adesso",
+    dry_err: "Simulazione non riuscita", dry_would: "partirebbe", dry_skip: "saltato",
+    dry_nobody: "nessun destinatario, solo target diretti", dry_targets: "target",
+    dry_suppressed: "La notifica verrebbe soppressa", dry_fallback: "Nessun canale partirebbe: ripiego su",
+    dry_none: "Nessun canale selezionato", dry_scen: "Scenari attivi", dry_raw: "Risposta completa",
+    dry_prio: "Priorità",
     prio_minimum: "Minima", prio_low: "Bassa", prio_medium: "Media",
     prio_high: "Alta", prio_critical: "Critica ⚠️",
     target_lbl: "Target — persone, dispositivi, aree, piani, etichette",
@@ -2690,11 +2710,30 @@ class SupernotifyComposerCard extends HTMLElement {
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
     if (!this._rendered || wasDark !== this._dark) this._render();
-    else if (this._targetSelEl) this._targetSelEl.hass = hass;
+    else {
+      if (this._targetSelEl) this._targetSelEl.hass = hass;
+      this._syncDry();
+    }
   }
 
   getCardSize() {
     return 8;
+  }
+
+  // Dry-run action (SuperNotify issue #218): not released yet, and its name may still
+  // change, so look it up instead of assuming it. null -> the button stays hidden.
+  _dryAction() {
+    const svc = (this._hass && this._hass.services && this._hass.services.supernotify) || {};
+    const names = [this._config.dry_run_action, "enquire_dry_run", "dry_run"].filter(Boolean);
+    return names.find((n) => svc[n]) || null;
+  }
+
+  _syncDry() {
+    const b = this.shadowRoot && this.shadowRoot.getElementById("dry");
+    if (!b) return;
+    const has = !!this._dryAction();
+    b.style.display = has ? "" : "none";
+    if (!has) this.shadowRoot.getElementById("dryBox").style.display = "none";
   }
 
   _palette() {
@@ -2754,6 +2793,20 @@ class SupernotifyComposerCard extends HTMLElement {
                 font-weight: 750; padding: 11px 20px; cursor: pointer; font-size: 13.5px;
                 margin-top: 14px; }
         .send:active { transform: scale(.97); }
+        .send.dry { background: ${p.panel}; color: ${p.brandD}; border: 1.5px solid ${p.brand};
+                    margin-left: 8px; }
+        .dryBox { margin-top: 14px; border: 1.5px solid ${p.line}; border-radius: 12px;
+                  padding: 10px 12px; background: ${p.soft}; font-size: 12.5px; }
+        .dryBox h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .05em;
+                     text-transform: uppercase; color: ${p.muted}; }
+        .dRow { display: flex; gap: 8px; align-items: baseline; padding: 4px 0;
+                border-top: 1px solid ${p.line}; }
+        .dRow:first-of-type { border-top: 0; }
+        .dName { font-weight: 750; min-width: 130px; }
+        .dOk { color: ${p.ok}; } .dNo { color: ${p.muted}; }
+        .dMeta { margin-top: 8px; color: ${p.muted}; font-size: 11.5px; }
+        .dWarn { color: ${p.warn}; font-weight: 700; margin-bottom: 6px; }
+        .dryBox pre { white-space: pre-wrap; font-size: 11px; max-height: 240px; overflow: auto; }
         .phone { border: 1.5px solid ${p.line}; border-radius: 18px; padding: 12px;
                  background: ${this._dark ? "#10161e" : "#f4f7fa"}; }
         .notif { background: ${p.panel}; border-radius: 12px; padding: 10px 12px;
@@ -2794,7 +2847,7 @@ class SupernotifyComposerCard extends HTMLElement {
             <div class="hint" id="targetWarn" style="display:none;margin-top:6px;color:${p.warn}"></div>
             <label>${T.camera_lbl}</label>
             <select id="cam"><option value="">${T.none}</option>${this._cameraNames().map((c) => `<option value="${esc(c)}">📷 ${esc(c)}</option>`).join("")}</select>
-            <button class="send" id="send">🚀 ${T.send}</button>
+            <button class="send" id="send">🚀 ${T.send}</button><button class="send dry" id="dry" style="display:none">🔍 ${T.dry_btn}</button>
           </div>
           <div>
             <label>${T.preview}</label>
@@ -2808,6 +2861,7 @@ class SupernotifyComposerCard extends HTMLElement {
             <div class="hint">${T.comp_hint}</div>
           </div>
         </div>
+        <div class="dryBox" id="dryBox" style="display:none"></div>
         <div class="toast" id="toast"></div>
         <div style="text-align:right;font-size:10px;color:${p.muted};opacity:.7;margin-top:8px">supernotify-composer-card v${SN_CARD_VERSIONS.composer}</div>
       </ha-card>`;
@@ -2838,7 +2892,9 @@ class SupernotifyComposerCard extends HTMLElement {
       };
     });
     sr.getElementById("send").onclick = () => this._send();
+    sr.getElementById("dry").onclick = () => this._dryRun();
     this._mountTargetSelector();
+    this._syncDry();
   }
 
   // Warn when the target selector holds only "indirect" categories
@@ -2898,14 +2954,21 @@ class SupernotifyComposerCard extends HTMLElement {
   }
 
   _send() {
-    const sr = this.shadowRoot;
     const T = snT(this._config, this._hass);
+    const payload = this._payload();
+    if (!payload.message) { this._toast(T.write_first); return; }
+    if (payload.priority === "critical" && !confirm(T.critical_confirm))
+      return;
+    this._hass.callService("supernotify", "notify", payload);
+    this._toast(T.sent_toast);
+  }
+
+  // The form as a supernotify.notify payload - shared by Send and Try without sending.
+  _payload() {
+    const sr = this.shadowRoot;
     const message = (sr.getElementById("m").value || "").trim();
-    if (!message) { this._toast(T.write_first); return; }
     const title = (sr.getElementById("t").value || "").trim();
     const priority = sr.getElementById("p").value;
-    if (priority === "critical" && !confirm(T.critical_confirm))
-      return;
     // Dedicated `supernotify.notify` action (SuperNotify >= 2.3.0): typed,
     // selector-driven fields instead of notify.supernotify's generic data:.
     // Context is preserved end-to-end and the target field accepts the
@@ -2926,8 +2989,69 @@ class SupernotifyComposerCard extends HTMLElement {
       payload.custom_target = customRaw.split(",").map((s) => s.trim()).filter(Boolean);
     const cam = sr.getElementById("cam").value;
     if (cam) payload.camera_entity_id = cam;
-    this._hass.callService("supernotify", "notify", payload);
-    this._toast(T.sent_toast);
+    return payload;
+  }
+
+  async _dryRun() {
+    const T = snT(this._config, this._hass);
+    const action = this._dryAction();
+    const box = this.shadowRoot.getElementById("dryBox");
+    if (!action) return;
+    const payload = this._payload();
+    if (!payload.message) payload.message = T.no_message; // nothing is sent: any text will do
+    box.style.display = "";
+    box.textContent = "…";
+    try {
+      const res = await this._hass.callWS({
+        type: "call_service", domain: "supernotify", service: action,
+        service_data: payload, return_response: true,
+      });
+      this._renderDry((res && res.response) || res || {});
+    } catch (e) {
+      box.textContent = `✖ ${T.dry_err}: ${(e && (e.message || e.code)) || e}`;
+    }
+  }
+
+  // Shape of Notification.plan() (SuperNotify 2.10): priority, scenarios, occupancy,
+  // deliveries {name: {recipients, targets} | {skipped}}, suppressed?, fallback?.
+  // Also accepts it wrapped in `result`, and always offers the raw JSON.
+  _renderDry(res) {
+    const T = snT(this._config, this._hass);
+    const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const plan = res.result && res.result.deliveries ? res.result : res;
+    const st = this._hass.states;
+    const person = (id) => (st[id] && st[id].attributes.friendly_name) || String(id).replace(/^person\./, "");
+    const chan = (n) => {
+      const e = st["switch.supernotify_delivery_" + n] || st["binary_sensor.supernotify_delivery_" + n];
+      const alias = e ? snCleanName(e.attributes.friendly_name, n) : "";
+      return alias ? `${esc(alias)} <span class="dNo">(${esc(n)})</span>` : esc(n);
+    };
+    const nTargets = (tg) => (tg || []).reduce((acc, t) =>
+      acc + Object.values(t || {}).reduce((a, v) => a + (Array.isArray(v) ? v.length : 0), 0), 0);
+    const dels = plan.deliveries || {};
+    const names = Object.keys(dels).sort((a, b) => ("skipped" in dels[a]) - ("skipped" in dels[b]) || a.localeCompare(b));
+    let h = `<h4>🔍 ${T.dry_title}</h4>`;
+    if (plan.suppressed) h += `<div class="dWarn">⛔ ${T.dry_suppressed}: ${esc(plan.suppressed)}</div>`;
+    if (plan.fallback && plan.fallback.length)
+      h += `<div class="dWarn">↪ ${T.dry_fallback} ${plan.fallback.map(chan).join(", ")}</div>`;
+    if (!names.length && !plan.suppressed) h += `<div class="dNo">${T.dry_none}</div>`;
+    for (const n of names) {
+      const d = dels[n] || {};
+      if ("skipped" in d) {
+        h += `<div class="dRow"><span class="dName dNo">✖ ${chan(n)}</span><span class="dNo">${T.dry_skip}: ${esc(d.skipped)}</span></div>`;
+      } else {
+        const who = (d.recipients || []).map(person);
+        const nt = nTargets(d.targets);
+        h += `<div class="dRow"><span class="dName dOk">✔ ${chan(n)}</span><span>${
+          who.length ? esc(who.join(", ")) : T.dry_nobody}${nt ? ` <span class="dNo">· ${nt} ${T.dry_targets}</span>` : ""}</span></div>`;
+      }
+    }
+    const meta = [];
+    if (plan.priority) meta.push(`${T.dry_prio}: ${esc(plan.priority)}`);
+    if (plan.scenarios && plan.scenarios.length) meta.push(`${T.dry_scen}: ${esc(plan.scenarios.join(", "))}`);
+    if (meta.length) h += `<div class="dMeta">${meta.join(" · ")}</div>`;
+    h += `<details class="dMeta"><summary>${T.dry_raw}</summary><pre>${esc(JSON.stringify(res, null, 2))}</pre></details>`;
+    this.shadowRoot.getElementById("dryBox").innerHTML = h;
   }
 
   _toast(msg) {

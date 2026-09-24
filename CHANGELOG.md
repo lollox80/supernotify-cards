@@ -3,6 +3,15 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.44.0] - 2026-09-24
+
+### Added
+- composer-card (0.13.0): **Try without sending** button. Shows which channels would fire right
+  now and to whom, which would be skipped and why, the active scenarios, and whether the
+  notification would be suppressed or fall back, without sending anything. It uses SuperNotify's
+  dry-run action (issue #218, not released yet): the button stays hidden until Home Assistant has
+  `supernotify.enquire_dry_run` (or the action named with `dry_run_action:`).
+
 ## [0.43.4] - 2026-09-23
 
 ### Fixed
