@@ -3,6 +3,25 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.45.0] - 2026-09-25
+
+### Changed
+- archive-card (0.29.0), why-card (0.4.0) and recipients-card (0.21.0) read the archive through
+  SuperNotify's own **`supernotify.enquire_archive`** action (SuperNotify 2.10.0) when Home
+  Assistant has it. The command_line sensor, the automation, `shell_command.sn_archive_detail`
+  and `tools/sn_archive_index.py` are no longer needed, and can be removed.
+- One store is shared by every card on the page: the latest 40 notifications at first
+  (`limit:`), then only the newest few each time `sensor.supernotify_notifications` changes
+  (`trigger_entity:`).
+- The rows and the detail are built in the card by a port of `sn_archive_index.py`, checked
+  field by field against the script on 48 real archived notifications plus synthetic ones with
+  errors, a full trace and suppressed channels, so both cards look exactly as before.
+- On older SuperNotify, or with `source: sensor`, the cards keep using the bridge as before.
+
+### Fixed
+- The why-card shows "no longer in the archive" instead of a raw error when a notification was
+  purged after the list was read.
+
 ## [0.44.0] - 2026-09-24
 
 ### Added

@@ -303,18 +303,29 @@ Notification history, read from the SuperNotify archive.
 
 ```yaml
 type: custom:supernotify-archive-card
-entity: sensor.supernotify_archivio   # default
 ```
 
 | Option | Required | Description |
 |---|---|---|
-| `entity` | no | sensor holding the archive index (default `sensor.supernotify_archivio`) |
+| `limit` | no | notifications read from the archive (default 40, max 100) |
+| `source` | no | `sensor` to keep using the command_line bridge below even on SuperNotify 2.10+ |
+| `trigger_entity` | no | entity whose change means "a notification was sent" (default `sensor.supernotify_notifications`) |
+| `entity` | no | bridge only: sensor holding the archive index (default `sensor.supernotify_archivio`) |
 | `intro` | no | info banner at the top of the card |
 | `style` | no | `supernotify` (default) or `theme` |
 
-The card needs an index of the archive in the attributes of a sensor, because a Lovelace card
-cannot read files: `media_source` serves only audio/image/video, so a `.json` comes back 404
-even with a signed URL. Copy `tools/sn_archive_index.py` to `/config/tools/` and add:
+**SuperNotify 2.10.0 or later: nothing to set up.** The card reads the archive through the
+`supernotify.enquire_archive` action (the file archive must be on in SuperNotify's options). It
+asks for the latest `limit` notifications once, then only for the newest few each time
+`trigger_entity` changes, and shares what it read with the why card and the recipients card on
+the same page.
+
+### Before SuperNotify 2.10: the command_line bridge
+
+Older versions have no action to read the archive, and a Lovelace card cannot read files
+(`media_source` serves only audio/image/video, so a `.json` comes back 404 even with a signed
+URL). The card then needs an index of the archive in the attributes of a sensor. Copy
+`tools/sn_archive_index.py` to `/config/tools/` and add:
 
 ```yaml
 command_line:
@@ -341,6 +352,9 @@ so the JSON file is already on disk).
 The script takes `--limit` (default 40), `--path` and `--message-chars`; it never raises, so a
 missing folder or a corrupt file shows up as an attribute instead of breaking the sensor.
 
+Once you are on SuperNotify 2.10+, the sensor, the automation, the shell command and the script
+can all be removed: the cards stop reading them as soon as the action is there.
+
 With a `supernotify-why-card` on the same view, an expanded row gets a **🔎 Why?** link.
 
 ## supernotify-why-card
@@ -353,20 +367,21 @@ full selection trace archived with the notification is shown too.
 
 ```yaml
 type: custom:supernotify-why-card
-entity: sensor.supernotify_archivio            # default - the list comes from the archive index
-service: shell_command.sn_archive_detail       # default - fetches one notification's detail
 ```
 
 | Option | Required | Description |
 |---|---|---|
-| `entity` | no | sensor holding the archive index (see supernotify-archive-card) |
-| `service` | no | service returning the detail (default `shell_command.sn_archive_detail`) |
 | `limit` | no | notifications in the list (default 15) |
+| `source`, `trigger_entity` | no | as for supernotify-archive-card |
+| `entity` | no | bridge only: sensor holding the archive index |
+| `service` | no | bridge only: service returning the detail (default `shell_command.sn_archive_detail`) |
 | `intro`, `style`, `language` | no | as for the other cards |
 
-The detail is read on demand, so it never weighs on any entity's attributes. It needs the same
-`tools/sn_archive_index.py` as the archive card and a shell command returning its output
-(restart Home Assistant after adding it):
+On SuperNotify 2.10.0 or later the list and the detail both come from `supernotify.enquire_archive`,
+through the same store as the archive card: opening a notification already listed needs no
+further call. Before 2.10, the detail is read on demand through the bridge, so it never weighs on
+any entity's attributes. It needs the same `tools/sn_archive_index.py` as the archive card and a
+shell command returning its output (restart Home Assistant after adding it):
 
 ```yaml
 shell_command:

@@ -8,6 +8,19 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-25 — v0.45.0. The archive and why cards read the archive through SuperNotify's own
+ *   action, supernotify.enquire_archive (SuperNotify 2.10.0), instead of the command_line bridge.
+ *   - archive-card 0.29.0, why-card 0.4.0 and recipients-card 0.21.0 use the action when Home
+ *     Assistant has it: no sensor, no shell_command and no script in /config/tools are needed any
+ *     more. On older SuperNotify, or with `source: sensor`, they keep reading
+ *     sensor.supernotify_archivio and shell_command.sn_archive_detail as before;
+ *   - one store is shared by all the cards on a page: the latest 40 notifications at first (set
+ *     with `limit:`), then only the newest few each time sensor.supernotify_notifications changes;
+ *   - the rows and the detail are built in the card by a port of tools/sn_archive_index.py
+ *     (_item_of / detail_of), checked field by field against the script on 48 real archived
+ *     notifications plus synthetic ones with errors, a full trace and suppressed channels;
+ *   - the why-card opens a notification straight from the store, and only asks the action for
+ *     one it has not loaded.
  * 2026-09-24 — v0.44.0. composer-card 0.13.0: "Try without sending" button, ready for the
  *   dry-run action jeyrb is adding to SuperNotify (issue #218, engine.async_dry_run()).
  *   - hidden until Home Assistant has the action (`supernotify.enquire_dry_run`, or the name
@@ -191,7 +204,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.44.0"; // bundle / HACS release
+const VERSION = "0.45.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -207,14 +220,14 @@ const SN_CARD_VERSIONS = {
   bands: "0.13.0",
   deliveries: "0.20.0",
   transports: "0.18.0",
-  recipients: "0.20.0",
+  recipients: "0.21.0",
   scenarios: "0.18.0",
   simulator: "0.9.0",
   composer: "0.13.0",
   automations: "0.15.0",
   stats: "0.22.1",
-  archive: "0.28.0",
-  why: "0.3.2",
+  archive: "0.29.0",
+  why: "0.4.0",
 };
 
 /**
@@ -543,6 +556,415 @@ function snProvOf(n) {
  * Ask a supernotify-why-card on the page to show one notification (archive id or
  * its 8-char prefix). Returns false when there is no such card to answer.
  */
+/* ════════════════════════════════════════════════════════════════════════
+ * Archive through SuperNotify's own action (2.10.0+, supernotify.enquire_archive)
+ *
+ * Before 2.10 the archive reached the dashboard through a bridge: a command_line
+ * sensor (sensor.supernotify_archivio) running tools/sn_archive_index.py, plus
+ * shell_command.sn_archive_detail for one notification. When Home Assistant has
+ * supernotify.enquire_archive, the archive and why cards read the archive from it
+ * instead, and build the same compact rows and the same detail the script used to
+ * print (snArchiveItem / snArchiveDetail below are a port of its _item_of and
+ * detail_of), so the rest of both cards is unchanged. The bridge still works: it
+ * is used when the action is missing, or when a card sets `source: sensor`.
+ *
+ * One store is shared by every card on the page:
+ *   - the first card asks for the latest `limit` notifications (whole files, about
+ *     10 KB each, so the default stays at 40);
+ *   - after that, each time sensor.supernotify_notifications changes (SuperNotify
+ *     updates it after every notification) only the newest few are asked for and
+ *     merged in. `after` is not used for this on purpose: the action then reads
+ *     every file in the archive to find the few newer ones.
+ * Cards listen for the "supernotify-archive" window event to redraw, and also compare
+ * snArchiveStore.version on every hass update: Home Assistant sets `hass` before the card
+ * is in the page, so the first answer often arrives before the card can hear the event.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+const SN_ARCHIVE_REASONS = {
+  DUPE: "doppione", NO_TARGET: "nessun target", ERROR: "errore", DELIVERY_CONDITION: "condizione",
+  SCENARIO: "scenario", OCCUPANCY: "presenza", PRIORITY: "priorita", DELIVERY_DISABLED: "spento",
+  SNOOZE: "pausa",
+};
+const SN_ARCHIVE_MESSAGE_CHARS = 130;
+const SN_ARCHIVE_SPOKEN_CHARS = 110;
+const SN_ARCHIVE_DETAIL_TEXT = 400;
+const SN_ARCHIVE_DETAIL_VALUE = 160;
+const SN_ARCHIVE_REFRESH = 5;
+
+/** Length and slice by code point, like Python str: an emoji is one character, not two. */
+function snLen(s) { return Array.from(String(s)).length; }
+function snCut(s, n) { return Array.from(String(s)).slice(0, n).join(""); }
+
+/** JSON the way Python's json.dumps writes it (", " and ": "), for text shown as-is. */
+function snPyJson(v) {
+  if (Array.isArray(v)) return "[" + v.map(snPyJson).join(", ") + "]";
+  if (v !== null && typeof v === "object") {
+    return "{" + Object.entries(v).map(([k, x]) => JSON.stringify(k) + ": " + snPyJson(x)).join(", ") + "}";
+  }
+  return v === undefined ? "null" : JSON.stringify(v);
+}
+
+function snIsObj(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
+
+/** Python truthiness, since the archive JSON is written by Python: empty list, dict and string are false. */
+function snTruthy(v) {
+  if (Array.isArray(v) || typeof v === "string") return v.length > 0;
+  if (snIsObj(v)) return Object.keys(v).length > 0;
+  return !!v;
+}
+
+function snArchiveStamp(doc) {
+  const t = doc && doc.created ? Date.parse(doc.created) : NaN;
+  return isNaN(t) ? Math.floor(Date.now() / 1000) : Math.floor(t / 1000);
+}
+
+function snArchiveTitle(doc, message) {
+  const cv = (doc && doc.condition_variables) || {};
+  if (cv.notification_title) return snCut(cv.notification_title, 120);
+  return snCut(String(message || "").split("\n")[0], 120);
+}
+
+function snArchiveShort(value, limit = SN_ARCHIVE_DETAIL_VALUE) {
+  const text = String(value).split(/\s+/).filter(Boolean).join(" ");
+  return snLen(text) <= limit ? text : snCut(text, limit - 1) + "…";
+}
+
+/** A channel that delivered is just its pool index; skipped or failed is [index, "s"|"e", reason?]. */
+function snArchiveChannels(doc, chan) {
+  const out = [];
+  for (const [name, res] of Object.entries((doc && doc.deliveries) || {})) {
+    if (!snIsObj(res)) continue;
+    const idx = chan.id(name);
+    if (snTruthy(res.error)) { out.push([idx, "e"]); continue; }
+    if (snTruthy(res.success)) { out.push(idx); continue; }
+    const skipped = snIsObj(res.skipped) ? res.skipped : {};
+    let raw = skipped.suppression_reason || skipped.skip_reason;
+    if (!raw) {
+      for (const env of res.suppressed || []) {
+        if (snIsObj(env) && env.skip_reason) { raw = env.skip_reason; break; }
+      }
+    }
+    if (raw) {
+      const key = String(raw).toUpperCase();
+      out.push([idx, "s", SN_ARCHIVE_REASONS[key] || snCut(raw, 18).toLowerCase()]);
+    } else {
+      out.push([idx, "s"]);
+    }
+  }
+  return out;
+}
+
+/** What Alexa or TTS actually said, from the call's action data. */
+function snArchiveSpoken(doc) {
+  for (const [name, res] of Object.entries((doc && doc.deliveries) || {})) {
+    if (!snIsObj(res) || (!name.includes("alexa") && !name.includes("tts"))) continue;
+    for (const call of res.success || []) {
+      if (!snIsObj(call)) continue;
+      let said = null;
+      for (const c of call.calls || []) {
+        if (snIsObj(c)) {
+          said = ((c.action_data || {}).message) || said;
+          if (said) break;
+        }
+      }
+      said = said || call.message;
+      if (said) return snCut(String(said).split(/\s+/).filter(Boolean).join(" "), SN_ARCHIVE_SPOKEN_CHARS);
+    }
+  }
+  return null;
+}
+
+function snArchiveWhispered(doc) {
+  for (const res of Object.values((doc && doc.deliveries) || {})) {
+    if (!snIsObj(res)) continue;
+    for (const call of res.success || []) {
+      if (snIsObj(call) && String(((call.data || {}).message_template) || "").includes("whispered")) return true;
+    }
+  }
+  return false;
+}
+
+/** One row of the archive index, in the format of tools/sn_archive_index.py. */
+function snArchiveItem(doc, chan, scen) {
+  const message = String(doc.message || "").trim();
+  const title = snArchiveTitle(doc, message);
+  let body = message;
+  if (title && body.startsWith(title)) body = body.slice(title.length);
+  body = body.split(/\s+/).filter(Boolean).join(" ");
+  // the full id travels in `fid`, for the detail; `id` stays the 8 characters shown
+  const item = { id: String(doc.id || "").slice(0, 8), fid: String(doc.id || ""), t: snArchiveStamp(doc), ti: title };
+  if (body) {
+    item.m = snCut(body, SN_ARCHIVE_MESSAGE_CHARS);
+    if (snLen(body) > SN_ARCHIVE_MESSAGE_CHARS) item.mt = true;
+  }
+  if (doc.priority && doc.priority !== "medium") item.p = doc.priority;
+  if (doc.outcome && doc.outcome !== "success") item.o = doc.outcome;
+  for (const [key, field] of [["d", "delivered"], ["f", "failed"], ["s", "skipped"]]) {
+    const val = parseInt(doc[field] || 0, 10);
+    if (val) item[key] = val;
+  }
+  const chans = snArchiveChannels(doc, chan);
+  if (chans.length) item.c = chans;
+  const sc = doc.selected_scenario_names || [];
+  if (sc.length) item.sc = sc.slice(0, 6).map((s) => scen.id(s));
+  const ms = (doc.stats || {}).total_duration_ms;
+  if (typeof ms === "number" && ms) item.ms = Math.round(ms * 10) / 10;
+  if (snArchiveWhispered(doc)) item.w = true;
+  const said = snArchiveSpoken(doc);
+  if (said) {
+    const flat = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+    const fs = flat(said);
+    const same = [flat(message), flat(body), flat(title)].filter(Boolean)
+      .some((f) => fs.startsWith(snCut(f, snLen(fs))) || f.startsWith(fs));
+    if (fs && !same) item.sp = said;
+  }
+  return item;
+}
+
+function snArchivePool() {
+  const names = [];
+  const index = new Map();
+  return {
+    names,
+    id(name) {
+      name = String(name);
+      if (!index.has(name)) { index.set(name, names.length); names.push(name); }
+      return index.get(name);
+    },
+  };
+}
+
+/** {category: [values]} without empty categories; takes an object or a list of objects. */
+function snArchiveTargets(target) {
+  const out = {};
+  for (const t of Array.isArray(target) ? target : [target]) {
+    if (!snIsObj(t)) continue;
+    for (const [cat, vals] of Object.entries(t)) {
+      for (let v of Array.isArray(vals) ? vals : [vals]) {
+        if (v === null || v === undefined) continue;
+        const bucket = out[cat] || (out[cat] = []);
+        v = snArchiveShort(v, 80);
+        if (!bucket.includes(v)) bucket.push(v);
+      }
+    }
+  }
+  return out;
+}
+
+function snArchiveDelivery(name, res) {
+  const d = { n: name };
+  if (!snIsObj(res)) { d.r = "?"; return d; }
+  let envelopes = [];
+  if (snTruthy(res.error)) { d.r = "err"; envelopes = res.error || []; }
+  else if (snTruthy(res.success)) { d.r = "ok"; envelopes = res.success || []; }
+  else if (snTruthy(res.suppressed)) { d.r = "supp"; envelopes = res.suppressed || []; }
+  else {
+    const skipped = snIsObj(res.skipped) ? res.skipped : {};
+    d.r = "skip";
+    if (skipped.suppression_reason) d.why = String(skipped.suppression_reason);
+    if (skipped.target_required) d.tr = String(skipped.target_required);
+    const tg = snArchiveTargets(skipped.targets || []);
+    if (Object.keys(tg).length) d.tg = tg;
+    return d;
+  }
+  const targets = [];
+  const errors = [];
+  let calls = 0;
+  for (const env of envelopes) {
+    if (!snIsObj(env)) continue;
+    if (env.target) targets.push(env.target);
+    if (env.skip_reason && !("why" in d)) d.why = String(env.skip_reason);
+    calls += (env.calls || []).length;
+    for (const call of env.failedcalls || []) {
+      if (snIsObj(call) && call.exception) errors.push(snArchiveShort(call.exception));
+    }
+  }
+  const tg = snArchiveTargets(targets);
+  if (Object.keys(tg).length) d.tg = tg;
+  if (calls) d.calls = calls;
+  if (errors.length) d.err = errors.slice(0, 3);
+  return d;
+}
+
+function snArchiveProvenance(doc) {
+  for (const prov of [doc.delivery_provenance, (doc.debug_trace || {}).delivery_provenance]) {
+    if (snIsObj(prov) && Object.keys(prov).length) {
+      const out = {};
+      for (const [k, v] of Object.entries(prov)) if (snIsObj(v)) out[k] = v;
+      return out;
+    }
+  }
+  return null;
+}
+
+function snArchiveTrace(doc) {
+  const trace = doc.debug_trace;
+  if (!snIsObj(trace)) return null;
+  const out = {};
+  const sel = trace.delivery_selection;
+  if (snIsObj(sel) && Object.keys(sel).length) {
+    out.sel = {};
+    for (const [k, v] of Object.entries(sel)) out.sel[k] = Array.isArray(v) ? [...v] : v;
+  }
+  const res = trace.resolved;
+  if (snIsObj(res) && Object.keys(res).length) {
+    const chains = {};
+    for (const [name, stages] of Object.entries(res)) {
+      if (!snIsObj(stages)) continue;
+      const chain = [];
+      for (const [stage, value] of Object.entries(stages)) {
+        if (value === "NO_CHANGE") continue;
+        chain.push([stage, (snIsObj(value) || Array.isArray(value)) ? snArchiveTargets(value) : snArchiveShort(value)]);
+      }
+      if (chain.length) chains[name] = chain;
+    }
+    if (Object.keys(chains).length) out.res = chains;
+  }
+  const exc = trace.delivery_exceptions;
+  if (snIsObj(exc) && Object.keys(exc).length) {
+    out.exc = {};
+    for (const [k, v] of Object.entries(exc)) out.exc[k] = snArchiveShort(snPyJson(v), 300);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** The detail of one notification, in the format of sn_archive_index.py --detail. */
+function snArchiveDetail(doc) {
+  const message = String(doc.message || "").trim();
+  const out = {
+    id: doc.id, t: snArchiveStamp(doc), ti: snArchiveTitle(doc, message),
+    m: snArchiveShort(message, SN_ARCHIVE_DETAIL_TEXT), p: doc.priority || "medium",
+    o: doc.outcome || "", sel: doc.delivery_selection || "", v: doc.version || "",
+  };
+  if (doc.spoken_message) out.sp = snArchiveShort(doc.spoken_message, SN_ARCHIVE_DETAIL_TEXT);
+  if (doc.dupe) out.dupe = true;
+  const scen = {};
+  for (const [key, field] of [["on", "enabled_scenarios"], ["sel", "selected_scenario_names"],
+    ["ap", "applied_scenario_names"], ["rq", "required_scenario_names"], ["cs", "constrain_scenario_names"]]) {
+    let val = doc[field];
+    if (snIsObj(val)) val = Object.keys(val);
+    if (snTruthy(val)) scen[key] = [...val];
+  }
+  if (Object.keys(scen).length) out.sc = scen;
+  const occ = doc.occupancy || {};
+  const flags = ((doc.condition_variables || {}).occupancy) || [];
+  const home = (occ.home || []).filter(snIsObj).map((p) => p.person);
+  const away = (occ.not_home || []).filter(snIsObj).map((p) => p.person);
+  if (home.length || away.length || flags.length) out.occ = { home, away, flags: [...flags] };
+  const overrides = {};
+  for (const [name, ov] of Object.entries(doc.delivery_overrides || {})) {
+    if (!snIsObj(ov)) continue;
+    const entry = { en: ov.enabled !== false };
+    const tg = snArchiveTargets(ov.target || {});
+    if (Object.keys(tg).length) entry.tg = tg;
+    if (snTruthy(ov.data)) entry.data = Object.keys(ov.data).map(String).sort().slice(0, 8);
+    overrides[name] = entry;
+  }
+  if (Object.keys(overrides).length) out.ov = overrides;
+  out.dl = Object.entries(doc.deliveries || {}).map(([n, r]) => snArchiveDelivery(n, r));
+  if (snTruthy(doc.delivery_exceptions)) {
+    out.dx = snArchiveShort(snPyJson(doc.delivery_exceptions), 400);
+  }
+  const ctx = doc.original_context || {};
+  if (snIsObj(ctx) && ctx.id) {
+    out.ctx = {};
+    for (const k of ["id", "parent_id", "user_id"]) if (ctx[k]) out.ctx[k] = ctx[k];
+  }
+  const trace = snArchiveTrace(doc);
+  if (trace) out.trace = trace;
+  const prov = snArchiveProvenance(doc);
+  if (prov) out.prov = prov;
+  return out;
+}
+
+/** True when this card should read the archive through supernotify.enquire_archive. */
+function snArchiveNative(hass, config) {
+  if (config && config.source === "sensor") return false;
+  const svc = hass && hass.services && hass.services.supernotify;
+  return !!(svc && svc.enquire_archive);
+}
+
+const snArchiveStore = {
+  docs: [],            // archived notifications, newest first
+  limit: 0,
+  stamp: undefined,    // last_updated of the trigger entity at the last fetch
+  loading: null,
+  error: null,
+  fetched: null,       // Date of the last successful fetch
+  index: null,         // cached compact index, rebuilt when docs change
+  version: 0,          // bumped on every fetch, so a card that missed the event still redraws
+
+  async _call(hass, data) {
+    const r = await hass.callWS({
+      type: "call_service", domain: "supernotify", service: "enquire_archive",
+      service_data: data, return_response: true,
+    });
+    return (r && r.response) || {};
+  },
+
+  /** Keep the store current for this card: first load, then only the newest few. */
+  ensure(hass, limit, trigger) {
+    const st = hass.states[trigger || "sensor.supernotify_notifications"];
+    const stamp = st ? st.last_updated : "none";
+    const want = Math.max(1, Math.min(100, limit || 40));
+    if (this.loading) return;
+    let data = null;
+    if (!this.fetched || want > this.limit) data = { limit: want };
+    else if (stamp !== this.stamp) data = { limit: SN_ARCHIVE_REFRESH };
+    if (!data) return;
+    this.limit = Math.max(this.limit, want);
+    this.stamp = stamp;
+    this.loading = this._call(hass, data).then((resp) => {
+      const got = (resp.notifications || []).filter(snIsObj);
+      const seen = new Set(got.map((d) => d.id));
+      const merged = got.concat(this.docs.filter((d) => !seen.has(d.id)));
+      merged.sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
+      this.docs = merged.slice(0, this.limit);
+      this.index = null;
+      this.error = null;
+      this.fetched = new Date();
+    }).catch((e) => {
+      this.error = (e && e.message) || String(e);
+    }).finally(() => {
+      this.loading = null;
+      this.version += 1;
+      window.dispatchEvent(new CustomEvent("supernotify-archive"));
+    });
+  },
+
+  /** The compact index the cards already know, built from the store. */
+  getIndex() {
+    if (!this.fetched && !this.error) return { items: [], chan: [], scen: [], loading: true, native: true };
+    if (!this.index) {
+      const chan = snArchivePool();
+      const scen = snArchivePool();
+      const items = [];
+      for (const doc of this.docs) {
+        try { items.push(snArchiveItem(doc, chan, scen)); } catch (e) { /* one bad file never empties the list */ }
+      }
+      this.index = { items, chan: chan.names, scen: scen.names, native: true,
+        generated: this.fetched ? this.fetched.toISOString() : null };
+    }
+    return { ...this.index, error: this.error && !this.docs.length ? this.error : null };
+  },
+
+  /** The archived notification whose id starts with this, from the store or from the action. */
+  async doc(hass, id) {
+    const wanted = String(id || "").toLowerCase();
+    const found = this.docs.find((d) => String(d.id || "").toLowerCase().startsWith(wanted));
+    if (found) return found;
+    try {
+      const resp = await this._call(hass, { id: wanted });
+      return snIsObj(resp) && resp.id ? resp : null;
+    } catch (e) {
+      // archive_entry_not_found comes back as a service_validation_error: the file was
+      // purged since the list was read, or the id never existed
+      if (e && (e.code === "service_validation_error" || String(e.code || e.message || "").includes("not_found"))) return null;
+      throw e;
+    }
+  },
+};
+
 function snWhyOpen(id) {
   if (!id || !window.__snWhyCards) return false;
   window.dispatchEvent(new CustomEvent("supernotify-why", { detail: { id } }));
@@ -2223,16 +2645,23 @@ class SupernotifyRecipientsCard extends HTMLElement {
   /**
    * SuperNotify 2.7.0 stamps notify.recipient_<name> (state = ISO time, with the
    * notification's context) on every delivery that reaches the recipient. The
-   * archive index (sensor.supernotify_archivio) gives the title: the notification
-   * created closest to that time, within 2 minutes.
+   * archive index gives the title: the notification created closest to that time,
+   * within 2 minutes. The index is the enquire_archive store on SuperNotify 2.10+,
+   * sensor.supernotify_archivio before that.
    */
   _lastNotified(name) {
     const entity = `notify.recipient_${name}`;
     const st = this._hass.states[entity];
     const when = st && st.state ? new Date(st.state) : null;
     if (!when || isNaN(when.getTime())) return null;
-    const idx = this._hass.states[this._config.archive_entity || "sensor.supernotify_archivio"];
-    const items = (idx && idx.attributes && idx.attributes.items) || [];
+    let items;
+    if (snArchiveNative(this._hass, this._config)) {
+      snArchiveStore.ensure(this._hass, 40, this._config.trigger_entity);
+      items = snArchiveStore.getIndex().items || [];
+    } else {
+      const idx = this._hass.states[this._config.archive_entity || "sensor.supernotify_archivio"];
+      items = (idx && idx.attributes && idx.attributes.items) || [];
+    }
     const ts = when.getTime() / 1000;
     let best = null;
     for (const it of items) {
@@ -3989,11 +4418,34 @@ class SupernotifyArchiveCard extends HTMLElement {
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (snArchiveNative(hass, this._config)) {
+      // the store redraws this card through the "supernotify-archive" event
+      snArchiveStore.ensure(hass, this._config.limit, this._config.trigger_entity);
+      if (!this._rendered || wasDark !== this._dark) this._render();
+      else if (this._storeVer !== snArchiveStore.version) { this._renderChips(); this._renderList(); }
+      this._storeVer = snArchiveStore.version;
+      return;
+    }
     const st = hass.states[this._config.entity];
     const stamp = st ? st.last_updated : "none";
     if (!this._rendered || wasDark !== this._dark) this._render();
     else if (stamp !== this._stamp) this._renderList();
     this._stamp = stamp;
+  }
+
+  connectedCallback() {
+    this._onArchive = () => {
+      if (!this._rendered) return;
+      this._storeVer = snArchiveStore.version;
+      this._renderChips();
+      this._renderList();
+    };
+    window.addEventListener("supernotify-archive", this._onArchive);
+    this._onArchive();   // catch up with a fetch that finished before the card was in the page
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener("supernotify-archive", this._onArchive);
   }
 
   getCardSize() { return 12; }
@@ -4029,8 +4481,11 @@ class SupernotifyArchiveCard extends HTMLElement {
    *             sc: [indici scenario], ms (durata) }]
    * Le tabelle condivise e i default omessi sono cio' che tiene l'indice sotto
    * i ~16 KB oltre i quali gli attributi di stato diventano un peso per HA.
+   * With SuperNotify 2.10+ the same index is built in the card from
+   * supernotify.enquire_archive (snArchiveStore), and the sensor is not needed.
    */
   _index() {
+    if (this._hass && snArchiveNative(this._hass, this._config)) return snArchiveStore.getIndex();
     const st = this._hass && this._hass.states[this._config.entity];
     if (!st) return null;
     const a = st.attributes || {};
@@ -4156,6 +4611,11 @@ class SupernotifyArchiveCard extends HTMLElement {
       el.innerHTML = `<div class="empty">⚠️ ${esc(idx.error)}</div>`;
       return;
     }
+    if (idx.loading) {
+      meta.textContent = "";
+      el.innerHTML = `<div class="empty">${T.loading}</div>`;
+      return;
+    }
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const rows = idx.items.filter((r) => {
       if (this._filter === "today" && r.t * 1000 < todayStart.getTime()) return false;
@@ -4170,8 +4630,10 @@ class SupernotifyArchiveCard extends HTMLElement {
     const parts = [];
     const gen = idx.generated ? new Date(idx.generated).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit" }) : "";
     const old = idx.oldest ? new Date(idx.oldest).toLocaleDateString(this._loc()) : "";
-    meta.innerHTML = `${idx.items.length} ${T.of} ${idx.total || "?"} ${T.in_archive}` +
-      (old ? ` · ${T.since}: ${old}` : "") + (gen ? ` · ${T.updated} ${gen}` : "");
+    meta.innerHTML = idx.native
+      ? `${idx.items.length} ${T.recent}` + (gen ? ` · ${T.read_at} ${gen}` : "")
+      : `${idx.items.length} ${T.of} ${idx.total || "?"} ${T.in_archive}` +
+        (old ? ` · ${T.since}: ${old}` : "") + (gen ? ` · ${T.updated} ${gen}` : "");
     if (!rows.length) {
       el.innerHTML = `<div class="empty">${T.none}</div>`;
       return;
@@ -4231,7 +4693,8 @@ const SN_ARCH_STRINGS = {
     f_all: "All", f_problems: "Problems only", f_today: "Today",
     f_whisper: "Whispered", wh: "whispered", said: "Alexa said",
     none: "no notification matches", no_sensor: "sensor not found",
-    no_sensor_hint: "This card needs the command_line sensor that indexes the archive (see README).",
+    no_sensor_hint: "Update SuperNotify to 2.10 or later, which has the supernotify.enquire_archive action, or add the command_line sensor that indexes the archive (see README).",
+    loading: "reading the archive…", recent: "latest notifications", read_at: "read at",
     of: "of", in_archive: "in the archive", since: "oldest", updated: "index updated",
     today: "Today", yesterday: "Yesterday",
     delivered: "delivered", failed: "failed", skipped: "skipped",
@@ -4243,7 +4706,8 @@ const SN_ARCH_STRINGS = {
     f_all: "Tutte", f_problems: "Solo con problemi", f_today: "Oggi",
     f_whisper: "Sussurrate", wh: "sussurrata", said: "Alexa ha detto",
     none: "nessuna notifica corrisponde", no_sensor: "sensore non trovato",
-    no_sensor_hint: "Questa card ha bisogno del sensore command_line che indicizza l'archivio (vedi README).",
+    no_sensor_hint: "Aggiorna SuperNotify alla 2.10 o successiva, che ha l'azione supernotify.enquire_archive, oppure aggiungi il sensore command_line che indicizza l'archivio (vedi README).",
+    loading: "lettura dell'archivio…", recent: "notifiche più recenti", read_at: "lette alle",
     of: "di", in_archive: "nell'archivio", since: "più vecchia", updated: "indice aggiornato",
     today: "Oggi", yesterday: "Ieri",
     delivered: "consegnata", failed: "fallita", skipped: "saltata",
@@ -4260,10 +4724,12 @@ const SN_ARCH_STRINGS = {
  * The question it answers: why did this notification go out (or not) on
  * this channel, to these targets? Everything comes from what SuperNotify
  * archived for that notification:
- *   - the list: the archive index in sensor.supernotify_archivio (same as
- *     supernotify-archive-card);
- *   - the detail, fetched on demand for the selected notification through
- *     shell_command.sn_archive_detail, which runs
+ *   - with SuperNotify 2.10+, both the list and the detail come from the
+ *     supernotify.enquire_archive action, through the store shared with
+ *     supernotify-archive-card (snArchiveStore / snArchiveDetail);
+ *   - before that, or with `source: sensor`: the list is the archive index in
+ *     sensor.supernotify_archivio, and the detail is fetched on demand
+ *     through shell_command.sn_archive_detail, which runs
  *     tools/sn_archive_index.py --detail <id> and returns its JSON as the
  *     service response (so it never weighs on any entity's attributes).
  * Channels that did not start at all are not in the archive: for those the
@@ -4295,6 +4761,13 @@ class SupernotifyWhyCard extends HTMLElement {
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (snArchiveNative(hass, this._config)) {
+      snArchiveStore.ensure(hass, Math.max(this._config.limit, 40), this._config.trigger_entity);
+      if (!this._rendered || wasDark !== this._dark) this._render();
+      else if (this._storeVer !== snArchiveStore.version) this._renderList();
+      this._storeVer = snArchiveStore.version;
+      return;
+    }
     const st = hass.states[this._config.entity];
     const stamp = st ? st.last_updated : "none";
     if (!this._rendered || wasDark !== this._dark) this._render();
@@ -4305,6 +4778,13 @@ class SupernotifyWhyCard extends HTMLElement {
   getCardSize() { return 12; }
 
   connectedCallback() {
+    this._onArchive = () => {
+      if (!this._rendered) return;
+      this._storeVer = snArchiveStore.version;
+      this._renderList();
+    };
+    window.addEventListener("supernotify-archive", this._onArchive);
+    this._onArchive();
     window.__snWhyCards = (window.__snWhyCards || 0) + 1;
     this._onWhy = (e) => {
       const id = e.detail && e.detail.id;
@@ -4316,6 +4796,7 @@ class SupernotifyWhyCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    window.removeEventListener("supernotify-archive", this._onArchive);
     window.__snWhyCards = Math.max(0, (window.__snWhyCards || 1) - 1);
     window.removeEventListener("supernotify-why", this._onWhy);
   }
@@ -4343,6 +4824,7 @@ class SupernotifyWhyCard extends HTMLElement {
   }
 
   _index() {
+    if (this._hass && snArchiveNative(this._hass, this._config)) return snArchiveStore.getIndex();
     const st = this._hass && this._hass.states[this._config.entity];
     if (!st) return null;
     const a = st.attributes || {};
@@ -4428,6 +4910,8 @@ class SupernotifyWhyCard extends HTMLElement {
       el.innerHTML = `<div class="empty">${T.no_sensor} <code>${esc(this._config.entity)}</code></div>`;
       return;
     }
+    if (idx.error) { el.innerHTML = `<div class="empty">⚠️ ${esc(idx.error)}</div>`; return; }
+    if (idx.loading) { el.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
     const items = idx.items.slice(0, this._config.limit);
     if (!items.length) { el.innerHTML = `<div class="empty">${T.none}</div>`; return; }
     el.innerHTML = items.map((r) => {
@@ -4458,6 +4942,14 @@ class SupernotifyWhyCard extends HTMLElement {
   }
 
   async _fetch(id) {
+    if (snArchiveNative(this._hass, this._config)) {
+      try {
+        const doc = await snArchiveStore.doc(this._hass, id);
+        return doc ? { ok: true, n: snArchiveDetail(doc) } : { ok: false, error: this._T().gone };
+      } catch (e) {
+        return { ok: false, error: (e && e.message) || String(e) };
+      }
+    }
     const [domain, service] = String(this._config.service).split(".");
     const svc = this._hass.services && this._hass.services[domain];
     if (!svc || !svc[service]) return { ok: false, error: "no_service" };
@@ -4704,7 +5196,8 @@ const SN_WHY_STRINGS = {
   en: {
     title: "Why?", pick: "Pick a notification to see why it went where it went.",
     loading: "loading…", none: "no notification", no_sensor: "sensor not found:",
-    no_service: "Missing service", no_service_hint: "Add the shell_command sn_archive_detail (see README) and restart Home Assistant.",
+    no_service: "Missing service", no_service_hint: "Update SuperNotify to 2.10 or later (supernotify.enquire_archive), or add the shell_command sn_archive_detail (see README) and restart Home Assistant.",
+    gone: "this notification is no longer in the archive",
     priority: "priority", outcome: "outcome", dupe: "duplicate",
     outcomes: { success: "delivered", partial_delivery: "partly delivered", dupe: "duplicate", failed: "failed", no_delivery: "not delivered" },
     scenarios: "Scenarios in force", no_scenarios: "no scenario in force",
@@ -4733,7 +5226,8 @@ const SN_WHY_STRINGS = {
   it: {
     title: "Perché?", pick: "Scegli una notifica per vedere perché è andata dove è andata.",
     loading: "carico…", none: "nessuna notifica", no_sensor: "sensore non trovato:",
-    no_service: "Manca il servizio", no_service_hint: "Aggiungi lo shell_command sn_archive_detail (vedi README) e riavvia Home Assistant.",
+    no_service: "Manca il servizio", no_service_hint: "Aggiorna SuperNotify alla 2.10 o successiva (supernotify.enquire_archive), oppure aggiungi lo shell_command sn_archive_detail (vedi README) e riavvia Home Assistant.",
+    gone: "questa notifica non è più nell'archivio",
     priority: "priorità", outcome: "esito", dupe: "doppione",
     outcomes: { success: "consegnata", partial_delivery: "consegnata in parte", dupe: "doppione", failed: "fallita", no_delivery: "non consegnata" },
     scenarios: "Scenari in vigore", no_scenarios: "nessuno scenario in vigore",
