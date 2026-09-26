@@ -3,6 +3,19 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.45.1] - 2026-09-26
+
+### Fixed
+- control-card (0.22.2) and overview-card (0.20.3): an **expired snooze was shown as one ending
+  tomorrow** ("1078 min left, until 09:41" for a snooze that had ended at 09:41 the same
+  morning). `supernotify.enquire_snoozes` returns only `HH:MM:SS` and keeps expired snoozes
+  until the nightly housekeeping, and the card moved any end time already past to the next day.
+  The new helper `snLiveSnoozes()` anchors the end on `snoozed_at` (next day only for a snooze
+  that crosses midnight), drops the snoozes that are over, and uses full ISO timestamps when
+  SuperNotify provides them.
+- control-card: when clearing snoozes fails, the tile shows the error instead of
+  "Snoozes cleared".
+
 ## [0.45.0] - 2026-09-25
 
 ### Changed

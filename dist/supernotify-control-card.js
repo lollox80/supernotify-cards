@@ -8,6 +8,13 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-09-26 - v0.45.1. Snooze tile and overview chip no longer show an expired snooze as one
+ *   ending tomorrow. enquire_snoozes gives only "HH:MM:SS" and keeps expired snoozes until the
+ *   nightly housekeeping, so a snooze that ended at 09:41 showed "1078 min left, until 09:41".
+ *   New helper snLiveSnoozes(): works out the end from snoozed_at (+1 day only when the snooze
+ *   crosses midnight), drops the ones already over, and uses full ISO timestamps when SuperNotify
+ *   sends them. control-card 0.22.2 (tile, countdown, tap-to-clear), overview-card 0.20.3 (chip
+ *   and stat). Clearing a snooze that fails now shows the error instead of "Snoozes cleared".
  * 2026-09-25 — v0.45.0. The archive and why cards read the archive through SuperNotify's own
  *   action, supernotify.enquire_archive (SuperNotify 2.10.0), instead of the command_line bridge.
  *   - archive-card 0.29.0, why-card 0.4.0 and recipients-card 0.21.0 use the action when Home
@@ -204,7 +211,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.45.0"; // bundle / HACS release
+const VERSION = "0.45.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -215,8 +222,8 @@ const VERSION = "0.45.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.22.1",
-  overview: "0.20.2",
+  control: "0.22.2",
+  overview: "0.20.3",
   bands: "0.13.0",
   deliveries: "0.20.0",
   transports: "0.18.0",
@@ -366,6 +373,48 @@ const SN_STRINGS = {
     no_notif: "nessuna notifica ancora",
   },
 };
+
+/**
+ * Active snoozes only, each with `_end` (Date or null = no end).
+ * enquire_snoozes returns snoozed_at / snooze_until as local "HH:MM:SS" (no date) and
+ * keeps expired snoozes until the nightly housekeeping. The end is anchored on
+ * snoozed_at: the start is today (yesterday if that time is still ahead), the end is on
+ * the start's day, +1 day only when it is not after the start (snooze across midnight).
+ * Full ISO timestamps, when SuperNotify sends them, are used as they are.
+ */
+function snLiveSnoozes(list, now) {
+  now = now || new Date();
+  const hms = (s) => {
+    const m = String(s || "").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    return m ? [+m[1], +m[2], +(m[3] || 0)] : null;
+  };
+  const iso = (s) => {
+    if (!s || !/\d{4}-\d{2}-\d{2}T/.test(String(s))) return null;
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  };
+  const out = [];
+  for (const s of list || []) {
+    if (!s) continue;
+    if (!s.snooze_until) { out.push({ ...s, _end: null }); continue; }
+    let end = iso(s.snooze_until);
+    if (!end) {
+      const u = hms(s.snooze_until);
+      if (!u) { out.push({ ...s, _end: null }); continue; }
+      const a = hms(s.snoozed_at);
+      const start = new Date(now);
+      if (a) {
+        start.setHours(a[0], a[1], a[2], 0);
+        if (start > now) start.setDate(start.getDate() - 1);
+      }
+      end = new Date(start);
+      end.setHours(u[0], u[1], u[2], 0);
+      if (a ? end <= start : end < now) end.setDate(end.getDate() + 1);
+    }
+    if (end > now) out.push({ ...s, _end: end });
+  }
+  return out;
+}
 
 function snT(config, hass) {
   const lang = ((config && config.language) || (hass && hass.language) || "en").split("-")[0];
@@ -1059,7 +1108,7 @@ class SupernotifyControlCard extends HTMLElement {
     // 30 s tick: snooze countdown + relative time of the last notification
     this._tickTimer = setInterval(() => {
       if (!this._rendered) return;
-      if ((this._snoozes || []).length) this._renderTiles();
+      if ((this._snoozes || []).length) this._renderTiles(); // also hides a snooze that just ended
       if (this._config.last_notification) this._renderLast();
     }, 30000);
     this._refreshSnoozes();
@@ -1167,12 +1216,16 @@ class SupernotifyControlCard extends HTMLElement {
     // NONCRITICAL keeps critical notifications flowing during the snooze.
     // When a snooze is already active, tapping the tile clears it instead.
     const T = snT(this._config, this._hass);
-    if ((this._snoozes || []).length) {
-      await this._hass.callWS({
-        type: "call_service", domain: "supernotify", service: "clear_snoozes",
-        service_data: {}, return_response: true,
-      });
-      this._toast(T.cleared);
+    if (snLiveSnoozes(this._snoozes).length) {
+      try {
+        await this._hass.callWS({
+          type: "call_service", domain: "supernotify", service: "clear_snoozes",
+          service_data: {}, return_response: true,
+        });
+        this._toast(T.cleared);
+      } catch (e) {
+        this._toast(`✖ ${(e && e.message) || e}`);
+      }
     } else {
       const minutes = this._config.snooze_minutes || 30;
       const action =
@@ -1447,18 +1500,17 @@ class SupernotifyControlCard extends HTMLElement {
         act: () => this._toggle(c.dnd_entity) };
     }
     if (t === "snooze") {
-      const act = this._snoozes || [];
+      // expired snoozes dropped, end anchored on snoozed_at (see snLiveSnoozes)
+      const act = snLiveSnoozes(this._snoozes);
       if (act.length) {
-        // snooze_until is a local "HH:MM:SS" string (snoozer.py export()).
-        const raw = act[0] && act[0].snooze_until ? String(act[0].snooze_until) : "";
-        const until = raw.slice(0, 5);
+        const ends = act.map((s) => s._end);
+        const end = ends.includes(null) ? null : new Date(Math.max(...ends));
+        let until = "";
         let left = "";
-        const m = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-        if (m) {
-          const now = new Date();
-          const end = new Date(now); end.setHours(+m[1], +m[2], +(m[3] || 0), 0);
-          if (end < now) end.setDate(end.getDate() + 1);
-          const mins = Math.max(0, Math.round((end - now) / 60000));
+        if (end) {
+          const pad = (n) => String(n).padStart(2, "0");
+          until = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
+          const mins = Math.max(1, Math.ceil((end - new Date()) / 60000));
           left = `⏳ ${mins} ${T.min} ${T.left}`;
         }
         return { cls: "warn", icon: "😴", name: left || T.snoozed,
@@ -1627,7 +1679,7 @@ class SupernotifyOverviewCard extends HTMLElement {
     const delsOff = this._scan("delivery").filter((d) => d.state === "off" && !/^default_/i.test(d.name));
     if (delsOff.length) chips.push({ k: "off", t: `🔕 ${delsOff.length} ${T.h_channels_off}`, title: delsOff.map((d) => d.name).join(", ") });
     if (c.quiet_entity && this._st(c.quiet_entity) === "on") chips.push({ k: "warn", t: `🌙 ${T.dnd} ${T.active}` });
-    const snz = this._snoozes || [];
+    const snz = snLiveSnoozes(this._snoozes);
     if (snz.length) chips.push({ k: "warn", t: `😴 ${snz.length} ${T.snoozed.toLowerCase()}` });
     if (!chips.some((x) => x.k !== "ok" && x.k !== "off")) chips.unshift({ k: "ok", t: `✔ ${T.h_all_good}` });
     return chips;
@@ -1785,7 +1837,7 @@ class SupernotifyOverviewCard extends HTMLElement {
       `<div class="stat"><div class="k">${k}</div><div class="v"${color ? ` style="color:${color}"` : ""}>${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
     const p = this._palette();
     const T = snT(this._config, this._hass);
-    const snz = this._snoozes || [];
+    const snz = snLiveSnoozes(this._snoozes);
     // Optional daily counter (utility_meter on sensor.supernotify_notifications):
     // shows "sent today" with yesterday's total from the last_period attribute.
     let sentStat;
@@ -1811,7 +1863,7 @@ class SupernotifyOverviewCard extends HTMLElement {
       stat("⚠️ " + T.failures, failures != null ? esc(failures) : "—", "", +failures > 0 ? p.crit : p.ok) +
       stat("🎬 " + T.act_scen, act ? act.length : "—", "") +
       stat("📤 " + T.deliveries, dels.length ? `${delsOn}/${dels.length}` : "—", T.enabled_total) +
-      stat("😴 " + T.snoozed, snz.length, snz.length && snz[0].snooze_until ? T.until + " " + esc(String(snz[0].snooze_until).slice(0, 5)) : "", snz.length ? p.warn : undefined);
+      stat("😴 " + T.snoozed, snz.length, snz.length && snz[0]._end ? T.until + " " + esc(String(snz[0]._end.getHours()).padStart(2, "0") + ":" + String(snz[0]._end.getMinutes()).padStart(2, "0")) : "", snz.length ? p.warn : undefined);
 
     const lastEl = this.shadowRoot.getElementById("last");
     if (this._last) {
