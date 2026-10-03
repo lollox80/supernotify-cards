@@ -58,6 +58,7 @@ Each link opens the card's page: screenshot, every option, examples.
 | [archive](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/archive.md) | Recent notifications with the outcome of each channel. |
 | [why](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/why.md) | Why a notification went where it went, channel by channel. |
 | [stats](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/stats.md) | Usage over 7/14/30 days: per day, hour, weekday, channel, priority. |
+| [tools](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/tools.md) | Maintenance actions and every SuperNotify question, with readable answers. |
 
 All cards follow the Home Assistant dark theme ([screenshot](https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/dark.png)).
 

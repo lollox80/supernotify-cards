@@ -8,6 +8,14 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.62.0. (1) New supernotify-tools-card 0.1.0: maintenance with the result on the
+ *   spot (refresh entities, resume every pause, archive / picture cleanup older than N days,
+ *   reset hand-made changes by kind with the list of what went back) and every enquire_* shown
+ *   readable in the card instead of a persistent notification, with Copy JSON. (3)
+ *   recipients-card 0.27.0: a person's devices (model, system, app version) on request, and
+ *   "Send a test" (two taps) through notify.recipient_<name>, i.e. the whole pipeline.
+ *   (4) composer-card 0.20.0: advanced options - spoken message, scenarios to apply / require /
+ *   consider, picture from a URL, debug.
  * 2026-10-04 - v0.61.0. (B1) control-card 0.32.0: the snooze tile opens a pause panel - what
  *   (non-critical, everything, one channel, one priority), for whom (everyone or only me), how
  *   long (15 min ... 4 h, or until resumed), and the pauses in force, each with Resume, plus
@@ -411,7 +419,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.61.0"; // bundle / HACS release
+const VERSION = "0.62.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -427,14 +435,15 @@ const SN_CARD_VERSIONS = {
   bands: "0.20.1",
   deliveries: "0.26.1",
   transports: "0.23.2",
-  recipients: "0.26.4",
+  recipients: "0.27.0",
   scenarios: "0.26.1",
   simulator: "0.15.3",
-  composer: "0.19.3",
+  composer: "0.20.0",
   automations: "0.20.2",
   stats: "0.28.2",
   archive: "0.36.4",
-  why: "0.13.0",
+  tools: "0.1.0",
+  why: "0.13.1",
 };
 
 /**
@@ -467,7 +476,8 @@ const SN_STRINGS = {
     grp_fallback: "Backup, when the others fail", ch_title: "Channels", ch_count: "{on} of {tot} on",
     off_manual: "switched off", paused_by: "paused now by", on_by: "on now through",
     fixed_targets: "fixed targets", no_deliveries: "no delivery entities found",
-    home: "home", away: "away", devices: "devices", devices_1: "device", overrides: "delivery overrides", overrides_1: "delivery override",
+    home: "home", away: "away", devices: "devices", devices_1: "device", rc_test: "Send a test", rc_test_confirm: "Tap again to send",
+    rc_test_sent: "Test sent", rc_test_title: "SuperNotify test", rc_test_msg: "Test message from the dashboard,", overrides: "delivery overrides", overrides_1: "delivery override",
     no_contact: "no contact points", no_recipients: "no recipient entities found",
     details: "Details",
     h_update: "update available:", h_restart: "restart Home Assistant to finish the update",
@@ -521,6 +531,9 @@ const SN_STRINGS = {
     prio_high: "High", prio_critical: "Critical",
     target_lbl: "Target — people, devices, areas, floors, labels",
     custom_target_lbl: "Custom targets (email, Telegram IDs, …) — comma separated",
+    adv_title: "Advanced options", adv_spoken: "Spoken message (Alexa, TTS)", adv_spoken_ph: "what the speakers say, if different from the text",
+    adv_apply: "Apply these scenarios", adv_require: "Send only if these scenarios are active", adv_constrain: "Consider only these scenarios",
+    adv_snapshot: "Picture from a URL", adv_debug: "Debug: record the full selection trace (shown by the why card)",
     custom_target_ph: "e.g. user@example.com, 123456789",
     native_target_tag: "🎯 native area/floor/label",
     target_warn: "⚠️ Areas, floors and labels are only resolved by notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts and chime. With any other channel — or the default routing when no channel is picked above — the notification can silently end up with no target. Pick a compatible channel, or add a person/device directly.",
@@ -563,7 +576,8 @@ const SN_STRINGS = {
     grp_fallback: "Di riserva, se gli altri falliscono", ch_title: "Canali", ch_count: "{on} di {tot} accesi",
     off_manual: "spento a mano", paused_by: "in pausa ora:", on_by: "acceso ora da",
     fixed_targets: "target fissi", no_deliveries: "nessuna entità delivery trovata",
-    home: "in casa", away: "fuori", devices: "dispositivi", devices_1: "dispositivo", overrides: "override delivery",
+    home: "in casa", away: "fuori", devices: "dispositivi", devices_1: "dispositivo", rc_test: "Manda una prova", rc_test_confirm: "Tocca ancora per inviare",
+    rc_test_sent: "Prova inviata", rc_test_title: "Prova SuperNotify", rc_test_msg: "Messaggio di prova dalla dashboard, ore", overrides: "override delivery",
     no_contact: "nessun recapito", no_recipients: "nessuna entità destinatario trovata",
     details: "Dettagli",
     h_update: "aggiornamento disponibile:", h_restart: "riavvia Home Assistant per completare l'aggiornamento",
@@ -616,6 +630,9 @@ const SN_STRINGS = {
     prio_high: "Alta", prio_critical: "Critica",
     target_lbl: "Target — persone, dispositivi, aree, piani, etichette",
     custom_target_lbl: "Target personalizzati (email, ID Telegram, …) — separati da virgola",
+    adv_title: "Opzioni avanzate", adv_spoken: "Frase parlata (Alexa, TTS)", adv_spoken_ph: "cosa dicono gli altoparlanti, se diverso dal testo",
+    adv_apply: "Applica questi scenari", adv_require: "Invia solo se questi scenari sono attivi", adv_constrain: "Considera solo questi scenari",
+    adv_snapshot: "Foto da un indirizzo", adv_debug: "Debug: registra il trace completo della selezione (lo mostra la card Perché)",
     custom_target_ph: "es. utente@esempio.com, 123456789",
     native_target_tag: "🎯 area/piano/etichetta nativi",
     target_warn: "⚠️ Aree, piani ed etichette vengono risolti solo da notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts e chime. Con qualsiasi altro canale — o con l'instradamento di default se non scegli nessun canale qui sopra — la notifica può restare senza target senza nessun errore visibile. Scegli un canale compatibile, oppure aggiungi anche una persona/dispositivo diretto.",
@@ -820,7 +837,7 @@ const SN_EMOJI_MDI = [
   ["🔒", "lock-outline"], ["🔘", "gesture-tap-button"], ["✋", "hand-back-right-outline"],
   ["🏷", "tag-outline"], ["📊", "chart-bar"], ["📅", "calendar-today"], ["🏆", "trophy-outline"],
   ["💡", "lightbulb-on-outline"], ["📝", "pencil-outline"], ["🧭", "compass-outline"], ["🧪", "flask-outline"],
-  ["ℹ", "information-outline"], ["↺", "restore"], ["🃏", "cards-outline"],
+  ["ℹ", "information-outline"], ["↺", "restore"], ["🃏", "cards-outline"], ["🗂", "archive-outline"], ["↩", "undo-variant"],
 ];
 const SN_EMOJI_MAP = new Map(SN_EMOJI_MDI);
 const SN_EMOJI_RE = new RegExp(
@@ -936,6 +953,7 @@ const SN_FORM_LABELS = {
     _common: "Look and text", style: "Colours", icons: "Icons", show_version: "Show the card version",
     intro: "Intro text on top", title: "Title", dnd_entity: "Do-not-disturb switch",
     quiet_entity: "Computed quiet state (optional)", presence_entity: "Person for the status bar",
+    archive_days: "Archive cleanup: older than (days)", media_days: "Picture cleanup: older than (days)",
     snooze_minutes: "Snooze length (minutes)", snooze_panel: "Snooze tile opens the pause panel", announce_delivery: "Channel for announcements",
     last_notification: "Show the last notification", last_channels: "One chip per channel in the last notification",
     repeat_entity: "Repeat-last button (optional)", tile_layout: "Tiles", tile_columns: "Tile columns (empty = automatic)",
@@ -955,6 +973,7 @@ const SN_FORM_LABELS = {
     _common: "Aspetto e testi", style: "Colori", icons: "Icone", show_version: "Mostra la versione della card",
     intro: "Testo introduttivo in alto", title: "Titolo", dnd_entity: "Interruttore non disturbare",
     quiet_entity: "Stato silenzioso calcolato (facoltativo)", presence_entity: "Persona nella barra di stato",
+    archive_days: "Pulizia archivio: piu' vecchie di (giorni)", media_days: "Pulizia foto: piu' vecchie di (giorni)",
     snooze_minutes: "Durata dello snooze (minuti)", snooze_panel: "Il riquadro pausa apre il pannello delle pause", announce_delivery: "Canale per gli annunci",
     last_notification: "Mostra l'ultima notifica", last_channels: "Un chip per canale nell'ultima notifica",
     repeat_entity: "Pulsante ripeti ultima (facoltativo)", tile_layout: "Tile", tile_columns: "Colonne delle tile (vuoto = automatico)",
@@ -1002,6 +1021,7 @@ function snForm(kind) {
     automations: [txt("manifest_url")],
     stats: [num("days", 2, 90), ent("sent_today_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update")],
     archive, why: [...archive, bool("expand"), txt("max_height")],
+    tools: [num("archive_days", 1, 365), num("media_days", 1, 365)],
   };
   return {
     schema: [...(S[kind] || []), common],
@@ -3782,6 +3802,12 @@ class SupernotifyRecipientsCard extends HTMLElement {
         .last { margin-top: 5px; font-size: 11.5px; color: ${p.muted}; cursor: pointer; }
         .last b { color: ${p.ink}; text-transform: none; }
         .last.none { cursor: default; opacity: .7; }
+        button.tag { font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; }
+        .devs { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+        .dv { font-size: 12px; } .dv b { font-size: 12.5px; text-transform: none; margin-right: 6px; } .dv span { color: ${p.muted}; }
+        .tst { margin-top: 7px; border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
+               padding: 4px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 30px; }
+        .tst.arm { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
@@ -3809,7 +3835,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
       if (r.a.email) tags.push(`✉️ ${r.a.email}`);
       if (r.a.phone_number) tags.push(`💬 ${r.a.phone_number}`);
       const nDev = Array.isArray(r.a.mobile_devices) ? r.a.mobile_devices.length : 0;
-      if (nDev) tags.push(`📱 ${snPl(T, "devices", nDev)}`);
+      if (nDev) tags.push(`<button class="tag devb" data-dev="${esc(r.name)}" aria-expanded="${this._openDev && this._openDev.has(r.name) ? "true" : "false"}">📱 ${snPl(T, "devices", nDev)} ${this._openDev && this._openDev.has(r.name) ? "▴" : "▾"}</button>`);
       const nOvr = r.a.delivery && typeof r.a.delivery === "object" ? Object.keys(r.a.delivery).length : 0;
       if (nOvr) tags.push(`🔗 ${snPl(T, "overrides", nOvr)}`);
       if (!tags.length) tags.push(`<span class="tag warn">⚠️ ${T.no_contact}</span>`);
@@ -3822,8 +3848,14 @@ class SupernotifyRecipientsCard extends HTMLElement {
         <span class="em">👤</span>
         <div class="mid"><b>${esc(alias || r.name)}</b>
           <span class="sub">${esc(personId || "")}${pState !== undefined ? (home ? " · 🏠 " + T.home : " · 🚗 " + T.away) : ""}</span>
-          <div class="tags">${tags.map((t) => t.startsWith("<span") ? t : `<span class="tag">${esc(t)}</span>`).join("")}</div>
+          <div class="tags">${tags.map((t) => t.startsWith("<") ? t : `<span class="tag">${esc(t)}</span>`).join("")}</div>
+          ${nDev && this._openDev && this._openDev.has(r.name) ? `<div class="devs">${r.a.mobile_devices.map((d) => {
+            const model = [d.manufacturer, d.model].filter(Boolean).join(" ");
+            const os = [d.os_name, d.os_version].filter(Boolean).join(" ");
+            return `<div class="dv"><b>${esc(d.device_name || d.mobile_app_id || "?")}</b><span>${esc([model, os, d.app_version ? "app " + d.app_version : ""].filter(Boolean).join(" · "))}</span></div>`;
+          }).join("")}</div>` : ""}
           ${lastHtml}
+          ${this._hass.states[`notify.recipient_${r.name}`] ? `<button class="tst${this._armed === r.name ? " arm" : ""}" data-tst="${esc(r.name)}">${this._armed === r.name ? "✉️ " + esc(T.rc_test_confirm) : "✉️ " + esc(T.rc_test)}</button>` : ""}
         </div>
         <span class="gear" title="${esc(T.details)}" aria-label="${esc(T.details)}">⚙️</span>
         <label class="sw" data-id="${esc(r.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
@@ -3834,7 +3866,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
     }).join(""), this && this._config);
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
-        if (e.target.closest(".sw")) return;
+        if (e.target.closest(".sw") || e.target.closest(".devb") || e.target.closest(".tst")) return;
         this._moreInfo(recs[+node.dataset.i].id);
       };
     });
@@ -3845,6 +3877,45 @@ class SupernotifyRecipientsCard extends HTMLElement {
         snToggle(this._hass, label.dataset.id, input.checked);
       });
     });
+    // 0.62.0: the person's devices (model, system, app version) on request
+    rows.querySelectorAll(".devb").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        this._openDev = this._openDev || new Set();
+        const n = b.dataset.dev;
+        if (this._openDev.has(n)) this._openDev.delete(n); else this._openDev.add(n);
+        this._update();
+      };
+    });
+    // 0.62.0: test message through the whole pipeline (scenarios, snoozes, dupe check), two taps
+    rows.querySelectorAll(".tst").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const n = b.dataset.tst;
+        if (this._armed !== n) {
+          this._armed = n;
+          clearTimeout(this._armT);
+          this._armT = setTimeout(() => { this._armed = null; this._update(); }, 4000);
+          this._update();
+          return;
+        }
+        this._armed = null;
+        clearTimeout(this._armT);
+        const T2 = snT(this._config, this._hass);
+        const when = new Date();
+        this._hass.callService("notify", "send_message", {
+          entity_id: `notify.recipient_${n}`, title: T2.rc_test_title,
+          message: `${T2.rc_test_msg} ${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`,
+        }).then(() => { this._sent = n; this._update(); setTimeout(() => { this._sent = null; this._update(); }, 4000); })
+          .catch((err) => { this._sentErr = `${n}: ${(err && err.message) || err}`; this._update(); });
+        snEnquireBust(1500);
+      };
+    });
+    if (this._sent || this._sentErr) {
+      const tb = this._sent && rows.querySelector(`.tst[data-tst="${this._sent}"]`);
+      if (tb) tb.textContent = "✔ " + T.rc_test_sent;
+      if (this._sentErr) { rows.insertAdjacentHTML("afterbegin", `<div class="tag warn">${esc(this._sentErr)}</div>`); this._sentErr = null; }
+    }
     rows.querySelectorAll(".last[data-ent]").forEach((node) => {
       node.onclick = (e) => {
         e.stopPropagation();
@@ -4485,6 +4556,11 @@ class SupernotifyComposerCard extends HTMLElement {
                 border-radius: 999px; padding: 5px 11px; font-size: 11.5px; font-weight: 650;
                 cursor: pointer; margin: 0 5px 5px 0; user-select: none; }
         .chip.sel { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }
+        details.adv { margin-top: 12px; border: 1.5px solid ${p.line}; border-radius: 10px; padding: 8px 12px; }
+        details.adv summary { cursor: pointer; font-weight: 700; color: ${p.brandD}; }
+        details.adv textarea { width: 100%; box-sizing: border-box; }
+        .achips { display: flex; flex-wrap: wrap; gap: 6px; }
+        label.chk { display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 600; margin-top: 10px; }
         .send { border: 0; border-radius: 10px; background: ${p.brand}; color: ${p.onBrand};
                 font-weight: 750; padding: 11px 20px; cursor: pointer; font-size: 13.5px;
                 margin-top: 14px; }
@@ -4545,6 +4621,16 @@ class SupernotifyComposerCard extends HTMLElement {
             <div class="hint" id="targetWarn" style="display:none;margin-top:6px;color:${p.warn}"></div>
             <label>${T.camera_lbl}</label>
             <select id="cam"><option value="">${T.none}</option>${this._cameraNames().map((c) => `<option value="${esc(c)}">📷 ${esc(snCameraName(this._hass, c))}</option>`).join("")}</select>
+            <details class="adv" id="adv"><summary>${T.adv_title}</summary>
+              <label>${T.adv_spoken}</label>
+              <textarea id="spk" rows="2" placeholder="${T.adv_spoken_ph}"></textarea>
+              ${this._scenNames().length ? [["apply_scenarios", T.adv_apply], ["require_scenarios", T.adv_require], ["constrain_scenarios", T.adv_constrain]].map(([k, l]) =>
+                `<label>${l}</label><div class="chips achips" data-k="${k}">${this._scenNames().map((n) =>
+                  `<button class="chip" data-s="${esc(n)}">${esc(snScenarioName(this._hass, n))}</button>`).join("")}</div>`).join("") : ""}
+              <label>${T.adv_snapshot}</label>
+              <input id="snapUrl" placeholder="https://…/snapshot.jpg">
+              <label class="chk"><input type="checkbox" id="dbg"> ${T.adv_debug}</label>
+            </details>
             <button class="send" id="send">🚀 ${T.send}</button><button class="send dry" id="dry" style="display:none">🔍 ${T.dry_btn}</button>
           </div>
           <div>
@@ -4582,6 +4668,16 @@ class SupernotifyComposerCard extends HTMLElement {
     sr.getElementById("m").addEventListener("input", upd);
     sr.getElementById("p").addEventListener("change", upd);
     sr.getElementById("cam").addEventListener("change", upd);
+    this._adv = { apply_scenarios: new Set(), require_scenarios: new Set(), constrain_scenarios: new Set() };
+    sr.querySelectorAll(".achips .chip").forEach((b) => {
+      b.onclick = () => {
+        const set = this._adv[b.parentElement.dataset.k];
+        const n = b.dataset.s;
+        if (set.has(n)) set.delete(n); else set.add(n);
+        b.classList.toggle("sel", set.has(n));
+        b.setAttribute("aria-pressed", set.has(n));
+      };
+    });
     this._deliveryTransport = {};
     this._deliveries().forEach((d) => { this._deliveryTransport[d.name] = d.transport; });
     sr.querySelectorAll("#chips .chip").forEach((node) => {
@@ -4652,6 +4748,12 @@ class SupernotifyComposerCard extends HTMLElement {
     }
   }
 
+  /** Scenario names (0.62.0), for the advanced options. */
+  _scenNames() {
+    if (!this._hass) return [];
+    return snEntityRows(this._hass, "scenario").map((r) => r.name).sort();
+  }
+
   _cameraNames() {
     if (!this._hass) return [];
     return Object.keys(this._hass.states).filter((e) => e.startsWith("camera.")).sort();
@@ -4709,6 +4811,16 @@ class SupernotifyComposerCard extends HTMLElement {
     const customRaw = (sr.getElementById("customTarget").value || "").trim();
     if (customRaw)
       payload.custom_target = customRaw.split(",").map((s) => s.trim()).filter(Boolean);
+    // 0.62.0: advanced options
+    const spk = ((sr.getElementById("spk") || {}).value || "").trim();
+    if (spk) payload.spoken_message = spk;
+    for (const k of ["apply_scenarios", "require_scenarios", "constrain_scenarios"]) {
+      const set = this._adv && this._adv[k];
+      if (set && set.size) payload[k] = [...set];
+    }
+    const snap = ((sr.getElementById("snapUrl") || {}).value || "").trim();
+    if (snap) payload.snapshot_url = snap;
+    if ((sr.getElementById("dbg") || {}).checked) payload.debug = true;
     const cam = sr.getElementById("cam").value;
     if (cam) {
       payload.camera_entity_id = cam;
@@ -6747,3 +6859,265 @@ const SN_WHY_STRINGS = {
       INVALID_ACTION_DATA: "dati dell'azione non validi", UNKNOWN: "motivo sconosciuto" },
   },
 };
+
+/* ════════════════════════════════════════════════════════════════════════
+ * supernotify-tools-card — maintenance and enquiries (0.62.0)
+ * The buttons a SuperNotify dashboard usually builds out of mushroom cards,
+ * with the result shown in the card: cleanup counts, what an override reset
+ * put back, and every enquire_* answer as a readable tree (Copy JSON).
+ * ════════════════════════════════════════════════════════════════════════ */
+
+const SN_TOOLS_ENQ = [
+  ["enquire_configuration", "q_config"], ["enquire_scenarios", "q_scen"], ["enquire_active_scenarios", "q_active"],
+  ["enquire_deliveries_by_scenario", "q_by_scen"], ["enquire_implicit_deliveries", "q_implicit"],
+  ["enquire_recipients", "q_recipients"], ["enquire_occupancy", "q_occupancy"], ["enquire_snoozes", "q_snoozes"],
+  ["enquire_last_notification", "q_last"],
+];
+
+const SN_TOOLS_STRINGS = {
+  en: {
+    maint: "Maintenance", enq: "Ask SuperNotify", refresh: "Publish every entity again", refresh_btn: "Refresh", resume_btn: "Resume", refreshed: "Entities published again.",
+    resume_all: "Resume every pause", cleared_n: "pauses resumed", purge_arch: "Clean the archive", purge_media: "Clean the pictures",
+    older: "older than", days: "days", purge_btn: "Clean", confirm: "Tap again to confirm", purged: "deleted", remaining: "left",
+    reset: "Undo the changes made by hand", reset_btn: "Reset", reset_none: "Nothing to reset: everything is as configured.",
+    reset_done: "Back to the configuration:", k_all: "everything", k_scenario: "scenarios", k_delivery: "channels",
+    k_recipient: "people", k_transport: "transports",
+    q_config: "Configuration", q_scen: "Scenarios", q_active: "Active scenarios", q_by_scen: "Channels by scenario",
+    q_implicit: "Default channels", q_recipients: "Recipients", q_occupancy: "Who is home", q_snoozes: "Pauses",
+    q_last: "Last notification", copy: "Copy JSON", copied: "Copied", close: "Close", empty: "(empty)",
+    err: "SuperNotify answered with an error:", err_config: "SuperNotify 2.12.0 cannot return its configuration when a channel has template conditions (rhizomatics/supernotify#241).",
+    settings: "Integration settings", running: "working…", more: "more",
+  },
+  it: {
+    maint: "Manutenzione", enq: "Chiedi a SuperNotify", refresh: "Ripubblica tutte le entità", refresh_btn: "Aggiorna", resume_btn: "Riprendi", refreshed: "Entità ripubblicate.",
+    resume_all: "Riprendi tutte le pause", cleared_n: "pause riprese", purge_arch: "Pulisci l'archivio", purge_media: "Pulisci le foto",
+    older: "più vecchie di", days: "giorni", purge_btn: "Pulisci", confirm: "Tocca ancora per confermare", purged: "cancellati", remaining: "rimasti",
+    reset: "Annulla le modifiche fatte a mano", reset_btn: "Ripristina", reset_none: "Niente da ripristinare: è tutto come da configurazione.",
+    reset_done: "Tornati alla configurazione:", k_all: "tutto", k_scenario: "scenari", k_delivery: "canali",
+    k_recipient: "persone", k_transport: "transport",
+    q_config: "Configurazione", q_scen: "Scenari", q_active: "Scenari attivi", q_by_scen: "Canali per scenario",
+    q_implicit: "Canali predefiniti", q_recipients: "Destinatari", q_occupancy: "Chi è in casa", q_snoozes: "Pause",
+    q_last: "Ultima notifica", copy: "Copia JSON", copied: "Copiato", close: "Chiudi", empty: "(vuoto)",
+    err: "SuperNotify ha risposto con un errore:", err_config: "SuperNotify 2.12.0 non riesce a restituire la configurazione quando un canale ha condizioni con template (rhizomatics/supernotify#241).",
+    settings: "Impostazioni dell'integrazione", running: "in corso…", more: "altri",
+  },
+};
+
+class SupernotifyToolsCard extends HTMLElement {
+  static getConfigForm() {
+    return snForm("tools");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { style: "supernotify", archive_days: 30, media_days: 7, ...(config || {}) };
+    this._rendered = false;
+  }
+
+  set hass(hass) {
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    if (!this._rendered || wasDark !== this._dark) this._render();
+  }
+
+  getGridOptions() {
+    return { columns: 12, min_columns: 6 };
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  _palette() {
+    return snPalette(this._dark, this._config && this._config.style);
+  }
+
+  _T() {
+    const lang = String(this._config.language || (this._hass && this._hass.language) || "en").split("-")[0];
+    return SN_TOOLS_STRINGS[lang] || SN_TOOLS_STRINGS.en;
+  }
+
+  async _call(service, data, withResponse = true) {
+    const msg = { type: "call_service", domain: "supernotify", service, service_data: data || {} };
+    if (withResponse) msg.return_response = true;
+    const r = await this._hass.callWS(msg);
+    return withResponse ? (r && r.response) : r;
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    const T = this._T();
+    const c = this._config;
+    const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    this.shadowRoot.innerHTML = snIconify(`
+      <style>
+        :host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted}; margin: 14px 0 8px; }
+        .sec:first-of-type { margin-top: 0; }
+        .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; position: relative; }
+        .row + .row::before { content: ""; position: absolute; left: 0; right: 0; top: 0; border-top: 1px solid ${p.line}; }
+        .lbl { flex: 1 1 180px; font-size: 14px; font-weight: 600; }
+        .lbl small { display: block; font-weight: 400; color: ${p.muted}; font-size: 12px; }
+        button { font: inherit; cursor: pointer; }
+        .b { border: 1.5px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; border-radius: 999px;
+             padding: 6px 14px; font-size: 13px; font-weight: 700; min-height: 34px; }
+        .b.arm { background: ${p.crit}; border-color: ${p.crit}; color: #fff; }
+        .b:disabled { opacity: .6; cursor: default; }
+        input[type=number], select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 8px; border: 1.5px solid ${p.line};
+             background: ${p.panel}; color: ${p.ink}; }
+        input[type=number] { width: 64px; }
+        .res { font-size: 12.5px; color: ${p.muted}; flex-basis: 100%; }
+        .res.ok { color: ${p.ok}; } .res.err { color: ${p.crit}; }
+        .qs { display: flex; flex-wrap: wrap; gap: 6px; }
+        .q.on { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }
+        .out { margin-top: 10px; border: 1.5px solid ${p.line}; border-radius: 12px; padding: 10px 12px; }
+        .oh { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .oh b { flex: 1; font-size: 14px; }
+        .tree { font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+        .tree details { margin-left: 2px; } .tree summary { cursor: pointer; }
+        .tree .k { color: ${p.brandD}; font-weight: 700; } .tree .v { color: ${p.ink}; } .tree .n { color: ${p.muted}; }
+        .tree .kids { margin-left: 14px; border-left: 1px solid ${p.line}; padding-left: 8px; }
+        .lnk { display: inline-block; margin-top: 12px; color: ${p.brandD}; font-size: 13px; font-weight: 700; text-decoration: none; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
+      </style>
+      <ha-card>
+        ${snIntro(c, this._dark)}
+        <div class="sec">${esc(T.maint)}</div>
+        <div class="row"><span class="lbl">🔄 ${esc(T.refresh)}</span><button class="b" id="refresh">${esc(T.refresh_btn)}</button><div class="res" id="r_refresh"></div></div>
+        <div class="row"><span class="lbl">😴 ${esc(T.resume_all)}</span><button class="b" id="clear">${esc(T.resume_btn)}</button><div class="res" id="r_clear"></div></div>
+        <div class="row"><span class="lbl">🗂 ${esc(T.purge_arch)}<small>${esc(T.older)} <input type="number" style="width:64px" id="dArch" min="1" value="${esc(c.archive_days)}"> ${esc(T.days)}</small></span>
+          <button class="b" id="purgeArch">${esc(T.purge_btn)}</button><div class="res" id="r_purgeArch"></div></div>
+        <div class="row"><span class="lbl">🖼️ ${esc(T.purge_media)}<small>${esc(T.older)} <input type="number" style="width:64px" id="dMedia" min="1" value="${esc(c.media_days)}"> ${esc(T.days)}</small></span>
+          <button class="b" id="purgeMedia">${esc(T.purge_btn)}</button><div class="res" id="r_purgeMedia"></div></div>
+        <div class="row"><span class="lbl">↩ ${esc(T.reset)}<small><select id="kind" aria-label="${esc(T.reset)}">
+            ${["", "scenario", "delivery", "recipient", "transport"].map((k) => `<option value="${k}">${esc(T["k_" + (k || "all")])}</option>`).join("")}</select></small></span>
+          <button class="b" id="reset">${esc(T.reset_btn)}</button><div class="res" id="r_reset"></div></div>
+        <div class="sec">${esc(T.enq)}</div>
+        <div class="qs">${SN_TOOLS_ENQ.map(([svc, key]) => `<button class="b q" data-q="${svc}">${esc(T[key])}</button>`).join("")}</div>
+        <div id="out"></div>
+        <a class="lnk" href="/config/integrations/integration/supernotify">⚙️ ${esc(T.settings)} ›</a>
+        ${c.show_version ? `<div class="ver">supernotify-tools-card v${SN_CARD_VERSIONS.tools}</div>` : ""}
+      </ha-card>`, c);
+    const $ = (id) => this.shadowRoot.getElementById(id);
+    const say = (id, text, cls) => { const el = $("r_" + id); if (el) { el.className = "res " + (cls || ""); el.textContent = text; } };
+    const errText = (e) => (e && (e.message || e.code)) || String(e);
+    // destructive buttons: first tap arms (red, "tap again"), second runs; disarms after 4 s
+    const armed = (btn, run) => {
+      btn.onclick = async () => {
+        if (!btn.classList.contains("arm")) {
+          btn.classList.add("arm"); btn.dataset.txt = btn.textContent; btn.textContent = T.confirm;
+          clearTimeout(btn._t); btn._t = setTimeout(() => { btn.classList.remove("arm"); btn.textContent = btn.dataset.txt; }, 4000);
+          return;
+        }
+        clearTimeout(btn._t); btn.classList.remove("arm"); btn.textContent = btn.dataset.txt;
+        btn.disabled = true;
+        try { await run(); } finally { btn.disabled = false; }
+      };
+    };
+    $("refresh").onclick = async () => {
+      say("refresh", T.running);
+      try { await this._call("refresh_entities", {}, false); say("refresh", "✔ " + T.refreshed, "ok"); } catch (e) { say("refresh", "✖ " + errText(e), "err"); }
+    };
+    $("clear").onclick = async () => {
+      say("clear", T.running);
+      try { const r = await this._call("clear_snoozes"); say("clear", `✔ ${(r && r.cleared) || 0} ${T.cleared_n}`, "ok"); snEnquireBust(300); }
+      catch (e) { say("clear", "✖ " + errText(e), "err"); }
+    };
+    const purge = (id, svc, input) => async () => {
+      const days = Math.max(1, +$(input).value || 1);
+      say(id, T.running);
+      try {
+        const r = await this._call(svc, { days });
+        say(id, `✔ ${(r && r.purged) || 0} ${T.purged} · ${(r && r.remaining) != null ? r.remaining : "?"} ${T.remaining}`, "ok");
+        if (svc === "purge_archive") snArchiveStore.poke(this._hass);
+      } catch (e) { say(id, "✖ " + errText(e), "err"); }
+    };
+    armed($("purgeArch"), purge("purgeArch", "purge_archive", "dArch"));
+    armed($("purgeMedia"), purge("purgeMedia", "purge_media", "dMedia"));
+    armed($("reset"), async () => {
+      const kind = $("kind").value;
+      say("reset", T.running);
+      try {
+        const r = await this._call("reset_overrides", kind ? { kind } : {});
+        const done = Object.entries((r && r.reset) || {}).filter(([, v]) => Array.isArray(v) && v.length);
+        say("reset", done.length ? `✔ ${T.reset_done} ${done.map(([k, v]) => `${T["k_" + k] || k}: ${v.join(", ")}`).join(" · ")}` : "✔ " + T.reset_none, "ok");
+        snEnquireBust(300);
+      } catch (e) { say("reset", "✖ " + errText(e), "err"); }
+    });
+    this.shadowRoot.querySelectorAll(".q").forEach((b) => {
+      b.onclick = () => this._ask(b.dataset.q);
+    });
+  }
+
+  async _ask(svc) {
+    const T = this._T();
+    const out = this.shadowRoot.getElementById("out");
+    const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    this.shadowRoot.querySelectorAll(".q").forEach((b) => b.classList.toggle("on", b.dataset.q === svc));
+    const title = T[(SN_TOOLS_ENQ.find(([s]) => s === svc) || [])[1]] || svc;
+    out.innerHTML = `<div class="out"><div class="oh"><b>${esc(title)}</b></div><div class="res">${esc(T.running)}</div></div>`;
+    let data, err;
+    try { data = await this._call(svc); } catch (e) { err = e; }
+    if (err) {
+      const m = String((err && (err.message || err.code)) || err);
+      const known = svc === "enquire_configuration" ? `<div class="res">${esc(T.err_config)}</div>` : "";
+      out.innerHTML = `<div class="out"><div class="oh"><b>${esc(title)}</b><button class="b" id="oclose">${esc(T.close)}</button></div>
+        <div class="res err">✖ ${esc(T.err)} ${esc(m)}</div>${known}</div>`;
+    } else {
+      out.innerHTML = snIconify(`<div class="out"><div class="oh"><b>${esc(title)}</b><button class="b" id="ocopy">${esc(T.copy)}</button>
+        <button class="b" id="oclose">${esc(T.close)}</button></div><div class="tree">${this._tree(data, 0)}</div></div>`, this._config);
+      const cp = this.shadowRoot.getElementById("ocopy");
+      cp.onclick = async () => {
+        try { await navigator.clipboard.writeText(JSON.stringify(data, null, 2)); cp.textContent = "✔ " + T.copied; }
+        catch (e) { cp.textContent = "✖"; }
+      };
+    }
+    const cl = this.shadowRoot.getElementById("oclose");
+    if (cl) cl.onclick = () => { out.innerHTML = ""; this.shadowRoot.querySelectorAll(".q").forEach((b) => b.classList.remove("on")); };
+  }
+
+  /** A JSON value as a readable tree: scalars inline, objects and lists foldable (first level open). */
+  _tree(v, depth) {
+    const T = this._T();
+    const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const scalar = (x) => x === null || x === undefined ? `<span class="n">—</span>`
+      : typeof x === "boolean" ? `<span class="v">${x ? "✔" : "✖"} ${x}</span>`
+      : `<span class="v">${esc(x)}</span>`;
+    if (v === null || typeof v !== "object") return scalar(v);
+    const entries = Array.isArray(v) ? v.map((x, i) => [i, x]) : Object.entries(v);
+    if (!entries.length) return `<span class="n">${esc(T.empty)}</span>`;
+    if (Array.isArray(v) && v.every((x) => x === null || typeof x !== "object")) {
+      const shown = v.slice(0, 40).map((x) => esc(x)).join(", ");
+      return `<span class="v">${shown}${v.length > 40 ? ` … +${v.length - 40} ${esc(T.more)}` : ""}</span>`;
+    }
+    const lines = entries.slice(0, 200).map(([k, x]) => {
+      if (x !== null && typeof x === "object" && (Array.isArray(x) ? x.some((y) => y !== null && typeof y === "object") : Object.keys(x).length)) {
+        const n = Array.isArray(x) ? x.length : Object.keys(x).length;
+        return `<details${depth < 1 ? " open" : ""}><summary><span class="k">${esc(k)}</span> <span class="n">(${n})</span></summary>
+          <div class="kids">${depth > 6 ? `<span class="n">…</span>` : this._tree(x, depth + 1)}</div></details>`;
+      }
+      return `<div><span class="k">${esc(k)}</span>: ${this._tree(x, depth + 1)}</div>`;
+    });
+    if (entries.length > 200) lines.push(`<div class="n">… +${entries.length - 200} ${esc(T.more)}</div>`);
+    return lines.join("");
+  }
+}
+
+customElements.define("supernotify-tools-card", SupernotifyToolsCard);
+
+window.customCards.push({
+  type: "supernotify-tools-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/tools.md",
+  name: "SuperNotify Tools",
+  description: "Maintenance with the result on the spot (refresh, resume pauses, archive and picture cleanup, reset hand-made changes) and every SuperNotify enquiry shown readable.",
+});
+

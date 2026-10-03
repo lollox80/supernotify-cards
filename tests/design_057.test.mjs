@@ -56,8 +56,8 @@ ok(/snEnquireBust\(800\)/.test(SRC) && /snEnquireBust\(1500\)/.test(SRC), "snooz
 
 // ── 3. card picker ──────────────────────────────────────────────────────
 const cc = window.customCards.filter((c) => c.type.startsWith("supernotify-"));
-ok(cc.length === 13 && cc.every((c) => c.preview === true), "13 card con anteprima nel selettore");
-ok(cc.every((c) => /docs\/cards\/[a-z]+\.md$/.test(c.documentationURL)), "13 card con link alla documentazione");
+ok(cc.length === 14 && cc.every((c) => c.preview === true), "14 card con anteprima nel selettore (0.62.0: + tools)");
+ok(cc.every((c) => /docs\/cards\/[a-z]+\.md$/.test(c.documentationURL)), "card con link alla documentazione");
 const K = (t) => customElements.get(`supernotify-${t}-card`);
 const st = K("control").getStubConfig(hass);
 ok(st.dnd_entity === "input_boolean.casa_dnd" && st.last_notification === true, `control: usa l'interruttore DND che esiste (${st.dnd_entity})`);
@@ -66,7 +66,7 @@ ok(!st0.dnd_entity && !st0.tiles.includes("dnd"), "control: senza DND niente riq
 const sb = K("bands").getStubConfig(hass);
 ok(Object.keys(sb.bands).sort().join() === "morning,night", `bands: trova le coppie di helper (${Object.keys(sb.bands)})`);
 ok(JSON.stringify(K("archive").getStubConfig()) === "{}" && JSON.stringify(K("why").getStubConfig()) === "{}", "archive/why: niente sensore personale nello stub");
-for (const t of ["control", "overview", "bands", "deliveries", "transports", "recipients", "scenarios", "simulator", "composer", "automations", "stats", "archive", "why"]) {
+for (const t of ["control", "overview", "bands", "deliveries", "transports", "recipients", "scenarios", "simulator", "composer", "automations", "stats", "archive", "why", "tools"]) {
   let err = null;
   try { const c = document.createElement(`supernotify-${t}-card`); c.setConfig(K(t).getStubConfig({ states: {}, services: {} })); } catch (e) { err = e.message; }
   if (err) ok(false, `${t}: lo stub non deve dare errore (${err})`);

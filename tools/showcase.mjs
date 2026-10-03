@@ -187,6 +187,7 @@ window.__mkHass = (dark) => ({
     if (s === "notify") return { context: {}, response: DRY };
     if (s === "enquire_last_notification") return { response: LAST };
     if (s === "enquire_snoozes") return { response: { snoozes: SNOOZES } };
+    if (s === "enquire_occupancy") return { response: { scenarios: { home: [{ person: "person.alex", enabled: true, email: "alex@example.com" }, { person: "person.sam", enabled: true }], not_home: [{ person: "person.robin", enabled: false }] } } };
     if (s === "enquire_active_scenarios") return { response: { scenarios: ["people_home", "morning", "voice_off_guests"] } };
     if (s === "enquire_deliveries_by_scenario") return { response: {
       people_home: { enabled: ["alexa_announce", "doorbell_chime"], disabled: [] }, morning: { enabled: ["tts"], disabled: [] },
@@ -219,6 +220,7 @@ const SHOTS = {
   archive: [700, [["archive", ARCH]]],
   why: [700, [["why", ARCH]]],
   stats: [700, [["stats", { sent_today_entity: "sensor.supernotify_sent_today" }]]],
+  tools: [460, [["tools", {}]], 1, false, "tools"],
   composer: [700, [["composer", {}]], 1, false, "composer"],
   hero: [920, [["control", CONTROL], ["overview", OVERVIEW], ["composer", {}]], 2, false, "composer"],
   dark: [1200, [["control", CONTROL], ["overview", OVERVIEW], ["deliveries", {}]], 3, true],
@@ -261,6 +263,10 @@ for (const [name, [width, cards, cols = 1, dark = false, before]] of Object.entr
       sr.getElementById("dry").click();
     });
     await page.waitForTimeout(900);
+  }
+  if (before === "tools") {
+    await page.evaluate(() => { const c = document.querySelector("supernotify-tools-card"); c.shadowRoot.querySelector('.q[data-q="enquire_occupancy"]').click(); });
+    await page.waitForTimeout(400);
   }
   if (name === "archive") {
     await page.evaluate(() => { const r = document.querySelector("supernotify-archive-card").shadowRoot.querySelector(".row"); r && r.click(); });

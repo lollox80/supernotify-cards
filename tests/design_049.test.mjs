@@ -32,7 +32,7 @@ for (const k of ["ink", "muted", "brand", "brandD", "ok", "warn", "crit"]) {
 }
 ok(ratio("#ffffff", val("brand")) >= 4.5, `chiaro: testo bianco su brand ${ratio("#ffffff", val("brand")).toFixed(2)}:1`);
 ok(ratio(val("warnInk"), val("warnSoft")) >= 4.5, `chiaro: snooze attivo ${ratio(val("warnInk"), val("warnSoft")).toFixed(2)}:1`);
-ok((SRC.match(/\n  _palette\(\) \{\n    return snPalette\(/g) || []).length === 13, "le 13 card usano snPalette");
+ok((SRC.match(/\n  _palette\(\) \{\n    return snPalette\(/g) || []).length === 14, "le 14 card usano snPalette (0.62.0: + tools)");
 
 // ── 2. stati di prova ───────────────────────────────────────────────────────
 const T0 = Math.floor(Date.now() / 1000) - 600;

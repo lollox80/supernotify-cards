@@ -41,6 +41,16 @@ right after, with the same text, would be dropped as a duplicate. With
 `dry_run_dupe_check: true` the dry run does check duplicates, and the next Send
 of the same content carries `force_resend` instead.
 
+**Advanced** (closed by default):
+
+- **Spoken message** — a different text for voice channels (`spoken_message`).
+- **Scenarios** — chips to *apply* scenarios to this notification only,
+  *require* them (send only if they are active) or *constrain* the channels to
+  theirs (`apply_scenarios`, `require_scenarios`, `constrain_scenarios`).
+- **Snapshot URL** — a picture by address instead of a camera (`snapshot_url`).
+- **Debug** — SuperNotify keeps extra detail on this notification (`debug: true`),
+  visible in the why and archive cards.
+
 ```yaml
 type: custom:supernotify-composer-card
 # dry_run: true               # optional: show the button whatever the version

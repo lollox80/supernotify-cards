@@ -3,6 +3,23 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.62.0] - 2026-10-04
+
+A tools card, a test button for each person, and the composer's advanced options.
+
+### Added
+- **supernotify-tools-card** (new): refresh entities, resume every pause, clean the archive and the
+  pictures older than N days, undo the changes made by hand (all or one kind), each with its result
+  on the same row. Every `enquire_*` question as a chip, with the answer as a readable tree and
+  Copy JSON. Explains the 2.12.0 configuration error (#241).
+- recipients-card: **Send a test** button, sends a short notification to that person only (second tap to
+  confirm), and the **device list** (name, maker, model, system, app version) behind the devices chip.
+- composer-card: **Advanced** section with spoken message, apply / require / constrain scenarios,
+  snapshot URL and debug.
+
+### Changed
+- Icons: 🗂 and ↩ are now drawn as MDI icons like the others.
+
 ## [0.61.0] - 2026-10-04
 
 Pause what you want, and see a notification as soon as it is done.
