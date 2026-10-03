@@ -1,0 +1,11 @@
+{
+  "name": "supernotify-cards-dev",
+  "private": true,
+  "description": "Dev-only: runs the jsdom tests in tests/. Nothing here ships to HACS (the card is dist/supernotify-control-card.js).",
+  "scripts": {
+    "test": "node tools/run_tests.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
+}

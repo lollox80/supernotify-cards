@@ -1,0 +1,11 @@
+# CHANGELOG
+# 2026-10-03 - first .gitignore: npm dependencies for the jsdom tests, editor/OS leftovers.
+
+node_modules/
+package-lock.json
+npm-debug.log*
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
