@@ -50,7 +50,7 @@ const steps = [...det.querySelectorAll(".path .step")].map((s) => s.textContent.
 console.log("    percorso:", steps.join(" | "));
 ok(steps.length === 4, "quattro passi");
 ok(/instradamento normale/.test(steps[0]) && /Qualcuno in casa/.test(steps[1]) && /Lorenzo/.test(steps[2]) && /fuori: Jessica/.test(steps[2]), "chiamata, scenari, persone");
-ok(/1 partito · 2 da guardare · 1 saltato/.test(steps[3]), "conteggio canali");
+ok(/1 partito\s*2 da guardare\s*1 saltato/.test(steps[3]), "conteggio canali (0.59.0: in pila)");
 const pbs = [...det.querySelectorAll(".pb")];
 ok(pbs.length === 2 && det.firstElementChild.nextElementSibling.classList.contains("path") && det.children[2].classList.contains("pb"), "problemi subito dopo il percorso");
 const em = pbs.find((x) => /Email/.test(x.textContent));

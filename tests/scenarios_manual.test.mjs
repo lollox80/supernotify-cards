@@ -45,7 +45,8 @@ const osp = byName("Ospiti in casa");
 assert.ok(osp, "nome pulito 'Ospiti in casa' (niente 'manuale')");
 assert.ok(!osp.querySelector(".mid b").textContent.includes("manuale"));
 assert.ok(osp.textContent.includes(" manuale") && osp.querySelector('ha-icon[icon="mdi:hand-back-right-outline"]'), "tag manuale");
-assert.strictEqual(osp.querySelectorAll(".sw").length, 2, "abilitato + applica ora");
+assert.strictEqual(osp.querySelectorAll(".sw").length, 1, "un solo interruttore: abilitato");
+assert.ok(osp.querySelector(".apb") && /Applica ora/.test(osp.querySelector(".apb").textContent), "0.59.0: applica ora è un bottone");
 assert.ok(!osp.textContent.includes("attivo ora"), "manuale spento -> non attivo");
 
 const mor = byName("Morning");
@@ -58,10 +59,9 @@ assert.ok(tst.textContent.includes(" manuale") && tst.querySelector('ha-icon[ico
 assert.strictEqual(tst.querySelector(".mid b").textContent, "Test");
 
 // applica ora -> scrittura stato del binary_sensor manuale
-const man = osp.querySelector(".sw.man input");
-man.checked = true; man.dispatchEvent(new dom.window.Event("change"));
+osp.querySelector(".apb").click();
 // abilitato -> servizio switch
-const en = osp.querySelector(".sw:not(.man) input");
+const en = osp.querySelector(".sw input");
 en.checked = false; en.dispatchEvent(new dom.window.Event("change"));
 assert.deepStrictEqual(calls, [
   ["api", "POST", "states/binary_sensor.supernotify_scenario_ospiti", "on"],

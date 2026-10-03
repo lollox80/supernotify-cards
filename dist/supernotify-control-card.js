@@ -8,6 +8,15 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.59.0. Design review, part 2 (finishing touches). (A5) archive and why: times
+ *   follow the HA profile's time format (snH12). (C3) bands-card 0.20.0: one line per band - name
+ *   and "until 13:00", start time, volume slider, percent; about 40% shorter. (C4) scenarios: the
+ *   manual scenario's "Apply now" is a button (Applied when on), one switch per row. (C5) control:
+ *   the snooze tile reads "Snoozed · 25 min", "garden · until 22:05". (C6) transports: readable
+ *   name first, technical name and "used by 2 channels" under it. (C1) stats: hour and weekday
+ *   charts drawn at their real width, labels 10.5 px, hours every 6. (C2) stats: day periods by
+ *   their band name. (C7) why: step 4 stacked. (C8) archive: scenarios in force by name. (C9)
+ *   simulator: the reason sits next to the channel name.
  * 2026-10-03 - v0.58.0. Design review, consistency and visible defects. (A1) stats-card number
  *   tiles are filled like the overview's, no border. (A2) snTech()/snSame(): one rule for technical
  *   names - small monospace, hidden when they say the same as the readable name (deliveries,
@@ -376,7 +385,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.58.0"; // bundle / HACS release
+const VERSION = "0.59.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -387,19 +396,19 @@ const VERSION = "0.58.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.30.1",
+  control: "0.30.2",
   overview: "0.29.1",
-  bands: "0.19.0",
+  bands: "0.20.0",
   deliveries: "0.26.0",
-  transports: "0.22.2",
+  transports: "0.23.0",
   recipients: "0.26.2",
-  scenarios: "0.24.1",
-  simulator: "0.15.0",
+  scenarios: "0.25.0",
+  simulator: "0.15.1",
   composer: "0.19.1",
   automations: "0.20.1",
-  stats: "0.28.0",
-  archive: "0.36.1",
-  why: "0.12.1",
+  stats: "0.28.1",
+  archive: "0.36.2",
+  why: "0.12.2",
 };
 
 /**
@@ -421,7 +430,7 @@ const SN_STRINGS = {
     yesterday: "yesterday", failures: "Failures", deliveries: "Deliveries",
     enabled_total: "enabled/total", last_notif: "Last notification",
     transports: "Transports", delivered: "delivered", failed: "failed",
-    channels: "channels", none: "none", no_transports: "no transport entities found",
+    channels: "channels", none: "none", no_transports: "no transport entities found", tr_used: "used by", tr_unused: "no channel uses it",
     start: "start", volume: "volume", now: "now", crosses: "crosses midnight",
     no_voice: "no voice", mute_hint: "A band at <b>0%</b> sends <b>no voice announcement</b> at all (Alexa and TTS off, push and dashboard still delivered). Critical and high-priority alerts always speak.",
     enabled: "enabled", implicit: "always on", explicit: "on request",
@@ -447,7 +456,7 @@ const SN_STRINGS = {
     ln_why: "Why", tgt_loading: "loading the picker…", bands_empty_t: "No time bands yet",
     bands_empty: "Add one band per part of the day: an input_datetime for its start and an input_number for the voice volume.",
     active_now: "active now", disabled: "disabled", other: "Other",
-    manual: "manual", apply_now: "apply now", enabled_lbl: "enabled",
+    manual: "manual", apply_now: "apply now", applied: "Applied", apply_off: "tap to stop applying it", enabled_lbl: "enabled",
     reset_overrides: "Reset overrides", reset_done: "overrides reset",
     transport_off: "transport off", last_notified: "last notified", never_notified: "never notified",
     media: "media", no_scenarios: "no scenario entities found",
@@ -512,7 +521,7 @@ const SN_STRINGS = {
     yesterday: "ieri", failures: "Fallimenti", deliveries: "Delivery",
     enabled_total: "attive/totali", last_notif: "Ultima notifica",
     transports: "Transport", delivered: "consegnata", failed: "fallite",
-    channels: "canali", none: "nessuno", no_transports: "nessuna entità transport trovata",
+    channels: "canali", none: "nessuno", no_transports: "nessuna entità transport trovata", tr_used: "usato da", tr_unused: "nessun canale lo usa",
     start: "inizio", volume: "volume", now: "ora", crosses: "attraversa mezzanotte",
     no_voice: "niente voce", mute_hint: "Una fascia a <b>0%</b> <b>non manda proprio</b> l'annuncio vocale (Alexa e TTS spenti; push e notifica a schermo arrivano lo stesso). Gli avvisi critici e urgenti parlano sempre.",
     enabled: "attiva", implicit: "sempre attivo", explicit: "solo su richiesta",
@@ -537,7 +546,7 @@ const SN_STRINGS = {
     ln_why: "Perché", tgt_loading: "carico il selettore…", bands_empty_t: "Nessuna fascia oraria",
     bands_empty: "Aggiungi una fascia per ogni parte della giornata: un input_datetime per l'inizio e un input_number per il volume della voce.",
     active_now: "attivo ora", disabled: "disattivato", other: "Altro",
-    manual: "manuale", apply_now: "applica ora", enabled_lbl: "abilitato",
+    manual: "manuale", apply_now: "applica ora", applied: "Applicato", apply_off: "tocca per non applicarlo più", enabled_lbl: "abilitato",
     reset_overrides: "Ripristina override", reset_done: "override ripristinati",
     transport_off: "transport spento", last_notified: "ultimo avviso", never_notified: "nessun avviso",
     media: "media", no_scenarios: "nessuna entità scenario trovata",
@@ -835,6 +844,15 @@ function snSame(a, b) {
 function snTech(name, shown) {
   if (!name || snSame(name, shown)) return "";
   return `<span class="tech sn-tech" style="font-family:ui-monospace,'Roboto Mono',monospace;font-size:11px;font-weight:400">${String(name).replace(/&/g, "&amp;").replace(/</g, "&lt;")}</span>`;
+}
+
+/**
+ * 12 or 24 hours (0.59.0): the user's own choice in the HA profile (time_format "12" / "24"),
+ * else the language's default (undefined lets toLocale* decide).
+ */
+function snH12(hass) {
+  const f = hass && hass.locale && hass.locale.time_format;
+  return f === "12" ? true : f === "24" ? false : undefined;
 }
 
 function snW(T, key, n) {
@@ -2149,11 +2167,11 @@ class SupernotifyControlCard extends HTMLElement {
           const pad = (n) => String(n).padStart(2, "0");
           until = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
           const mins = Math.max(1, Math.ceil((end - new Date()) / 60000));
-          left = `⏳ ${mins} ${T.min} ${T.left}`;
+          left = `${T.snoozed} · ${mins} ${T.min}`;
         }
         const what = snSnoozeLabels(this._hass, act, T);
         return { cls: "warn", icon: "😴", name: left || T.snoozed,
-          sub: what ? what + (until ? ` · ${until}` : "") : (until ? T.until + " " + until + " · " : "") + T.tap_clear,
+          sub: what ? what + (until ? ` · ${T.until} ${until}` : "") : (until ? T.until + " " + until + " · " : "") + T.tap_clear,
           act: () => this._snooze() };
       }
       return { cls: "", icon: "😴", name: `${T.snooze} ${c.snooze_minutes || 30} ${T.min}`,
@@ -2783,10 +2801,19 @@ class SupernotifyBandsCard extends HTMLElement {
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-               padding: 10px 8px; border-radius: 12px; }
+        /* 0.59.0: one line per band - name and end, start time, volume slider, percent */
+        .row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(80px, 1fr) 42px;
+               align-items: center; gap: 12px; padding: 10px 8px; border-radius: 12px; position: relative; }
+        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
+               border-top: 1px solid ${p.line}; pointer-events: none; }
+        .row.act::before, .row.act + .row::before { display: none; }
+        @container (max-width: 380px) {
+          .row { grid-template-columns: auto minmax(0, 1fr) 42px; row-gap: 6px; }
+          .who { grid-column: 1 / -1; }
+        }
+        .pct { font-weight: 800; font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
         .row.act { background: ${p.okSoft}; }
-        .who { flex: 1; min-width: 150px; }
+        .who { min-width: 0; }
         .who b { font-size: 14px; }
         .who .rng { font-size: 11.5px; color: ${p.muted}; margin-top: 1px; }
         .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px;
@@ -2803,7 +2830,7 @@ class SupernotifyBandsCard extends HTMLElement {
         input[type=time] { border: 1.5px solid ${p.line}; border-radius: 8px;
                  padding: 6px 8px; font-size: 13px; background: ${p.panel}; color: ${p.ink}; }
         input[type=time]:focus { outline: none; border-color: ${p.brand}; }
-        .volwrap { min-width: 150px; }
+        .volwrap { min-width: 0; }
         input[type=range] { width: 100%; accent-color: ${p.brand}; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
         ${SN_FLOW_CSS}
@@ -2838,12 +2865,11 @@ class SupernotifyBandsCard extends HTMLElement {
         const isMute = b.vol === 0;
         return `<div class="row ${isAct ? "act" : ""} ${isMute ? "mute" : ""}" data-row="${b.key}">
         <div class="who"><b>${b.icon} ${b.name}</b> <span class="badge" data-now ${isAct ? "" : "hidden"}>${T.now}</span><span class="badge mute" data-m="${b.key}" ${isMute ? "" : "hidden"}>&nbsp;\u{1F507} ${T.no_voice}</span>
-          <div class="rng">${b.hhmm || "\u2014"} \u2192 ${next.hhmm || "\u2014"}${i === bands.length - 1 ? " \u00b7 " + T.crosses : ""}</div>
+          <div class="rng">${T.until} ${next.hhmm || "\u2014"}${i === bands.length - 1 ? " \u00b7 " + T.crosses : ""}</div>
         </div>
-        <div class="fld"><span class="k">${T.start}</span>
-          <input type="time" value="${b.hhmm}" data-e="${b.start}"></div>
-        <div class="fld volwrap"><span class="k">${T.volume} <span data-l="${b.key}">${b.vol != null ? b.vol : "\u2014"}</span>%</span>
-          <input type="range" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}"></div>
+        <input type="time" value="${b.hhmm}" data-e="${b.start}" aria-label="${b.name} - ${T.start}" title="${T.start}">
+        <input type="range" class="volwrap" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}" aria-label="${b.name} - ${T.volume}" title="${T.volume}">
+        <span class="pct"><span data-l="${b.key}">${b.vol != null ? b.vol : "\u2014"}</span>%</span>
       </div>`;
       }).join(""), this && this._config);
       rows.dataset.sig = sig;
@@ -2866,7 +2892,7 @@ class SupernotifyBandsCard extends HTMLElement {
       if (mb) mb.hidden = !isMute;
       const rng = row.querySelector(".rng");
       if (rng) {
-        rng.textContent = `${b.hhmm || "\u2014"} \u2192 ${next.hhmm || "\u2014"}`
+        rng.textContent = `${T.until} ${next.hhmm || "\u2014"}`
           + (i === bands.length - 1 ? " \u00b7 " + T.crosses : "");
       }
       const ti = row.querySelector("input[type=time]");
@@ -2930,6 +2956,15 @@ window.customCards.push({
 const SN_NATIVE_TARGET_TRANSPORTS = [
   "notify_entity", "alexa_devices", "html5", "ntfy", "kodi", "media_player", "tts", "chime",
 ];
+
+// readable transport names (0.59.0); a transport not listed keeps its technical name
+const SN_TRANSPORT_LABELS = {
+  alexa_devices: "Alexa", alexa_media_player: "Alexa Media Player", chime: "Chime", email: "Email",
+  mobile_push: "Mobile app", persistent: "Home Assistant", sms: "SMS", telegram: "Telegram", tts: "Text to speech",
+  media: "Media player", notify_entity: "Notify entity", generic: "Notify action", pushover: "Pushover", ntfy: "ntfy",
+  gotify: "Gotify", matrix: "Matrix", discord: "Discord", html5: "HTML5 push", kodi: "Kodi", google_cast: "Google Cast",
+  mqtt: "MQTT", whatsapp: "WhatsApp", signal: "Signal",
+};
 
 const SN_TRANSPORT_ICONS = {
   mobile_push: "📱", telegram: "✈️", alexa_media_player: "🗣️", alexa_devices: "🗣️",
@@ -3310,9 +3345,14 @@ class SupernotifyTransportsCard extends HTMLElement {
       if (errCount > 0) tags.push(`<span class="tag err">⚠️ ${errCount} · ${esc(t.a.last_error_message || "")}</span>`);
       let alias = snCleanName(t.a.friendly_name, t.name);
       if (/Transport Adaptor$/i.test(alias)) alias = "";
+      const label = alias || SN_TRANSPORT_LABELS[t.name] || t.name;
+      const used = Object.keys(this._hass.states).filter((e) => e.startsWith("switch.supernotify_delivery_")
+        && this._hass.states[e].attributes && this._hass.states[e].attributes.transport === t.name).length;
+      const use = used ? `${T.tr_used} ${snPl(T, "channels", used)}` : T.tr_unused;
       return `<div class="row" data-i="${i}">
         <span class="em">${em}</span>
-        <div class="mid"><b>${esc(t.name)}</b>${alias ? ` <span class="sub">· ${esc(alias)}</span>` : ""}
+        <div class="mid"><b>${esc(label)}</b>
+          <div class="sub">${[snTech(t.name, label), esc(use)].filter(Boolean).join(" · ")}</div>
           ${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}
         </div>
         <label class="sw" data-id="${esc(t.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
@@ -3732,6 +3772,9 @@ class SupernotifyScenariosCard extends HTMLElement {
         .b-dis { background: rgba(226,60,60,.10); color: ${p.crit}; }
         .row.dis .mid { opacity: .55; }
         .mlbl { font-size: 10.5px; color: ${p.muted}; flex-shrink: 0; }
+        .apb { flex-shrink: 0; border: 1.5px solid ${p.brand}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
+               padding: 6px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 32px; }
+        .apb.on { background: ${p.ok}; border-color: ${p.ok}; color: #fff; }
         ${SN_SWITCH_CSS}
         ${SN_FLOW_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
@@ -3769,9 +3812,8 @@ class SupernotifyScenariosCard extends HTMLElement {
       : (s.enabled === false ? `<span class="badge b-dis">${T.disabled}</span>` : "");
     // Manual scenario (no conditions): its binary_sensor state IS the control.
     const man = s.manual && s.bsId
-      ? `<span class="mlbl">${T.apply_now}</span><label class="sw man" data-id="${esc(s.bsId)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.ok}">
-          <input type="checkbox" ${s.state === "on" ? "checked" : ""} aria-label="${esc((alias || s.name) + " - " + T.apply_now)}" title="${T.apply_now}">
-          <span class="sl"></span></label>`
+      ? `<button class="apb${s.state === "on" ? " on" : ""}" data-id="${esc(s.bsId)}" data-on="${s.state === "on" ? 1 : 0}"
+          aria-pressed="${s.state === "on"}" title="${esc(s.state === "on" ? T.apply_off : T.apply_now)}">${s.state === "on" ? "✔ " + esc(T.applied) : esc(T.apply_now.charAt(0).toUpperCase() + T.apply_now.slice(1))}</button>`
       : "";
     return `<div class="row ${isAct ? "act" : ""} ${s.enabled === false ? "dis" : ""}" data-i="${i}">
       <span class="em">${em}</span>
@@ -3821,9 +3863,13 @@ class SupernotifyScenariosCard extends HTMLElement {
     rows.innerHTML = snIconify(html, this && this._config);
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
-        if (e.target.closest(".sw")) return;
+        if (e.target.closest(".sw") || e.target.closest(".apb")) return;
         this._moreInfo(all[+node.dataset.i].id);
       };
+    });
+    // the manual scenario's binary_sensor: SuperNotify applies the scenario while it is on
+    rows.querySelectorAll(".apb").forEach((b) => {
+      b.onclick = (e) => { e.stopPropagation(); snToggle(this._hass, b.dataset.id, b.dataset.on !== "1"); };
     });
     rows.querySelectorAll(".sw").forEach((label) => {
       label.addEventListener("click", (e) => e.stopPropagation());
@@ -3952,7 +3998,7 @@ class SupernotifySimulatorCard extends HTMLElement {
         .hint { font-size: 11.5px; color: ${p.muted}; margin-top: 8px; }
         .sh { font-size: 12px; font-weight: 700; color: ${p.muted}; margin: 10px 0 4px; }
         .sh.go { color: ${p.ok}; }
-        .sr { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1.3fr); gap: 8px; align-items: baseline;
+        .sr { display: grid; grid-template-columns: 22px minmax(0, min(15em, 42%)) minmax(0, 1fr); gap: 8px 14px; align-items: baseline;
               padding: 7px 2px; border-bottom: 1px solid ${p.line}; font-size: 13.5px; }
         .sr:last-child { border-bottom: 0; }
         .sr .si { color: ${p.muted}; } .sr.go .si { color: ${p.ok}; }
@@ -4945,6 +4991,7 @@ class SupernotifyStatsCard extends HTMLElement {
 
   _chartWidth() {
     const w = this.getBoundingClientRect ? this.getBoundingClientRect().width : 0;
+    this._cardW = w; // 0.59.0: the side-by-side charts are drawn at half of this
     return Math.max(300, Math.min(600, Math.round((w || 600) - 28)));
   }
 
@@ -5164,7 +5211,7 @@ class SupernotifyStatsCard extends HTMLElement {
         @container (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
         @container (max-width: 460px) { .hrow .nm { width: 46%; min-width: 90px; } .hrow .ct { width: 48px; } }
         svg { width: 100%; height: auto; display: block; overflow: visible; }
-        .bars text { font-size: 9px; fill: ${p.muted}; }
+        .bars text { font-size: 10.5px; fill: ${p.muted}; }
         .bars .val { font-size: 9.5px; fill: ${p.ink}; font-weight: 700; }
         .hrow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 0; }
         .hrow .nm { width: 38%; min-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -5258,9 +5305,9 @@ class SupernotifyStatsCard extends HTMLElement {
       l: (d.perDay.length - 1 - i) % every === 0 ? `${x.d.getDate()}/${x.d.getMonth() + 1}` : "",
       v: x.n, hi: x.today })), p, { avg: d.avg });
     // hourly
-    const hourly = this._barsSvg(d.perHour.map((v, h) => ({ l: h % 3 === 0 ? String(h) : "", v, hi: h === d.peakHour })), p, { thin: true });
+    const hourly = this._barsSvg(d.perHour.map((v, h) => ({ l: h % 6 === 0 ? String(h) : "", v, hi: h === d.peakHour })), p, { thin: true, half: true });
     // weekday
-    const wd = this._barsSvg(d.perWd.map((v, i) => ({ l: T.st_wd[i], v })), p, {});
+    const wd = this._barsSvg(d.perWd.map((v, i) => ({ l: T.st_wd[i], v })), p, { half: true });
     // channels
     const maxCh = d.channels.length ? d.channels[0].ok + d.channels[0].ko : 1;
     const chRows = d.channels.slice(0, this._config.top_channels).map((ch) => {
@@ -5280,7 +5327,7 @@ class SupernotifyStatsCard extends HTMLElement {
       `<span class="chip"><i style="background:${SN_PRIO_COLORS[k]}"></i>${T["prio_" + k] || k} ${Math.round((d.prioCount[k] / prioTot) * 100)}%</span>`).join("") || `<span class="empty">—</span>`;
     const perTot = Object.values(d.periodCount).reduce((a, b) => a + b, 0) || 1;
     const perChips = Object.keys(d.periodCount).sort((a, b) => d.periodCount[b] - d.periodCount[a]).map((k) =>
-      `<span class="chip">${esc(k)} ${Math.round((d.periodCount[k] / perTot) * 100)}%</span>`).join("") || `<span class="empty">—</span>`;
+      `<span class="chip">${esc(snBandName(T, String(k).trim().toLowerCase().replace(/[\s-]+/g, "_")))} ${Math.round((d.periodCount[k] / perTot) * 100)}%</span>`).join("") || `<span class="empty">—</span>`;
 
     body.innerHTML = snIconify(`
       <div class="kpis">${kpis}</div>
@@ -5317,7 +5364,10 @@ class SupernotifyStatsCard extends HTMLElement {
   _barsSvg(items, p, opt) {
     const n = items.length || 1;
     // drawn at the card's own width (300-600), so 9 px labels stay 9 px on a phone
-    const W = this._svgW || 600, H = 110, padB = 18, padT = 14;
+    // 0.59.0: the hour and weekday charts sit side by side above 640 px, so they are drawn at
+    // half the width - otherwise the browser shrinks them and their labels drop to ~5 px
+    const full = this._svgW || 600, cw = this._cardW || 0;
+    const W = opt.half && cw > 640 ? Math.max(260, Math.min(600, Math.round((cw - 28 - 18) / 2))) : full, H = 110, padB = 18, padT = 14;
     const max = Math.max(1, ...items.map((i) => i.v));
     const gap = opt.thin ? 2 : 4;
     const bw = (W - gap * (n - 1)) / n;
@@ -5655,7 +5705,7 @@ class SupernotifyArchiveCard extends HTMLElement {
       return true;
     });
     const parts = [];
-    const gen = idx.generated ? new Date(idx.generated).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit" }) : "";
+    const gen = idx.generated ? new Date(idx.generated).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) }) : "";
     const old = idx.oldest ? new Date(idx.oldest).toLocaleDateString(this._loc()) : "";
     meta.innerHTML = snIconify(idx.native
       ? `${idx.items.length} ${T.recent}` + (gen ? ` · ${T.read_at} ${gen}` : "")
@@ -5670,13 +5720,13 @@ class SupernotifyArchiveCard extends HTMLElement {
       const d = new Date(r.t * 1000);
       const day = this._dayLabel(d, T);
       if (day !== lastDay) { parts.push(`<div class="day">${esc(day)}</div>`); lastDay = day; }
-      const hm = d.toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit" });
+      const hm = d.toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
       const chans = this._channels(r, idx).map((c) =>
         `<span class="tg ${c.state}" title="${esc(c.name)}">${c.state === "ok" ? "✔" : c.state === "err" ? "✖" : "⊘"} ${esc(snDeliveryAlias(this._hass, c.name) || c.name)}` +
         `${c.reason ? " · " + esc(c.reason) : ""}</span>`).join("");
       const prio = r.p ? `<span class="tg pr ${esc(r.p)}">● ${esc((T.prio && T.prio[r.p]) || r.p)}</span>` : "";
       const wh = r.w ? `<span class="tg wh">\u{1F92B} ${T.wh}</span>` : "";
-      const scen = (r.sc || []).map((s) => esc(idx.scen[s] || "?")).join(", ");
+      const scen = (r.sc || []).map((s) => esc(idx.scen[s] ? snScenarioName(this._hass, idx.scen[s]) : "?")).join(", ");
       const open = this._open.has(r.id) ? " open" : "";
       parts.push(
         `<div class="row${open}" data-id="${esc(r.id)}" title="id ${esc(r.id)}">
@@ -5972,7 +6022,7 @@ class SupernotifyWhyCard extends HTMLElement {
     if (!items.length) { el.innerHTML = snIconify(`<div class="empty">${T.none}</div>`, this && this._config); return; }
     el.innerHTML = snIconify(items.map((r) => {
       const d = new Date(r.t * 1000);
-      const hm = d.toLocaleString(this._loc(), { weekday: "short", hour: "2-digit", minute: "2-digit" });
+      const hm = d.toLocaleString(this._loc(), { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
       return `<div class="it${this._sel === r.id ? " sel" : ""}" data-id="${esc(r.id)}">
         <span class="dot ${this._outcomeClass(r)}"></span><span class="hm">${esc(hm)}</span>
         <span class="ti">${esc(r.ti || r.m || "—")}</span></div>`;
@@ -6142,7 +6192,7 @@ class SupernotifyWhyCard extends HTMLElement {
 
     // header: what and when
     const d = new Date((n.t || 0) * 1000);
-    const when = d.toLocaleString(this._loc(), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    const when = d.toLocaleString(this._loc(), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
     const prioTxt = snT(this._config, this._hass)["prio_" + (n.p || "medium")] || n.p || "medium";
     out.push(`<div class="hd"><div class="meta">${esc(when)} · ${T.priority} ${esc(prioTxt)} · ${esc(T.outcomes[n.o] || n.o || "—")}${n.dupe ? ` · ♻ ${T.dupe}` : ""}</div>
       <b class="ttl">${esc(n.ti || "—")}</b>
@@ -6174,7 +6224,7 @@ class SupernotifyWhyCard extends HTMLElement {
     const peopleTxt = home === null ? "—" : home.length ? `${T.home}: ${home.join(", ")}` : T.nobody;
     const chTxt = [`<b class="c-ok">${sent.length}</b> ${snW(T, "ch_sent", sent.length)}`,
       problems.length ? `<b class="c-pb">${problems.length}</b> ${T.ch_problems}` : "",
-      skipped.length ? `${snPl(T, "ch_skipped", skipped.length)}` : ""].filter(Boolean).join(" · ");
+      skipped.length ? `<span style="opacity:.8">${snPl(T, "ch_skipped", skipped.length)}</span>` : ""].filter(Boolean).map((x) => `<div>${x}</div>`).join("");
     const step = (i, label, body, more) => `<div class="step"><div class="sk">${i} · ${label}</div><div class="sb">${body}</div>${more ? `<div class="sm">${more}</div>` : ""}</div>`;
     out.push(`<div class="path">
       ${step(1, T.step_call, esc(callTxt), n.trace ? esc(T.call_debug) : "")}

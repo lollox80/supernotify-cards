@@ -55,8 +55,10 @@ ok(/Mattina presto/.test(names[0]) && /Notte fonda/.test(names[5]),
 // 2. intervalli corretti
 const rng = [...el.shadowRoot.querySelectorAll(".row .rng")].map((n) => n.textContent.trim());
 console.log("primo intervallo:", rng[0], "| ultimo:", rng[5]);
-ok(rng[0].startsWith("05:00") && rng[0].includes("09:00"), "Mattina presto 05:00 -> 09:00");
-ok(rng[5].startsWith("23:00") && rng[5].includes("05:00") && /mezzanotte/.test(rng[5]),
+// 0.59.0: the start is the time field, the line says where the band ends
+const starts = [...el.shadowRoot.querySelectorAll(".row input[type=time]")].map((n) => n.value);
+ok(starts[0] === "05:00" && rng[0] === "fino alle 09:00", "Mattina presto 05:00 -> 09:00");
+ok(starts[5] === "23:00" && rng[5].includes("fino alle 05:00") && /mezzanotte/.test(rng[5]),
    "Notte fonda 23:00 -> 05:00 con 'attraversa mezzanotte'");
 
 // 3. badge "niente voce" solo sulla fascia a 0

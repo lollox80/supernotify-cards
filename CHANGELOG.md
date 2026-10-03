@@ -3,6 +3,25 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.59.0] - 2026-10-03
+
+Design review, part 2: finishing touches.
+
+### Changed
+- bands-card 0.20.0: one line per band - name and "until 13:00", start time, volume slider and
+  percent - about 40% shorter. On a narrow card the name goes on its own line.
+- scenarios-card: a manual scenario's "Apply now" is a button ("Applied" while on), so every row
+  has a single switch, the one that enables the scenario.
+- control-card: the snooze tile reads "Snoozed · 25 min" with "garden · until 22:05" under it.
+- transports-card: the readable name comes first (Alexa Media Player, Mobile app, Text to
+  speech...), with the technical name and "used by 2 channels" under it.
+- stats-card: the hour and weekday charts are drawn at their real width when side by side, so
+  their labels stay readable (10.5 px, hours every 6); day periods use the band names.
+- why-card: step 4 (channels) is stacked like the other steps.
+- archive-card: scenarios in force by name, not by id.
+- simulator-card: the reason sits next to the channel name on wide cards.
+- Archive and why: times follow the time format chosen in the Home Assistant profile (12/24 h).
+
 ## [0.58.0] - 2026-10-03
 
 Design review, part 1: the cards look like one family, and six visible defects are gone.
