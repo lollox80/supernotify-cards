@@ -8,6 +8,9 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.48.4. archive-card 0.31.1: skip reasons on the rows follow the UI language (the
+ *   index keeps short Italian ones, so an English dashboard showed "pausa", "nessun target"), and
+ *   priorities are translated in Italian. README: screenshots of every card (docs/images).
  * 2026-10-03 - v0.48.3. composer-card 0.15.3: camera names instead of entity ids in the picker and
  *   the preview; the preview shows the "📷 <camera>" text that goes out when the message is empty;
  *   the dry-run box shows scenario names as the why-card does. Shared helpers snCameraName /
@@ -264,7 +267,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.48.3"; // bundle / HACS release
+const VERSION = "0.48.4"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -286,7 +289,7 @@ const SN_CARD_VERSIONS = {
   composer: "0.15.3",
   automations: "0.16.0",
   stats: "0.23.0",
-  archive: "0.31.0",
+  archive: "0.31.1",
   why: "0.6.0",
 };
 
@@ -4987,7 +4990,9 @@ class SupernotifyArchiveCard extends HTMLElement {
     return (row.c || []).map((c) => {
       if (typeof c === "number") return { name: idx.chan[c] || "?", state: "ok" };
       const [i, e, r] = c;
-      return { name: idx.chan[i] || "?", state: e === "e" ? "err" : "skip", reason: r };
+      // the index keeps short Italian reasons (tools/sn_archive_index.py): shown in the UI language
+      const T = this._T();
+      return { name: idx.chan[i] || "?", state: e === "e" ? "err" : "skip", reason: (r && T.reasons && T.reasons[r]) || r };
     });
   }
 
@@ -5136,7 +5141,7 @@ class SupernotifyArchiveCard extends HTMLElement {
       const chans = this._channels(r, idx).map((c) =>
         `<span class="tg ${c.state}">${c.state === "ok" ? "✔" : c.state === "err" ? "✖" : "⊘"} ${esc(c.name)}` +
         `${c.reason ? " · " + esc(c.reason) : ""}</span>`).join("");
-      const prio = r.p ? `<span class="tg pr">${esc(r.p)}</span>` : "";
+      const prio = r.p ? `<span class="tg pr">${esc((T.prio && T.prio[r.p]) || r.p)}</span>` : "";
       const wh = r.w ? `<span class="tg wh">\u{1F92B} ${T.wh}</span>` : "";
       const scen = (r.sc || []).map((s) => esc(idx.scen[s] || "?")).join(", ");
       const open = this._open.has(r.id) ? " open" : "";
@@ -5187,6 +5192,10 @@ const SN_ARCH_STRINGS = {
     of: "of", in_archive: "in the archive", since: "oldest", updated: "index updated",
     today: "Today", yesterday: "Yesterday",
     delivered: "delivered", failed: "failed", skipped: "skipped", missed: "missed",
+    reasons: { doppione: "duplicate", "nessun target": "no target", errore: "error", condizione: "condition",
+      scenario: "scenario", presenza: "presence", priorita: "priority", spento: "off", pausa: "snoozed",
+      "transport spento": "transport off", "nessuna azione": "no action", "dati non validi": "invalid data",
+      sconosciuto: "unknown" },
     scenarios: "Scenarios in force", truncated: "message truncated in the index",
     dur: "took", id: "id", why: "Why? - full detail",
   },
@@ -5200,6 +5209,7 @@ const SN_ARCH_STRINGS = {
     of: "di", in_archive: "nell'archivio", since: "più vecchia", updated: "indice aggiornato",
     today: "Oggi", yesterday: "Ieri",
     delivered: "consegnata", failed: "fallita", skipped: "saltata", missed: "mancata",
+    prio: { critical: "critica", high: "alta", low: "bassa", minimum: "minima", medium: "media" },
     scenarios: "Scenari in vigore", truncated: "messaggio troncato nell'indice",
     dur: "in", id: "id", why: "Perché? - dettaglio completo",
   },

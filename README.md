@@ -21,6 +21,32 @@ and English so far, English fallback for anything else). Override with
 `language: it` / `language: en` in the card config if you need to pin it
 regardless of the HA UI language.
 
+## What it looks like
+
+All screenshots come from a demo installation (made-up people and devices).
+
+<p align="center"><img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/hero.png" alt="Control, overview and composer cards" width="800"></p>
+
+| Card | What it is for |
+|---|---|
+| [control](#supernotify-control-card) | Touch-first control centre: last notification, snooze, do-not-disturb, announce, house modes |
+| [overview](#supernotify-overview-card) | Health at a glance: version, failures, channels off, snoozes, active scenarios |
+| [bands](#supernotify-bands-card) | Time bands with start time and voice volume |
+| [deliveries](#supernotify-deliveries-card) | Every channel with its on/off switch and when it starts |
+| [transports](#supernotify-transports-card) | Integrations behind the channels, with error counts |
+| [recipients](#supernotify-recipients-card) | People: contact points, presence, last notification received |
+| [scenarios](#supernotify-scenarios-card) | Scenarios, which are active now, on/off switches |
+| [simulator](#supernotify-simulator-card) | Tap scenarios and see which channels would fire |
+| [composer](#supernotify-composer-card) | Write and send a notification, or try it without sending (SuperNotify 2.12) |
+| [automations](#supernotify-automations-card) | The automations that notify, with search and enable/disable |
+| [stats](#supernotify-stats-card) | Usage over 7/14/30 days: per day, hour, weekday, channel, priority |
+| [archive](#supernotify-archive-card) | Recent notifications with the outcome of each channel |
+| [why](#supernotify-why-card) | Why a notification went where it went, channel by channel |
+
+Every card follows the Home Assistant dark theme:
+
+<p align="center"><img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/dark.png" alt="Cards in the dark theme" width="900"></p>
+
 ## Versions
 
 The bundle has one release version (HACS, this repo's tags) and **each card has its own
@@ -34,6 +60,8 @@ bump in `SN_CARD_VERSIONS`.
 Touch-first control center: status bar, big quick-action tiles and grouped
 mode toggles. Implements the "control center" concept from the SuperNotify
 UI roadmap (feature #27, statistics and dashboard).
+
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/control.png" alt="supernotify-control-card" width="420">
 
 ### Installation
 
@@ -137,6 +165,8 @@ sent and failure counters (`sensor.supernotify_notifications` /
 the `supernotify.enquire_*` response services over WebSocket) and delivery
 counts. Transport status lives in the transports card.
 
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/overview.png" alt="supernotify-overview-card" width="420">
+
 ```yaml
 type: custom:supernotify-overview-card
 # optional:
@@ -153,6 +183,8 @@ style: theme            # follow the HA theme instead of the SuperNotify look
 Time bands editor: one row per band with an "now" badge on the active band
 (cross-midnight aware), inline start-time input (`input_datetime`) and
 volume slider (`input_number`).
+
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/bands.png" alt="supernotify-bands-card" width="420">
 
 ```yaml
 type: custom:supernotify-bands-card
@@ -176,11 +208,25 @@ area/floor/label target natively (`notify_entity`, `alexa_devices`, `html5`,
 target selector note below for why this matters. Tap a row for the full
 delivery attributes.
 
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/deliveries.png" alt="supernotify-deliveries-card" width="420">
+
 ```yaml
 type: custom:supernotify-deliveries-card
 # optional:
 hide_defaults: true     # hide auto-generated DEFAULT_* deliveries (default true)
 style: theme
+```
+
+## supernotify-transports-card
+
+The integrations behind the channels (mobile push, Alexa, email, Telegram…), each with its
+on/off switch and the number of errors since the last restart. Turning a transport off stops
+every channel that uses it.
+
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/transports.png" alt="supernotify-transports-card" width="420">
+
+```yaml
+type: custom:supernotify-transports-card
 ```
 
 ## supernotify-recipients-card
@@ -192,6 +238,8 @@ On SuperNotify ≥ 2.7.0 each recipient is read from its
 `switch.supernotify_recipient_*` and toggled with `switch.turn_on/turn_off`
 (the deprecated `binary_sensor` mirror is ignored); older versions fall back
 to the `binary_sensor`.
+
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/recipients.png" alt="supernotify-recipients-card" width="420">
 
 ```yaml
 type: custom:supernotify-recipients-card
@@ -205,6 +253,8 @@ Scenarios dashboard, auto-discovered: "active now" badge (live from
 on older versions), a live on/off switch per scenario (SuperNotify ≥ 2.7.0,
 `switch.supernotify_scenario_*`), per-delivery override tags (enabled/disabled),
 action groups and media tags. Optional `groups` reproduce categories.
+
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/scenarios.png" alt="supernotify-scenarios-card" width="420">
 
 ```yaml
 type: custom:supernotify-scenarios-card
@@ -225,6 +275,8 @@ computed from real engine data (`enquire_implicit_deliveries` and
 struck-through. Priority-based delivery filtering happens engine-side and
 is not simulated.
 
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/simulator.png" alt="supernotify-simulator-card" width="700">
+
 ```yaml
 type: custom:supernotify-simulator-card
 ```
@@ -237,6 +289,8 @@ floors, labels — the same picker HA itself shows for `supernotify.notify`),
 an optional comma-separated **custom targets** field for recipients with no
 HA selector (email addresses, Telegram chat IDs, …), camera snapshot picker
 and a live phone preview.
+
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/composer.png" alt="supernotify-composer-card" width="800">
 
 Sends via the dedicated `supernotify.notify` action (SuperNotify ≥ 2.3.0) —
 typed fields instead of `notify.supernotify`'s generic `data:` — with
@@ -281,6 +335,8 @@ Live list of the automations that notify via `notify.supernotify`: search,
 category filters, a "🔕 disabled only" toggle, state and "last triggered",
 enable/disable, tap a row for the automation's own more-info dialog.
 
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/automations.png" alt="supernotify-automations-card" width="420">
+
 Home Assistant does not expose the config of YAML/package automations (they
 have no `id`), so discovery is hybrid: [`tools/genera_vista_automazioni.py`](tools/genera_vista_automazioni.py)
 (included in this repo, run on the HA host or wherever it can read your
@@ -307,6 +363,8 @@ the card's own installation.
 ## supernotify-archive-card
 
 Notification history, read from the SuperNotify archive.
+
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/archive.png" alt="supernotify-archive-card" width="800">
 
 ```yaml
 type: custom:supernotify-archive-card
@@ -372,6 +430,8 @@ channel** whether it went out, why not, to which targets and what selected it �
 that did not start at all, with the reason. When SuperNotify diagnostics are set to `ALL`, the
 full selection trace archived with the notification is shown too.
 
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/why.png" alt="supernotify-why-card" width="800">
+
 ```yaml
 type: custom:supernotify-why-card
 ```
@@ -408,6 +468,8 @@ per-hour / per-weekday bar charts, channels most used (with error share),
 priority and day-period mix, auto-generated insights, and a version strip
 showing installed vs. latest version of SuperNotify and of these cards
 (from the HACS `update.*` entities, with their brand icon and release link).
+
+<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/stats.png" alt="supernotify-stats-card" width="800">
 
 Data sources:
 

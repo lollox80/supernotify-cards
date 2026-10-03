@@ -3,6 +3,17 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.48.4] - 2026-10-03
+
+### Added
+- README: screenshots of every card from a demo installation, a "cards at a glance" table, a
+  dark-theme picture and a section for the transports card (images in `docs/images`, linked
+  with absolute URLs so HACS shows them).
+
+### Fixed
+- archive-card (0.31.1): skip reasons on the rows follow the UI language (an English dashboard
+  showed the Italian "pausa", "nessun target"), and priorities are translated in Italian.
+
 ## [0.48.3] - 2026-10-03
 
 ### Changed

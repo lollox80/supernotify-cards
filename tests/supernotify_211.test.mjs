@@ -123,5 +123,16 @@ const chips = o._health().map((h) => h.t);
 console.log("    chip overview:", chips.join(" | "));
 ok(chips.some((t) => t === "😴 In pausa: 🏷️ portico"), "overview: chip con il soggetto dello snooze");
 
+// v0.48.4: in inglese i motivi dell'indice (italiani) vengono tradotti
+const ae = document.createElement("supernotify-archive-card");
+ae.setConfig({ style: "flat", language: "en" });
+document.body.appendChild(ae);
+ae.hass = hass; await tick(); ae.hass = { ...hass }; await tick();
+const enTags = [...ae.shadowRoot.querySelectorAll(".row")][1].querySelector(".tags").textContent;
+console.log("    canali in inglese:", enTags.trim());
+ok(/snoozed/.test(enTags) && /transport off/.test(enTags) && !/pausa/.test(enTags), "archivio in inglese: snoozed / transport off");
+const itPrio = [...a.shadowRoot.querySelectorAll(".tg.pr")].map((n) => n.textContent);
+ok(itPrio.includes("alta"), `archivio in italiano: priorità tradotta (${itPrio})`);
+
 console.log(fail ? `\n${fail} TEST FALLITI` : "\nTUTTI I TEST OK");
 process.exit(fail ? 1 : 0);
