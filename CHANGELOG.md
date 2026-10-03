@@ -3,6 +3,13 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.48.3] - 2026-10-03
+
+### Changed
+- composer-card (0.15.3): camera names instead of entity ids in the picker and the preview; the
+  preview shows the "📷 <camera>" text that goes out when the message is empty; the dry-run box
+  shows scenario names as the why-card does.
+
 ## [0.48.2] - 2026-10-03
 
 ### Fixed

@@ -8,6 +8,10 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.48.3. composer-card 0.15.3: camera names instead of entity ids in the picker and
+ *   the preview; the preview shows the "📷 <camera>" text that goes out when the message is empty;
+ *   the dry-run box shows scenario names as the why-card does. Shared helpers snCameraName /
+ *   snScenarioName.
  * 2026-10-03 - v0.48.2. composer-card 0.15.2: a notification with a camera and no text gets
  *   "📷 <camera name>" as its text. SuperNotify sends a text-less photo push with message "",
  *   and the Android companion app showed nothing on the phone.
@@ -260,7 +264,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.48.2"; // bundle / HACS release
+const VERSION = "0.48.3"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -279,7 +283,7 @@ const SN_CARD_VERSIONS = {
   recipients: "0.22.0",
   scenarios: "0.19.0",
   simulator: "0.10.0",
-  composer: "0.15.2",
+  composer: "0.15.3",
   automations: "0.16.0",
   stats: "0.23.0",
   archive: "0.31.0",
@@ -1205,6 +1209,22 @@ function snSupernotifyAtLeast(hass, min, entity) {
   if (!have || !want) return null;
   for (let i = 0; i < 3; i++) if (have[i] !== want[i]) return have[i] > want[i];
   return true;
+}
+
+/** A camera's friendly name, or its entity_id without "camera.". */
+function snCameraName(hass, id) {
+  const st = hass && hass.states && hass.states[id];
+  return (st && st.attributes && st.attributes.friendly_name) || String(id || "").replace(/^camera\./, "");
+}
+
+/** A scenario's readable name from its switch / binary_sensor, as the why-card shows it. */
+function snScenarioName(hass, name) {
+  for (const dom of ["switch", "binary_sensor"]) {
+    const st = hass && hass.states && hass.states[`${dom}.supernotify_scenario_${name}`];
+    const c = st && snCleanName(st.attributes.friendly_name, name);
+    if (c) return c;
+  }
+  return name;
 }
 
 function snWhyOpen(id) {
@@ -3646,7 +3666,7 @@ class SupernotifyComposerCard extends HTMLElement {
             <div class="hint" style="margin-top:3px">${T.custom_target_lbl}</div>
             <div class="hint" id="targetWarn" style="display:none;margin-top:6px;color:${p.warn}"></div>
             <label>${T.camera_lbl}</label>
-            <select id="cam"><option value="">${T.none}</option>${this._cameraNames().map((c) => `<option value="${esc(c)}">📷 ${esc(c)}</option>`).join("")}</select>
+            <select id="cam"><option value="">${T.none}</option>${this._cameraNames().map((c) => `<option value="${esc(c)}">📷 ${esc(snCameraName(this._hass, c))}</option>`).join("")}</select>
             <button class="send" id="send">🚀 ${T.send}</button><button class="send dry" id="dry" style="display:none">🔍 ${T.dry_btn}</button>
           </div>
           <div>
@@ -3668,14 +3688,17 @@ class SupernotifyComposerCard extends HTMLElement {
     const sr = this.shadowRoot;
     const upd = () => {
       sr.getElementById("pvT").textContent = sr.getElementById("t").value || T.no_title;
-      sr.getElementById("pvM").textContent = sr.getElementById("m").value || T.no_message;
+      const camSel = sr.getElementById("cam").value;
+      // with a camera and no text, the card sends "📷 <camera>" as the text: show that
+      sr.getElementById("pvM").textContent = sr.getElementById("m").value ||
+        (camSel ? "📷 " + snCameraName(this._hass, camSel) : T.no_message);
       const pr = sr.getElementById("p").value;
       sr.getElementById("pvStrip").style.background =
         { critical: p.crit, high: p.warn, low: p.muted, minimum: p.muted }[pr] || p.brand;
       const cam = sr.getElementById("cam").value;
       const pvC = sr.getElementById("pvC");
       pvC.style.display = cam ? "" : "none";
-      pvC.textContent = cam ? "📷 " + cam : "";
+      pvC.textContent = cam ? "🖼️ " + snCameraName(this._hass, cam) : "";
     };
     sr.getElementById("t").addEventListener("input", upd);
     sr.getElementById("m").addEventListener("input", upd);
@@ -3811,8 +3834,7 @@ class SupernotifyComposerCard extends HTMLElement {
       // phone with message "" and the app shows nothing. So a camera with no text gets the
       // camera's name as text; a channel picked without text still goes out without one.
       if (!payload.message) {
-        const st = this._hass && this._hass.states[cam];
-        payload.message = "📷 " + ((st && st.attributes && st.attributes.friendly_name) || cam.replace(/^camera\./, ""));
+        payload.message = "📷 " + snCameraName(this._hass, cam);
       }
     }
     return payload;
@@ -3897,7 +3919,7 @@ class SupernotifyComposerCard extends HTMLElement {
     const meta = [];
     meta.push(`${T.dry_prio}: ${esc(T["prio_" + n.p] || n.p || "medium")}`);
     const scen = (n.sc && (n.sc.sel || n.sc.on)) || [];
-    if (scen.length) meta.push(`${T.dry_scen}: ${esc(scen.join(", "))}`);
+    if (scen.length) meta.push(`${T.dry_scen}: ${esc(scen.map((x) => snScenarioName(this._hass, x)).join(", "))}`);
     if (n.occ && n.occ.home && n.occ.home.length)
       meta.push(`${T.dry_home}: ${esc(n.occ.home.map((p) => (st[p] && st[p].attributes.friendly_name) || short(p)).join(", "))}`);
     h += `<div class="dMeta">${meta.join(" · ")}</div>`;

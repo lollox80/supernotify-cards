@@ -39,6 +39,8 @@ const mkHass = (v) => ({
     "switch.supernotify_delivery_tts": { entity_id: "switch.supernotify_delivery_tts", state: "on", attributes: { transport: "tts" } },
     "media_player.cucina": { state: "idle", attributes: { friendly_name: "Echo Cucina" } },
     "person.lorenzo": { state: "home", attributes: { friendly_name: "Lorenzo" } },
+    "switch.supernotify_scenario_multi_home": { state: "on", attributes: { friendly_name: "SuperNotify Scenario Persone a casa abilitato" } },
+    "camera.a1_camera": { state: "idle", attributes: { friendly_name: "Ingresso" } },
   },
   callService: async (d, s, data) => { services.push([d, s, data]); },
   callWS: async (msg) => { ws.push(msg); return { context: {}, response: CONTENTS }; },
@@ -72,7 +74,7 @@ ok(/⚠ 1 mancati/.test(txt), "mancati");
 ok(/Notifica sul telefono/.test(txt) && /s23/.test(txt), "alias e destinatario del telefono");
 ok(/Echo Cucina, sala, ufficio \+1/.test(txt), "target Alexa: nome, id accorciati, +N");
 ok(/in pausa/.test(txt) && /nessun destinatario utilizzabile/.test(txt), "motivi tradotti (SNOOZED, NO_TARGET)");
-ok(/Priorità: Alta/.test(txt) && /afternoon, multi_home/.test(txt) && /In casa: Lorenzo/.test(txt), "priorità, scenari, chi è in casa");
+ok(/Priorità: Alta/.test(txt) && /afternoon, Persone a casa/.test(txt) && /In casa: Lorenzo/.test(txt), "priorità, scenari, chi è in casa");
 ok(/Controllo doppioni non simulato/.test(txt), "nota sul controllo doppioni");
 const rows = [...box.querySelectorAll(".dRow")].map((r) => r.textContent.trim());
 ok(rows[0].startsWith("✔") && rows[rows.length - 1].startsWith("⊘"), "prima chi parte, poi i saltati");
@@ -122,6 +124,19 @@ ok(c4.shadowRoot.getElementById("dry").style.display === "none", "2.12 scaricata
 card._hass.callWS = async () => { throw { code: "service_validation_error", message: "Validation error: An action which does not return responses can't be called with return_response=True" }; };
 await card._dryRun();
 ok(/va riavviato/.test(box.textContent), "errore 'does not return responses' spiegato come riavvio");
+
+// v0.48.3: nomi delle camere e anteprima con il testo automatico
+const c5 = document.createElement("supernotify-composer-card");
+c5.setConfig({}); document.body.appendChild(c5);
+c5.hass = mkHass("v2.12.0");
+const s5 = c5.shadowRoot;
+const opt = [...s5.getElementById("cam").options].find((o) => o.value === "camera.a1_camera");
+ok(opt && /Ingresso/.test(opt.textContent) && !/a1_camera/.test(opt.textContent), "camera mostrata col nome");
+s5.getElementById("m").value = "";
+s5.getElementById("cam").value = "camera.a1_camera";
+s5.getElementById("cam").dispatchEvent(new window.Event("change"));
+ok(s5.getElementById("pvM").textContent === "📷 Ingresso", `anteprima col testo automatico (${s5.getElementById("pvM").textContent})`);
+ok(c5._payload().message === "📷 Ingresso", "payload con lo stesso testo dell'anteprima");
 
 console.log(fail ? `\n${fail} TEST FALLITI` : "\nTUTTI I TEST OK");
 process.exit(fail ? 1 : 0);
