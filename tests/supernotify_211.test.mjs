@@ -132,7 +132,7 @@ const enTags = [...ae.shadowRoot.querySelectorAll(".row")][1].querySelector(".ta
 console.log("    canali in inglese:", enTags.trim());
 ok(/snoozed/.test(enTags) && /transport off/.test(enTags) && !/pausa/.test(enTags), "archivio in inglese: snoozed / transport off");
 const itPrio = [...a.shadowRoot.querySelectorAll(".tg.pr")].map((n) => n.textContent);
-ok(itPrio.includes("Alta"), `archivio in italiano: priorità tradotta (${itPrio})`);
+ok(itPrio.some((t) => /Alta/.test(t)), `archivio in italiano: priorità tradotta (${itPrio})`);
 
 console.log(fail ? `\n${fail} TEST FALLITI` : "\nTUTTI I TEST OK");
 process.exit(fail ? 1 : 0);

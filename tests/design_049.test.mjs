@@ -60,7 +60,7 @@ const dc = mount("supernotify-deliveries-card");
 const row = [...dc.shadowRoot.querySelectorAll(".row")].find((r) => r.textContent.includes("mobile_push"));
 ok(row && row.querySelector(".mid b").textContent === "Notifica sul telefono", "deliveries: in grassetto l'alias");
 ok(row && row.querySelector(".tech").textContent === "mobile_push", "deliveries: nome tecnico piccolo accanto");
-const emailRow = [...dc.shadowRoot.querySelectorAll(".row")].find((r) => r.textContent.includes("email"));
+const emailRow = [...dc.shadowRoot.querySelectorAll(".row")].find((r) => /email/i.test(r.textContent));
 ok(emailRow && !emailRow.querySelector(".tech"), "deliveries: senza alias diverso niente doppione del nome");
 
 const cc = mount("supernotify-composer-card");

@@ -8,6 +8,17 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.58.0. Design review, consistency and visible defects. (A1) stats-card number
+ *   tiles are filled like the overview's, no border. (A2) snTech()/snSame(): one rule for technical
+ *   names - small monospace, hidden when they say the same as the readable name (deliveries,
+ *   scenarios, composer result, stats, why). (A3) deliveries, transports, recipients, scenarios:
+ *   a hairline between rows instead of a bottom border bent by the row radius. (A4) archive:
+ *   priority in the shared scale (critical red, high orange, medium blue, low grey). (B1) archive:
+ *   "6 in the archive" when the total is unknown, not "6 of ?". (B2) why: "1 call". (B3) composer:
+ *   "loading the picker…" instead of an orphan "…", gone after 4 s if HA never defines it. (B4)
+ *   stats: a channel with only errors shows "✖ 26", not "26 ✖26". (B5) overview/stats: tile labels
+ *   wrap instead of spilling out. (B6) control: the last notification's title wraps to two lines,
+ *   chips move below, before anything is cut.
  * 2026-10-03 - v0.57.0. (1) Shared reads: control, overview, scenarios and simulator ask
  *   enquire_last_notification / enquire_snoozes / enquire_active_scenarios / ... through
  *   snEnquire(), so cards on the same view share one call (in flight or < 2.5 s old) instead of
@@ -365,7 +376,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.57.0"; // bundle / HACS release
+const VERSION = "0.58.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -376,19 +387,19 @@ const VERSION = "0.57.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.30.0",
-  overview: "0.29.0",
+  control: "0.30.1",
+  overview: "0.29.1",
   bands: "0.19.0",
-  deliveries: "0.25.1",
-  transports: "0.22.1",
-  recipients: "0.26.1",
-  scenarios: "0.24.0",
+  deliveries: "0.26.0",
+  transports: "0.22.2",
+  recipients: "0.26.2",
+  scenarios: "0.24.1",
   simulator: "0.15.0",
-  composer: "0.19.0",
+  composer: "0.19.1",
   automations: "0.20.1",
-  stats: "0.27.1",
-  archive: "0.36.0",
-  why: "0.12.0",
+  stats: "0.28.0",
+  archive: "0.36.1",
+  why: "0.12.1",
 };
 
 /**
@@ -433,7 +444,7 @@ const SN_STRINGS = {
     band_evening: "Evening", band_night: "Night", band_late_night: "Late night",
     h_look_1: "1 thing to look at", h_look_n: "{n} things to look at", h_rest_ok: "everything else works",
     h_ch_on: "{on} of {tot} channels on", h_open: "Open", ln_delivered: "delivered", ln_failed: "failed",
-    ln_why: "Why", bands_empty_t: "No time bands yet",
+    ln_why: "Why", tgt_loading: "loading the picker…", bands_empty_t: "No time bands yet",
     bands_empty: "Add one band per part of the day: an input_datetime for its start and an input_number for the voice volume.",
     active_now: "active now", disabled: "disabled", other: "Other",
     manual: "manual", apply_now: "apply now", enabled_lbl: "enabled",
@@ -523,7 +534,7 @@ const SN_STRINGS = {
     band_evening: "Sera", band_night: "Notte", band_late_night: "Notte fonda",
     h_look_1: "1 cosa da guardare", h_look_n: "{n} cose da guardare", h_rest_ok: "il resto funziona",
     h_ch_on: "{on} di {tot} canali accesi", h_open: "Apri", ln_delivered: "consegnati", ln_delivered_1: "consegnato", ln_failed: "falliti", ln_failed_1: "fallito",
-    ln_why: "Perché", bands_empty_t: "Nessuna fascia oraria",
+    ln_why: "Perché", tgt_loading: "carico il selettore…", bands_empty_t: "Nessuna fascia oraria",
     bands_empty: "Aggiungi una fascia per ogni parte della giornata: un input_datetime per l'inizio e un input_number per il volume della voce.",
     active_now: "attivo ora", disabled: "disattivato", other: "Altro",
     manual: "manuale", apply_now: "applica ora", enabled_lbl: "abilitato",
@@ -811,6 +822,19 @@ function snPlainMsg(s) {
     .replace(/`([^`]+)`/g, "$1")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/[ \t]+\n/g, "\n").trim();
+}
+
+/**
+ * Technical name next to a readable one (0.58.0), the same everywhere: small monospace, and
+ * nothing when it says the same thing ("Email" / "email", "Morning" / "morning").
+ */
+function snSame(a, b) {
+  const k = (x) => String(x || "").toLowerCase().replace(/[_\-\s]+/g, " ").trim();
+  return k(a) === k(b);
+}
+function snTech(name, shown) {
+  if (!name || snSame(name, shown)) return "";
+  return `<span class="tech sn-tech" style="font-family:ui-monospace,'Roboto Mono',monospace;font-size:11px;font-weight:400">${String(name).replace(/&/g, "&amp;").replace(/</g, "&lt;")}</span>`;
 }
 
 function snW(T, key, n) {
@@ -1939,9 +1963,10 @@ class SupernotifyControlCard extends HTMLElement {
         .mgroup.fold .gv { transform: rotate(-90deg); }
         .lastn { border: 1px solid ${p.line}; border-radius: 14px; padding: 12px 14px;
                  margin-bottom: 14px; background: ${p.panel}; box-shadow: 0 1px 3px rgba(16,42,67,.06); }
-        .lastn .lh { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-        .lastn .lt { font-size: 14.5px; font-weight: 750; flex: 1; min-width: 0;
-                     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lastn .lh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 4px; }
+        .lastn .lt { font-size: 14.5px; font-weight: 750; flex: 1 1 180px; min-width: 0; line-height: 1.3;
+                     overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical;
+                     -webkit-line-clamp: 2; overflow: hidden; }
         .lastn .lm { font-size: 13px; line-height: 1.45; white-space: pre-line; color: ${p.ink}; }
         .lastn .lf { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px;
                      font-size: 11.5px; color: ${p.muted}; }
@@ -2420,8 +2445,8 @@ class SupernotifyOverviewCard extends HTMLElement {
           .stats[data-n="5"] .stat, .stats[data-n="5"] .stat:nth-child(n+4) { grid-column: auto; }
         }
         .stat { border: 0; border-radius: 10px; padding: 12px 14px; background: ${p.soft}; }
-        .stat .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
-                   font-weight: 800; color: ${p.muted}; white-space: nowrap; }
+        .stat .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.35;
+                   font-weight: 800; color: ${p.muted}; overflow-wrap: anywhere; }
         .stat .v { font-size: 22px; font-weight: 800; margin-top: 3px; }
         .stat .s { font-size: 11px; color: ${p.muted}; margin-top: 2px; }
         .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
@@ -2988,8 +3013,10 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px;
-               border-bottom: 1px solid ${p.line}; cursor: pointer; border-radius: 8px; }
+        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
+               cursor: pointer; border-radius: 8px; }
+        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
+               border-top: 1px solid ${p.line}; pointer-events: none; }
         .row:hover { background: ${p.soft}; }
         .row:last-child { border-bottom: 0; }
         .em { font-size: 22px; flex-shrink: 0; }
@@ -3105,7 +3132,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       if (d.a.target_usage && d.a.target_usage !== "no_action") tags.push(`↔️ ${d.a.target_usage}`);
       if (SN_NATIVE_TARGET_TRANSPORTS.includes(tr)) tags.push(T.native_target_tag);
       const meta = [state ? `<span class="st ${cls}">${esc(state)}</span>` : "",
-        tech ? `<span class="tech">${esc(tech)}</span>` : "", tr && tr !== tech ? esc(tr) : ""].filter(Boolean).join(" · ");
+        snTech(tech, alias || d.name), tr && !snSame(tr, d.name) && !snSame(tr, alias) ? snTech(tr, "") : ""].filter(Boolean).join(" · ");
       return `<div class="row${d.on ? "" : " dim"}" data-i="${i}">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(alias || d.name)}</b>
@@ -3232,8 +3259,10 @@ class SupernotifyTransportsCard extends HTMLElement {
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px;
-               border-bottom: 1px solid ${p.line}; cursor: pointer; border-radius: 8px; }
+        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
+               cursor: pointer; border-radius: 8px; }
+        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
+               border-top: 1px solid ${p.line}; pointer-events: none; }
         .row:hover { background: ${p.soft}; }
         .row:last-child { border-bottom: 0; }
         .em { font-size: 22px; flex-shrink: 0; }
@@ -3395,8 +3424,10 @@ class SupernotifyRecipientsCard extends HTMLElement {
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px;
-               border-bottom: 1px solid ${p.line}; cursor: pointer; border-radius: 8px; }
+        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
+               cursor: pointer; border-radius: 8px; }
+        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
+               border-top: 1px solid ${p.line}; pointer-events: none; }
         .row:hover { background: ${p.soft}; }
         .row:last-child { border-bottom: 0; }
         .em { font-size: 24px; flex-shrink: 0; }
@@ -3679,8 +3710,10 @@ class SupernotifyScenariosCard extends HTMLElement {
         .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
                font-weight: 800; color: ${p.muted}; margin: 14px 0 6px; }
         .sec:first-child { margin-top: 0; }
-        .row { display: flex; align-items: center; gap: 12px; padding: 9px 8px;
-               border-bottom: 1px solid ${p.line}; cursor: pointer; border-radius: 8px; }
+        .row { display: flex; align-items: center; gap: 12px; padding: 9px 8px; position: relative;
+               cursor: pointer; border-radius: 8px; }
+        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
+               border-top: 1px solid ${p.line}; pointer-events: none; }
         .row.act { background: ${p.okSoft}; }
         .row:hover { background: ${p.soft}; }
         .row:last-child { border-bottom: 0; }
@@ -3743,7 +3776,7 @@ class SupernotifyScenariosCard extends HTMLElement {
     return `<div class="row ${isAct ? "act" : ""} ${s.enabled === false ? "dis" : ""}" data-i="${i}">
       <span class="em">${em}</span>
       <div class="mid"><b>${esc(alias || s.name)}</b>
-        ${alias ? `<span style="font-size:11px;color:inherit;opacity:.6"> · ${esc(s.name)}</span>` : ""}
+        ${alias && !snSame(alias, s.name) ? `<span style="color:inherit;opacity:.7"> · ${snTech(s.name, alias)}</span>` : ""}
         <div class="tags">${tags.join("")}</div>
       </div>
       ${isAct ? `<span class="badge b-act">${T.active_now}</span>` : ""}
@@ -4273,10 +4306,13 @@ class SupernotifyComposerCard extends HTMLElement {
     if (customElements.get("ha-selector")) {
       mount();
     } else {
-      container.textContent = "…";
+      // 0.58.0: a short "loading" while HA defines the picker, nothing if it never comes
+      // (the custom targets field below still works)
+      container.innerHTML = `<span style="font-size:12px;opacity:.7">${snT(this._config, this._hass).tgt_loading || ""}</span>`;
       customElements.whenDefined("ha-selector").then(mount).catch(() => {
         container.textContent = "";
       });
+      setTimeout(() => { if (!customElements.get("ha-selector")) container.textContent = ""; }, 4000);
     }
   }
 
@@ -4395,7 +4431,7 @@ class SupernotifyComposerCard extends HTMLElement {
     const st = this._hass.states;
     const chan = (name) => {
       const alias = snDeliveryAlias(this._hass, name);
-      return alias && alias !== name ? `${esc(alias)} <span class="dNo">(${esc(name)})</span>` : esc(name);
+      return alias && !snSame(alias, name) ? `${esc(alias)} <span class="dNo">${snTech(name, alias)}</span>` : esc(alias || name);
     };
     const reason = (code) => {
       const k = String(code || "").toUpperCase();
@@ -5117,8 +5153,9 @@ class SupernotifyStatsCard extends HTMLElement {
               border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.muted}; padding: 3px 10px; }
         .pb.on { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }
         .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; margin-top: 12px; }
-        .kpi { border: 1.5px solid ${p.line}; border-radius: 14px; padding: 10px 12px; background: ${p.panel}; }
-        .kpi .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted}; white-space: nowrap; }
+        .kpi { border: 0; border-radius: 10px; padding: 12px 14px; background: ${p.soft}; }
+        .kpi .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted};
+                  line-height: 1.35; overflow-wrap: anywhere; }
         .kpi .v { font-size: 21px; font-weight: 800; margin-top: 2px; }
         .kpi .s { font-size: 11px; color: ${p.muted}; margin-top: 1px; }
         .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted}; margin: 16px 0 6px; display:flex; justify-content: space-between; }
@@ -5229,9 +5266,9 @@ class SupernotifyStatsCard extends HTMLElement {
     const chRows = d.channels.slice(0, this._config.top_channels).map((ch) => {
       const tot = ch.ok + ch.ko;
       const alias = this._aliasFor(ch.name);
-      return `<div class="hrow"><span class="nm" title="${esc(ch.name)}">${this._iconFor(ch.name)} ${alias ? `${esc(alias)} <small style="color:${p.muted}">${esc(ch.name)}</small>` : esc(ch.name)}</span>
+      return `<div class="hrow"><span class="nm" title="${esc(ch.name)}">${this._iconFor(ch.name)} ${alias ? `${esc(alias)} <small style="color:${p.muted}">${snTech(ch.name, alias)}</small>` : esc(ch.name)}</span>
         <span class="tr"><span class="ok" style="width:${(ch.ok / maxCh) * 100}%"></span><span class="ko" style="width:${(ch.ko / maxCh) * 100}%"></span></span>
-        <span class="ct">${tot}${ch.ko ? ` <span style="color:${p.crit}">✖${ch.ko}</span>` : ""}</span></div>`;
+        <span class="ct">${ch.ko && !ch.ok ? `<span style="color:${p.crit}">✖ ${ch.ko}</span>` : `${tot}${ch.ko ? ` <span style="color:${p.crit}">✖${ch.ko}</span>` : ""}`}</span></div>`;
     }).join("");
     const chNote = d.chanUnknown
       ? `<div class="empty" style="font-size:11px">${d.chanKnown}/${d.chanKnown + d.chanUnknown} ${T.st_total.toLowerCase()} · ${d.chanUnknown} ${T.st_unknown}</div>`
@@ -5535,7 +5572,11 @@ class SupernotifyArchiveCard extends HTMLElement {
         .tg.ok { color: ${p.ok}; background: rgba(46,158,91,.12); }
         .tg.err { color: ${p.crit}; background: rgba(226,60,60,.12); }
         .tg.skip { color: ${p.muted}; background: transparent; border: 1px dashed ${p.line}; }
-        .tg.pr { color: ${p.warn}; background: rgba(240,160,32,.14); }
+        /* 0.58.0: the same priority scale as the stats card (critical red, high orange, medium blue, low grey) */
+        .tg.pr { color: ${p.warn}; background: ${p.warnSoft}; }
+        .tg.pr.critical { color: ${p.crit}; background: ${this._dark ? "rgba(239,83,80,.16)" : "#fbe3e3"}; }
+        .tg.pr.medium { color: ${p.brandD}; background: ${p.soft}; }
+        .tg.pr.low, .tg.pr.minimum { color: ${p.muted}; background: ${p.soft}; }
         .tg.wh { color: ${p.brandD}; background: ${p.soft}; }
         .said { margin-top: 4px; padding: 6px 9px; border-radius: 9px;
                 background: ${p.soft}; border-left: 3px solid ${p.brand};
@@ -5618,7 +5659,7 @@ class SupernotifyArchiveCard extends HTMLElement {
     const old = idx.oldest ? new Date(idx.oldest).toLocaleDateString(this._loc()) : "";
     meta.innerHTML = snIconify(idx.native
       ? `${idx.items.length} ${T.recent}` + (gen ? ` · ${T.read_at} ${gen}` : "")
-      : `${idx.items.length} ${T.of} ${idx.total || "?"} ${T.in_archive}` +
+      : (idx.total ? `${idx.items.length} ${T.of} ${idx.total} ${T.in_archive}` : `${idx.items.length} ${T.in_archive}`) +
         (old ? ` · ${T.since}: ${old}` : "") + (gen ? ` · ${T.updated} ${gen}` : ""), this && this._config);
     if (!rows.length) {
       el.innerHTML = snIconify(`<div class="empty">${T.none}</div>`, this && this._config);
@@ -5633,7 +5674,7 @@ class SupernotifyArchiveCard extends HTMLElement {
       const chans = this._channels(r, idx).map((c) =>
         `<span class="tg ${c.state}" title="${esc(c.name)}">${c.state === "ok" ? "✔" : c.state === "err" ? "✖" : "⊘"} ${esc(snDeliveryAlias(this._hass, c.name) || c.name)}` +
         `${c.reason ? " · " + esc(c.reason) : ""}</span>`).join("");
-      const prio = r.p ? `<span class="tg pr">${esc((T.prio && T.prio[r.p]) || r.p)}</span>` : "";
+      const prio = r.p ? `<span class="tg pr ${esc(r.p)}">● ${esc((T.prio && T.prio[r.p]) || r.p)}</span>` : "";
       const wh = r.w ? `<span class="tg wh">\u{1F92B} ${T.wh}</span>` : "";
       const scen = (r.sc || []).map((s) => esc(idx.scen[s] || "?")).join(", ");
       const open = this._open.has(r.id) ? " open" : "";
@@ -6161,7 +6202,7 @@ class SupernotifyWhyCard extends HTMLElement {
       }
       const icon = { ok: "✔", skip: "⊘", supp: "⊘", err: "✖" }[ch.r] || "?";
       let why = "";
-      if (ch.r === "ok") why = T.st_ok + (ch.calls ? ` (${ch.calls} ${T.calls})` : "");
+      if (ch.r === "ok") why = T.st_ok + (ch.calls ? ` (${snPl(T, "calls", ch.calls)})` : "");
       else if (ch.r === "err") why = `${T.st_err}${ch.err ? ": " + esc(ch.err.join(" / ")) : ""}`;
       else why = `${esc(this._reasonText(ch.why, T))}${ch.tr ? ` (${T.target_required} ${esc(ch.tr)})` : ""}`;
       const tg = ch.tg ? tgText(ch.tg) : "";
@@ -6169,7 +6210,7 @@ class SupernotifyWhyCard extends HTMLElement {
         src.off.length ? `${T.scen_would_off}: ${esc(src.off.map((x) => this._scenarioLabel(x)).join(", "))}` : "",
         offBy.length ? `${T.r_off_by}: ${esc(offBy.join(", "))}` : ""].filter(Boolean);
       return `<div class="ch ${cls || ""}"><div class="r1"><span class="st ${ch.r}">${icon}</span>
-        <span class="nm">${esc(alias || ch.n)}</span>${alias && alias.toLowerCase() !== ch.n.toLowerCase() ? `<span class="al tech">${esc(ch.n)}</span>` : ""}</div>
+        <span class="nm">${esc(alias || ch.n)}</span>${alias && !snSame(alias, ch.n) ? `<span class="al tech">${esc(ch.n)}</span>` : ""}</div>
         <div class="why">${why}${tg ? ` · ${tg}` : ""}</div>
         ${meta.length ? `<div class="src">${meta.join("<br>")}</div>` : ""}
         ${ov && ov.tg && tgText(ov.tg) !== tg ? `<div class="src">📝 ${T.call_targets}: ${tgText(ov.tg)}</div>` : ""}
@@ -6197,7 +6238,7 @@ class SupernotifyWhyCard extends HTMLElement {
     if (notStarted.length) {
       out.push(`<details class="fold"${det(false)}><summary>${snPl(T, "grp_not", notStarted.length)}</summary>${notStarted.map((k) => {
         const alias = snDeliveryAlias(this._hass, k);
-        return `<div class="ch not"><div class="r1"><span class="st">·</span><span class="nm">${esc(alias || k)}</span>${alias && alias.toLowerCase() !== k.toLowerCase() ? `<span class="al tech">${esc(k)}</span>` : ""}</div>
+        return `<div class="ch not"><div class="r1"><span class="st">·</span><span class="nm">${esc(alias || k)}</span>${alias && !snSame(alias, k) ? `<span class="al tech">${esc(k)}</span>` : ""}</div>
           <div class="why">${esc(this._whyNotStarted(k, rows.get(k), n, scen, T))}</div></div>`;
       }).join("")}<div class="note">${snProvOf(n) || n.trace ? T.from_trace : T.from_config}</div></details>`);
     }
@@ -6257,7 +6298,7 @@ const SN_WHY_STRINGS = {
     applied: "forced by the call", required: "required by the call", constrain: "limited by the call to",
     presence: "Presence", home: "home", away: "away",
     channels: "Channels", no_channels: "no channel was selected",
-    st_ok: "delivered", st_err: "failed", st_skip: "skipped", st_supp: "suppressed", calls: "calls",
+    st_ok: "delivered", st_err: "failed", st_skip: "skipped", st_supp: "suppressed", calls: "calls", calls_1: "call",
     target_required: "target required:", started_by: "selected by", scen_would_off: "switched off by (overruled)",
     src_default: "always on (default)", src_scen: "scenario", src_call: "the call itself",
     src_recipient: "recipient", r_off_by: "switched off by",
@@ -6300,7 +6341,7 @@ const SN_WHY_STRINGS = {
     applied: "forzati dalla chiamata", required: "richiesti dalla chiamata", constrain: "limitati dalla chiamata a",
     presence: "Presenza", home: "in casa", away: "fuori",
     channels: "Canali", no_channels: "nessun canale selezionato",
-    st_ok: "consegnata", st_err: "fallita", st_skip: "saltata", st_supp: "scartata", calls: "chiamate",
+    st_ok: "consegnata", st_err: "fallita", st_skip: "saltata", st_supp: "scartata", calls: "chiamate", calls_1: "chiamata",
     target_required: "target richiesto:", started_by: "scelto da", scen_would_off: "spento da (ma ha perso)",
     src_default: "sempre attivo (default)", src_scen: "scenario", src_call: "la chiamata stessa",
     src_recipient: "destinatario", r_off_by: "spento da",

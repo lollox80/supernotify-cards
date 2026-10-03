@@ -3,6 +3,30 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.58.0] - 2026-10-03
+
+Design review, part 1: the cards look like one family, and six visible defects are gone.
+
+### Changed
+- One rule for technical names in every card: small and monospaced, and hidden when it says the
+  same as the readable name (no more "Email · email" or "Morning · morning"). The transport in the
+  channels card follows the same rule.
+- Channels, transports, recipients and scenarios: a thin line between rows instead of a bottom
+  border bent by the row's rounded corners.
+- Stats-card number tiles are filled like the overview's, without a border.
+- Archive: priority uses the same colours as the stats card - critical red, high orange, medium
+  blue, low grey.
+
+### Fixed
+- Archive: "6 in the archive" when the total is not known, instead of "6 of ?".
+- Why: "1 call" instead of "1 calls".
+- Composer: "loading the picker…" instead of an orphan "…" under Target; it disappears if Home
+  Assistant never provides the picker (the custom targets field still works).
+- Stats: a channel with only errors shows "✖ 26" instead of "26 ✖26".
+- Overview and stats: tile labels wrap instead of spilling out of the tile.
+- Control: the last notification's title wraps to two lines (chips move below) instead of being cut
+  with "…" in a narrow column.
+
 ## [0.57.0] - 2026-10-03
 
 Fewer calls, a better card picker.
