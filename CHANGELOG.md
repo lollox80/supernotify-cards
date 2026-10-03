@@ -3,6 +3,36 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.47.0] - 2026-10-03
+
+Lighter, and checked on a phone-sized screen in both themes.
+
+### Changed
+- **Cards redraw only when something they show changed.** control, overview, bands,
+  deliveries, transports, recipients, scenarios and automations used to rescan every state and
+  rebuild their lists on every state change in the house (a temperature sensor included). Now
+  each card notes which entities it looked at and redraws when one of them changes, when the
+  entity list changes (cards that scan it), on language / theme / entity registry / services
+  changes, and once a minute for relative times. In a test, 20 updates of an unrelated sensor
+  caused 0 redraws (before: 20).
+- **composer-card (0.14.0)**: a notification can go out without text (SuperNotify 2.11.1) when
+  a camera or a channel is picked; on older SuperNotify it says 2.11.1 is needed. Errors from
+  the action are shown instead of always "Sent".
+- **`getGridOptions()`** on every card, so sections dashboards give them a sensible size
+  (lists half width, composer / simulator / stats / archive / why full width). A card's own
+  `grid_options:` still wins.
+
+### Fixed
+- **Dark theme**: native controls (the time pickers of the bands card, selects, scrollbars)
+  follow the Home Assistant theme (`color-scheme`): their icons were dark on dark.
+- **Phone**: stats-card (0.23.0) charts are drawn at the card's width, so the labels are about
+  9 px instead of ~5 px on a 390 px screen, with fewer day labels when narrow; redrawn on resize.
+- control-card (0.24.0): snooze tile shortened to "subject · end time".
+- overview (0.22.0), scenarios (0.19.0) and simulator (0.10.0) load their data as soon as they get
+  `hass`; before, the overview showed "0 snoozed" and no last notification until the first 60 s
+  poll. The overview's last notification shows missed channels and the translated priority.
+- recipients-card (0.22.0): "2 h fa" was capitalised as "2 H Fa".
+
 ## [0.46.0] - 2026-10-03
 
 Aligned with SuperNotify 2.11 / 2.11.1.

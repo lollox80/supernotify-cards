@@ -8,6 +8,23 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.47.0. Lighter, phone and dark theme.
+ *   - Cards redraw only when something they show changed: control, overview, bands, deliveries,
+ *     transports, recipients, scenarios and automations used to rescan every state and rebuild
+ *     their lists on every state change in the house. Helpers snTracker / snTrackedHass /
+ *     snChanged / snSnap: hass is read through a proxy that notes the entities each card looked
+ *     at; a redraw happens when one of them, the entity list (for cards that scan it), language,
+ *     theme, entity registry or services change, or once a minute for relative times.
+ *   - composer-card: a notification without text (SuperNotify 2.11.1), when a camera or a
+ *     channel is picked; on older versions it says 2.11.1 is needed. Send errors are shown.
+ *   - getGridOptions() on every card: sensible default size in sections dashboards.
+ *   - Dark theme / phone, from screenshots of all 13 cards at 390 px in both themes: native
+ *     controls (time pickers in the bands card, selects, scrollbars) follow the theme
+ *     (color-scheme); stats-card charts are drawn at the card's width, so their labels are no
+ *     longer ~5 px on a phone, and redraw on resize; the snooze tile is shorter; "2 h fa" in the
+ *     recipients card was capitalised as "2 H Fa".
+ *   - overview, scenarios and simulator load their data as soon as they get hass, instead of
+ *     showing "0 snoozed" and no last notification until the first 60 s poll.
  * 2026-10-03 - v0.46.0. Aligned with SuperNotify 2.11 / 2.11.1.
  *   - `missed` (2.11): a requested channel that could not go out. The archive rows carry it
  *     (`mi`), the archive card lists it next to delivered/failed/skipped, the why-card header
@@ -225,7 +242,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.46.0"; // bundle / HACS release
+const VERSION = "0.47.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -236,19 +253,19 @@ const VERSION = "0.46.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.23.0",
-  overview: "0.21.0",
-  bands: "0.13.0",
-  deliveries: "0.20.0",
-  transports: "0.18.0",
-  recipients: "0.21.0",
-  scenarios: "0.18.0",
-  simulator: "0.9.0",
-  composer: "0.13.0",
-  automations: "0.15.0",
-  stats: "0.22.1",
-  archive: "0.30.0",
-  why: "0.5.0",
+  control: "0.24.0",
+  overview: "0.22.0",
+  bands: "0.14.0",
+  deliveries: "0.21.0",
+  transports: "0.19.0",
+  recipients: "0.22.0",
+  scenarios: "0.19.0",
+  simulator: "0.10.0",
+  composer: "0.14.0",
+  automations: "0.16.0",
+  stats: "0.23.0",
+  archive: "0.31.0",
+  why: "0.6.0",
 };
 
 /**
@@ -300,6 +317,8 @@ const SN_STRINGS = {
     comp_hint: "Picked channels are sent with delivery_selection: fixed (only those fire). Critical really is critical — sirens included.",
     critical_confirm: "Send a CRITICAL notification? Sirens and max volume included.",
     write_first: "Write a message first", sent_toast: "Sent 🚀",
+    write_or_pick: "Write a message, or pick a camera or a channel",
+    need_2111: "A notification without text needs SuperNotify 2.11.1", send_err: "Not sent",
     dry_btn: "Try without sending", dry_title: "If you sent it now",
     dry_err: "Dry run failed", dry_would: "would send", dry_skip: "skipped",
     dry_nobody: "no recipient, direct targets only", dry_targets: "targets",
@@ -366,6 +385,8 @@ const SN_STRINGS = {
     comp_hint: "I canali scelti partono con delivery_selection: fixed (solo quelli). Il critical è critical davvero — sirene incluse.",
     critical_confirm: "Inviare una notifica CRITICA? Sirene e volume massimo inclusi.",
     write_first: "Scrivi prima un messaggio", sent_toast: "Inviata 🚀",
+    write_or_pick: "Scrivi un messaggio, oppure scegli una camera o un canale",
+    need_2111: "Una notifica senza testo richiede SuperNotify 2.11.1", send_err: "Non inviata",
     dry_btn: "Prova senza inviare", dry_title: "Se la inviassi adesso",
     dry_err: "Simulazione non riuscita", dry_would: "partirebbe", dry_skip: "saltato",
     dry_nobody: "nessun destinatario, solo target diretti", dry_targets: "target",
@@ -1082,6 +1103,76 @@ const snArchiveStore = {
   },
 };
 
+/* ════════════════════════════════════════════════════════════════════════
+ * Redraw only when something the card looked at changed (0.47.0)
+ *
+ * Home Assistant hands every card a new `hass` on every state change in the
+ * house, a temperature sensor included: the cards used to rescan all states and
+ * rebuild their lists each time. Now each card reads hass through a proxy that
+ * notes which entities it looked at; on the next update the card redraws only
+ * when one of those state objects was replaced (HA replaces them on change), the
+ * entity list grew or shrank (a card that scans it), language, theme, entity
+ * registry or services changed, or a minute went by (relative times, current band).
+ * ════════════════════════════════════════════════════════════════════════ */
+function snTracker() {
+  return { keys: new Set(), scanned: false, snap: null };
+}
+
+function snTrackedHass(hass, tr) {
+  if (!hass || !hass.states) return hass;
+  const states = new Proxy(hass.states, {
+    get(t, k) { if (typeof k === "string") tr.keys.add(k); return t[k]; },
+    has(t, k) { if (typeof k === "string") tr.keys.add(k); return k in t; },
+    ownKeys(t) { tr.scanned = true; return Reflect.ownKeys(t); },
+  });
+  return new Proxy(hass, {
+    get(t, k) {
+      if (k === "states") return states;
+      const v = t[k];
+      return typeof v === "function" ? v.bind(t) : v;
+    },
+  });
+}
+
+function snChanged(tr, hass) {
+  const p = tr.snap;
+  if (!p || !hass || !hass.states) return true;
+  if (p.lang !== hass.language || p.themes !== hass.themes || p.entities !== hass.entities ||
+      p.services !== hass.services || p.minute !== Math.floor(Date.now() / 60000)) return true;
+  if (tr.scanned && p.count !== Object.keys(hass.states).length) return true;
+  if (tr.keys.size !== p.objs.size) return true; // the card looked at something new
+  for (const [k, obj] of p.objs) if (hass.states[k] !== obj) return true;
+  return false;
+}
+
+function snSnap(tr, hass) {
+  if (!hass || !hass.states) return;
+  const objs = new Map();
+  for (const k of tr.keys) objs.set(k, hass.states[k]);
+  tr.snap = {
+    objs, lang: hass.language, themes: hass.themes, entities: hass.entities, services: hass.services,
+    minute: Math.floor(Date.now() / 60000), count: tr.scanned ? Object.keys(hass.states).length : 0,
+  };
+}
+
+/**
+ * SuperNotify version from its HACS update entity: true / false against `min`
+ * ("2.11.1"), null when it cannot be told (no update entity, unparsable).
+ */
+function snSupernotifyAtLeast(hass, min, entity) {
+  const st = hass && hass.states && hass.states[entity || "update.supernotify_update"];
+  const raw = st && st.attributes && st.attributes.installed_version;
+  const parse = (v) => {
+    const m = String(v || "").match(/(\d+)\.(\d+)(?:\.(\d+))?/);
+    return m ? [+m[1], +m[2], +(m[3] || 0)] : null;
+  };
+  const have = parse(raw);
+  const want = parse(min);
+  if (!have || !want) return null;
+  for (let i = 0; i < 3; i++) if (have[i] !== want[i]) return have[i] > want[i];
+  return true;
+}
+
 function snWhyOpen(id) {
   if (!id || !window.__snWhyCards) return false;
   window.dispatchEvent(new CustomEvent("supernotify-why", { detail: { id } }));
@@ -1154,17 +1245,30 @@ class SupernotifyControlCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const raw = hass;
+    const tr = this._snTr || (this._snTr = snTracker());
+    const changed = snChanged(tr, raw);
+    hass = snTrackedHass(raw, tr);
+    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._rendered || wasDark !== this._dark) this._render();
-    else this._update();
+    else if (changed) this._update();
     if (this._config.last_notification) {
       const cnt = this._st("sensor.supernotify_notifications");
       if (cnt !== this._lastCount) { this._lastCount = cnt; this._refreshLast(); }
     }
     // first hass after connect: connectedCallback may have run without hass
     if (!this._booted) { this._booted = true; this._refreshSnoozes(); }
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -1584,7 +1688,7 @@ class SupernotifyControlCard extends HTMLElement {
         }
         const what = snSnoozeLabels(this._hass, act, T);
         return { cls: "warn", icon: "😴", name: left || T.snoozed,
-          sub: (what ? what + " · " : "") + (until ? T.until + " " + until + " · " : "") + T.tap_clear,
+          sub: what ? what + (until ? ` · ${until}` : "") : (until ? T.until + " " + until + " · " : "") + T.tap_clear,
           act: () => this._snooze() };
       }
       return { cls: "", icon: "😴", name: `${T.snooze} ${c.snooze_minutes || 30} ${T.min}`,
@@ -1715,11 +1819,26 @@ class SupernotifyOverviewCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const raw = hass;
+    const tr = this._snTr || (this._snTr = snTracker());
+    const changed = snChanged(tr, raw);
+    hass = snTrackedHass(raw, tr);
+    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._rendered || wasDark !== this._dark) this._render();
-    else this._update();
+    else if (changed) this._update();
+    // connectedCallback may have run before hass: first data now, not at the first poll
+    if (!this._booted) { this._booted = true; this._refresh(); }
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -1945,11 +2064,11 @@ class SupernotifyOverviewCard extends HTMLElement {
       const ok = (n.failed || 0) === 0;
       const prioCol = { critical: "#e23c3c", high: "#f0a020", medium: p.brandD }[n.priority];
       const prio = n.priority
-        ? `<span class="badge" style="background:${p.soft};color:${prioCol || p.muted}">${esc(n.priority)}</span>`
+        ? `<span class="badge" style="background:${p.soft};color:${prioCol || p.muted}">${esc(T["prio_" + n.priority] || n.priority)}</span>`
         : "";
       const ch = +n.delivered > 0 ? `<span class="badge b-off">${n.delivered} ${T.channels}</span>` : "";
       lastEl.innerHTML = `<div class="t">${when}</div><div>${msg}</div>
-        <div style="margin-top:5px">${prio}<span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ " + T.delivered : "✖ " + n.failed + " " + T.failed}</span>${ch}</div>`;
+        <div style="margin-top:5px">${prio}<span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ " + T.delivered : "✖ " + n.failed + " " + T.failed}</span>${+n.missed > 0 ? `<span class="badge" style="background:${p.soft};color:${p.warn || "#f0a020"}">⚠ ${esc(n.missed)} ${T.missed_n}</span>` : ""}${ch}</div>`;
     } else {
       lastEl.textContent = "—";
     }
@@ -2000,11 +2119,24 @@ class SupernotifyBandsCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const raw = hass;
+    const tr = this._snTr || (this._snTr = snTracker());
+    const changed = snChanged(tr, raw);
+    hass = snTrackedHass(raw, tr);
+    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._rendered || wasDark !== this._dark) this._render();
-    else this._update();
+    else if (changed) this._update();
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -2265,11 +2397,24 @@ class SupernotifyDeliveriesCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const raw = hass;
+    const tr = this._snTr || (this._snTr = snTracker());
+    const changed = snChanged(tr, raw);
+    hass = snTrackedHass(raw, tr);
+    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._rendered || wasDark !== this._dark) this._render();
-    else this._update();
+    else if (changed) this._update();
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -2465,11 +2610,24 @@ class SupernotifyTransportsCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const raw = hass;
+    const tr = this._snTr || (this._snTr = snTracker());
+    const changed = snChanged(tr, raw);
+    hass = snTrackedHass(raw, tr);
+    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._rendered || wasDark !== this._dark) this._render();
-    else this._update();
+    else if (changed) this._update();
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -2618,11 +2776,24 @@ class SupernotifyRecipientsCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const raw = hass;
+    const tr = this._snTr || (this._snTr = snTracker());
+    const changed = snChanged(tr, raw);
+    hass = snTrackedHass(raw, tr);
+    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._rendered || wasDark !== this._dark) this._render();
-    else this._update();
+    else if (changed) this._update();
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -2693,7 +2864,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
         .gear:hover { opacity: 1; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
         .last { margin-top: 5px; font-size: 11.5px; color: ${p.muted}; cursor: pointer; }
-        .last b { color: ${p.ink}; }
+        .last b { color: ${p.ink}; text-transform: none; }
         .last.none { cursor: default; opacity: .7; }
       </style>
       <ha-card>
@@ -2838,11 +3009,26 @@ class SupernotifyScenariosCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const raw = hass;
+    const tr = this._snTr || (this._snTr = snTracker());
+    const changed = snChanged(tr, raw);
+    hass = snTrackedHass(raw, tr);
+    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._rendered || wasDark !== this._dark) this._render();
-    else this._update();
+    else if (changed) this._update();
+    // connectedCallback may have run before hass: first data now, not at the first poll
+    if (!this._booted) { this._booted = true; this._refresh(); }
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -3104,7 +3290,17 @@ class SupernotifySimulatorCard extends HTMLElement {
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._rendered || wasDark !== this._dark) this._render();
+    // connectedCallback may have run before hass: first data now, not at the first poll
+    if (!this._booted) { this._booted = true; this._refresh(); }
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: "full", min_columns: 6 };
   }
 
   getCardSize() {
@@ -3262,11 +3458,19 @@ class SupernotifyComposerCard extends HTMLElement {
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._rendered || wasDark !== this._dark) this._render();
     else {
       if (this._targetSelEl) this._targetSelEl.hass = hass;
       this._syncDry();
     }
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: "full", min_columns: 6 };
   }
 
   getCardSize() {
@@ -3506,14 +3710,25 @@ class SupernotifyComposerCard extends HTMLElement {
     return Object.keys(this._hass.states).filter((e) => e.startsWith("camera.")).sort();
   }
 
-  _send() {
+  async _send() {
     const T = snT(this._config, this._hass);
     const payload = this._payload();
-    if (!payload.message) { this._toast(T.write_first); return; }
+    if (!payload.message) {
+      // SuperNotify 2.11.1: supernotify.notify works without text, e.g. only a camera
+      // snapshot or a channel with a preset message. Older versions need the text.
+      const other = payload.camera_entity_id || (payload.delivery && Object.keys(payload.delivery).length);
+      const ok = snSupernotifyAtLeast(this._hass, "2.11.1", this._config.update_entity);
+      if (ok === false) { this._toast(other ? T.need_2111 : T.write_first); return; }
+      if (!other) { this._toast(T.write_or_pick); return; }
+    }
     if (payload.priority === "critical" && !confirm(T.critical_confirm))
       return;
-    this._hass.callService("supernotify", "notify", payload);
-    this._toast(T.sent_toast);
+    try {
+      await this._hass.callService("supernotify", "notify", payload);
+      this._toast(T.sent_toast);
+    } catch (e) {
+      this._toast(`✖ ${T.send_err}: ${(e && (e.message || e.code)) || e}`);
+    }
   }
 
   // The form as a supernotify.notify payload - shared by Send and Try without sending.
@@ -3526,7 +3741,8 @@ class SupernotifyComposerCard extends HTMLElement {
     // selector-driven fields instead of notify.supernotify's generic data:.
     // Context is preserved end-to-end and the target field accepts the
     // native HA target selector (people/devices/areas/floors/labels).
-    const payload = { message };
+    const payload = {};
+    if (message) payload.message = message;
     if (title) payload.title = title;
     if (priority) payload.priority = priority;
     if (this._picked.size) {
@@ -3658,12 +3874,25 @@ class SupernotifyAutomationsCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const raw = hass;
+    const tr = this._snTr || (this._snTr = snTracker());
+    const changed = snChanged(tr, raw);
+    hass = snTrackedHass(raw, tr);
+    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._manifest && !this._loading && !this._err) this._load();
     if (!this._rendered || wasDark !== this._dark) this._render();
-    else this._updateRows();
+    else if (changed) this._updateRows();
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -4040,6 +4269,8 @@ class SupernotifyStatsCard extends HTMLElement {
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (!this._rendered || wasDark !== this._dark) this._render();
     else this._updateVersions();
     if (first) this._load();
@@ -4048,10 +4279,29 @@ class SupernotifyStatsCard extends HTMLElement {
   connectedCallback() {
     const m = (this._config && this._config.refresh_minutes) || 10;
     this._timer = setInterval(() => this._load(), m * 60000);
+    // redraw the bars when the card changes width (phone rotation, sidebar, column span)
+    if (window.ResizeObserver && !this._ro) {
+      this._ro = new ResizeObserver(() => {
+        if (this._data && this._svgW && Math.abs(this._chartWidth() - this._svgW) > 40) this._draw();
+      });
+    }
+    if (this._ro) this._ro.observe(this);
   }
 
   disconnectedCallback() {
     clearInterval(this._timer);
+    if (this._ro) this._ro.disconnect();
+  }
+
+  _chartWidth() {
+    const w = this.getBoundingClientRect ? this.getBoundingClientRect().width : 0;
+    return Math.max(300, Math.min(600, Math.round((w || 600) - 28)));
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: "full", min_columns: 6 };
   }
 
   getCardSize() {
@@ -4333,6 +4583,7 @@ class SupernotifyStatsCard extends HTMLElement {
   _draw() {
     const sr = this.shadowRoot;
     if (!sr) return;
+    this._svgW = this._chartWidth();
     const d = this._data;
     const T = snT(this._config, this._hass);
     const p = this._palette();
@@ -4362,7 +4613,7 @@ class SupernotifyStatsCard extends HTMLElement {
 
     // daily bars
     // long windows: label one day in k so the labels never overlap (30 days -> every 2nd)
-    const every = Math.max(1, Math.ceil(d.perDay.length / 16));
+    const every = Math.max(1, Math.ceil(d.perDay.length / Math.max(6, Math.min(16, Math.floor(this._svgW / 34)))));
     const daily = this._barsSvg(d.perDay.map((x, i) => ({
       l: (d.perDay.length - 1 - i) % every === 0 ? `${x.d.getDate()}/${x.d.getMonth() + 1}` : "",
       v: x.n, hi: x.today })), p, { avg: d.avg });
@@ -4425,7 +4676,8 @@ class SupernotifyStatsCard extends HTMLElement {
 
   _barsSvg(items, p, opt) {
     const n = items.length || 1;
-    const W = 600, H = 110, padB = 18, padT = 14;
+    // drawn at the card's own width (300-600), so 9 px labels stay 9 px on a phone
+    const W = this._svgW || 600, H = 110, padB = 18, padT = 14;
     const max = Math.max(1, ...items.map((i) => i.v));
     const gap = opt.thin ? 2 : 4;
     const bw = (W - gap * (n - 1)) / n;
@@ -4542,6 +4794,8 @@ class SupernotifyArchiveCard extends HTMLElement {
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (snArchiveNative(hass, this._config)) {
       // the store redraws this card through the "supernotify-archive" event
       snArchiveStore.ensure(hass, this._config.limit, this._config.trigger_entity);
@@ -4570,6 +4824,12 @@ class SupernotifyArchiveCard extends HTMLElement {
 
   disconnectedCallback() {
     window.removeEventListener("supernotify-archive", this._onArchive);
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: "full", min_columns: 6 };
   }
 
   getCardSize() { return 12; }
@@ -4885,6 +5145,8 @@ class SupernotifyWhyCard extends HTMLElement {
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
     if (snArchiveNative(hass, this._config)) {
       snArchiveStore.ensure(hass, Math.max(this._config.limit, 40), this._config.trigger_entity);
       if (!this._rendered || wasDark !== this._dark) this._render();
@@ -4897,6 +5159,12 @@ class SupernotifyWhyCard extends HTMLElement {
     if (!this._rendered || wasDark !== this._dark) this._render();
     else if (stamp !== this._stamp) this._renderList();
     this._stamp = stamp;
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: "full", min_columns: 6 };
   }
 
   getCardSize() { return 12; }
