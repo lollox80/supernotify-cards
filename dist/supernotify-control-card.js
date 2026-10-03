@@ -8,6 +8,15 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.60.0. Real data (gap analysis of 03/10). (A1) Active scenarios come from
+ *   enquire_active_scenarios (snActive, every 30 s and after a change) - SuperNotify 2.12.0 can leave
+ *   the scenario binary_sensors at their startup value. (A2) snNotifTitle: the title lives in
+ *   condition_variables / the delivery envelopes, not at the top level (overview and control showed
+ *   no title). (A3) overview "Failures" = failed channel sends today from the archive;
+ *   sensor.supernotify_failures only counts crashes inside SuperNotify. (A8) control: tiles and group
+ *   pills toggle any domain (a switch.* DND did nothing). (A9) overview and composer list each
+ *   delivery once, by its name (switch over the deprecated binary_sensor); transports count "used
+ *   by" over every delivery.
  * 2026-10-03 - v0.59.2. No code change: README links the changelog near the top, so HACS shows it.
  * 2026-10-03 - v0.59.1. Contrast measured on every text of the 13 cards in both themes
  *   (tools/contrast_audit.mjs): light-theme green #1b7f45 -> #17733d (it was 4.2-4.4:1 on the green
@@ -392,7 +401,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.59.2"; // bundle / HACS release
+const VERSION = "0.60.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -403,15 +412,15 @@ const VERSION = "0.59.2"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.30.3",
-  overview: "0.29.2",
+  control: "0.31.0",
+  overview: "0.30.0",
   bands: "0.20.1",
   deliveries: "0.26.1",
-  transports: "0.23.1",
+  transports: "0.23.2",
   recipients: "0.26.3",
-  scenarios: "0.25.1",
+  scenarios: "0.26.0",
   simulator: "0.15.2",
-  composer: "0.19.2",
+  composer: "0.19.3",
   automations: "0.20.2",
   stats: "0.28.2",
   archive: "0.36.3",
@@ -434,7 +443,7 @@ const SN_STRINGS = {
     announced: "Announced", cleared: "Snoozes cleared",
     snoozed_for: "Snoozed non-critical notifications for",
     sent: "Sent", sent_today: "Sent today", since_startup: "since startup",
-    yesterday: "yesterday", failures: "Failures", deliveries: "Deliveries",
+    yesterday: "yesterday", failures: "Failures", fail_today: "failed channel sends today", deliveries: "Deliveries",
     enabled_total: "enabled/total", last_notif: "Last notification",
     transports: "Transports", delivered: "delivered", failed: "failed",
     channels: "channels", none: "none", no_transports: "no transport entities found", tr_used: "used by", tr_unused: "no channel uses it",
@@ -525,7 +534,7 @@ const SN_STRINGS = {
     announced: "Annunciato", cleared: "Pause annullate",
     snoozed_for: "Notifiche non critiche in pausa per",
     sent: "Inviate", sent_today: "Inviate oggi", since_startup: "dall'avvio",
-    yesterday: "ieri", failures: "Fallimenti", deliveries: "Delivery",
+    yesterday: "ieri", failures: "Fallimenti", fail_today: "invii falliti oggi", deliveries: "Delivery",
     enabled_total: "attive/totali", last_notif: "Ultima notifica",
     transports: "Transport", delivered: "consegnata", failed: "fallite",
     channels: "canali", none: "nessuno", no_transports: "nessuna entità transport trovata", tr_used: "usato da", tr_unused: "nessun canale lo usa",
@@ -731,6 +740,7 @@ function snSetBinaryState(hass, entityId, on) {
  * state write above.
  */
 function snToggle(hass, entityId, on) {
+  if (/\.supernotify_scenario_/.test(entityId)) setTimeout(() => snEnquireBust(), 800);
   if (entityId && entityId.startsWith("switch.")) {
     return hass.callService("switch", on ? "turn_on" : "turn_off", { entity_id: entityId });
   }
@@ -860,6 +870,24 @@ function snTech(name, shown) {
 function snH12(hass) {
   const f = hass && hass.locale && hass.locale.time_format;
   return f === "12" ? true : f === "24" ? false : undefined;
+}
+
+/**
+ * Title of a notification document (0.60.0): SuperNotify keeps it in condition_variables and in
+ * each delivery envelope, not at the top level, so `n.title` alone is empty.
+ */
+function snNotifTitle(n) {
+  if (!n || typeof n !== "object") return "";
+  if (n.title) return n.title;
+  const cv = n.condition_variables;
+  if (cv && cv.notification_title) return cv.notification_title;
+  for (const d of Object.values(n.deliveries || {})) {
+    for (const k of ["success", "error", "suppressed"]) {
+      const env = d && Array.isArray(d[k]) && d[k].find((e) => e && e.title);
+      if (env) return env.title;
+    }
+  }
+  return "";
 }
 
 function snW(T, key, n) {
@@ -1006,9 +1034,38 @@ function snCleanName(fn, techName) {
  * (SuperNotify >= 2.7.0). Active = conditions hold AND not switched off.
  */
 function snScenarioActive(hass, bsId) {
-  if (!hass || !hass.states[bsId] || hass.states[bsId].state !== "on") return false;
+  if (!hass) return false;
   const sw = hass.states[bsId.replace(/^binary_sensor\./, "switch.")];
+  // 0.60.0: SuperNotify 2.12.0 can leave the scenario binary_sensors at their startup value
+  // (seen on a real install: 10 hours unchanged while the time-of-day scenarios moved on), so
+  // the answer of enquire_active_scenarios, refreshed every 30 s, wins when it is known
+  snActiveEnsure(hass);
+  if (snActive.names) {
+    const name = bsId.replace(/^(binary_sensor|switch)\.supernotify_scenario_/, "");
+    return snActive.names.has(name) && (!sw || sw.state !== "off");
+  }
+  if (!hass.states[bsId] || hass.states[bsId].state !== "on") return false;
   return !sw || sw.state !== "off";
+}
+
+/**
+ * Active scenarios as SuperNotify computes them (0.60.0): enquire_active_scenarios, at most
+ * every 30 s (sooner after a change made from a card, see snEnquireBust). `v` grows when the
+ * list changes, so the cards' change tracker (snChanged) redraws them.
+ */
+const snActive = { names: null, t: 0, busy: false, v: 0 };
+function snActiveEnsure(hass) {
+  if (!hass || !hass.callWS || snActive.busy || Date.now() - snActive.t < 30000) return;
+  const svc = hass.services && hass.services.supernotify;
+  if (svc && !svc.enquire_active_scenarios) return;
+  snActive.busy = true;
+  snActive.t = Date.now();
+  snEnquire(hass, "enquire_active_scenarios").then((r) => {
+    const list = (r && r.response && r.response.scenarios) || [];
+    const next = new Set(list.map((x) => String(x).replace(/^(binary_sensor|switch)\.supernotify_scenario_/, "")));
+    const prev = snActive.names;
+    if (!prev || prev.size !== next.size || [...next].some((x) => !prev.has(x))) { snActive.names = next; snActive.v++; }
+  }).catch(() => {}).finally(() => { snActive.busy = false; });
 }
 
 /**
@@ -1485,6 +1542,7 @@ function snEnquire(hass, service, data) {
 }
 function snEnquireBust(delay) {
   SN_ENQ.clear();
+  snActive.t = 0; // a change made from a card: read the active scenarios again too
   const fire = () => { SN_ENQ.clear(); window.dispatchEvent(new CustomEvent("supernotify-refresh")); };
   if (delay) setTimeout(fire, delay); else fire();
 }
@@ -1611,7 +1669,7 @@ function snChanged(tr, hass) {
   const p = tr.snap;
   if (!p || !hass || !hass.states) return true;
   if (p.lang !== hass.language || p.themes !== hass.themes || p.entities !== hass.entities ||
-      p.services !== hass.services || p.minute !== Math.floor(Date.now() / 60000)) return true;
+      p.services !== hass.services || p.minute !== Math.floor(Date.now() / 60000) || p.act !== snActive.v) return true;
   if (tr.scanned && p.count !== Object.keys(hass.states).length) return true;
   if (tr.keys.size !== p.objs.size) return true; // the card looked at something new
   for (const [k, obj] of p.objs) if (hass.states[k] !== obj) return true;
@@ -1625,6 +1683,7 @@ function snSnap(tr, hass) {
   tr.snap = {
     objs, lang: hass.language, themes: hass.themes, entities: hass.entities, services: hass.services,
     minute: Math.floor(Date.now() / 60000), count: tr.scanned ? Object.keys(hass.states).length : 0,
+    act: snActive.v,
   };
 }
 
@@ -1833,8 +1892,12 @@ class SupernotifyControlCard extends HTMLElement {
     const s = this._hass && this._hass.states[entityId];
     return (s && s.attributes.friendly_name) || fallback || entityId;
   }
+  // 0.60.0: any domain (input_boolean, switch, light, fan...) - the visual editor also offers switch.*
   _toggle(entityId) {
-    this._hass.callService("input_boolean", "toggle", { entity_id: entityId });
+    const dom = String(entityId).split(".")[0];
+    if (["input_boolean", "switch", "light", "fan", "automation", "siren", "humidifier"].includes(dom))
+      this._hass.callService(dom, "toggle", { entity_id: entityId });
+    else this._hass.callService("homeassistant", "toggle", { entity_id: entityId });
   }
 
   _activeBand() {
@@ -2064,7 +2127,7 @@ class SupernotifyControlCard extends HTMLElement {
     const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const n = this._last;
     const titleFromEntity = c.last_notification_entity ? this._st(c.last_notification_entity) : undefined;
-    const title = (n && n.title) || (titleFromEntity && !["unknown", "unavailable", ""].includes(titleFromEntity) ? titleFromEntity : "");
+    const title = snNotifTitle(n) || (titleFromEntity && !["unknown", "unavailable", ""].includes(titleFromEntity) ? titleFromEntity : "");
     let msg = snPlainMsg(n && n.message);
     if (c.last_notification_strip) {
       try { msg = msg.replace(new RegExp(c.last_notification_strip, "m"), "").trim(); } catch (e) { /* bad regex: ignore */ }
@@ -2356,7 +2419,7 @@ class SupernotifyOverviewCard extends HTMLElement {
       else if (/restart/i.test(a.release_summary || "")) chips.push({ k: "warn", t: `🔄 ${T.h_restart}` });
       else chips.push({ k: "ok", t: `✔ SuperNotify ${a.installed_version || ""} ${T.h_uptodate}` });
     }
-    const failures = +this._st("sensor.supernotify_failures") || 0;
+    const failures = this._failures().n || 0;
     if (failures > 0) chips.push({ k: "crit", t: `✖ ${snPl(T, "h_failures", failures)}` });
     const trErr = this._scan("transport").filter((t) => {
       const st = this._hass.states[t.id];
@@ -2383,11 +2446,14 @@ class SupernotifyOverviewCard extends HTMLElement {
     this._refresh();
     this._onRefresh = this._onRefresh || (() => this._refresh());
     window.addEventListener("supernotify-refresh", this._onRefresh);
+    this._onArchive = this._onArchive || (() => { if (this._rendered) this._update(); });
+    window.addEventListener("supernotify-archive", this._onArchive);
   }
 
   disconnectedCallback() {
     clearInterval(this._pollTimer);
     if (this._onRefresh) window.removeEventListener("supernotify-refresh", this._onRefresh);
+    if (this._onArchive) window.removeEventListener("supernotify-archive", this._onArchive);
   }
 
   _palette() {
@@ -2439,15 +2505,30 @@ class SupernotifyOverviewCard extends HTMLElement {
     if (this._rendered) this._update();
   }
 
+  // 0.60.0: one row per delivery / transport (switch preferred over the deprecated
+  // binary_sensor, so nothing is counted twice), named by its `name` attribute
   _scan(kind) {
-    // Entities exposed by SuperNotify: <domain>.supernotify_<kind>_<name>
-    const out = [];
-    if (!this._hass) return out;
-    for (const id of Object.keys(this._hass.states)) {
-      const m = id.match(new RegExp(`^[a-z_]+\\.supernotify_${kind}_(.+)$`));
-      if (m) out.push({ id, name: m[1], state: this._hass.states[id].state });
+    if (!this._hass) return [];
+    return snEntityRows(this._hass, kind).map((r) => ({ id: r.id, name: r.name, state: this._hass.states[r.id].state }));
+  }
+
+  // 0.60.0: sensor.supernotify_failures only counts crashes inside SuperNotify, never a channel
+  // that failed; with the native archive count the failed channel sends of today instead
+  _failures() {
+    if (this._hass && snArchiveNative(this._hass, this._config)) {
+      snArchiveStore.ensure(this._hass, 40, this._config.trigger_entity);
+      if (snArchiveStore.fetched) {
+        const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+        let n = 0;
+        for (const doc of snArchiveStore.docs) {
+          const t = doc && doc.created ? new Date(doc.created) : null;
+          if (t && t >= d0) n += +doc.failed || 0;
+        }
+        return { n, today: true };
+      }
     }
-    return out;
+    const v = this._st("sensor.supernotify_failures");
+    return { n: v != null && v !== "unknown" && v !== "unavailable" ? +v || 0 : null, today: false };
   }
 
   _render() {
@@ -2540,7 +2621,8 @@ class SupernotifyOverviewCard extends HTMLElement {
     if (!this.shadowRoot) return;
     const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const sent = this._st("sensor.supernotify_notifications");
-    const failures = this._st("sensor.supernotify_failures");
+    const fail = this._failures();
+    const failures = fail.n;
     const dels = this._scan("delivery");
     const delsOn = dels.filter((d) => d.state === "on").length;
     const reactiveAct = this._activeScenarios();
@@ -2596,7 +2678,7 @@ class SupernotifyOverviewCard extends HTMLElement {
     const statsEl = this.shadowRoot.getElementById("stats");
     statsEl.innerHTML =
       snIconify(sentStat +
-      stat("⚠️ " + T.failures, failures != null ? esc(failures) : "—", "", +failures > 0 ? p.crit : p.ok) +
+      stat("⚠️ " + T.failures, failures != null ? esc(failures) : "—", fail.today ? T.fail_today : "", +failures > 0 ? p.crit : p.ok) +
       (this._config.stats === "full" ? stat("🎬 " + T.act_scen, act ? act.length : "—", "") : "") +
       stat("📤 " + T.deliveries, dels.length ? `${delsOn}/${dels.length}` : "—", T.enabled_total) +
       (this._config.stats !== "full" ? "" : stat("😴 " + T.snoozed, snz.length, snz.length && snz[0]._end ? T.until + " " + esc(String(snz[0]._end.getHours()).padStart(2, "0") + ":" + String(snz[0]._end.getMinutes()).padStart(2, "0")) : "", snz.length ? p.warn : undefined)), this && this._config);
@@ -2607,7 +2689,7 @@ class SupernotifyOverviewCard extends HTMLElement {
     const lastEl = this.shadowRoot.getElementById("last");
     if (lastEl && this._last) {
       const n = this._last;
-      const title = snPlainMsg(n.title);
+      const title = snPlainMsg(snNotifTitle(n));
       const msg = snPlainMsg(n.message).slice(0, 600);
       const prioCol = { critical: p.crit, high: p.warn, medium: p.brandD, low: p.muted, minimum: p.muted }[n.priority];
       const d = n.created ? new Date(n.created) : null;
@@ -3355,8 +3437,7 @@ class SupernotifyTransportsCard extends HTMLElement {
       let alias = snCleanName(t.a.friendly_name, t.name);
       if (/Transport Adaptor$/i.test(alias)) alias = "";
       const label = alias || SN_TRANSPORT_LABELS[t.name] || t.name;
-      const used = Object.keys(this._hass.states).filter((e) => e.startsWith("switch.supernotify_delivery_")
-        && this._hass.states[e].attributes && this._hass.states[e].attributes.transport === t.name).length;
+      const used = snEntityRows(this._hass, "delivery").filter((d) => d.a && d.a.transport === t.name).length;
       const use = used ? `${T.tr_used} ${snPl(T, "channels", used)}` : T.tr_unused;
       return `<div class="row" data-i="${i}">
         <span class="em">${em}</span>
@@ -3736,6 +3817,8 @@ class SupernotifyScenariosCard extends HTMLElement {
   // array) when every scenario is still "unknown"/"unavailable", so the
   // caller can fall back to the polled list on older SuperNotify versions.
   _reactiveActive(all) {
+    snActiveEnsure(this._hass);
+    if (snActive.names) return all.filter((s) => snActive.names.has(s.name) && s.enabled).map((s) => s.name);
     const known = all.filter((s) => !["unknown", "unavailable"].includes(s.state));
     if (!known.length) return null;
     return known.filter((s) => s.state === "on" && s.enabled).map((s) => s.name);
@@ -4171,14 +4254,11 @@ class SupernotifyComposerCard extends HTMLElement {
   _deliveries() {
     // name + transport (the latter needed to tell whether an explicitly
     // picked channel actually resolves an area/floor/label target).
-    const out = [];
-    if (!this._hass) return out;
-    for (const id of Object.keys(this._hass.states)) {
-      const m = id.match(/^[a-z_]+\.supernotify_delivery_(.+)$/);
-      if (m && !/^default_/i.test(m[1]))
-        out.push({ name: m[1], transport: (this._hass.states[id].attributes || {}).transport || "" });
-    }
-    return out.sort((x, y) => x.name.localeCompare(y.name));
+    if (!this._hass) return [];
+    // 0.60.0: snEntityRows - switch over the deprecated binary_sensor, no double chips
+    return snEntityRows(this._hass, "delivery").filter((d) => !/^default_/i.test(d.name))
+      .map((d) => ({ name: d.name, transport: (d.a && d.a.transport) || "" }))
+      .sort((x, y) => x.name.localeCompare(y.name));
   }
 
   _render() {

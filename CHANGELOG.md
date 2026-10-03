@@ -3,6 +3,23 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.60.0] - 2026-10-04
+
+Real data: what the cards show now matches what SuperNotify does.
+
+### Fixed
+- Active scenarios come from SuperNotify itself (`enquire_active_scenarios`, read every 30 s and right
+  after a change made from a card). SuperNotify 2.12.0 can leave the scenario binary_sensors at their
+  startup value, so the scenarios, overview and control cards could show the wrong scenarios as active.
+- The last notification's title is shown again: SuperNotify keeps it in `condition_variables` and in
+  each delivery, not at the top level of the notification.
+- Overview "Failures" counts the channel sends that failed today (from the archive).
+  `sensor.supernotify_failures` only counts crashes inside SuperNotify, so it stayed at 0 when a
+  channel failed. Without the native archive the card still falls back to the sensor.
+- Control: tiles and group pills toggle any domain - a `switch.*` do-not-disturb did nothing.
+- Overview and composer list each channel once, by its name, also where the deprecated
+  binary_sensor still exists next to the switch; the transports card counts "used by" over all of them.
+
 ## [0.59.2] - 2026-10-03
 
 ### Changed
