@@ -3,6 +3,13 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Docs
+- Short README for HACS: what the cards do, who they are for, install, quick start, one line per
+  card. Each card's options and examples moved to its own page in `docs/cards/`, common options
+  and required SuperNotify versions to `docs/configuration.md`.
+
 ## [0.48.4] - 2026-10-03
 
 ### Added

@@ -1,558 +1,66 @@
 # SuperNotify Cards
 
-Lovelace cards for [SuperNotify](https://github.com/rhizomatics/supernotify).
+Dashboard cards for **[SuperNotify](https://github.com/rhizomatics/supernotify)**, the Home
+Assistant notification integration: switch channels and scenarios, send or test a
+notification, and see why it went where it went, without touching YAML.
 
-See [CHANGELOG.md](CHANGELOG.md) for release notes. The loaded version is
-shown on the card footer.
+<p align="center"><img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/hero.png" alt="Control, overview and composer cards" width="760"></p>
 
-Works with SuperNotify ≥ 2.0.0. The composer card's native target selector
-and its use of the dedicated `supernotify.notify` action need SuperNotify
-≥ 2.3.0; live scenario state (see the control card below) needs ≥ 2.4.0.
-The automations card needs no particular SuperNotify version but does need
-its manifest generator (`tools/genera_vista_automazioni.py`) to be run
-separately — see that card's section below.
+**Who it is for:** you already use SuperNotify and want to run it from the dashboard.
 
-All cards accept two common options: `style: theme` (follow the HA theme
-instead of the SuperNotify palette) and `intro: <text>` (HTML allowed),
-which renders an info banner at the top of the card.
+**What you need:** Home Assistant with SuperNotify 2.0 or later; some features need a newer
+SuperNotify ([which ones](https://github.com/lollox80/supernotify-cards/blob/main/docs/configuration.md#which-supernotify-version-each-feature-needs)).
 
-**Localization:** every card follows `hass.language` automatically (Italian
-and English so far, English fallback for anything else). Override with
-`language: it` / `language: en` in the card config if you need to pin it
-regardless of the HA UI language.
+## Install
 
-## What it looks like
+1. HACS → ⋮ → **Custom repositories** → add `https://github.com/lollox80/supernotify-cards`, type **Dashboard**.
+2. Install **SuperNotify Cards** and reload the browser.
+3. Add a card: **Add card** → search *SuperNotify*, or paste one of the examples below.
 
-All screenshots come from a demo installation (made-up people and devices).
+<details><summary>Manual install (without HACS)</summary>
 
-<p align="center"><img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/hero.png" alt="Control, overview and composer cards" width="800"></p>
+Copy `dist/supernotify-control-card.js` to `config/www/` and add the dashboard resource
+`/local/supernotify-control-card.js` (type: JavaScript module).
+</details>
 
-| Card | What it is for |
-|---|---|
-| [control](#supernotify-control-card) | Touch-first control centre: last notification, snooze, do-not-disturb, announce, house modes |
-| [overview](#supernotify-overview-card) | Health at a glance: version, failures, channels off, snoozes, active scenarios |
-| [bands](#supernotify-bands-card) | Time bands with start time and voice volume |
-| [deliveries](#supernotify-deliveries-card) | Every channel with its on/off switch and when it starts |
-| [transports](#supernotify-transports-card) | Integrations behind the channels, with error counts |
-| [recipients](#supernotify-recipients-card) | People: contact points, presence, last notification received |
-| [scenarios](#supernotify-scenarios-card) | Scenarios, which are active now, on/off switches |
-| [simulator](#supernotify-simulator-card) | Tap scenarios and see which channels would fire |
-| [composer](#supernotify-composer-card) | Write and send a notification, or try it without sending (SuperNotify 2.12) |
-| [automations](#supernotify-automations-card) | The automations that notify, with search and enable/disable |
-| [stats](#supernotify-stats-card) | Usage over 7/14/30 days: per day, hour, weekday, channel, priority |
-| [archive](#supernotify-archive-card) | Recent notifications with the outcome of each channel |
-| [why](#supernotify-why-card) | Why a notification went where it went, channel by channel |
+## Quick start
 
-Every card follows the Home Assistant dark theme:
-
-<p align="center"><img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/dark.png" alt="Cards in the dark theme" width="900"></p>
-
-## Versions
-
-The bundle has one release version (HACS, this repo's tags) and **each card has its own
-version**, shown in its footer and bumped only when that card changes. A card footer that
-says `v0.16.0` while the bundle is at `0.22.0` simply means that card has not changed since
-0.16.0. `tools/check_card_versions.py` (run in CI) fails when a card's code changes without a
-bump in `SN_CARD_VERSIONS`.
-
-## supernotify-control-card
-
-Touch-first control center: status bar, big quick-action tiles and grouped
-mode toggles. Implements the "control center" concept from the SuperNotify
-UI roadmap (feature #27, statistics and dashboard).
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/control.png" alt="supernotify-control-card" width="420">
-
-### Installation
-
-**HACS (recommended):** add this repository as a custom repository of type
-"Dashboard", then install *SuperNotify Cards*.
-
-**Manual:** copy `dist/supernotify-control-card.js` to `config/www/` and add
-a dashboard resource:
-
-```yaml
-url: /local/supernotify-control-card.js
-type: module
-```
-
-### Configuration
+Three cards that work with no options at all:
 
 ```yaml
 type: custom:supernotify-control-card
-presence_entity: person.lorenzo
-dnd_entity: input_boolean.notifier_dnd
-announce_delivery: alexa_announce
-snooze_minutes: 30
-last_notification: true
-last_notification_entity: input_text.supernotify_last_title
-repeat_entity: input_button.supernotify_show_last
-tiles:
-  - dnd
-  - snooze
-  - toggle: input_boolean.notifier_speech_notifications
-    name: Voice
-    icon: mdi:account-voice
-  - toggle: input_boolean.notifier_phone_notifications
-    name: Push
-    icon: mdi:cellphone
-  - announce
-groups:
-  - name: Notification channels
-    entities:
-      - input_boolean.notifier_speech_notifications
-      - input_boolean.notifier_phone_notifications
-      - input_boolean.notifier_screen_notifications
-  - name: Quiet and schedules
-    entities:
-      - input_boolean.notifier_dnd
-      - input_boolean.notifier_holidays
-      - input_boolean.notifier_dnd_workdays
-  - name: People and home
-    collapsed: true
-    entities:
-      - input_boolean.modo_ospite
-      - input_boolean.tata_presente
-bands:
-  early_morning: {start: input_datetime.notifier_start_early_morning, volume: input_number.notifier_early_morning_volume}
-  morning:       {start: input_datetime.notifier_start_morning,       volume: input_number.notifier_morning_volume}
-  afternoon:     {start: input_datetime.notifier_start_afternoon,     volume: input_number.notifier_afternoon_volume}
-  evening:       {start: input_datetime.notifier_start_evening,       volume: input_number.notifier_evening_volume}
-  night:         {start: input_datetime.notifier_start_night,         volume: input_number.notifier_night_volume}
-  late_night:    {start: input_datetime.notifier_start_late_night,    volume: input_number.notifier_late_night_volume}
 ```
-
-| Option | Required | Description |
-|---|---|---|
-| `presence_entity` | no | `person.*` shown in the status bar |
-| `dnd_entity` | no | `input_boolean` used by the DND tile and status bar |
-| `announce_delivery` | no | SuperNotify delivery used by Announce (default `alexa_announce`) |
-| `snooze_minutes` | no | minutes for the snooze tile (default 30) |
-| `snooze_action` | no | override the snooze command (default `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_<minutes>`; e.g. use `..._EVERYTHING_...` to pause critical too) |
-| `tiles` | no | list of `dnd`, `snooze`, `announce`, or `{toggle, name, icon}` |
-| `groups` | no | grouped `input_boolean` toggles with a `name` |
-| `bands` | no | time bands (`input_datetime` start + `input_number` volume) for the status bar |
-| `last_notification` | no | `true` shows the native last-notification block (title, message, priority, relative time, channels ✔/✖ with delivery alias) |
-| `last_notification_entity` | no | `input_text` holding the last title (fallback when the engine has no title) |
-| `last_notification_strip` | no | regex removed from the message, e.g. `\\s*🕐 Ora:.*$` to drop a timestamp line |
-| `repeat_entity` | no | `input_button` (or `script`) pressed by the "Repeat" button of the block |
-| `collapsible` | no | groups fold on header tap with an active/total counter (default `true`); per-group `collapsed: true` folds by default |
-| `tile_columns` | no | force N tile columns (default: auto-fit, min 84 px) |
-
-Active scenarios are read from `binary_sensor.supernotify_scenario_*`. Since
-SuperNotify 2.4.0 these report a live `on`/`off` state (recomputed reactively
-plus a periodic sweep — see `scenario_control` in the SuperNotify config); on
-older versions, or for a scenario configured with `expose_state: false`, they
-stay `unknown` and the counter hides automatically. The overview-card and
-scenarios-card use the same live state for their "active now" count/badge
-when it's available, falling back to their polled `enquire_active_scenarios`
-check (a `poll_seconds` option, default 60) only on older versions.
-From SuperNotify 2.7.0 a scenario also has a `switch.supernotify_scenario_*`
-(enabled or not): a scenario counts as active only when its conditions hold
-**and** its switch is not off.
-
-The Announce tile calls `notify.supernotify` with
-`data: {delivery_selection: fixed, delivery: {<announce_delivery>: {}}}`.
-
-## supernotify-overview-card
-
-Dashboard overview shipped in the same bundle: a **health strip** (one chip
-per thing worth a glance — SuperNotify version status from the HACS update
-entity, engine failures, transports with errors, channels switched off, DND
-active, active snoozes; a single green "All good" when nothing is wrong),
-sent and failure counters (`sensor.supernotify_notifications` /
-`sensor.supernotify_failures`), active scenarios and last notification (via
-the `supernotify.enquire_*` response services over WebSocket) and delivery
-counts. Transport status lives in the transports card.
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/overview.png" alt="supernotify-overview-card" width="420">
-
-```yaml
-type: custom:supernotify-overview-card
-# optional:
-poll_seconds: 60        # refresh interval for enquire_* data
-health: true            # health strip on top (set false to hide)
-update_entity: update.supernotify_update   # HACS update entity for the version chip
-quiet_entity: binary_sensor.notifier_dnd   # your DND sensor, for the 🌙 chip
-sent_today_entity: sensor.supernotify_inviate_oggi   # daily utility_meter for "sent today"
-style: theme            # follow the HA theme instead of the SuperNotify look
-```
-
-## supernotify-bands-card
-
-Time bands editor: one row per band with an "now" badge on the active band
-(cross-midnight aware), inline start-time input (`input_datetime`) and
-volume slider (`input_number`).
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/bands.png" alt="supernotify-bands-card" width="420">
-
-```yaml
-type: custom:supernotify-bands-card
-bands:                   # config order = chronological order (cyclic)
-  early_morning: {start: input_datetime.notifier_start_early_morning, volume: input_number.notifier_early_morning_volume}
-  morning:       {start: input_datetime.notifier_start_morning,       volume: input_number.notifier_morning_volume}
-  afternoon:     {start: input_datetime.notifier_start_afternoon,     volume: input_number.notifier_afternoon_volume}
-  evening:       {start: input_datetime.notifier_start_evening,       volume: input_number.notifier_evening_volume}
-  night:         {start: input_datetime.notifier_start_night,         volume: input_number.notifier_night_volume}
-  late_night:    {start: input_datetime.notifier_start_late_night,    volume: input_number.notifier_late_night_volume}
-# per band, optional: name and icon (emoji); defaults provided for the six standard bands
-```
-
-## supernotify-deliveries-card
-
-Delivery dashboard, auto-discovered from the entities SuperNotify exposes:
-transport icon, selection/action/target tags, enabled badge. A "🎯 native
-area/floor/label" tag marks deliveries whose transport resolves an
-area/floor/label target natively (`notify_entity`, `alexa_devices`, `html5`,
-`ntfy`, `kodi`, `media_player`, `tts`, `chime`) — see the composer card's
-target selector note below for why this matters. Tap a row for the full
-delivery attributes.
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/deliveries.png" alt="supernotify-deliveries-card" width="420">
-
-```yaml
-type: custom:supernotify-deliveries-card
-# optional:
-hide_defaults: true     # hide auto-generated DEFAULT_* deliveries (default true)
-style: theme
-```
-
-## supernotify-transports-card
-
-The integrations behind the channels (mobile push, Alexa, email, Telegram…), each with its
-on/off switch and the number of errors since the last restart. Turning a transport off stops
-every channel that uses it.
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/transports.png" alt="supernotify-transports-card" width="420">
-
-```yaml
-type: custom:supernotify-transports-card
-```
-
-## supernotify-recipients-card
-
-Recipients dashboard, auto-discovered: home/away state from the linked
-`person.*` entity, contact tags (email, phone, devices, delivery overrides)
-and a live on/off switch. Warns when a recipient has no contact points.
-On SuperNotify ≥ 2.7.0 each recipient is read from its
-`switch.supernotify_recipient_*` and toggled with `switch.turn_on/turn_off`
-(the deprecated `binary_sensor` mirror is ignored); older versions fall back
-to the `binary_sensor`.
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/recipients.png" alt="supernotify-recipients-card" width="420">
-
-```yaml
-type: custom:supernotify-recipients-card
-# optional: style: theme
-```
-
-## supernotify-scenarios-card
-
-Scenarios dashboard, auto-discovered: "active now" badge (live from
-`binary_sensor.supernotify_scenario_*`, polled from `enquire_active_scenarios`
-on older versions), a live on/off switch per scenario (SuperNotify ≥ 2.7.0,
-`switch.supernotify_scenario_*`), per-delivery override tags (enabled/disabled),
-action groups and media tags. Optional `groups` reproduce categories.
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/scenarios.png" alt="supernotify-scenarios-card" width="420">
-
-```yaml
-type: custom:supernotify-scenarios-card
-# optional:
-groups:
-  - name: 🚨 Priority
-    scenarios: [critical_panic, high_priority, alexa_low_whisper]
-  - name: 🕐 Time bands
-    scenarios: [early_morning, morning, afternoon, evening, night, late_night]
-# scenarios not listed fall into an "Other" group
-```
-
-## supernotify-simulator-card
-
-"Who receives?" — pick scenarios and see which deliveries would fire,
-computed from real engine data (`enquire_implicit_deliveries` and
-`enquire_deliveries_by_scenario`). Suppressed deliveries are shown
-struck-through. Priority-based delivery filtering happens engine-side and
-is not simulated.
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/simulator.png" alt="supernotify-simulator-card" width="700">
-
-```yaml
-type: custom:supernotify-simulator-card
-```
-
-## supernotify-composer-card
-
-Try & send: title, message, priority, optional explicit channel chips
-(auto-discovered), a native HA **target selector** (people, devices, areas,
-floors, labels — the same picker HA itself shows for `supernotify.notify`),
-an optional comma-separated **custom targets** field for recipients with no
-HA selector (email addresses, Telegram chat IDs, …), camera snapshot picker
-and a live phone preview.
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/composer.png" alt="supernotify-composer-card" width="800">
-
-Sends via the dedicated `supernotify.notify` action (SuperNotify ≥ 2.3.0) —
-typed fields instead of `notify.supernotify`'s generic `data:` — with
-`delivery_selection: fixed` when channels are picked, and a confirmation
-guard on critical priority. Requires SuperNotify ≥ 2.3.0; on older versions
-use `supernotify-control-card`'s Announce tile or your own automation
-instead.
-
-⚠️ **Areas, floors and labels are not resolved by every channel.** SuperNotify
-only resolves them natively for transports that call an HA entity service —
-`notify_entity`, `alexa_devices`, `html5`, `ntfy`, `kodi`, `media_player`,
-`tts` and `chime` (see [issue #9](https://github.com/rhizomatics/supernotify/issues/9)
-upstream). With any other channel, or with the default/implicit routing when
-no channel is picked, a target made only of areas/floors/labels can silently
-end up with no recipient at all. The card shows an inline warning in this
-case; pick a compatible channel above (the deliveries card flags them) or add
-a person/device directly to the target.
-
-**Try without sending** (🔍): shows which channels would send right now and to
-whom, which would be skipped and why, missed channels, priority, scenarios in
-force and who is home — without sending anything. It uses SuperNotify's dry
-run (2.12 or later, [issue #218](https://github.com/rhizomatics/supernotify/issues/218)):
-`supernotify.notify` with `dry_run: simulate`. The button shows when
-`update.supernotify_update` says 2.12 or later; `dry_run: true` shows it anyway.
-
-By default the dry run skips the duplicate check (`force_resend`): on
-2.12.0-beta1 a simulated notification is remembered as sent, so the real Send
-right after, with the same text, would be dropped as a duplicate. With
-`dry_run_dupe_check: true` the dry run does check duplicates, and the next Send
-of the same content carries `force_resend` instead.
-
 ```yaml
 type: custom:supernotify-composer-card
-# dry_run: true               # optional: show the button whatever the version
-# dry_run_dupe_check: true    # optional: simulate the duplicate check too
-# update_entity: update.supernotify_update
 ```
-
-## supernotify-automations-card
-
-Live list of the automations that notify via `notify.supernotify`: search,
-category filters, a "🔕 disabled only" toggle, state and "last triggered",
-enable/disable, tap a row for the automation's own more-info dialog.
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/automations.png" alt="supernotify-automations-card" width="420">
-
-Home Assistant does not expose the config of YAML/package automations (they
-have no `id`), so discovery is hybrid: [`tools/genera_vista_automazioni.py`](tools/genera_vista_automazioni.py)
-(included in this repo, run on the HA host or wherever it can read your
-config directory) scans `automations.yaml`/`packages/*.yaml`, finds the
-ones calling `notify.supernotify` and writes a JSON manifest to
-`config/www/supernotify/automations.json`; the card layers everything live
-on top of it (state, last_triggered, enable/disable). Edit the `HA_CONFIG_DIR`
-and `CATEGORIES` constants at the top of the script for your own setup
-before running it, and rerun it whenever automations are added, removed or
-renamed — the card itself only reads the manifest, it never scans anything.
-
-```yaml
-type: custom:supernotify-automations-card
-# optional:
-manifest_url: /local/supernotify/automations.json   # default shown
-style: theme
-```
-
-⚠️ If the card shows a configuration/loading error, check that the manifest
-file actually exists at that URL on your instance — this card depends on it
-being generated and copied into `config/www/supernotify/` separately from
-the card's own installation.
-
-## supernotify-archive-card
-
-Notification history, read from the SuperNotify archive.
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/archive.png" alt="supernotify-archive-card" width="800">
-
-```yaml
-type: custom:supernotify-archive-card
-```
-
-| Option | Required | Description |
-|---|---|---|
-| `limit` | no | notifications read from the archive (default 40, max 100) |
-| `source` | no | `sensor` to keep using the command_line bridge below even on SuperNotify 2.10+ |
-| `trigger_entity` | no | entity whose change means "a notification was sent" (default `sensor.supernotify_notifications`) |
-| `entity` | no | bridge only: sensor holding the archive index (default `sensor.supernotify_archivio`) |
-| `intro` | no | info banner at the top of the card |
-| `style` | no | `supernotify` (default) or `theme` |
-
-**SuperNotify 2.10.0 or later: nothing to set up.** The card reads the archive through the
-`supernotify.enquire_archive` action (the file archive must be on in SuperNotify's options). It
-asks for the latest `limit` notifications once, then only for the newest few each time
-`trigger_entity` changes, and shares what it read with the why card and the recipients card on
-the same page.
-
-### Before SuperNotify 2.10: the command_line bridge
-
-Older versions have no action to read the archive, and a Lovelace card cannot read files
-(`media_source` serves only audio/image/video, so a `.json` comes back 404 even with a signed
-URL). The card then needs an index of the archive in the attributes of a sensor. Copy
-`tools/sn_archive_index.py` to `/config/tools/` and add:
-
-```yaml
-command_line:
-  - sensor:
-      name: "SuperNotify archivio"
-      unique_id: supernotify_archivio_indice
-      command: "python3 /config/tools/sn_archive_index.py"
-      value_template: "{{ value_json.count }}"
-      json_attributes: [items, chan, scen, generated, total_files, oldest, error, unreadable]
-      scan_interval: 300
-      command_timeout: 30
-
-recorder:
-  exclude:
-    entities:
-      - sensor.supernotify_archivio    # ~8 KB of attributes, no reason to store them
-```
-
-Optionally trigger a refresh right after each notification instead of waiting for the next
-scan, with an automation on `sensor.supernotify_notifications` calling
-`homeassistant.update_entity` on the sensor (the engine updates that counter *after* delivery,
-so the JSON file is already on disk).
-
-The script takes `--limit` (default 40), `--path` and `--message-chars`; it never raises, so a
-missing folder or a corrupt file shows up as an attribute instead of breaking the sensor.
-
-Once you are on SuperNotify 2.10+, the sensor, the automation, the shell command and the script
-can all be removed: the cards stop reading them as soon as the action is there.
-
-With a `supernotify-why-card` on the same view, an expanded row gets a **🔎 Why?** link.
-
-## supernotify-why-card
-
-"Why did this notification go where it went?" Pick a notification (or open it from the archive
-card or the recipients card) to see the scenarios in force, who was home, and for **every
-channel** whether it went out, why not, to which targets and what selected it — plus the channels
-that did not start at all, with the reason. When SuperNotify diagnostics are set to `ALL`, the
-full selection trace archived with the notification is shown too.
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/why.png" alt="supernotify-why-card" width="800">
-
 ```yaml
 type: custom:supernotify-why-card
 ```
 
-| Option | Required | Description |
-|---|---|---|
-| `limit` | no | notifications in the list (default 15) |
-| `source`, `trigger_entity` | no | as for supernotify-archive-card |
-| `entity` | no | bridge only: sensor holding the archive index |
-| `service` | no | bridge only: service returning the detail (default `shell_command.sn_archive_detail`) |
-| `intro`, `style`, `language` | no | as for the other cards |
+## The cards
 
-On SuperNotify 2.10.0 or later the list and the detail both come from `supernotify.enquire_archive`,
-through the same store as the archive card: opening a notification already listed needs no
-further call. Before 2.10, the detail is read on demand through the bridge, so it never weighs on
-any entity's attributes. It needs the same `tools/sn_archive_index.py` as the archive card and a
-shell command returning its output (restart Home Assistant after adding it):
+Each link opens the card's page: screenshot, every option, examples.
 
-```yaml
-shell_command:
-  sn_archive_detail: "python3 /config/tools/sn_archive_index.py --detail {{ id }}"
-```
+| Card | What it does |
+|---|---|
+| [control](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/control.md) | Touch-first control centre: last notification, snooze, do-not-disturb, announce, house modes. |
+| [overview](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/overview.md) | Health at a glance: version, failures, channels off, snoozes, active scenarios. |
+| [bands](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/bands.md) | Time bands: start time and voice volume of each part of the day. |
+| [deliveries](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/deliveries.md) | Every channel with its on/off switch and when it starts. |
+| [transports](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/transports.md) | The integrations behind the channels, with error counts. |
+| [recipients](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/recipients.md) | People: contact points, presence, last notification received. |
+| [scenarios](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/scenarios.md) | Scenarios, which are active now, on/off switches. |
+| [simulator](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/simulator.md) | Tap scenarios and see which channels would fire. |
+| [composer](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/composer.md) | Write and send a notification, or try it without sending. |
+| [automations](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/automations.md) | The automations that notify, with search and enable/disable. |
+| [archive](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/archive.md) | Recent notifications with the outcome of each channel. |
+| [why](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/why.md) | Why a notification went where it went, channel by channel. |
+| [stats](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/stats.md) | Usage over 7/14/30 days: per day, hour, weekday, channel, priority. |
 
-The channels that did not start are not in the archive: their reason is reconstructed from the
-configuration as it is now (delivery and transport switches, inclusion, the scenarios in force,
-the call's own overrides) and is labelled as such, unless the archived trace says otherwise.
+All cards follow the Home Assistant dark theme ([screenshot](https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/dark.png)).
 
-## supernotify-stats-card
+## More
 
-Usage analytics built **only from entities that already exist** — no extra
-sensor, no archive parsing: KPIs (notifications in the window, per day,
-today vs. average, peak hour, top channel, channel errors), per-day /
-per-hour / per-weekday bar charts, channels most used (with error share),
-priority and day-period mix, auto-generated insights, and a version strip
-showing installed vs. latest version of SuperNotify and of these cards
-(from the HACS `update.*` entities, with their brand icon and release link).
-
-<img src="https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/stats.png" alt="supernotify-stats-card" width="800">
-
-Data sources:
-
-- **Per-day series** — long-term statistics of a daily `utility_meter` on
-  `sensor.supernotify_notifications` (survives recorder purges).
-- **Per-notification detail** — recorder history of the "last notification"
-  helpers written by a logging automation: one change of an
-  `input_datetime` = one notification, joined with the priority / channels /
-  day-period helpers at that moment. History length = your recorder
-  `purge_keep_days`.
-- **Channels** — an `input_text` written *after* delivery from
-  `supernotify.enquire_last_notification` as `a, b, ✖c` (✖ = errored).
-
-```yaml
-type: custom:supernotify-stats-card
-# optional (defaults shown):
-days: 14
-periods: [7, 14, 30]    # window switch in the header; the choice is remembered per browser
-time_entity: input_datetime.supernotify_last_time
-priority_entity: input_text.supernotify_last_priority
-channels_entity: input_text.supernotify_last_channels
-period_entity: input_text.supernotify_last_day_period
-sent_today_entity: sensor.supernotify_inviate_oggi      # daily utility_meter
-update_entity: update.supernotify_update                # HACS update entity
-cards_update_entity: update.supernotify_cards_update
-refresh_minutes: 10
-top_channels: 8
-grid_options: { columns: full }   # recommended inside a column_span: 2 section
-```
-
-Minimal helpers + automations the card expects (adapt names to yours):
-
-```yaml
-input_text:
-  supernotify_last_priority: { max: 20 }
-  supernotify_last_channels: { max: 255 }
-  supernotify_last_day_period: { max: 50 }
-input_datetime:
-  supernotify_last_time: { has_date: true, has_time: true }
-
-utility_meter:
-  supernotify_inviate_oggi:
-    source: sensor.supernotify_notifications
-    cycle: daily
-
-automation:
-  # 1) at call time: timestamp + priority (+ your own day-period sensor)
-  - alias: SuperNotify - log last notification
-    mode: queued
-    trigger:
-      - platform: event
-        event_type: call_service
-        event_data: { domain: notify, service: supernotify }
-    action:
-      - action: input_text.set_value
-        target: { entity_id: input_text.supernotify_last_priority }
-        data:
-          value: "{{ (trigger.event.data.service_data.data | default({})).priority | default('medium') }}"
-      - action: input_datetime.set_datetime
-        target: { entity_id: input_datetime.supernotify_last_time }
-        data: { datetime: "{{ now().isoformat() }}" }
-
-  # 2) after delivery: channels that really delivered / errored
-  - alias: SuperNotify - log delivered channels
-    mode: queued
-    trigger:
-      - platform: state
-        entity_id: sensor.supernotify_notifications
-        not_to: [unknown, unavailable]
-    action:
-      - action: supernotify.enquire_last_notification
-        response_variable: last
-      - action: input_text.set_value
-        target: { entity_id: input_text.supernotify_last_channels }
-        data:
-          value: >-
-            {% set ns = namespace(ok=[], ko=[]) %}
-            {% for name, o in (last.deliveries | default({})).items() %}
-              {% if o.success | default([]) | length > 0 %}{% set ns.ok = ns.ok + [name] %}{% endif %}
-              {% if (o.error | default([]) | length) + (o.failed | default([]) | length) > 0 %}{% set ns.ko = ns.ko + ['✖' ~ name] %}{% endif %}
-            {% endfor %}
-            {{ (ns.ok + ns.ko) | join(', ') if (ns.ok + ns.ko) | length > 0 else 'none' }}
-```
-
-Values the card cannot parse (e.g. an older "auto" placeholder) are counted
-as *unknown* and shown as such under the channel chart.
+- [Common options and required versions](https://github.com/lollox80/supernotify-cards/blob/main/docs/configuration.md)
+- [Changelog](https://github.com/lollox80/supernotify-cards/blob/main/CHANGELOG.md)
+- Issues and ideas: [GitHub issues](https://github.com/lollox80/supernotify-cards/issues)
