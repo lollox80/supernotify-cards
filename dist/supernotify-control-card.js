@@ -8,6 +8,12 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.56.1. Fixes seen on a real dashboard: overview-card 0.28.1 - with `stats: full`
+ *   the five numbers sit 3+2 (one row when the card is wide) instead of leaving a hole, four sit
+ *   2+2; a last notification without a title is shown as plain text, not as a bold headline,
+ *   clamped to three lines instead of cut mid-word; space between icon and name in the scenario
+ *   chips. control-card 0.29.1 and overview: markdown in the message ([text](url), **bold**,
+ *   `code`) is shown as plain text (new shared helper snPlainMsg).
  * 2026-10-03 - v0.56.0. overview-card 0.28.0: the last notification reads like the control card's -
  *   title, message, priority and "4 min ago" instead of a raw timestamp, channel counts with the
  *   names in the tooltip ("2 delivered", "1 missed", "2 skipped"), and Why ›. `last_notification:
@@ -351,7 +357,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.56.0"; // bundle / HACS release
+const VERSION = "0.56.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -362,8 +368,8 @@ const VERSION = "0.56.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.29.0",
-  overview: "0.28.0",
+  control: "0.29.1",
+  overview: "0.28.1",
   bands: "0.18.0",
   deliveries: "0.25.0",
   transports: "0.22.0",
@@ -783,6 +789,20 @@ function snIconify(html, cfg) {
  * Singular or plural (0.54.0): T[key + "_1"] when n is 1 and the language has a singular,
  * else T[key]. snPl() gives "1 channel off" / "3 channels off".
  */
+/**
+ * Message text for a card (0.56.1): markdown links become their text, **bold**, `code` and
+ * heading marks go, so "[Clock Weather Card Update](https://github.com/...)" reads as
+ * "Clock Weather Card Update" instead of the raw link.
+ */
+function snPlainMsg(s) {
+  return String(s == null ? "" : s)
+    .replace(/!?\[([^\]]*)\]\((?:[^()]|\([^)]*\))*\)/g, "$1")
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/[ \t]+\n/g, "\n").trim();
+}
+
 function snW(T, key, n) {
   return (+n === 1 && T[key + "_1"]) || T[key] || key;
 }
@@ -1953,7 +1973,7 @@ class SupernotifyControlCard extends HTMLElement {
     const n = this._last;
     const titleFromEntity = c.last_notification_entity ? this._st(c.last_notification_entity) : undefined;
     const title = (n && n.title) || (titleFromEntity && !["unknown", "unavailable", ""].includes(titleFromEntity) ? titleFromEntity : "");
-    let msg = (n && n.message) || "";
+    let msg = snPlainMsg(n && n.message);
     if (c.last_notification_strip) {
       try { msg = msg.replace(new RegExp(c.last_notification_strip, "m"), "").trim(); } catch (e) { /* bad regex: ignore */ }
     }
@@ -2343,9 +2363,19 @@ class SupernotifyOverviewCard extends HTMLElement {
     const p = this._palette();
     this.shadowRoot.innerHTML = snIconify(`
       <style>
-        :host { display: block; }
+        :host { display: block; container-type: inline-size; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+        /* 0.56.1: no hole in the grid - 4 numbers 2+2, 5 numbers 3+2 (one row when the card is wide) */
+        .stats[data-n="4"] { grid-template-columns: repeat(2, 1fr); }
+        .stats[data-n="5"] { grid-template-columns: repeat(6, 1fr); }
+        .stats[data-n="5"] .stat { grid-column: span 2; }
+        .stats[data-n="5"] .stat:nth-child(n+4) { grid-column: span 3; }
+        @container (min-width: 620px) {
+          .stats[data-n="4"] { grid-template-columns: repeat(4, 1fr); }
+          .stats[data-n="5"] { grid-template-columns: repeat(5, 1fr); }
+          .stats[data-n="5"] .stat, .stats[data-n="5"] .stat:nth-child(n+4) { grid-column: auto; }
+        }
         .stat { border: 0; border-radius: 10px; padding: 12px 14px; background: ${p.soft}; }
         .stat .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
                    font-weight: 800; color: ${p.muted}; white-space: nowrap; }
@@ -2363,12 +2393,15 @@ class SupernotifyOverviewCard extends HTMLElement {
         .b-crit { background: rgba(226,60,60,.12); color: ${p.crit}; }
         .lastmsg { font-size: 13px; }
         .lastmsg .t { color: ${p.muted}; font-size: 12.5px; margin-top: 3px; }
-        .lastmsg .lt { font-size: 15px; font-weight: 600; } .lastmsg .lmm { margin-top: 2px; }
+        .lastmsg .lt { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+        .lastmsg .lmm { margin-top: 2px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line;
+                        display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+        .lastmsg .lmm.solo { margin-top: 0; font-size: 14px; }
         .lastmsg .lf { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
         .lastmsg .badge { display: inline-flex; align-items: center; gap: 4px; }
         .whyb { margin-left: auto; border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.brandD};
                 border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
-        .chip { display: inline-flex; border: 1.5px solid ${p.line}; border-radius: 999px;
+        .chip { display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid ${p.line}; border-radius: 999px;
                 padding: 5px 12px; font-size: 12px; font-weight: 650; margin: 0 6px 6px 0;
                 background: ${p.soft}; color: ${p.brandD}; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 10px; }
@@ -2466,7 +2499,8 @@ class SupernotifyOverviewCard extends HTMLElement {
       }
       healthEl.innerHTML = snIconify(html, this && this._config);
     }
-    this.shadowRoot.getElementById("stats").innerHTML =
+    const statsEl = this.shadowRoot.getElementById("stats");
+    statsEl.innerHTML =
       snIconify(sentStat +
       stat("⚠️ " + T.failures, failures != null ? esc(failures) : "—", "", +failures > 0 ? p.crit : p.ok) +
       (this._config.stats === "full" ? stat("🎬 " + T.act_scen, act ? act.length : "—", "") : "") +
@@ -2475,11 +2509,12 @@ class SupernotifyOverviewCard extends HTMLElement {
 
     // 0.56.0: same reading as the control card - title, message, priority and "4 min ago",
     // channel counts, Why ›. `last_notification: false` hides the block (the control card has it).
+    statsEl.dataset.n = statsEl.children.length;
     const lastEl = this.shadowRoot.getElementById("last");
     if (lastEl && this._last) {
       const n = this._last;
-      const title = n.title || "";
-      const msg = (n.message || "").slice(0, 140);
+      const title = snPlainMsg(n.title);
+      const msg = snPlainMsg(n.message).slice(0, 600);
       const prioCol = { critical: p.crit, high: p.warn, medium: p.brandD, low: p.muted, minimum: p.muted }[n.priority];
       const d = n.created ? new Date(n.created) : null;
       const meta = [n.priority ? `<span style="color:${prioCol || p.muted};font-weight:600">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "",
@@ -2501,8 +2536,8 @@ class SupernotifyOverviewCard extends HTMLElement {
       if (+n.missed > 0) chips.push(`<span class="badge" style="background:${p.warnSoft};color:${p.warnInk}">⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
       if (skipped) chips.push(`<span class="badge b-off">${snPl(T, "skipped_n", skipped)}</span>`);
       const why = n.id && window.__snWhyCards ? `<button class="whyb" id="whyBtn">${esc(T.ln_why)} ›</button>` : "";
-      lastEl.innerHTML = snIconify(`<div class="lt">${esc(title || msg || "—")}</div>
-        ${title && msg ? `<div class="lmm">${esc(msg)}</div>` : ""}
+      lastEl.innerHTML = snIconify(`${title ? `<div class="lt">${esc(title)}</div>` : ""}
+        <div class="lmm${title ? "" : " solo"}">${esc(msg || "—")}</div>
         ${meta ? `<div class="t">${meta}</div>` : ""}
         <div class="lf">${chips.join("")}${why}</div>`, this && this._config);
       const wb = lastEl.querySelector("#whyBtn");

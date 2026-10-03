@@ -3,6 +3,19 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.56.1] - 2026-10-03
+
+Fixes seen on a real dashboard.
+
+### Fixed
+- overview-card 0.28.1: with `stats: full` the five numbers sit 3+2 (one row when the card is wide)
+  instead of leaving an empty cell; four numbers sit 2+2.
+- overview-card: a last notification without a title is shown as plain text, not as a bold headline,
+  and is clamped to three lines instead of being cut mid-word.
+- overview-card and control-card 0.29.1: markdown in the message (`[text](url)`, `**bold**`, `` `code` ``)
+  is shown as plain text instead of the raw link.
+- overview-card: space between the icon and the name in the active-scenario chips.
+
 ## [0.56.0] - 2026-10-03
 
 One way to read the last notification.
