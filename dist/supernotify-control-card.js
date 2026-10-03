@@ -8,6 +8,8 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.52.1. No card changed: HACS validation action added, release made after it passed
+ *   (required to submit the repository to the HACS default store).
  * 2026-10-03 - v0.52.0. Redesign, step 4: control-card 0.27.0 and overview-card 0.25.0.
  *   control: the status bar is one line of text (no box, no capital labels); tiles have the icon
  *   on the left and one colour logic (on = blue tint, needs attention = orange tint), 2 per row on
@@ -313,7 +315,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.52.0"; // bundle / HACS release
+const VERSION = "0.52.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION

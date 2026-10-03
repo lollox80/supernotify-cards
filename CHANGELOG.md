@@ -3,6 +3,13 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.52.1] - 2026-10-03
+
+### CI
+- HACS validation action (`hacs/action`, category plugin) on every push and weekly; repository
+  description and topics set. Released after the validation passed, as the HACS default store
+  requires. No card changed.
+
 ## [0.52.0] - 2026-10-03
 
 Fourth step of the redesign: the control and overview cards.
