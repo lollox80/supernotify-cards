@@ -3,6 +3,18 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.53.1] - 2026-10-03
+
+### Fixed
+- composer-card (0.17.1) and automations-card (0.18.1) still showed their version (composer
+  footer, automations header), missed by 0.49.0's `show_version`.
+
+### Docs
+- New screenshots of every card in the README and in `docs/cards`, showing the redesign
+  (0.49.0 to 0.53.0), from a demo installation with invented data.
+- `tools/showcase.mjs` makes them again: headless Chromium, Home Assistant icons drawn from
+  `@mdi/js`, light and dark theme.
+
 ## [0.53.0] - 2026-10-03
 
 Fifth and last step of the redesign: the why-card answers first, the details come on demand.

@@ -8,6 +8,8 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.53.1. composer-card 0.17.1 and automations-card 0.18.1: their version (composer footer,
+ *   automations header) was still shown, missed by 0.49.0's `show_version`. New README / docs screenshots of every card from tools/showcase.mjs.
  * 2026-10-03 - v0.53.0. Redesign, step 5: why-card 0.9.0 answers first, details on demand.
  *   - The path in four steps under the title: call (channels named, or normal routing), scenarios
  *     in force, who was home, channels (sent / to look at / skipped).
@@ -324,7 +326,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.53.0"; // bundle / HACS release
+const VERSION = "0.53.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -343,8 +345,8 @@ const SN_CARD_VERSIONS = {
   recipients: "0.24.0",
   scenarios: "0.21.0",
   simulator: "0.12.0",
-  composer: "0.17.0",
-  automations: "0.18.0",
+  composer: "0.17.1",
+  automations: "0.18.1",
   stats: "0.25.0",
   archive: "0.33.0",
   why: "0.9.0",
@@ -3835,7 +3837,7 @@ class SupernotifyComposerCard extends HTMLElement {
         </div>
         <div class="dryBox" id="dryBox" style="display:none"></div>
         <div class="toast" id="toast"></div>
-        <div style="text-align:right;font-size:10px;color:${p.muted};opacity:.7;margin-top:8px">supernotify-composer-card v${SN_CARD_VERSIONS.composer}</div>
+        ${this._config && this._config.show_version ? `<div style="text-align:right;font-size:10px;color:${p.muted};opacity:.7;margin-top:8px">supernotify-composer-card v${SN_CARD_VERSIONS.composer}</div>` : ""}
       </ha-card>`, this && this._config);
     const sr = this.shadowRoot;
     const upd = () => {
@@ -4295,7 +4297,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
       <div class="top">
         <input type="search" id="q" placeholder="${this._esc(T.aut_search)}"
           value="${this._esc(this._q)}" aria-label="${this._esc(T.aut_search)}">
-        <span class="tot">${items.length} ${T.aut_count} · v${SN_CARD_VERSIONS.automations}</span>
+        <span class="tot">${items.length} ${T.aut_count}${this._config.show_version ? ` · v${SN_CARD_VERSIONS.automations}` : ""}</span>
       </div>
       <div class="chips" id="chips"></div>
       <div id="list" class="flow"></div>`, this && this._config);
