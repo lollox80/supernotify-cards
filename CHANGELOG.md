@@ -3,6 +3,15 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.48.1] - 2026-10-03
+
+### Fixed
+- composer-card (0.15.1): the "Try without sending" button showed as soon as HACS had downloaded
+  SuperNotify 2.12, before Home Assistant was restarted, and failed with "An action which does not
+  return responses can't be called with return_response=True". It now follows what Home Assistant
+  is running (the `supernotify.notify` description says whether it can answer), and that error is
+  explained as "restart needed".
+
 ## [0.48.0] - 2026-10-03
 
 ### Changed

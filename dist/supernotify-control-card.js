@@ -8,6 +8,10 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.48.1. composer-card 0.15.1: the "Try without sending" button follows what Home
+ *   Assistant is running (supernotify.notify able to answer, `response` in its description), not
+ *   update.supernotify_update, which says 2.12 as soon as HACS has downloaded it, before the
+ *   restart. "An action which does not return responses..." is explained as "restart needed".
  * 2026-10-03 - v0.48.0. composer-card 0.15.0: "Try without sending" on SuperNotify 2.12's real dry run.
  *   - 2.12 has no separate dry-run action: it is supernotify.notify with `dry_run: simulate`,
  *     answering with the notification itself (the archive JSON). The button shows on SuperNotify
@@ -253,7 +257,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.48.0"; // bundle / HACS release
+const VERSION = "0.48.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -272,7 +276,7 @@ const SN_CARD_VERSIONS = {
   recipients: "0.22.0",
   scenarios: "0.19.0",
   simulator: "0.10.0",
-  composer: "0.15.0",
+  composer: "0.15.1",
   automations: "0.16.0",
   stats: "0.23.0",
   archive: "0.31.0",
@@ -338,6 +342,7 @@ const SN_STRINGS = {
     dry_prio: "Priority", dry_would_n: "channels would send", dry_nothing: "Nothing would be sent",
     dry_dupe: "Duplicate of a recent notification: it would be dropped",
     dry_no_dupe: "Duplicate check not simulated, so the real Send right after is not blocked.",
+    dry_restart: "The SuperNotify running now cannot simulate: dry run needs 2.12, and Home Assistant must be restarted after the update.",
     dry_home: "Home", dry_empty: "SuperNotify gave no answer: is it 2.12 or later?",
     dry_reasons: { NO_TARGET: "no usable target", DUPE: "duplicate", PRIORITY: "not for this priority",
       SNOOZED: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule",
@@ -413,6 +418,7 @@ const SN_STRINGS = {
     dry_prio: "Priorità", dry_would_n: "canali partirebbero", dry_nothing: "Non partirebbe niente",
     dry_dupe: "Doppione di una notifica recente: verrebbe scartata",
     dry_no_dupe: "Controllo doppioni non simulato, così l'Invia subito dopo non viene bloccato.",
+    dry_restart: "Il SuperNotify in esecuzione non sa simulare: la prova richiede la 2.12, e dopo l'aggiornamento Home Assistant va riavviato.",
     dry_home: "In casa", dry_empty: "SuperNotify non ha risposto: è la 2.12 o successiva?",
     dry_reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione", PRIORITY: "non per questa priorità",
       SNOOZED: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza",
@@ -3509,6 +3515,11 @@ class SupernotifyComposerCard extends HTMLElement {
   _dryAvailable() {
     const c = this._config;
     if (c.dry_run === true || c.dry_run === false) return c.dry_run;
+    // What Home Assistant is RUNNING decides, not what HACS downloaded: the action's
+    // description carries `response` only when supernotify.notify can answer (2.12+).
+    // update.supernotify_update already says 2.12 after the download, before the restart.
+    const svc = this._hass && this._hass.services && this._hass.services.supernotify;
+    if (svc && svc.notify) return !!svc.notify.response;
     return snSupernotifyAtLeast(this._hass, "2.12.0", c.update_entity) === true;
   }
 
@@ -3819,7 +3830,10 @@ class SupernotifyComposerCard extends HTMLElement {
       if (dupeCheck) this._dryKey = { key: JSON.stringify(payload), at: Date.now() };
       this._renderDry((res && res.response) || {}, !dupeCheck);
     } catch (e) {
-      box.textContent = `✖ ${T.dry_err}: ${(e && (e.message || e.code)) || e}`;
+      const msg = String((e && (e.message || e.code)) || e);
+      box.textContent = /does not return responses/i.test(msg)
+        ? `✖ ${T.dry_restart}`
+        : `✖ ${T.dry_err}: ${msg}`;
     }
   }
 

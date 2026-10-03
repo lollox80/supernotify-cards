@@ -31,7 +31,7 @@ const ws = [];
 const services = [];
 const ver = (v) => ({ "update.supernotify_update": { state: "off", attributes: { installed_version: v } } });
 const mkHass = (v) => ({
-  language: "it", themes: { darkMode: false }, services: { supernotify: { notify: {} } },
+  language: "it", themes: { darkMode: false }, services: { supernotify: { notify: v.includes("2.12") ? { response: { optional: true } } : {} } },
   states: {
     ...ver(v),
     "switch.supernotify_delivery_mobile_push": { entity_id: "switch.supernotify_delivery_mobile_push", state: "on",
@@ -113,6 +113,15 @@ ok(c3.shadowRoot.getElementById("dry").style.display === "", "dry_run: true lo m
 card._hass.callWS = async () => { throw { code: "service_validation_error", message: "boom" }; };
 await card._dryRun();
 ok(/Simulazione non riuscita: boom/.test(box.textContent), "errore mostrato");
+
+// scaricata ma HA non riavviato: update dice 2.12, l'azione non risponde ancora
+const c4 = document.createElement("supernotify-composer-card");
+c4.setConfig({}); document.body.appendChild(c4);
+c4.hass = { ...mkHass("v2.12.0-beta1"), services: { supernotify: { notify: {} } } };
+ok(c4.shadowRoot.getElementById("dry").style.display === "none", "2.12 scaricata ma non attiva: pulsante nascosto");
+card._hass.callWS = async () => { throw { code: "service_validation_error", message: "Validation error: An action which does not return responses can't be called with return_response=True" }; };
+await card._dryRun();
+ok(/va riavviato/.test(box.textContent), "errore 'does not return responses' spiegato come riavvio");
 
 console.log(fail ? `\n${fail} TEST FALLITI` : "\nTUTTI I TEST OK");
 process.exit(fail ? 1 : 0);
