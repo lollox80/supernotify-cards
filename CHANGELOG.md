@@ -3,6 +3,24 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.57.0] - 2026-10-03
+
+Fewer calls, a better card picker.
+
+### Changed
+- Cards on the same view share their reads of SuperNotify: control, overview, scenarios and
+  simulator ask for the last notification, snoozes and active scenarios once between them (a
+  request in flight or less than 2.5 s old is reused) instead of once each. A snooze, a clear or a
+  send from the composer drops the shared copy and the other cards read again straight away.
+
+### Added
+- Card picker (**Add card**): every card shows a live preview and links to its documentation page.
+- Starting configurations that fit any installation: the control card uses a do-not-disturb switch
+  only if one exists, archive and why use SuperNotify's own archive (no sensor needed), and the
+  bands card picks up helpers named like the README's (`input_datetime.…start_<band>` +
+  `input_number.…<band>_volume`).
+- bands-card with no bands shows how to add them instead of an error.
+
 ## [0.56.1] - 2026-10-03
 
 Fixes seen on a real dashboard.

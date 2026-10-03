@@ -8,6 +8,14 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.57.0. (1) Shared reads: control, overview, scenarios and simulator ask
+ *   enquire_last_notification / enquire_snoozes / enquire_active_scenarios / ... through
+ *   snEnquire(), so cards on the same view share one call (in flight or < 2.5 s old) instead of
+ *   one each; a snooze, clear or send forgets the cache and the other cards read again
+ *   ("supernotify-refresh"). (2) Card picker: every card has a live preview and a documentation
+ *   link; stubs fit any installation (control uses a DND switch only if one exists, archive and
+ *   why use the native archive, bands finds helpers named like the README's). bands-card with no
+ *   bands shows how to add them instead of an error.
  * 2026-10-03 - v0.56.1. Fixes seen on a real dashboard: overview-card 0.28.1 - with `stats: full`
  *   the five numbers sit 3+2 (one row when the card is wide) instead of leaving a hole, four sit
  *   2+2; a last notification without a title is shown as plain text, not as a bold headline,
@@ -357,7 +365,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.56.1"; // bundle / HACS release
+const VERSION = "0.57.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -368,19 +376,19 @@ const VERSION = "0.56.1"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.29.1",
-  overview: "0.28.1",
-  bands: "0.18.0",
-  deliveries: "0.25.0",
-  transports: "0.22.0",
-  recipients: "0.26.0",
-  scenarios: "0.23.0",
-  simulator: "0.14.0",
-  composer: "0.18.0",
-  automations: "0.20.0",
-  stats: "0.27.0",
-  archive: "0.35.0",
-  why: "0.11.0",
+  control: "0.30.0",
+  overview: "0.29.0",
+  bands: "0.19.0",
+  deliveries: "0.25.1",
+  transports: "0.22.1",
+  recipients: "0.26.1",
+  scenarios: "0.24.0",
+  simulator: "0.15.0",
+  composer: "0.19.0",
+  automations: "0.20.1",
+  stats: "0.27.1",
+  archive: "0.36.0",
+  why: "0.12.0",
 };
 
 /**
@@ -425,7 +433,8 @@ const SN_STRINGS = {
     band_evening: "Evening", band_night: "Night", band_late_night: "Late night",
     h_look_1: "1 thing to look at", h_look_n: "{n} things to look at", h_rest_ok: "everything else works",
     h_ch_on: "{on} of {tot} channels on", h_open: "Open", ln_delivered: "delivered", ln_failed: "failed",
-    ln_why: "Why",
+    ln_why: "Why", bands_empty_t: "No time bands yet",
+    bands_empty: "Add one band per part of the day: an input_datetime for its start and an input_number for the voice volume.",
     active_now: "active now", disabled: "disabled", other: "Other",
     manual: "manual", apply_now: "apply now", enabled_lbl: "enabled",
     reset_overrides: "Reset overrides", reset_done: "overrides reset",
@@ -514,7 +523,8 @@ const SN_STRINGS = {
     band_evening: "Sera", band_night: "Notte", band_late_night: "Notte fonda",
     h_look_1: "1 cosa da guardare", h_look_n: "{n} cose da guardare", h_rest_ok: "il resto funziona",
     h_ch_on: "{on} di {tot} canali accesi", h_open: "Apri", ln_delivered: "consegnati", ln_delivered_1: "consegnato", ln_failed: "falliti", ln_failed_1: "fallito",
-    ln_why: "Perché",
+    ln_why: "Perché", bands_empty_t: "Nessuna fascia oraria",
+    bands_empty: "Aggiungi una fascia per ogni parte della giornata: un input_datetime per l'inizio e un input_number per il volume della voce.",
     active_now: "attivo ora", disabled: "disattivato", other: "Altro",
     manual: "manuale", apply_now: "applica ora", enabled_lbl: "abilitato",
     reset_overrides: "Ripristina override", reset_done: "override ripristinati",
@@ -1395,6 +1405,40 @@ function snArchiveDetail(doc) {
 }
 
 /** True when this card should read the archive through supernotify.enquire_archive. */
+/**
+ * Shared read of the supernotify enquire_* services (0.57.0). Cards on the same dashboard ask
+ * for the same data (last notification, active scenarios, snoozes) and their timers start
+ * together, so one call is shared: a request in flight, or answered less than SN_ENQ_TTL ms
+ * ago, is reused. Every caller gets its own copy of the answer. snEnquireBust() forgets
+ * everything after an action that changes the data (snooze, clear, send) and tells the other
+ * cards to read again ("supernotify-refresh" on window).
+ */
+const SN_ENQ = new Map();
+const SN_ENQ_TTL = 2500;
+const snEnqStats = { calls: 0, shared: 0 };
+function snEnquire(hass, service, data) {
+  const key = service + "|" + JSON.stringify(data || {});
+  const now = Date.now();
+  let hit = SN_ENQ.get(key);
+  if (hit && now - hit.t < SN_ENQ_TTL) snEnqStats.shared++;
+  else {
+    snEnqStats.calls++;
+    const p = hass.callWS({
+      type: "call_service", domain: "supernotify", service,
+      service_data: data || {}, return_response: true,
+    });
+    hit = { t: now, p };
+    SN_ENQ.set(key, hit);
+    p.catch(() => { if (SN_ENQ.get(key) === hit) SN_ENQ.delete(key); });
+  }
+  return hit.p.then((r) => (r == null ? r : JSON.parse(JSON.stringify(r))));
+}
+function snEnquireBust(delay) {
+  SN_ENQ.clear();
+  const fire = () => { SN_ENQ.clear(); window.dispatchEvent(new CustomEvent("supernotify-refresh")); };
+  if (delay) setTimeout(fire, delay); else fire();
+}
+
 function snArchiveNative(hass, config) {
   if (config && config.source === "sensor") return false;
   const svc = hass && hass.services && hass.services.supernotify;
@@ -1619,13 +1663,13 @@ class SupernotifyControlCard extends HTMLElement {
     return snForm("control");
   }
 
-  static getStubConfig() {
-    return {
-      dnd_entity: "input_boolean.notifier_dnd",
-      snooze_minutes: 30,
-      tiles: ["dnd", "snooze", "announce"],
-      groups: [],
-    };
+  // card picker (0.57.0): a do-not-disturb switch only if this installation has one
+  static getStubConfig(hass) {
+    const ids = Object.keys((hass && hass.states) || {});
+    const dnd = ids.find((e) => /^(input_boolean|switch)\..*(dnd|do_not_disturb|non_disturbare)/.test(e));
+    return dnd
+      ? { dnd_entity: dnd, tiles: ["dnd", "snooze"], last_notification: true }
+      : { tiles: ["snooze"], last_notification: true };
   }
 
   setConfig(config) {
@@ -1685,20 +1729,20 @@ class SupernotifyControlCard extends HTMLElement {
     }, 30000);
     this._refreshSnoozes();
     this._refreshLast();
+    this._onRefresh = this._onRefresh || (() => { this._refreshSnoozes(); this._refreshLast(); });
+    window.addEventListener("supernotify-refresh", this._onRefresh);
   }
 
   disconnectedCallback() {
     clearInterval(this._pollTimer);
     clearInterval(this._tickTimer);
+    if (this._onRefresh) window.removeEventListener("supernotify-refresh", this._onRefresh);
   }
 
   async _refreshLast() {
     if (!this._hass || !this._config.last_notification) return;
     try {
-      const r = await this._hass.callWS({
-        type: "call_service", domain: "supernotify", service: "enquire_last_notification",
-        service_data: {}, return_response: true,
-      });
+      const r = await snEnquire(this._hass, "enquire_last_notification");
       const n = r && r.response && Object.keys(r.response).length ? r.response : null;
       const raw = n ? (n.id || "") + "|" + (n.delivered || 0) + "|" + (n.failed || 0) : "";
       if (raw !== this._lastRaw) {
@@ -1714,10 +1758,7 @@ class SupernotifyControlCard extends HTMLElement {
   async _refreshSnoozes() {
     if (!this._hass) return;
     try {
-      const r = await this._hass.callWS({
-        type: "call_service", domain: "supernotify", service: "enquire_snoozes",
-        service_data: {}, return_response: true,
-      });
+      const r = await snEnquire(this._hass, "enquire_snoozes");
       const list = (r && r.response && r.response.snoozes) || [];
       const raw = JSON.stringify(list);
       if (raw !== this._snoozesRaw) {
@@ -1805,7 +1846,7 @@ class SupernotifyControlCard extends HTMLElement {
       this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
       this._toast(`${T.snoozed_for} ${minutes} ${T.min}`);
     }
-    setTimeout(() => this._refreshSnoozes(), 800);
+    snEnquireBust(800); // this card and the others read the snoozes again
   }
 
   _announce() {
@@ -2186,6 +2227,8 @@ customElements.define("supernotify-control-card", SupernotifyControlCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "supernotify-control-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/control.md",
   name: "SuperNotify Control Card",
   description: "Touch-first control center for SuperNotify: status, last notification, quick actions (snooze countdown), collapsible mode groups.",
 });
@@ -2287,10 +2330,13 @@ class SupernotifyOverviewCard extends HTMLElement {
     const s = (this._config && this._config.poll_seconds) || 60;
     this._pollTimer = setInterval(() => this._refresh(), s * 1000);
     this._refresh();
+    this._onRefresh = this._onRefresh || (() => this._refresh());
+    window.addEventListener("supernotify-refresh", this._onRefresh);
   }
 
   disconnectedCallback() {
     clearInterval(this._pollTimer);
+    if (this._onRefresh) window.removeEventListener("supernotify-refresh", this._onRefresh);
   }
 
   _palette() {
@@ -2319,10 +2365,7 @@ class SupernotifyOverviewCard extends HTMLElement {
   }
 
   async _ws(service, data) {
-    const r = await this._hass.callWS({
-      type: "call_service", domain: "supernotify", service,
-      service_data: data || {}, return_response: true,
-    });
+    const r = await snEnquire(this._hass, service, data);
     return (r && r.response) || {};
   }
 
@@ -2568,6 +2611,8 @@ customElements.define("supernotify-overview-card", SupernotifyOverviewCard);
 
 window.customCards.push({
   type: "supernotify-overview-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/overview.md",
   name: "SuperNotify Overview Card",
   description: "Dashboard overview for SuperNotify: health strip (version, failures, transport errors, DND, snoozes), sent/failure counters, active scenarios, last notification.",
 });
@@ -2585,13 +2630,23 @@ class SupernotifyBandsCard extends HTMLElement {
     return snForm("bands");
   }
 
-  static getStubConfig() {
-    return { bands: {} };
+  // card picker (0.57.0): helpers named like the README's (…start_<band> + …<band>_volume)
+  static getStubConfig(hass) {
+    const st = (hass && hass.states) || {};
+    const bands = {};
+    for (const id of Object.keys(st)) {
+      const m = id.match(/^input_datetime\.(\w*?)start_(\w+)$/);
+      if (!m) continue;
+      const vol = `input_number.${m[1]}${m[2]}_volume`;
+      if (st[vol]) bands[m[2]] = { start: id, volume: vol };
+    }
+    return { bands };
   }
 
   setConfig(config) {
-    if (!config || !config.bands || !Object.keys(config.bands).length)
-      throw new Error("bands is required: {name: {start: input_datetime.x, volume: input_number.y}}");
+    if (!config || (config.bands != null && typeof config.bands !== "object"))
+      throw new Error("bands: {name: {start: input_datetime.x, volume: input_number.y}}");
+    config = { ...config, bands: config.bands || {} }; // 0.57.0: no bands yet = a hint, not an error
     this._config = { style: "supernotify", ...config };
     this._rendered = false;
   }
@@ -2688,6 +2743,17 @@ class SupernotifyBandsCard extends HTMLElement {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
+    if (!Object.keys(this._config.bands).length) {
+      const T = snT(this._config, this._hass);
+      this.shadowRoot.innerHTML = snIconify(`<ha-card style="padding:16px;background:${p.panel};color:${p.ink}">
+        <div style="font-weight:700;font-size:15px">🕐 ${T.bands_empty_t}</div>
+        <div style="color:${p.muted};font-size:13px;line-height:1.5;margin-top:6px">${T.bands_empty}</div>
+        <pre style="background:${p.soft};border-radius:10px;padding:10px 12px;font-size:12px;margin:10px 0 0;overflow:auto">bands:
+  morning:
+    start: input_datetime.notifier_start_morning
+    volume: input_number.notifier_morning_volume</pre></ha-card>`, this._config);
+      return;
+    }
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
@@ -2817,6 +2883,8 @@ customElements.define("supernotify-bands-card", SupernotifyBandsCard);
 
 window.customCards.push({
   type: "supernotify-bands-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/bands.md",
   name: "SuperNotify Bands Card",
   description: "Time bands editor: one row per band with active badge, inline start time and volume slider.",
 });
@@ -3084,6 +3152,8 @@ customElements.define("supernotify-deliveries-card", SupernotifyDeliveriesCard);
 
 window.customCards.push({
   type: "supernotify-deliveries-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/deliveries.md",
   name: "SuperNotify Deliveries Card",
   description: "Delivery dashboard: auto-discovered rows with transport icon, selection/action/target tags and a live on/off switch.",
 });
@@ -3244,6 +3314,8 @@ customElements.define("supernotify-transports-card", SupernotifyTransportsCard);
 
 window.customCards.push({
   type: "supernotify-transports-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/transports.md",
   name: "SuperNotify Transports Card",
   description: "Transport adaptors dashboard: auto-discovered rows with icon, error tag if any, and a live on/off switch.",
 });
@@ -3454,6 +3526,8 @@ customElements.define("supernotify-recipients-card", SupernotifyRecipientsCard);
 
 window.customCards.push({
   type: "supernotify-recipients-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/recipients.md",
   name: "SuperNotify Recipients Card",
   description: "Recipients dashboard: home state, contact tags (email, phone, devices) and a live on/off switch.",
 });
@@ -3527,19 +3601,19 @@ class SupernotifyScenariosCard extends HTMLElement {
     const s = (this._config && this._config.poll_seconds) || 60;
     this._pollTimer = setInterval(() => this._refresh(), s * 1000);
     this._refresh();
+    this._onRefresh = this._onRefresh || (() => this._refresh());
+    window.addEventListener("supernotify-refresh", this._onRefresh);
   }
 
   disconnectedCallback() {
     clearInterval(this._pollTimer);
+    if (this._onRefresh) window.removeEventListener("supernotify-refresh", this._onRefresh);
   }
 
   async _refresh() {
     if (!this._hass) return;
     try {
-      const r = await this._hass.callWS({
-        type: "call_service", domain: "supernotify", service: "enquire_active_scenarios",
-        service_data: {}, return_response: true,
-      });
+      const r = await snEnquire(this._hass, "enquire_active_scenarios");
       this._active = (r && r.response && r.response.scenarios) || [];
     } catch (e) { /* retry on next poll */ }
     if (this._rendered) this._update();
@@ -3734,6 +3808,8 @@ customElements.define("supernotify-scenarios-card", SupernotifyScenariosCard);
 
 window.customCards.push({
   type: "supernotify-scenarios-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/scenarios.md",
   name: "SuperNotify Scenarios Card",
   description: "Scenarios dashboard: active-now badge, live on/off switch, per-delivery override tags, optional category groups.",
 });
@@ -3789,10 +3865,7 @@ class SupernotifySimulatorCard extends HTMLElement {
   }
 
   async _ws(service) {
-    const r = await this._hass.callWS({
-      type: "call_service", domain: "supernotify", service,
-      service_data: {}, return_response: true,
-    });
+    const r = await snEnquire(this._hass, service);
     return (r && r.response) || {};
   }
 
@@ -3927,6 +4000,8 @@ customElements.define("supernotify-simulator-card", SupernotifySimulatorCard);
 
 window.customCards.push({
   type: "supernotify-simulator-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/simulator.md",
   name: "SuperNotify Simulator Card",
   description: "Who receives? Pick scenarios and see which deliveries would fire, from real engine data.",
 });
@@ -4230,6 +4305,7 @@ class SupernotifyComposerCard extends HTMLElement {
     this._dryKey = null;
     try {
       await this._hass.callService("supernotify", "notify", payload);
+      snEnquireBust(1500);
       this._toast(T.sent_toast);
     } catch (e) {
       this._toast(`✖ ${T.send_err}: ${(e && (e.message || e.code)) || e}`);
@@ -4375,6 +4451,8 @@ customElements.define("supernotify-composer-card", SupernotifyComposerCard);
 
 window.customCards.push({
   type: "supernotify-composer-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/composer.md",
   name: "SuperNotify Composer Card",
   description: "Try & send: title, message, priority, optional explicit channels, live phone preview.",
 });
@@ -4677,6 +4755,8 @@ customElements.define("supernotify-automations-card", SupernotifyAutomationsCard
 
 window.customCards.push({
   type: "supernotify-automations-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/automations.md",
   name: "SuperNotify Automations Card",
   description: "Live list of the automations that notify via SuperNotify: search, category filters, enable/disable.",
 });
@@ -5291,6 +5371,8 @@ customElements.define("supernotify-stats-card", SupernotifyStatsCard);
 
 window.customCards.push({
   type: "supernotify-stats-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/stats.md",
   name: "SuperNotify Stats Card",
   description: "Usage analytics from existing entities: per-day/hour/weekday, channels most used (alias-aware) with errors, priority and period mix, insights, installed vs latest version.",
 });
@@ -5302,8 +5384,9 @@ class SupernotifyArchiveCard extends HTMLElement {
     return snForm("archive");
   }
 
+  // card picker (0.57.0): SuperNotify 2.12+ answers enquire_archive, no sensor needed
   static getStubConfig() {
-    return { entity: "sensor.supernotify_archivio" };
+    return {};
   }
 
   setConfig(config) {
@@ -5586,6 +5669,8 @@ customElements.define("supernotify-archive-card", SupernotifyArchiveCard);
 
 window.customCards.push({
   type: "supernotify-archive-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/archive.md",
   name: "SuperNotify Archive Card",
   description: "Notification history from the SuperNotify archive: search, filters, per-channel outcome.",
 });
@@ -5657,7 +5742,7 @@ class SupernotifyWhyCard extends HTMLElement {
   }
 
   static getStubConfig() {
-    return { entity: "sensor.supernotify_archivio", service: "shell_command.sn_archive_detail" };
+    return {};
   }
 
   setConfig(config) {
@@ -6143,6 +6228,8 @@ customElements.define("supernotify-why-card", SupernotifyWhyCard);
 
 window.customCards.push({
   type: "supernotify-why-card",
+  preview: true,
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/why.md",
   name: "SuperNotify Why?",
   description: "Why a notification went out, or not, on each channel: scenarios, presence, targets and the selection trace.",
 });
