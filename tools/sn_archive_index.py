@@ -76,6 +76,12 @@ REASONS = {
     "PRIORITY": "priorita",
     "DELIVERY_DISABLED": "spento",
     "SNOOZE": "pausa",
+    "SNOOZED": "pausa",
+    "TRANSPORT_DISABLED": "transport spento",
+    "NO_SCENARIO": "scenario",
+    "NO_ACTION": "nessuna azione",
+    "INVALID_ACTION_DATA": "dati non validi",
+    "UNKNOWN": "sconosciuto",
 }
 
 
@@ -210,7 +216,7 @@ def _item_of(doc, mtime, message_chars, chan_pool, scen_pool):
     outcome = doc.get("outcome") or ""
     if outcome and outcome != "success":
         item["o"] = outcome
-    for key, field in (("d", "delivered"), ("f", "failed"), ("s", "skipped")):
+    for key, field in (("d", "delivered"), ("f", "failed"), ("s", "skipped"), ("mi", "missed")):
         val = int(doc.get(field) or 0)
         if val:
             item[key] = val
@@ -382,6 +388,9 @@ def detail_of(doc, mtime):
         out["sp"] = _short(doc["spoken_message"], DETAIL_TEXT)
     if doc.get("dupe"):
         out["dupe"] = True
+    missed = int(doc.get("missed") or 0)
+    if missed:
+        out["mi"] = missed
     scen = {}
     for key, field in (("on", "enabled_scenarios"), ("sel", "selected_scenario_names"),
                        ("ap", "applied_scenario_names"), ("rq", "required_scenario_names"),

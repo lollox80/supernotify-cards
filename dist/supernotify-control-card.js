@@ -8,6 +8,20 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.46.0. Aligned with SuperNotify 2.11 / 2.11.1.
+ *   - `missed` (2.11): a requested channel that could not go out. The archive rows carry it
+ *     (`mi`), the archive card lists it next to delivered/failed/skipped, the why-card header
+ *     shows it, and the control card's last-notification block shows a "missed" chip.
+ *   - "Problems only" (archive-card) and the dot colour (why-card) no longer flag routine skips:
+ *     snooze, presence, priority, delivery condition, scenario, switched-off channel or
+ *     transport, and an implicit channel with no target. Shared helper snArchiveProblem().
+ *   - Skip reasons: SuperNotify writes SNOOZED (the cards looked for SNOOZE), and
+ *     TRANSPORT_DISABLED, NO_SCENARIO, NO_ACTION, INVALID_ACTION_DATA, UNKNOWN had no text.
+ *   - Outcomes `error` and `fallback_delivery` are translated (the cards only knew `failed`).
+ *   - Snoozes say what they are about (2.11.1 snoozes by name/tag, camera, channel, priority):
+ *     control-card tile and overview-card chip, via snSnoozeLabel().
+ *   control 0.23.0, overview 0.21.0, archive 0.30.0, why 0.5.0; tools/sn_archive_index.py
+ *   writes `mi` and knows the same reasons.
  * 2026-09-26 - v0.45.1. Snooze tile and overview chip no longer show an expired snooze as one
  *   ending tomorrow. enquire_snoozes gives only "HH:MM:SS" and keeps expired snoozes until the
  *   nightly housekeeping, so a snooze that ended at 09:41 showed "1078 min left, until 09:41".
@@ -211,7 +225,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.45.1"; // bundle / HACS release
+const VERSION = "0.46.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -222,8 +236,8 @@ const VERSION = "0.45.1"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.22.2",
-  overview: "0.20.3",
+  control: "0.23.0",
+  overview: "0.21.0",
   bands: "0.13.0",
   deliveries: "0.20.0",
   transports: "0.18.0",
@@ -233,8 +247,8 @@ const SN_CARD_VERSIONS = {
   composer: "0.13.0",
   automations: "0.15.0",
   stats: "0.22.1",
-  archive: "0.29.0",
-  why: "0.4.0",
+  archive: "0.30.0",
+  why: "0.5.0",
 };
 
 /**
@@ -304,7 +318,8 @@ const SN_STRINGS = {
     aut_updated: "list updated", aut_count: "automations", never: "never",
     ago_now: "now", ago_min: "min ago", ago_h: "h ago", ago_d: "d ago",
     aut_disabled_only: "Disabled only",
-    grp_active: "active", repeat: "Repeat", skipped_n: "skipped", left: "left",
+    grp_active: "active", repeat: "Repeat", skipped_n: "skipped", left: "left", missed_n: "missed",
+    snz_all: "everything", snz_nc: "non-critical", snz_prio: "priority", snz_transport: "transport", snz_for: "for",
     no_notif: "no notification yet",
   },
   it: {
@@ -369,7 +384,8 @@ const SN_STRINGS = {
     aut_updated: "elenco aggiornato", aut_count: "automazioni", never: "mai",
     ago_now: "ora", ago_min: "min fa", ago_h: "h fa", ago_d: "g fa",
     aut_disabled_only: "Solo disattivate",
-    grp_active: "attivi", repeat: "Ripeti", skipped_n: "saltati", left: "rimasti",
+    grp_active: "attivi", repeat: "Ripeti", skipped_n: "saltati", left: "rimasti", missed_n: "mancati",
+    snz_all: "tutto", snz_nc: "non critici", snz_prio: "priorità", snz_transport: "transport", snz_for: "per",
     no_notif: "nessuna notifica ancora",
   },
 };
@@ -382,6 +398,39 @@ const SN_STRINGS = {
  * the start's day, +1 day only when it is not after the start (snooze across midnight).
  * Full ISO timestamps, when SuperNotify sends them, are used as they are.
  */
+/**
+ * What a snooze is about, for people: "everything", "non-critical", a channel alias,
+ * a camera name, a tag (SuperNotify 2.11.1, e.g. "porch"), a priority or a transport,
+ * plus "for <person>" when it only covers one recipient. Fields from enquire_snoozes.
+ */
+function snSnoozeLabel(hass, s, T) {
+  const st = (hass && hass.states) || {};
+  const tt = String((s && s.target_type) || "").toUpperCase();
+  const raw = s ? s.target : null;
+  const tg = Array.isArray(raw) ? raw.join(", ") : (raw == null ? "" : String(raw));
+  const fname = (id) => (st[id] && st[id].attributes && st[id].attributes.friendly_name) || "";
+  let what;
+  if (tt === "EVERYTHING") what = T.snz_all;
+  else if (tt === "NONCRITICAL") what = T.snz_nc;
+  else if (tt === "DELIVERY") what = snDeliveryAlias(hass, tg) || tg;
+  else if (tt === "CAMERA") what = "📷 " + (fname(tg) || tg.replace(/^camera\./, ""));
+  else if (tt === "TAG") what = "🏷️ " + tg;
+  else if (tt === "PRIORITY") what = `${T.snz_prio} ${tg}`;
+  else if (tt === "TRANSPORT") what = `${T.snz_transport} ${tg}`;
+  else what = tg || tt.toLowerCase();
+  if (String((s && s.recipient_type) || "").toUpperCase() === "USER" && s.recipient) {
+    const who = fname(s.recipient) || String(s.recipient).replace(/^person\./, "");
+    what += ` (${T.snz_for} ${who})`;
+  }
+  return what || "?";
+}
+
+/** Labels of active snoozes, at most `max` and "+N" for the rest. */
+function snSnoozeLabels(hass, list, T, max = 2) {
+  const labels = [...new Set((list || []).map((s) => snSnoozeLabel(hass, s, T)))];
+  return labels.length > max ? labels.slice(0, max).join(", ") + ` +${labels.length - max}` : labels.join(", ");
+}
+
 function snLiveSnoozes(list, now) {
   now = now || new Date();
   const hms = (s) => {
@@ -632,8 +681,25 @@ function snProvOf(n) {
 const SN_ARCHIVE_REASONS = {
   DUPE: "doppione", NO_TARGET: "nessun target", ERROR: "errore", DELIVERY_CONDITION: "condizione",
   SCENARIO: "scenario", OCCUPANCY: "presenza", PRIORITY: "priorita", DELIVERY_DISABLED: "spento",
-  SNOOZE: "pausa",
+  SNOOZE: "pausa", SNOOZED: "pausa", TRANSPORT_DISABLED: "transport spento", NO_SCENARIO: "scenario",
+  NO_ACTION: "nessuna azione", INVALID_ACTION_DATA: "dati non validi", UNKNOWN: "sconosciuto",
 };
+/**
+ * Short skip reasons that are just the configuration doing its job (SuperNotify 2.11
+ * SuppressionReason.is_rule, plus a channel switched off, plus no target, which on 2.11
+ * only stays quiet for an implicit channel: a requested one is counted in `missed`).
+ */
+const SN_ARCHIVE_ROUTINE = new Set(["pausa", "transport spento", "scenario", "priorita", "condizione",
+  "presenza", "spento", "nessun target"]);
+
+/** True when an archive row deserves a look: failures, missed channels, odd skips, odd outcomes. */
+function snArchiveProblem(r) {
+  if (!r) return false;
+  if (r.f || r.mi) return true;
+  if ((r.c || []).some((x) => Array.isArray(x) && (x[1] === "e" || (x[1] === "s" && !SN_ARCHIVE_ROUTINE.has(x[2] || ""))))) return true;
+  // before 2.11 partial_delivery also covered routine skips: the channels above decide
+  return !!r.o && r.o !== "success" && r.o !== "partial_delivery";
+}
 const SN_ARCHIVE_MESSAGE_CHARS = 130;
 const SN_ARCHIVE_SPOKEN_CHARS = 110;
 const SN_ARCHIVE_DETAIL_TEXT = 400;
@@ -748,7 +814,7 @@ function snArchiveItem(doc, chan, scen) {
   }
   if (doc.priority && doc.priority !== "medium") item.p = doc.priority;
   if (doc.outcome && doc.outcome !== "success") item.o = doc.outcome;
-  for (const [key, field] of [["d", "delivered"], ["f", "failed"], ["s", "skipped"]]) {
+  for (const [key, field] of [["d", "delivered"], ["f", "failed"], ["s", "skipped"], ["mi", "missed"]]) {
     const val = parseInt(doc[field] || 0, 10);
     if (val) item[key] = val;
   }
@@ -887,6 +953,8 @@ function snArchiveDetail(doc) {
   };
   if (doc.spoken_message) out.sp = snArchiveShort(doc.spoken_message, SN_ARCHIVE_DETAIL_TEXT);
   if (doc.dupe) out.dupe = true;
+  const missed = parseInt(doc.missed || 0, 10);
+  if (missed) out.mi = missed;
   const scen = {};
   for (const [key, field] of [["on", "enabled_scenarios"], ["sel", "selected_scenario_names"],
     ["ap", "applied_scenario_names"], ["rq", "required_scenario_names"], ["cs", "constrain_scenario_names"]]) {
@@ -1435,6 +1503,7 @@ class SupernotifyControlCard extends HTMLElement {
         chips.push(`<span class="lb ${err ? "err" : "ok"}">${err ? "✖" : "✔"} ${esc(label)}</span>`);
       }
     }
+    if (n && +n.missed > 0) chips.push(`<span class="lb err">⚠ ${esc(n.missed)} ${T.missed_n}</span>`);
     if (skipped) chips.push(`<span class="lb mut">${skipped} ${T.skipped_n}</span>`);
     const rep = c.repeat_entity
       ? `<button class="rep" id="repBtn">🔁 ${T.repeat}</button>` : "";
@@ -1513,8 +1582,9 @@ class SupernotifyControlCard extends HTMLElement {
           const mins = Math.max(1, Math.ceil((end - new Date()) / 60000));
           left = `⏳ ${mins} ${T.min} ${T.left}`;
         }
+        const what = snSnoozeLabels(this._hass, act, T);
         return { cls: "warn", icon: "😴", name: left || T.snoozed,
-          sub: (until ? T.until + " " + until + " · " : "") + T.tap_clear,
+          sub: (what ? what + " · " : "") + (until ? T.until + " " + until + " · " : "") + T.tap_clear,
           act: () => this._snooze() };
       }
       return { cls: "", icon: "😴", name: `${T.snooze} ${c.snooze_minutes || 30} ${T.min}`,
@@ -1680,7 +1750,9 @@ class SupernotifyOverviewCard extends HTMLElement {
     if (delsOff.length) chips.push({ k: "off", t: `🔕 ${delsOff.length} ${T.h_channels_off}`, title: delsOff.map((d) => d.name).join(", ") });
     if (c.quiet_entity && this._st(c.quiet_entity) === "on") chips.push({ k: "warn", t: `🌙 ${T.dnd} ${T.active}` });
     const snz = snLiveSnoozes(this._snoozes);
-    if (snz.length) chips.push({ k: "warn", t: `😴 ${snz.length} ${T.snoozed.toLowerCase()}` });
+    if (snz.length) chips.push({ k: "warn",
+      t: snz.length === 1 ? `😴 ${T.snoozed}: ${snSnoozeLabel(this._hass, snz[0], T)}` : `😴 ${snz.length} ${T.snoozed.toLowerCase()}`,
+      title: snz.map((x) => snSnoozeLabel(this._hass, x, T)).join(", ") });
     if (!chips.some((x) => x.k !== "ok" && x.k !== "off")) chips.unshift({ k: "ok", t: `✔ ${T.h_all_good}` });
     return chips;
   }
@@ -4671,7 +4743,7 @@ class SupernotifyArchiveCard extends HTMLElement {
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const rows = idx.items.filter((r) => {
       if (this._filter === "today" && r.t * 1000 < todayStart.getTime()) return false;
-      if (this._filter === "problems" && !(r.f || r.s || r.o)) return false;
+      if (this._filter === "problems" && !snArchiveProblem(r)) return false;
       if (this._filter === "whisper" && !r.w) return false;
       if (this._q) {
         const hay = ((r.ti || "") + " " + (r.m || "")).toLowerCase();
@@ -4711,7 +4783,7 @@ class SupernotifyArchiveCard extends HTMLElement {
            <div class="det">
              ${r.sp ? `<div class="said">\u{1F50A} <b>${T.said}:</b> \u00ab${esc(r.sp)}\u00bb</div>` : ""}
              ${scen ? `<div><b>${T.scenarios}:</b> ${scen}</div>` : ""}
-             <div>${r.d ? `<b>${r.d}</b> ${T.delivered} ` : ""}${r.f ? `· <b>${r.f}</b> ${T.failed} ` : ""}${r.s ? `· <b>${r.s}</b> ${T.skipped} ` : ""}
+             <div>${r.d ? `<b>${r.d}</b> ${T.delivered} ` : ""}${r.f ? `· <b>${r.f}</b> ${T.failed} ` : ""}${r.s ? `· <b>${r.s}</b> ${T.skipped} ` : ""}${r.mi ? `· ⚠ <b>${r.mi}</b> ${T.missed} ` : ""}
              ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""} · ${T.id} <code>${esc(r.id)}</code>${r.mt ? ` · ${T.truncated}` : ""}</div>
              ${window.__snWhyCards ? `<div><a class="why" data-why="${esc(r.id)}">🔎 ${T.why}</a></div>` : ""}
            </div>
@@ -4749,7 +4821,7 @@ const SN_ARCH_STRINGS = {
     loading: "reading the archive…", recent: "latest notifications", read_at: "read at",
     of: "of", in_archive: "in the archive", since: "oldest", updated: "index updated",
     today: "Today", yesterday: "Yesterday",
-    delivered: "delivered", failed: "failed", skipped: "skipped",
+    delivered: "delivered", failed: "failed", skipped: "skipped", missed: "missed",
     scenarios: "Scenarios in force", truncated: "message truncated in the index",
     dur: "took", id: "id", why: "Why? - full detail",
   },
@@ -4762,7 +4834,7 @@ const SN_ARCH_STRINGS = {
     loading: "lettura dell'archivio…", recent: "notifiche più recenti", read_at: "lette alle",
     of: "di", in_archive: "nell'archivio", since: "più vecchia", updated: "indice aggiornato",
     today: "Oggi", yesterday: "Ieri",
-    delivered: "consegnata", failed: "fallita", skipped: "saltata",
+    delivered: "consegnata", failed: "fallita", skipped: "saltata", missed: "mancata",
     scenarios: "Scenari in vigore", truncated: "messaggio troncato nell'indice",
     dur: "in", id: "id", why: "Perché? - dettaglio completo",
   },
@@ -4946,10 +5018,9 @@ class SupernotifyWhyCard extends HTMLElement {
     const c = r.c || [];
     if (r.f || c.some((x) => Array.isArray(x) && x[1] === "e")) return "d-err";
     if (!r.d) return "d-warn";
-    // a channel with no usable target (e.g. html5 with no subscription) is routine
-    // on a partial delivery; a dupe or any other skip reason is worth a look
-    const odd = c.some((x) => Array.isArray(x) && x[1] === "s" && !/^(nessun target|no_target)$/i.test(x[2] || ""));
-    return r.o === "dupe" || odd ? "d-warn" : "d-ok";
+    // routine skips (snooze, presence, priority, no target on an implicit channel...) are
+    // fine; missed channels, odd skip reasons, dupes and fallbacks are worth a look
+    return snArchiveProblem(r) ? "d-warn" : "d-ok";
   }
 
   _renderList() {
@@ -5139,7 +5210,7 @@ class SupernotifyWhyCard extends HTMLElement {
     const d = new Date((n.t || 0) * 1000);
     const when = d.toLocaleString(this._loc(), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", second: "2-digit" });
     out.push(`<div class="hd"><b>${esc(n.ti || "—")}</b>
-      <div class="meta">${esc(when)} · ${T.priority} <b>${esc(n.p || "medium")}</b> · ${T.outcome} <b>${esc(T.outcomes[n.o] || n.o || "—")}</b>${n.dupe ? ` · ♻ ${T.dupe}` : ""}${n.v ? ` · SuperNotify ${esc(n.v)}` : ""}</div>
+      <div class="meta">${esc(when)} · ${T.priority} <b>${esc(n.p || "medium")}</b> · ${T.outcome} <b>${esc(T.outcomes[n.o] || n.o || "—")}</b>${n.dupe ? ` · ♻ ${T.dupe}` : ""}${n.mi ? ` · ⚠ <b>${esc(n.mi)}</b> ${T.missed}` : ""}${n.v ? ` · SuperNotify ${esc(n.v)}` : ""}</div>
       ${n.m ? `<div class="msg">${esc(n.m)}</div>` : ""}
       ${n.sp ? `<div class="note">🔊 ${esc(n.sp)}</div>` : ""}</div>`);
 
@@ -5251,7 +5322,9 @@ const SN_WHY_STRINGS = {
     no_service: "Missing service", no_service_hint: "Update SuperNotify to 2.10 or later (supernotify.enquire_archive), or add the shell_command sn_archive_detail (see README) and restart Home Assistant.",
     gone: "this notification is no longer in the archive",
     priority: "priority", outcome: "outcome", dupe: "duplicate",
-    outcomes: { success: "delivered", partial_delivery: "partly delivered", dupe: "duplicate", failed: "failed", no_delivery: "not delivered" },
+    outcomes: { success: "delivered", partial_delivery: "partly delivered", dupe: "duplicate", failed: "failed", error: "failed",
+      fallback_delivery: "delivered by the fallback channel", no_delivery: "not delivered" },
+    missed: "missed (asked for, not sent)",
     scenarios: "Scenarios in force", no_scenarios: "no scenario in force",
     applied: "forced by the call", required: "required by the call", constrain: "limited by the call to",
     presence: "Presence", home: "home", away: "away",
@@ -5272,8 +5345,10 @@ const SN_WHY_STRINGS = {
     from_trace: "Reasons come from the selection trace archived with the notification.",
     trace: "Selection trace", no_trace: "The full selection trace is only recorded when the notify call has debug: true, and archived when the archive diagnostics include it.",
     reasons: { NO_TARGET: "no usable target", DUPE: "duplicate of a recent notification", PRIORITY: "not for this priority",
-      SNOOZE: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule", ERROR: "error",
-      DELIVERY_DISABLED: "switched off", SCENARIO: "scenario" },
+      SNOOZE: "snoozed", SNOOZED: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule", ERROR: "error",
+      DELIVERY_DISABLED: "switched off", SCENARIO: "scenario", TRANSPORT_DISABLED: "its transport is off",
+      NO_SCENARIO: "a required scenario is not in force", NO_ACTION: "no action to call",
+      INVALID_ACTION_DATA: "invalid action data", UNKNOWN: "unknown reason" },
   },
   it: {
     title: "Perché?", pick: "Scegli una notifica per vedere perché è andata dove è andata.",
@@ -5281,7 +5356,9 @@ const SN_WHY_STRINGS = {
     no_service: "Manca il servizio", no_service_hint: "Aggiorna SuperNotify alla 2.10 o successiva (supernotify.enquire_archive), oppure aggiungi lo shell_command sn_archive_detail (vedi README) e riavvia Home Assistant.",
     gone: "questa notifica non è più nell'archivio",
     priority: "priorità", outcome: "esito", dupe: "doppione",
-    outcomes: { success: "consegnata", partial_delivery: "consegnata in parte", dupe: "doppione", failed: "fallita", no_delivery: "non consegnata" },
+    outcomes: { success: "consegnata", partial_delivery: "consegnata in parte", dupe: "doppione", failed: "fallita", error: "fallita",
+      fallback_delivery: "consegnata dal canale di riserva", no_delivery: "non consegnata" },
+    missed: "mancati (richiesti, non partiti)",
     scenarios: "Scenari in vigore", no_scenarios: "nessuno scenario in vigore",
     applied: "forzati dalla chiamata", required: "richiesti dalla chiamata", constrain: "limitati dalla chiamata a",
     presence: "Presenza", home: "in casa", away: "fuori",
@@ -5302,7 +5379,9 @@ const SN_WHY_STRINGS = {
     from_trace: "I motivi vengono dal trace di selezione archiviato con la notifica.",
     trace: "Trace di selezione", no_trace: "Il trace completo viene registrato solo se la chiamata ha debug: true, e archiviato se la diagnostica dell'archivio lo include.",
     reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione di una notifica recente", PRIORITY: "non per questa priorità",
-      SNOOZE: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza", ERROR: "errore",
-      DELIVERY_DISABLED: "spento", SCENARIO: "scenario" },
+      SNOOZE: "in pausa", SNOOZED: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza", ERROR: "errore",
+      DELIVERY_DISABLED: "spento", SCENARIO: "scenario", TRANSPORT_DISABLED: "il suo transport è spento",
+      NO_SCENARIO: "manca uno scenario richiesto", NO_ACTION: "nessuna azione da chiamare",
+      INVALID_ACTION_DATA: "dati dell'azione non validi", UNKNOWN: "motivo sconosciuto" },
   },
 };

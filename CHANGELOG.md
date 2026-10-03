@@ -3,6 +3,34 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.46.0] - 2026-10-03
+
+Aligned with SuperNotify 2.11 / 2.11.1.
+
+### Added
+- **`missed` deliveries** (SuperNotify 2.11): a channel that was asked for but could not go out.
+  archive-card (0.30.0) lists it next to delivered / failed / skipped, why-card (0.5.0) shows it
+  in the header, and the control-card (0.23.0) last-notification block shows a "missed" chip.
+  Archive rows carry it as `mi` (also written by `tools/sn_archive_index.py`).
+- **What a snooze is about**: SuperNotify 2.11.1 can snooze by name or tag ("porch camera"),
+  besides camera, channel, priority and transport. The control-card snooze tile and the
+  overview-card (0.21.0) chip now say it (e.g. "Snoozed: 🏷️ porch"), with every snooze in the
+  chip tooltip.
+
+### Fixed
+- Skip reason **`SNOOZED`** (the name SuperNotify uses) was shown raw: the cards looked for
+  `SNOOZE`. `TRANSPORT_DISABLED`, `NO_SCENARIO`, `NO_ACTION`, `INVALID_ACTION_DATA` and
+  `UNKNOWN` now have a text too, in the archive rows and in the why-card.
+- Outcomes **`error`** and **`fallback_delivery`** are translated in the why-card (only
+  `failed`, which SuperNotify does not write, was known).
+
+### Changed
+- archive-card "Problems only" and the why-card dot colour no longer flag routine skips
+  (snooze, presence, priority, delivery condition, scenario, switched-off channel or transport,
+  implicit channel with no target): on 2.11 `partial_delivery` means a channel was missed.
+  Failures, missed channels, other skip reasons, duplicates and fallbacks still count.
+  Shared helper `snArchiveProblem()`.
+
 ## [0.45.1] - 2026-09-26
 
 ### Fixed
