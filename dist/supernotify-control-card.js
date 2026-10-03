@@ -8,6 +8,20 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.49.0. Redesign, step 1: foundations (design study "Studio card SuperNotify").
+ *   - One palette for all 13 cards (snPalette), instead of 13 diverging copies. Light theme
+ *     passes WCAG AA as text: blue #0277bd instead of #03a9f4 (2.6:1), warning #a04f00,
+ *     success #1b7f45, error #c62828, secondary text #5b6b7c. Dark theme: dark text on blue
+ *     fills. `style: theme` still takes every colour from the Home Assistant theme.
+ *   - Active snooze tile: tinted surface instead of white text on orange.
+ *   - control-card: the "missed" chip of the last notification is orange, as in the other
+ *     cards (red stays for failed).
+ *   - why-card: a channel skipped by a rule (snooze, scenario, no target) is grey, not orange:
+ *     it is normal; orange stays for missed, red for failed.
+ *   - The readable name (delivery `alias`) comes first in the deliveries, why, archive and
+ *     composer cards; the technical name is small and monospaced next to it (or a tooltip).
+ *   - The card version line at the bottom of every card is hidden; `show_version: true` shows it.
+ *     The overview health strip still shows the SuperNotify version.
  * 2026-10-03 - v0.48.5. Docs only: short README (HACS shows the README of the latest release),
  *   one page per card in docs/cards. No card changed.
  * 2026-10-03 - v0.48.4. archive-card 0.31.1: skip reasons on the rows follow the UI language (the
@@ -269,7 +283,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.48.5"; // bundle / HACS release
+const VERSION = "0.49.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -280,19 +294,19 @@ const VERSION = "0.48.5"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.24.0",
-  overview: "0.22.0",
-  bands: "0.14.0",
-  deliveries: "0.21.0",
-  transports: "0.19.0",
-  recipients: "0.22.0",
-  scenarios: "0.19.0",
-  simulator: "0.10.0",
-  composer: "0.15.3",
-  automations: "0.16.0",
-  stats: "0.23.0",
-  archive: "0.31.1",
-  why: "0.6.0",
+  control: "0.25.0",
+  overview: "0.23.0",
+  bands: "0.15.0",
+  deliveries: "0.22.0",
+  transports: "0.20.0",
+  recipients: "0.23.0",
+  scenarios: "0.20.0",
+  simulator: "0.11.0",
+  composer: "0.16.0",
+  automations: "0.17.0",
+  stats: "0.24.0",
+  archive: "0.32.0",
+  why: "0.7.0",
 };
 
 /**
@@ -592,6 +606,45 @@ function snToggle(hass, entityId, on) {
  * the type prefix and the "enabled" suffix. Returns "" when nothing is left
  * or the name is just the technical one.
  */
+/* ════════════════════════════════════════════════════════════════════════
+ * One palette for every card (0.49.0)
+ *
+ * The 13 cards each carried their own copy, with diverging values. Light
+ * values pass WCAG AA (4.5:1) as text on the card background: the HA blue
+ * #03a9f4 is only 2.6:1, so text, chips and filled buttons use #0277bd
+ * (4.8:1, white text on it too). Warning text is #a04f00 (5.8:1), success
+ * #1b7f45 (5.0:1), error #c62828 (5.6:1), secondary text #5b6b7c (5.5:1).
+ * Dark theme: text on a blue fill is dark (white on #03a9f4 is 2.6:1).
+ * `style: theme` takes everything from the Home Assistant theme.
+ * warnSoft / warnLine / warnInk: a tinted surface for "on but limited"
+ * states (an active snooze), instead of white text on orange.
+ * ════════════════════════════════════════════════════════════════════════ */
+function snPalette(dark, style) {
+  if (style === "theme") {
+    return {
+      brand: "var(--primary-color)", brandD: "var(--primary-color)",
+      onBrand: "var(--text-primary-color, #fff)",
+      ok: "var(--success-color, #1b7f45)", warn: "var(--warning-color, #a04f00)",
+      crit: "var(--error-color, #c62828)",
+      warnSoft: "rgba(var(--rgb-warning-color, 255,166,0), .16)",
+      warnLine: "var(--warning-color, #f0c48a)", warnInk: "var(--primary-text-color)",
+      line: "var(--divider-color)", panel: "var(--card-background-color)",
+      soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
+      ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
+      dot: "var(--disabled-text-color)",
+    };
+  }
+  return dark
+    ? { brand: "#03a9f4", brandD: "#8fd0ff", onBrand: "#06131d", ok: "#7fe0a5", warn: "#f0b050",
+        crit: "#ff9a9a", warnSoft: "rgba(240,160,32,.18)", warnLine: "#8a5a10", warnInk: "#ffd8a3",
+        line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#9aa8b6",
+        dot: "#3a4653" }
+    : { brand: "#0277bd", brandD: "#01579b", onBrand: "#fff", ok: "#1b7f45", warn: "#a04f00",
+        crit: "#c62828", warnSoft: "#fdf1e3", warnLine: "#f0c48a", warnInk: "#5c3200",
+        line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#5b6b7c",
+        dot: "#c3cdd8" };
+}
+
 function snCleanName(fn, techName) {
   if (!fn) return "";
   const n = String(fn)
@@ -1495,24 +1548,7 @@ class SupernotifyControlCard extends HTMLElement {
 
   // ── palette ────────────────────────────────────────────────────────────
   _palette() {
-    if (this._config.style === "theme") {
-      return {
-        brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color)",
-        line: "var(--divider-color)", panel: "var(--card-background-color)",
-        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
-        dot: "var(--disabled-text-color)",
-      };
-    }
-    // "supernotify": the prototype's own identity (light/dark)
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#0288d1", ok: "#7fe0a5", warn: "#f0a020",
-          line: "#2b3441", panel: "#1a222c", soft: "#16212c",
-          ink: "#e6ecf3", muted: "#8fa1b4", dot: "#3a4653" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#f0a020",
-          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb",
-          ink: "#1f3b57", muted: "#64798f", dot: "#c3cdd8" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   // ── render ─────────────────────────────────────────────────────────────
@@ -1548,9 +1584,9 @@ class SupernotifyControlCard extends HTMLElement {
         .ctile .ti { --mdc-icon-size: 30px; font-size: 30px; line-height: 1.1; }
         .ctile b { font-size: 12.5px; line-height: 1.2; }
         .ctile .ts { font-size: 11px; color: ${p.muted}; line-height: 1.25; }
-        .ctile.on { background: ${p.brand}; border-color: ${p.brandD}; color: #fff; }
+        .ctile.on { background: ${p.brand}; border-color: ${p.brandD}; color: ${p.onBrand}; }
         .ctile.on .ts { color: rgba(255,255,255,.88); }
-        .ctile.warn { background: ${p.warn}; border-color: #d98d10; color: #fff; }
+        .ctile.warn { background: ${p.warnSoft}; border-color: ${p.warnLine}; color: ${p.warnInk}; }
         .ctile.warn .ts { color: rgba(255,255,255,.92); }
         .announce { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
         .announce input { flex: 1; border: 1.5px solid ${p.line}; border-radius: 10px;
@@ -1559,7 +1595,7 @@ class SupernotifyControlCard extends HTMLElement {
         .announce input:focus { outline: none; border-color: ${p.brand};
                                 box-shadow: 0 0 0 3px rgba(3,169,244,.14); }
         .announce button {
-          border: 0; border-radius: 10px; background: ${p.brand}; color: #fff;
+          border: 0; border-radius: 10px; background: ${p.brand}; color: ${p.onBrand};
           font-weight: 700; padding: 10px 16px; cursor: pointer; font-size: 13px; }
         .mgroup { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
                   font-weight: 800; color: ${p.muted}; margin: 14px 0 8px;
@@ -1581,7 +1617,8 @@ class SupernotifyControlCard extends HTMLElement {
         .lastn .lb { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px;
                      padding: 3px 9px; font-weight: 700; font-size: 11px; background: ${p.soft}; }
         .lastn .lb.ok { color: ${p.ok}; background: rgba(46,158,91,.12); }
-        .lastn .lb.err { color: #e23c3c; background: rgba(226,60,60,.12); }
+        .lastn .lb.err { color: ${p.crit}; background: rgba(226,60,60,.12); }
+        .lastn .lb.mis { color: ${p.warn}; background: rgba(240,160,32,.14); }
         .lastn .lb.mut { color: ${p.muted}; background: transparent; border: 1px solid ${p.line}; }
         .lastn .rep { margin-left: auto; border: 1.5px solid ${p.line}; background: ${p.panel};
                       color: ${p.brandD}; border-radius: 999px; padding: 5px 12px; font-size: 12px;
@@ -1615,7 +1652,7 @@ class SupernotifyControlCard extends HTMLElement {
           <button id="announceBtn">${snT(this._config, this._hass).send}</button>
         </div>` : ""}
         <div id="groups"></div>
-        <div class="ver">supernotify-control-card v${SN_CARD_VERSIONS.control}</div>
+        ${this._config && this._config.show_version ? `<div class="ver">supernotify-control-card v${SN_CARD_VERSIONS.control}</div>` : ""}
         <div class="toast" id="toast"></div>
       </ha-card>`;
     const abtn = this.shadowRoot.getElementById("announceBtn");
@@ -1666,7 +1703,7 @@ class SupernotifyControlCard extends HTMLElement {
         chips.push(`<span class="lb ${err ? "err" : "ok"}">${err ? "✖" : "✔"} ${esc(label)}</span>`);
       }
     }
-    if (n && +n.missed > 0) chips.push(`<span class="lb err">⚠ ${esc(n.missed)} ${T.missed_n}</span>`);
+    if (n && +n.missed > 0) chips.push(`<span class="lb mis">⚠ ${esc(n.missed)} ${T.missed_n}</span>`);
     if (skipped) chips.push(`<span class="lb mut">${skipped} ${T.skipped_n}</span>`);
     const rep = c.repeat_entity
       ? `<button class="rep" id="repBtn">🔁 ${T.repeat}</button>` : "";
@@ -1946,21 +1983,7 @@ class SupernotifyOverviewCard extends HTMLElement {
   }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return {
-        brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color)",
-        crit: "var(--error-color, #e23c3c)",
-        line: "var(--divider-color)", panel: "var(--card-background-color)",
-        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
-      };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#0288d1", ok: "#7fe0a5", warn: "#f0a020", crit: "#ff9a9a",
-          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#f0a020", crit: "#e23c3c",
-          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _st(id) {
@@ -2069,7 +2092,7 @@ class SupernotifyOverviewCard extends HTMLElement {
         <div class="lastmsg" id="last">—</div>
         <div class="sec">${snT(this._config, this._hass).act_scen}</div>
         <div id="scen">—</div>
-        <div class="ver">supernotify-overview-card v${SN_CARD_VERSIONS.overview}</div>
+        ${this._config && this._config.show_version ? `<div class="ver">supernotify-overview-card v${SN_CARD_VERSIONS.overview}</div>` : ""}
       </ha-card>`;
     this._update();
   }
@@ -2203,22 +2226,7 @@ class SupernotifyBandsCard extends HTMLElement {
   }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return {
-        brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", line: "var(--divider-color)",
-        panel: "var(--card-background-color)", soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        okSoft: "rgba(46,158,91,.10)", ink: "var(--primary-text-color)",
-        muted: "var(--secondary-text-color)",
-      };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#0288d1", ok: "#7fe0a5", line: "#2b3441",
-          panel: "#1a222c", soft: "#16212c", okSoft: "rgba(46,158,91,.15)",
-          ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", line: "#e3e9f0",
-          panel: "#fff", soft: "#eef4fb", okSoft: "#e9f7ee",
-          ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _st(id) {
@@ -2315,7 +2323,7 @@ class SupernotifyBandsCard extends HTMLElement {
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         <div class="hint">🔇 ${snT(this._config, this._hass).mute_hint}</div>
-        <div class="ver">supernotify-bands-card v${SN_CARD_VERSIONS.bands}</div>
+        ${this._config && this._config.show_version ? `<div class="ver">supernotify-bands-card v${SN_CARD_VERSIONS.bands}</div>` : ""}
       </ha-card>`;
     this._update();
   }
@@ -2481,19 +2489,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
   }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return {
-        brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", line: "var(--divider-color)",
-        panel: "var(--card-background-color)", soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
-      };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", line: "#2b3441",
-          panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", line: "#e3e9f0",
-          panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _deliveries() {
@@ -2529,6 +2525,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
         .mid { flex: 1; min-width: 0; }
         .mid b { font-size: 14px; }
         .mid .tr { font-size: 11.5px; color: ${p.muted}; }
+        .tech { font-family: ui-monospace, 'Roboto Mono', monospace; font-size: 11px; }
         .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
         .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
                border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
@@ -2555,7 +2552,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        <div class="ver">supernotify-deliveries-card v${SN_CARD_VERSIONS.deliveries}</div>
+        ${this._config && this._config.show_version ? `<div class="ver">supernotify-deliveries-card v${SN_CARD_VERSIONS.deliveries}</div>` : ""}
       </ha-card>`;
     this._update();
   }
@@ -2611,7 +2608,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       const alias = snDeliveryAlias(this._hass, d.name) || "";
       return `<div class="row" data-i="${i}">
         <span class="em">${em}</span>
-        <div class="mid"><b>${esc(d.name)}</b> <span class="tr">${esc(tr)}${alias ? " · " + esc(alias) : ""}</span>
+        <div class="mid"><b>${esc(alias || d.name)}</b> <span class="tr">${alias && alias.toLowerCase() !== d.name.toLowerCase() ? `<span class="tech">${esc(d.name)}</span> · ` : ""}${esc(tr)}</span>
           <div class="tags">${tags.map((t) => {
             const [txt, cls] = Array.isArray(t) ? t : [t, ""];
             return `<span class="tag ${cls}">${esc(txt)}</span>`;
@@ -2694,20 +2691,7 @@ class SupernotifyTransportsCard extends HTMLElement {
   }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return {
-        brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", crit: "var(--error-color, #e23c3c)",
-        line: "var(--divider-color)", panel: "var(--card-background-color)",
-        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
-      };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", crit: "#ff9a9a",
-          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", crit: "#c62828",
-          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _transports() {
@@ -2755,7 +2739,7 @@ class SupernotifyTransportsCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        <div class="ver">supernotify-transports-card v${SN_CARD_VERSIONS.transports}</div>
+        ${this._config && this._config.show_version ? `<div class="ver">supernotify-transports-card v${SN_CARD_VERSIONS.transports}</div>` : ""}
       </ha-card>`;
     this._update();
   }
@@ -2860,19 +2844,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
   }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return {
-        brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", line: "var(--divider-color)",
-        panel: "var(--card-background-color)", soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
-      };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", line: "#2b3441",
-          panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", line: "#e3e9f0",
-          panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _recipients() {
@@ -2928,7 +2900,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        <div class="ver">supernotify-recipients-card v${SN_CARD_VERSIONS.recipients}</div>
+        ${this._config && this._config.show_version ? `<div class="ver">supernotify-recipients-card v${SN_CARD_VERSIONS.recipients}</div>` : ""}
       </ha-card>`;
     this._update();
   }
@@ -3117,23 +3089,7 @@ class SupernotifyScenariosCard extends HTMLElement {
   }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return {
-        brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", crit: "var(--error-color, #e23c3c)",
-        line: "var(--divider-color)", panel: "var(--card-background-color)",
-        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        okSoft: "rgba(46,158,91,.10)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
-      };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", crit: "#ff9a9a",
-          line: "#2b3441", panel: "#1a222c", soft: "#16212c", okSoft: "rgba(46,158,91,.15)",
-          ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", crit: "#c62828",
-          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", okSoft: "#e9f7ee",
-          ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _scenarios() {
@@ -3218,7 +3174,7 @@ class SupernotifyScenariosCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        <div class="ver">supernotify-scenarios-card v${SN_CARD_VERSIONS.scenarios}</div>
+        ${this._config && this._config.show_version ? `<div class="ver">supernotify-scenarios-card v${SN_CARD_VERSIONS.scenarios}</div>` : ""}
       </ha-card>`;
     this._update();
   }
@@ -3397,18 +3353,7 @@ class SupernotifySimulatorCard extends HTMLElement {
   }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return { brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", crit: "var(--error-color, #e23c3c)",
-        line: "var(--divider-color)", panel: "var(--card-background-color)",
-        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)" };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", crit: "#ff9a9a",
-          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", crit: "#c62828",
-          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _render() {
@@ -3427,7 +3372,7 @@ class SupernotifySimulatorCard extends HTMLElement {
                 border: 1.5px solid ${p.line}; background: ${p.panel};
                 border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 650;
                 cursor: pointer; margin: 0 5px 6px 0; user-select: none; }
-        .chip.sel { background: ${p.brand}; border-color: ${p.brand}; color: #fff; }
+        .chip.sel { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }
         .out { display: inline-flex; align-items: center; gap: 6px;
                border: 1.5px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
                border-radius: 999px; padding: 6px 13px; font-size: 12.5px; font-weight: 700;
@@ -3445,7 +3390,7 @@ class SupernotifySimulatorCard extends HTMLElement {
         <div class="sec">${snT(this._config, this._hass).sim_fire}</div>
         <div id="result">—</div>
         <div class="hint">${snT(this._config, this._hass).sim_hint}</div>
-        <div class="ver">supernotify-simulator-card v${SN_CARD_VERSIONS.simulator}</div>
+        ${this._config && this._config.show_version ? `<div class="ver">supernotify-simulator-card v${SN_CARD_VERSIONS.simulator}</div>` : ""}
       </ha-card>`;
     this._refresh();
   }
@@ -3560,19 +3505,7 @@ class SupernotifyComposerCard extends HTMLElement {
   }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return { brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color)",
-        crit: "var(--error-color, #e23c3c)",
-        line: "var(--divider-color)", panel: "var(--card-background-color)",
-        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)" };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", warn: "#f0a020", crit: "#ff9a9a",
-          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#f0a020", crit: "#e23c3c",
-          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _deliveries() {
@@ -3611,8 +3544,8 @@ class SupernotifyComposerCard extends HTMLElement {
         .chip { display: inline-flex; border: 1.5px solid ${p.line}; background: ${p.panel};
                 border-radius: 999px; padding: 5px 11px; font-size: 11.5px; font-weight: 650;
                 cursor: pointer; margin: 0 5px 5px 0; user-select: none; }
-        .chip.sel { background: ${p.brand}; border-color: ${p.brand}; color: #fff; }
-        .send { border: 0; border-radius: 10px; background: ${p.brand}; color: #fff;
+        .chip.sel { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }
+        .send { border: 0; border-radius: 10px; background: ${p.brand}; color: ${p.onBrand};
                 font-weight: 750; padding: 11px 20px; cursor: pointer; font-size: 13.5px;
                 margin-top: 14px; }
         .send:active { transform: scale(.97); }
@@ -3664,7 +3597,7 @@ class SupernotifyComposerCard extends HTMLElement {
               <option value="critical">${T.prio_critical}</option>
             </select>
             <label>${T.channels_lbl}</label>
-            <div id="chips">${this._deliveries().map((d) => `<span class="chip" data-d="${esc(d.name)}">${esc(d.name)}</span>`).join("")}</div>
+            <div id="chips">${this._deliveries().map((d) => `<span class="chip" data-d="${esc(d.name)}" title="${esc(d.name)}">${esc(snDeliveryAlias(this._hass, d.name) || d.name)}</span>`).join("")}</div>
             <label>${T.target_lbl}</label>
             <div id="targetSel"></div>
             <input type="text" id="customTarget" placeholder="${T.custom_target_ph}" style="margin-top:6px">
@@ -4026,22 +3959,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
   }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return {
-        brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", line: "var(--divider-color)",
-        panel: "var(--card-background-color)", soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        okSoft: "rgba(46,158,91,.10)", ink: "var(--primary-text-color)",
-        muted: "var(--secondary-text-color)",
-      };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#0288d1", ok: "#7fe0a5", line: "#2b3441",
-          panel: "#1a222c", soft: "#16212c", okSoft: "rgba(46,158,91,.15)",
-          ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", line: "#e3e9f0",
-          panel: "#fff", soft: "#eef4fb", okSoft: "#e9f7ee",
-          ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _esc(s) {
@@ -4140,7 +4058,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
       <ha-card>
         ${snIntro(this._config, this._dark)}
         <div id="body"></div>
-        <div class="ver" id="foot">supernotify-automations-card v${SN_CARD_VERSIONS.automations}</div>
+        <div class="ver" id="foot">${this._config && this._config.show_version ? `supernotify-automations-card v${SN_CARD_VERSIONS.automations}` : ""}</div>
       </ha-card>`;
     this._renderBody();
   }
@@ -4174,7 +4092,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
     const gen = this._manifest.generated;
     if (gen) {
       const f = this.shadowRoot.getElementById("foot");
-      f.innerText = `${T.aut_updated} ${this._rel(gen)} · supernotify-automations-card v${SN_CARD_VERSIONS.automations}`;
+      f.innerText = `${T.aut_updated} ${this._rel(gen)}` + (this._config.show_version ? ` · supernotify-automations-card v${SN_CARD_VERSIONS.automations}` : "");
     }
   }
 
@@ -4419,18 +4337,7 @@ class SupernotifyStatsCard extends HTMLElement {
   }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return { brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color)", crit: "var(--error-color, #e23c3c)",
-        line: "var(--divider-color)", panel: "var(--card-background-color)",
-        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)" };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", warn: "#f0a020", crit: "#ff9a9a",
-          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#f0a020", crit: "#e23c3c",
-          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   // ── data ──────────────────────────────────────────────────────────────
@@ -4622,7 +4529,7 @@ class SupernotifyStatsCard extends HTMLElement {
         .per { display: inline-flex; gap: 4px; margin-left: auto; }
         .pb { font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; border-radius: 999px;
               border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.muted}; padding: 3px 10px; }
-        .pb.on { background: ${p.brand}; border-color: ${p.brand}; color: #fff; }
+        .pb.on { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }
         .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; margin-top: 12px; }
         .kpi { border: 1.5px solid ${p.line}; border-radius: 14px; padding: 10px 12px; background: ${p.panel}; }
         .kpi .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted}; white-space: nowrap; }
@@ -4668,7 +4575,7 @@ class SupernotifyStatsCard extends HTMLElement {
           <span class="win" id="win">${T.st_loading}</span></div>
         <div id="body"><div class="empty">${T.st_loading}</div></div>
         <div class="ver" id="ver"></div>
-        <div class="foot">supernotify-stats-card v${SN_CARD_VERSIONS.stats}</div>
+        ${this._config && this._config.show_version ? `<div class="foot">supernotify-stats-card v${SN_CARD_VERSIONS.stats}</div>` : ""}
       </ha-card>`;
     this.shadowRoot.querySelectorAll(".pb").forEach((b) => { b.onclick = () => this._setDays(+b.dataset.d); });
     this._updateVersions();
@@ -4949,18 +4856,7 @@ class SupernotifyArchiveCard extends HTMLElement {
   _T() { return SN_ARCH_STRINGS[((this._config.language || (this._hass && this._hass.language) || "en").split("-")[0])] || SN_ARCH_STRINGS.en; }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return { brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color)", crit: "var(--error-color, #e23c3c)",
-        line: "var(--divider-color)", panel: "var(--card-background-color)",
-        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)" };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", warn: "#f0a020", crit: "#ff9a9a",
-          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#f0a020", crit: "#e23c3c",
-          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   /**
@@ -5067,7 +4963,7 @@ class SupernotifyArchiveCard extends HTMLElement {
         </div>
         <div class="meta" id="meta"></div>
         <div id="list" class="flow"${this._config.max_height ? ` style="max-height:${String(this._config.max_height).replace(/[<>"]/g, "")};overflow-y:auto;padding-right:4px"` : ""}></div>
-        <div class="ver">supernotify-archive-card v${SN_CARD_VERSIONS.archive}</div>
+        ${this._config && this._config.show_version ? `<div class="ver">supernotify-archive-card v${SN_CARD_VERSIONS.archive}</div>` : ""}
       </ha-card>`;
     const q = this.shadowRoot.getElementById("q");
     q.addEventListener("input", () => { this._q = q.value.toLowerCase(); this._renderList(); });
@@ -5141,7 +5037,7 @@ class SupernotifyArchiveCard extends HTMLElement {
       if (day !== lastDay) { parts.push(`<div class="day">${esc(day)}</div>`); lastDay = day; }
       const hm = d.toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit" });
       const chans = this._channels(r, idx).map((c) =>
-        `<span class="tg ${c.state}">${c.state === "ok" ? "✔" : c.state === "err" ? "✖" : "⊘"} ${esc(c.name)}` +
+        `<span class="tg ${c.state}" title="${esc(c.name)}">${c.state === "ok" ? "✔" : c.state === "err" ? "✖" : "⊘"} ${esc(snDeliveryAlias(this._hass, c.name) || c.name)}` +
         `${c.reason ? " · " + esc(c.reason) : ""}</span>`).join("");
       const prio = r.p ? `<span class="tg pr">${esc((T.prio && T.prio[r.p]) || r.p)}</span>` : "";
       const wh = r.w ? `<span class="tg wh">\u{1F92B} ${T.wh}</span>` : "";
@@ -5318,18 +5214,7 @@ class SupernotifyWhyCard extends HTMLElement {
   _loc() { return this._config.language || (this._hass && this._hass.language) || undefined; }
 
   _palette() {
-    if (this._config.style === "theme") {
-      return { brand: "var(--primary-color)", brandD: "var(--primary-color)",
-        ok: "var(--success-color, #2e9e5b)", warn: "var(--warning-color, #f0a020)", crit: "var(--error-color, #e23c3c)",
-        line: "var(--divider-color)", panel: "var(--card-background-color)",
-        soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
-        ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)" };
-    }
-    return this._dark
-      ? { brand: "#03a9f4", brandD: "#8fd0ff", ok: "#7fe0a5", warn: "#f0c060", crit: "#ff9a9a",
-          line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#8fa1b4" }
-      : { brand: "#03a9f4", brandD: "#0288d1", ok: "#2e9e5b", warn: "#b26a00", crit: "#c62828",
-          line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#64798f" };
+    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _index() {
@@ -5374,8 +5259,9 @@ class SupernotifyWhyCard extends HTMLElement {
         .ch { border: 1px solid ${p.line}; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
         .ch .r1 { display: flex; gap: 8px; align-items: baseline; }
         .ch .st { flex-shrink: 0; font-weight: 800; }
-        .st.ok { color: ${p.ok}; } .st.skip, .st.supp { color: ${p.warn}; } .st.err { color: ${p.crit}; }
+        .st.ok { color: ${p.ok}; } .st.skip, .st.supp { color: ${p.muted}; } .st.err { color: ${p.crit}; }
         .ch .nm { font-weight: 700; } .ch .al { color: ${p.muted}; font-size: 12px; }
+        .tech { font-family: ui-monospace, 'Roboto Mono', monospace; font-size: 11px; }
         .ch .why { margin-top: 3px; } .ch .src { margin-top: 3px; color: ${p.muted}; font-size: 12px; }
         .ch .tg { margin-top: 4px; font-size: 12px; color: ${p.muted}; word-break: break-word; }
         .ch.not { opacity: .85; border-style: dashed; }
@@ -5393,7 +5279,7 @@ class SupernotifyWhyCard extends HTMLElement {
         <h3>🔎 ${T.title}</h3>
         <div class="list" id="list"></div>
         <div class="det" id="det"${this._config.max_height ? ` style="max-height:${String(this._config.max_height).replace(/[<>"]/g, "")};overflow-y:auto;padding-right:4px"` : ""}><div class="empty">${T.pick}</div></div>
-        <div class="ver">supernotify-why-card v${SN_CARD_VERSIONS.why}</div>
+        ${this._config && this._config.show_version ? `<div class="ver">supernotify-why-card v${SN_CARD_VERSIONS.why}</div>` : ""}
       </ha-card>`;
     this._renderList();
     if (this._sel) this._renderDetail();
@@ -5646,7 +5532,7 @@ class SupernotifyWhyCard extends HTMLElement {
       else if (ch.r === "err") why = `${T.st_err}${ch.err ? ": " + esc(ch.err.join(" / ")) : ""}`;
       else why = `${ch.r === "supp" ? T.st_supp : T.st_skip}: ${esc(this._reasonText(ch.why, T))}${ch.tr ? ` (${T.target_required} ${esc(ch.tr)})` : ""}`;
       out.push(`<div class="ch"><div class="r1"><span class="st ${ch.r}">${icon[ch.r] || "?"}</span>
-        <span class="nm">${esc(ch.n)}</span>${alias ? `<span class="al">${esc(alias)}</span>` : ""}</div>
+        <span class="nm">${esc(alias || ch.n)}</span>${alias && alias.toLowerCase() !== ch.n.toLowerCase() ? `<span class="al tech">${esc(ch.n)}</span>` : ""}</div>
         <div class="why">${why}</div>
         ${by.length ? `<div class="src">${T.started_by}: ${esc(by.join(" · "))}</div>` : ""}
         ${src.off.length ? `<div class="src">${T.scen_would_off}: ${esc(src.off.map((s) => this._scenarioLabel(s)).join(", "))}</div>` : ""}
@@ -5664,7 +5550,7 @@ class SupernotifyWhyCard extends HTMLElement {
       for (const k of notStarted.sort()) {
         const row = rows.get(k);
         const alias = snDeliveryAlias(this._hass, k);
-        out.push(`<div class="ch not"><div class="r1"><span class="st">·</span><span class="nm">${esc(k)}</span>${alias ? `<span class="al">${esc(alias)}</span>` : ""}</div>
+        out.push(`<div class="ch not"><div class="r1"><span class="st">·</span><span class="nm">${esc(alias || k)}</span>${alias && alias.toLowerCase() !== k.toLowerCase() ? `<span class="al tech">${esc(k)}</span>` : ""}</div>
           <div class="why">${esc(this._whyNotStarted(k, row, n, scen, T))}</div></div>`);
       }
       out.push(`<div class="note">${snProvOf(n) || n.trace ? T.from_trace : T.from_config}</div>`);

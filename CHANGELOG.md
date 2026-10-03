@@ -3,6 +3,24 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.49.0] - 2026-10-03
+
+First step of the redesign: the same colours and the same signs in every card.
+
+### Changed
+- One palette for all 13 cards instead of 13 diverging copies. The light theme now passes WCAG
+  AA for text on the card: blue `#0277bd` instead of `#03a9f4` (2.6:1, also under white text),
+  warning `#a04f00`, success `#1b7f45`, error `#c62828`, secondary text `#5b6b7c`. In the dark
+  theme text on a blue fill is dark. `style: theme` still takes every colour from Home
+  Assistant.
+- The readable name of a channel (its `alias`) comes first in the deliveries, why, archive and
+  composer cards; the technical name is small and monospaced next to it, or in a tooltip.
+- why-card: a channel skipped by a rule (snooze, scenario, no target) is grey: it is normal.
+  Orange is for missed, red for failed, as in the control card's last notification, whose
+  "missed" chip is now orange too.
+- control-card: an active snooze tile is a tinted surface, not white text on orange.
+- The card version at the bottom of every card is hidden; `show_version: true` shows it.
+
 ## [0.48.5] - 2026-10-03
 
 ### Docs

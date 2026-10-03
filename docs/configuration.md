@@ -9,6 +9,7 @@
 | `style: theme` | Follow the Home Assistant theme instead of the SuperNotify colours |
 | `intro: <text>` | An info banner at the top of the card (HTML allowed) |
 | `language: it` / `en` | Pin the language; by default the card follows Home Assistant |
+| `show_version: true` | Show the card's version at the bottom (hidden since 0.49.0) |
 
 Italian and English are built in; any other language falls back to English.
 
@@ -29,7 +30,7 @@ The automations card works with any version but needs its manifest generator
 
 ## Versions
 The bundle has one release version (HACS, this repo's tags) and **each card has its own
-version**, shown in its footer and bumped only when that card changes. A card footer that
+version**, shown in its footer with `show_version: true` and bumped only when that card changes. A card footer that
 says `v0.16.0` while the bundle is at `0.22.0` simply means that card has not changed since
 0.16.0. `tools/check_card_versions.py` (run in CI) fails when a card's code changes without a
 bump in `SN_CARD_VERSIONS`.
