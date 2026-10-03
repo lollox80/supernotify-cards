@@ -11,6 +11,8 @@ notification, and see why it went where it went, without touching YAML.
 **What you need:** Home Assistant with SuperNotify 2.0 or later; some features need a newer
 SuperNotify ([which ones](https://github.com/lollox80/supernotify-cards/blob/main/docs/configuration.md#which-supernotify-version-each-feature-needs)).
 
+**What's new:** see the [changelog](https://github.com/lollox80/supernotify-cards/blob/main/CHANGELOG.md) (every version, newest first) or the [releases](https://github.com/lollox80/supernotify-cards/releases).
+
 ## Install
 
 1. HACS → ⋮ → **Custom repositories** → add `https://github.com/lollox80/supernotify-cards`, type **Dashboard**.

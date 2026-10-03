@@ -3,6 +3,11 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.59.2] - 2026-10-03
+
+### Changed
+- README: a link to this changelog and to the releases near the top, so it shows in HACS.
+
 ## [0.59.1] - 2026-10-03
 
 Contrast checked on every text of every card, light and dark theme.

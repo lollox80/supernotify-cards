@@ -8,6 +8,7 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.59.2. No code change: README links the changelog near the top, so HACS shows it.
  * 2026-10-03 - v0.59.1. Contrast measured on every text of the 13 cards in both themes
  *   (tools/contrast_audit.mjs): light-theme green #1b7f45 -> #17733d (it was 4.2-4.4:1 on the green
  *   tints of delivered/active/now chips), okSoft added to the palette (bands and scenarios used it for
@@ -391,7 +392,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.59.1"; // bundle / HACS release
+const VERSION = "0.59.2"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
