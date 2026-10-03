@@ -8,6 +8,10 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.56.0. overview-card 0.28.0: the last notification reads like the control card's -
+ *   title, message, priority and "4 min ago" instead of a raw timestamp, channel counts with the
+ *   names in the tooltip ("2 delivered", "1 missed", "2 skipped"), and Why ›. `last_notification:
+ *   false` hides the block when the control card already shows it (also in the visual editor).
  * 2026-10-03 - v0.55.0. Visual editor and a simulator that explains.
  *   - Every card answers getConfigForm(): "Add card" / "Edit card" shows a form drawn by Home
  *     Assistant (entity pickers, switches, numbers, dropdowns) for the common options, with a
@@ -347,7 +351,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.55.0"; // bundle / HACS release
+const VERSION = "0.56.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -359,7 +363,7 @@ const VERSION = "0.55.0"; // bundle / HACS release
  */
 const SN_CARD_VERSIONS = {
   control: "0.29.0",
-  overview: "0.27.0",
+  overview: "0.28.0",
   bands: "0.18.0",
   deliveries: "0.25.0",
   transports: "0.22.0",
@@ -863,7 +867,7 @@ function snForm(kind) {
       sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6)],
     overview: [ent("update_entity", "update"), ent("sent_today_entity", "sensor"),
       ent("quiet_entity", ["binary_sensor", "input_boolean"]), bool("health", true),
-      sel("stats", [["", "o_three"], ["full", "o_full"]]), num("poll_seconds", 10, 600, 10)],
+      sel("stats", [["", "o_three"], ["full", "o_full"]]), bool("last_notification", true), num("poll_seconds", 10, 600, 10)],
     deliveries: [txt("title"), bool("group", true), bool("hide_defaults", true)],
     transports: [], recipients: [], simulator: [], bands: [],
     scenarios: [num("poll_seconds", 10, 600, 10)],
@@ -2307,7 +2311,7 @@ class SupernotifyOverviewCard extends HTMLElement {
     try {
       const [act, last, snz] = await Promise.all([
         this._ws("enquire_active_scenarios"),
-        this._ws("enquire_last_notification"),
+        this._config.last_notification === false ? {} : this._ws("enquire_last_notification"),
         this._ws("enquire_snoozes"),
       ]);
       this._active = act.scenarios || [];
@@ -2358,7 +2362,12 @@ class SupernotifyOverviewCard extends HTMLElement {
         .b-off { background: ${p.soft}; color: ${p.muted}; }
         .b-crit { background: rgba(226,60,60,.12); color: ${p.crit}; }
         .lastmsg { font-size: 13px; }
-        .lastmsg .t { color: ${p.muted}; font-size: 11.5px; }
+        .lastmsg .t { color: ${p.muted}; font-size: 12.5px; margin-top: 3px; }
+        .lastmsg .lt { font-size: 15px; font-weight: 600; } .lastmsg .lmm { margin-top: 2px; }
+        .lastmsg .lf { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+        .lastmsg .badge { display: inline-flex; align-items: center; gap: 4px; }
+        .whyb { margin-left: auto; border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.brandD};
+                border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
         .chip { display: inline-flex; border: 1.5px solid ${p.line}; border-radius: 999px;
                 padding: 5px 12px; font-size: 12px; font-weight: 650; margin: 0 6px 6px 0;
                 background: ${p.soft}; color: ${p.brandD}; }
@@ -2391,8 +2400,8 @@ class SupernotifyOverviewCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div class="health" id="health"></div><div class="stats" id="stats"></div>
-        <div class="sec">${snT(this._config, this._hass).last_notif}</div>
-        <div class="lastmsg" id="last">—</div>
+        ${this._config.last_notification === false ? "" : `<div class="sec">${snT(this._config, this._hass).last_notif}</div>
+        <div class="lastmsg" id="last">—</div>`}
         <div class="sec">${snT(this._config, this._hass).act_scen}</div>
         <div id="scen">—</div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-overview-card v${SN_CARD_VERSIONS.overview}</div>` : ""}
@@ -2464,20 +2473,41 @@ class SupernotifyOverviewCard extends HTMLElement {
       stat("📤 " + T.deliveries, dels.length ? `${delsOn}/${dels.length}` : "—", T.enabled_total) +
       (this._config.stats !== "full" ? "" : stat("😴 " + T.snoozed, snz.length, snz.length && snz[0]._end ? T.until + " " + esc(String(snz[0]._end.getHours()).padStart(2, "0") + ":" + String(snz[0]._end.getMinutes()).padStart(2, "0")) : "", snz.length ? p.warn : undefined)), this && this._config);
 
+    // 0.56.0: same reading as the control card - title, message, priority and "4 min ago",
+    // channel counts, Why ›. `last_notification: false` hides the block (the control card has it).
     const lastEl = this.shadowRoot.getElementById("last");
-    if (this._last) {
+    if (lastEl && this._last) {
       const n = this._last;
-      const when = n.created ? esc(String(n.created).replace("T", " ").slice(0, 16)) : "";
-      const msg = esc((n.message || "").slice(0, 90));
-      const ok = (n.failed || 0) === 0;
-      const prioCol = { critical: p.crit, high: p.warn, medium: p.brandD }[n.priority];
-      const prio = n.priority
-        ? `<span class="badge" style="background:${p.soft};color:${prioCol || p.muted}">${esc(T["prio_" + n.priority] || n.priority)}</span>`
-        : "";
-      const ch = +n.delivered > 0 ? `<span class="badge b-off">${snPl(T, "channels", n.delivered)}</span>` : "";
-      lastEl.innerHTML = snIconify(`<div class="t">${when}</div><div>${msg}</div>
-        <div style="margin-top:5px">${prio}<span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ " + T.delivered : "✖ " + n.failed + " " + T.failed}</span>${+n.missed > 0 ? `<span class="badge" style="background:${p.soft};color:${p.warn || "#f0a020"}">⚠ ${snPl(T, "missed_n", +n.missed)}</span>` : ""}${ch}</div>`, this && this._config);
-    } else {
+      const title = n.title || "";
+      const msg = (n.message || "").slice(0, 140);
+      const prioCol = { critical: p.crit, high: p.warn, medium: p.brandD, low: p.muted, minimum: p.muted }[n.priority];
+      const d = n.created ? new Date(n.created) : null;
+      const meta = [n.priority ? `<span style="color:${prioCol || p.muted};font-weight:600">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "",
+        d && !isNaN(d) ? `🕐 ${esc(snAgo(d, T))}` : ""].filter(Boolean).join(" · ");
+      const okN = [], errN = [];
+      let skipped = 0;
+      if (n.deliveries && typeof n.deliveries === "object") {
+        for (const [name, dd] of Object.entries(n.deliveries)) {
+          const ok = dd && Array.isArray(dd.success) && dd.success.length;
+          const err = dd && Array.isArray(dd.error) && dd.error.length;
+          if (!ok && !err) { skipped++; continue; }
+          (err ? errN : okN).push(snDeliveryAlias(this._hass, name) || name);
+        }
+      }
+      const chips = [];
+      if (okN.length) chips.push(`<span class="badge b-ok" title="${esc(okN.join(", "))}">✔ ${snPl(T, "ln_delivered", okN.length)}</span>`);
+      else if (+n.delivered > 0) chips.push(`<span class="badge b-ok">✔ ${snPl(T, "ln_delivered", +n.delivered)}</span>`);
+      if (errN.length || +n.failed > 0) chips.push(`<span class="badge b-crit" title="${esc(errN.join(", "))}">✖ ${snPl(T, "ln_failed", errN.length || +n.failed)}</span>`);
+      if (+n.missed > 0) chips.push(`<span class="badge" style="background:${p.warnSoft};color:${p.warnInk}">⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
+      if (skipped) chips.push(`<span class="badge b-off">${snPl(T, "skipped_n", skipped)}</span>`);
+      const why = n.id && window.__snWhyCards ? `<button class="whyb" id="whyBtn">${esc(T.ln_why)} ›</button>` : "";
+      lastEl.innerHTML = snIconify(`<div class="lt">${esc(title || msg || "—")}</div>
+        ${title && msg ? `<div class="lmm">${esc(msg)}</div>` : ""}
+        ${meta ? `<div class="t">${meta}</div>` : ""}
+        <div class="lf">${chips.join("")}${why}</div>`, this && this._config);
+      const wb = lastEl.querySelector("#whyBtn");
+      if (wb) wb.onclick = () => snWhyOpen(n.id);
+    } else if (lastEl) {
       lastEl.textContent = "—";
     }
 

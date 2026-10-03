@@ -3,6 +3,19 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.56.0] - 2026-10-03
+
+One way to read the last notification.
+
+### Changed
+- overview-card 0.28.0: the last notification now looks like the control card's - title and message,
+  coloured priority and "4 min ago" instead of a raw timestamp, channel counts ("2 delivered",
+  "1 missed", "2 skipped") with the names in the tooltip, and **Why ›** when a why card is present.
+
+### Added
+- `last_notification: false` on the overview hides the block (and skips the
+  `enquire_last_notification` call) when the control card already shows it. Also in the visual editor.
+
 ## [0.55.0] - 2026-10-03
 
 Visual editor and a simulator that explains.

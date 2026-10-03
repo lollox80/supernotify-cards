@@ -21,8 +21,13 @@ type: custom:supernotify-overview-card
 poll_seconds: 60        # refresh interval for enquire_* data
 health: true            # health sentence + list on top (false = hide, chips = the pre-0.52 chips)
 stats: full             # all five numbers (default: sent, failures, channels)
+last_notification: false   # hide the last notification (the control card already shows it)
 update_entity: update.supernotify_update   # HACS update entity for the version chip
 quiet_entity: binary_sensor.notifier_dnd   # your DND sensor, for the 🌙 chip
 sent_today_entity: sensor.supernotify_sent_today   # daily utility_meter for "sent today"
 style: theme            # follow the HA theme instead of the SuperNotify look
 ```
+
+The **last notification** block reads like the control card's: title, message, priority, how long ago,
+then "2 delivered · 1 missed · 2 skipped" (hover for the channel names) and **Why ›** when a why card
+is on the dashboard. If you use both cards on the same view, set `last_notification: false` here.
