@@ -8,6 +8,8 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.48.5. Docs only: short README (HACS shows the README of the latest release),
+ *   one page per card in docs/cards. No card changed.
  * 2026-10-03 - v0.48.4. archive-card 0.31.1: skip reasons on the rows follow the UI language (the
  *   index keeps short Italian ones, so an English dashboard showed "pausa", "nessun target"), and
  *   priorities are translated in Italian. README: screenshots of every card (docs/images).
@@ -267,7 +269,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.48.4"; // bundle / HACS release
+const VERSION = "0.48.5"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
