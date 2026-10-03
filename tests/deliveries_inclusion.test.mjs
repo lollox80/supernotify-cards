@@ -44,28 +44,29 @@ let fail = 0;
 const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const txt = el.shadowRoot.textContent;
 
-// 1. le etichette dicono l'effetto
-console.log("tag inclusion:", [...el.shadowRoot.querySelectorAll(".tag")]
-  .map((t) => t.textContent.trim()).filter((t) => t.startsWith("🔀")).join(" | "));
-ok(txt.includes("sempre attivo"), "'default' si legge 'sempre attivo'");
-ok(txt.includes("solo su richiesta"), "'explicit' si legge 'solo su richiesta'");
-ok(txt.includes("solo con scenario"), "'scenario' si legge 'solo con scenario'");
-ok(txt.includes("riserva"), "'fallback' si legge 'riserva'");
+// 1. (0.51.0) i canali sono raggruppati per come partono, con il conteggio
+const groups = [...el.shadowRoot.querySelectorAll(".grp")].map((g) => ({
+  h: g.querySelector("h3").textContent.replace(/\s+/g, " ").trim(),
+  rows: [...g.querySelectorAll(".row .mid b")].map((b) => b.textContent),
+}));
+console.log("gruppi:", groups.map((g) => `${g.h} [${g.rows.join(", ")}]`).join(" | "));
+ok(groups.length === 4, "quattro gruppi");
+ok(groups[0].h === "Partono da soli · 2" && groups[0].rows.includes("Notifica sul telefono"), "'default' -> Partono da soli, con alias");
+ok(groups[1].h === "Solo se chiamati per nome · 1" && groups[1].rows[0] === "persistent", "'explicit' -> Solo se chiamati per nome");
+ok(groups[2].h === "Solo con uno scenario · 1" && groups[2].rows[0] === "sirena", "'scenario' -> Solo con uno scenario");
+ok(/^Di riserva/.test(groups[3].h) && groups[3].rows[0] === "backup_mail", "'fallback' -> Di riserva");
 ok(!txt.includes("implicita"), "la parola 'implicita' non compare più");
+ok(!el.shadowRoot.querySelector(".tag.always"), "niente tag 'sempre attivo' ripetuto su ogni riga");
 
-// 2. i canali che partono da soli sono evidenziati
-const sempre = [...el.shadowRoot.querySelectorAll(".tag.always")];
-ok(sempre.length === 2, "due tag evidenziati (mobile_push e alexa_announce)");
-ok(sempre.every((t) => /sempre attivo/.test(t.textContent)), "l'evidenza è sul tag giusto");
+// 2. intestazione con quanti sono accesi
+const hd = el.shadowRoot.querySelector(".chd");
+ok(hd && /Canali/.test(hd.textContent) && /5 di 5 accesi/.test(hd.textContent), "intestazione 'Canali · 5 di 5 accesi'");
 
-// 3. il riepilogo in testa
-const sum = el.shadowRoot.querySelector(".incsum");
-console.log("riepilogo:", sum && sum.textContent.trim());
-ok(!!sum, "il riepilogo c'è");
-ok(/5 di questi canali/.test(sum.textContent), "conta tutti i canali");
-ok(/2\s*partono da soli/.test(sum.textContent.replace(/\s+/g, " ")), "conta quelli che partono da soli");
-ok(/2\s*solo se richiesti/.test(sum.textContent.replace(/\s+/g, " ")), "conta quelli su richiesta (explicit + fallback)");
-ok(/1\s*solo con uno scenario/.test(sum.textContent.replace(/\s+/g, " ")), "conta quelli da scenario");
+// 3. group: false = lista unica
+const flat = document.createElement("supernotify-deliveries-card");
+flat.setConfig({ group: false }); document.body.appendChild(flat);
+flat.hass = { language: "it", themes: { darkMode: false }, states: DELS };
+ok(!flat.shadowRoot.querySelector(".grp") && flat.shadowRoot.querySelectorAll(".row").length === 5, "group: false -> lista unica");
 
 // 4. inclusion assente (vecchie versioni di SuperNotify): non deve sparire la riga
 const el2 = document.createElement("supernotify-deliveries-card");
@@ -75,7 +76,7 @@ el2.hass = { language: "it", themes: { darkMode: false }, states: {
   "binary_sensor.supernotify_delivery_vecchia": {
     state: "on", attributes: { name: "vecchia", transport: "email", enabled: true } } } };
 ok(el2.shadowRoot.querySelectorAll(".row").length === 1, "una delivery senza inclusion compare lo stesso");
-ok(el2.shadowRoot.textContent.includes("sempre attivo"), "e viene trattata come 'sempre attivo'");
+ok(/Partono da soli/.test(el2.shadowRoot.textContent), "e viene trattata come 'parte da sola'");
 
 console.log(fail ? `\n${fail} TEST FALLITI` : "\nTUTTI I TEST OK");
 process.exit(fail ? 1 : 0);

@@ -8,6 +8,16 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.51.0. Redesign, step 3: deliveries-card 0.24.0 grouped by how a channel starts.
+ *   - Sections "Start on their own", "Only when named in the call", "Only with a scenario",
+ *     "Backup" with their count, instead of the same "always on" tag repeated on every row and a
+ *     summary line on top. Header: "Channels · 7 of 8 on" (`title:` to rename it).
+ *   - One status line per channel, saying what is going on right now: switched off, transport
+ *     off, "paused now by <scenario>" when an active scenario turns it off, "on now through
+ *     <scenario>" for a scenario-only channel. Read from the scenario entities' `delivery`
+ *     attribute, as the why-card does. Switched-off rows are dimmed.
+ *   - The other tags (action, fixed targets, target usage, native area/floor/label) are quieter.
+ *   - "Reset overrides" moved to the bottom as a real button. `group: false` keeps one flat list.
  * 2026-10-03 - v0.50.0. Redesign, step 2: Home Assistant icons instead of emoji.
  *   - Every card's HTML goes through snIconify(): the ~80 emoji the cards use (channels,
  *     scenarios, tiles, chips, section headings, outcome signs) become <ha-icon> Material
@@ -291,7 +301,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.50.0"; // bundle / HACS release
+const VERSION = "0.51.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -305,7 +315,7 @@ const SN_CARD_VERSIONS = {
   control: "0.26.0",
   overview: "0.24.0",
   bands: "0.16.0",
-  deliveries: "0.23.0",
+  deliveries: "0.24.0",
   transports: "0.21.0",
   recipients: "0.24.0",
   scenarios: "0.21.0",
@@ -343,6 +353,9 @@ const SN_STRINGS = {
     by_scenario: "scenario only", fallback: "backup", fallback_err: "backup on error",
     inc_sum: "of these channels", inc_always: "start on their own",
     inc_req: "only when asked for", inc_scen: "only with a scenario",
+    grp_auto: "Start on their own", grp_named: "Only when named in the call", grp_scen: "Only with a scenario",
+    grp_fallback: "Backup, when the others fail", ch_title: "Channels", ch_count: "{on} of {tot} on",
+    off_manual: "switched off", paused_by: "paused now by", on_by: "on now through",
     fixed_targets: "fixed targets", no_deliveries: "no delivery entities found",
     home: "home", away: "away", devices: "devices", overrides: "delivery overrides",
     no_contact: "no contact points", no_recipients: "no recipient entities found",
@@ -419,6 +432,9 @@ const SN_STRINGS = {
     by_scenario: "solo con scenario", fallback: "riserva", fallback_err: "riserva su errore",
     inc_sum: "di questi canali", inc_always: "partono da soli",
     inc_req: "solo se richiesti", inc_scen: "solo con uno scenario",
+    grp_auto: "Partono da soli", grp_named: "Solo se chiamati per nome", grp_scen: "Solo con uno scenario",
+    grp_fallback: "Di riserva, se gli altri falliscono", ch_title: "Canali", ch_count: "{on} di {tot} accesi",
+    off_manual: "spento a mano", paused_by: "in pausa ora:", on_by: "acceso ora da",
     fixed_targets: "target fissi", no_deliveries: "nessuna entità delivery trovata",
     home: "in casa", away: "fuori", devices: "dispositivi", overrides: "override delivery",
     no_contact: "nessun recapito", no_recipients: "nessuna entità destinatario trovata",
@@ -2620,15 +2636,54 @@ class SupernotifyDeliveriesCard extends HTMLElement {
         .incsum { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
         .incsum .rstb { flex: none; }
         .tag.off { color: #c62828; border-color: rgba(198,40,40,.35); background: rgba(198,40,40,.08); }
-        .rst { text-align: right; margin: -4px 0 8px; }
-        .rstb { font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; border-radius: 8px;
-                border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; padding: 4px 10px; }
+        .chd { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 0 4px 6px; }
+        .cht { font-size: 17px; font-weight: 700; } .chn { font-size: 13px; color: ${p.muted}; }
+        .grp h3 { margin: 14px 4px 2px; font-size: 11.5px; font-weight: 700; letter-spacing: .05em;
+                  text-transform: uppercase; color: ${p.muted}; }
+        .grp .row:last-child { border-bottom: 0; }
+        .row.dim .em, .row.dim .mid b { opacity: .6; }
+        .mid .tr { margin-top: 2px; }
+        .st.warn { color: ${p.warn}; font-weight: 600; } .st.crit { color: ${p.crit}; font-weight: 600; }
+        .st.ok { color: ${p.ok}; font-weight: 600; }
+        .tag { color: ${p.muted}; background: transparent; }
+        .rstb { display: block; margin: 12px 4px 2px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+                border-radius: 10px; border: 1px solid ${p.line}; background: ${p.panel}; color: ${p.brandD};
+                padding: 9px 14px; min-height: 40px; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-deliveries-card v${SN_CARD_VERSIONS.deliveries}</div>` : ""}
       </ha-card>`, this && this._config);
     this._update();
+  }
+
+  // Which group a delivery belongs to, from its inclusion list (SuperNotify 2.5: `inclusion`,
+  // older: `selection`). A channel that starts on its own wins over everything else.
+  _group(d) {
+    const r = d.a.inclusion ?? d.a.selection;
+    const inc = Array.isArray(r) ? r : r ? [r] : ["default"];
+    if (inc.includes("default")) return "auto";
+    if (inc.includes("scenario")) return "scen";
+    if (inc.some((x) => /^fallback/.test(x))) return "fallback";
+    return "named";
+  }
+
+  // Active scenarios that switch this delivery off / on right now (scenario entity attribute
+  // `delivery: {<name>: {enabled: …}}`, the same source as the why-card).
+  _scenarioEffect(name) {
+    const off = [], on = [];
+    for (const id of Object.keys(this._hass.states)) {
+      const m = id.match(/^binary_sensor\.supernotify_scenario_(.+)$/);
+      if (!m || !snScenarioActive(this._hass, id)) continue;
+      let dl = null;
+      for (const dom of ["switch", "binary_sensor"]) {
+        const st = this._hass.states[`${dom}.supernotify_scenario_${m[1]}`];
+        if (st && st.attributes && st.attributes.delivery && typeof st.attributes.delivery === "object") { dl = st.attributes.delivery; break; }
+      }
+      if (!dl || dl[name] === undefined) continue;
+      (dl[name] && dl[name].enabled === false ? off : on).push(snScenarioName(this._hass, m[1]));
+    }
+    return { off, on };
   }
 
   _update() {
@@ -2642,58 +2697,58 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_deliveries}</span>`, this && this._config);
       return;
     }
-    // Riepilogo: la domanda vera e' "quali canali partono senza che io li chieda".
-    const inc = (d) => {
-      const r = d.a.inclusion ?? d.a.selection;
-      return Array.isArray(r) ? r : r ? [r] : ["default"];
-    };
-    const nAlways = dels.filter((d) => inc(d).includes("default")).length;
-    const nScen = dels.filter((d) => inc(d).includes("scenario")).length;
-    const nReq = dels.length - nAlways - nScen;
     const resetBtn = snResetOverridesButton(this._hass);
-    const sum = `<div class="incsum"><span>${dels.length} ${T.inc_sum}: `
-      + `<b>${nAlways}</b> ${T.inc_always}`
-      + (nReq ? ` · <b>${nReq}</b> ${T.inc_req}` : "")
-      + (nScen ? ` · <b>${nScen}</b> ${T.inc_scen}` : "")
-      + `</span>`
-      + (resetBtn ? `<button class="rstb">↺ ${esc(T.reset_overrides)}</button>` : "")
-      + `</div>`;
-    rows.innerHTML = snIconify(sum + dels.map((d, i) => {
+    const nOn = dels.filter((d) => d.on).length;
+    const head = `<div class="chd"><span class="cht">${esc(this._config.title || T.ch_title)}</span>`
+      + `<span class="chn">${esc(T.ch_count.replace("{on}", nOn).replace("{tot}", dels.length))}</span></div>`;
+    const rowHtml = (d) => {
+      const i = dels.indexOf(d);
       const tr = d.a.transport || "";
       const em = SN_TRANSPORT_ICONS[tr] || "📤";
+      const alias = snDeliveryAlias(this._hass, d.name) || "";
+      const tech = alias && alias.toLowerCase() !== d.name.toLowerCase() ? d.name : "";
+      // the one line that says what is going on with this channel right now
+      let state = "", cls = "";
+      if (!d.on) { state = T.off_manual; }
+      else if (d.a.transport_enabled === false) { state = `⛔ ${T.transport_off}`; cls = "crit"; }
+      else {
+        const fx = this._scenarioEffect(d.name);
+        if (fx.off.length) { state = `${T.paused_by} ${fx.off.join(", ")}`; cls = "warn"; }
+        else if (fx.on.length && this._group(d) === "scen") { state = `${T.on_by} ${fx.on.join(", ")}`; cls = "ok"; }
+      }
       const tags = [];
-      // SuperNotify 2.5 renamed the `selection` attribute to `inclusion` (now a list);
-      // older versions still expose `selection`, so read both.
-      let raw = d.a.inclusion ?? d.a.selection;
-      const incList = Array.isArray(raw) ? raw : raw ? [raw] : ["default"];
-      // `default` = nessuno la chiede e parte lo stesso: e' la riga che spiega
-      // perche' una notifica e' uscita da un canale che non avevi nominato.
-      const always = incList.includes("default");
-      const sel = incList.map((s) => snSelectionLabel(s, T) || s).join(", ");
-      tags.push([`🔀 ${sel || T.implicit}`, always ? "always" : ""]);
       if (d.a.action) tags.push(`⚙️ ${d.a.action}`);
       const tgt = d.a.target;
       const nTgt = Array.isArray(tgt) ? tgt.length : tgt && typeof tgt === "object" ? Object.keys(tgt).length : tgt ? 1 : 0;
       if (nTgt) tags.push(`🎯 ${nTgt} ${T.fixed_targets}`);
       if (d.a.target_usage && d.a.target_usage !== "no_action") tags.push(`↔️ ${d.a.target_usage}`);
       if (SN_NATIVE_TARGET_TRANSPORTS.includes(tr)) tags.push(T.native_target_tag);
-      // SuperNotify >= PR #207: a delivery switched on is still unused while its transport is off
-      if (d.a.transport_enabled === false) tags.push([`⛔ ${T.transport_off}`, "off"]);
-      const alias = snDeliveryAlias(this._hass, d.name) || "";
-      return `<div class="row" data-i="${i}">
+      const meta = [state ? `<span class="st ${cls}">${esc(state)}</span>` : "",
+        tech ? `<span class="tech">${esc(tech)}</span>` : "", tr && tr !== tech ? esc(tr) : ""].filter(Boolean).join(" · ");
+      return `<div class="row${d.on ? "" : " dim"}" data-i="${i}">
         <span class="em">${em}</span>
-        <div class="mid"><b>${esc(alias || d.name)}</b> <span class="tr">${alias && alias.toLowerCase() !== d.name.toLowerCase() ? `<span class="tech">${esc(d.name)}</span> · ` : ""}${esc(tr)}</span>
-          <div class="tags">${tags.map((t) => {
-            const [txt, cls] = Array.isArray(t) ? t : [t, ""];
-            return `<span class="tag ${cls}">${esc(txt)}</span>`;
-          }).join("")}</div>
+        <div class="mid"><b>${esc(alias || d.name)}</b>
+          <div class="tr">${meta}</div>
+          ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
         </div>
         <label class="sw" data-id="${esc(d.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
-          <input type="checkbox" ${d.on ? "checked" : ""} aria-label="${esc(d.name)}">
+          <input type="checkbox" ${d.on ? "checked" : ""} aria-label="${esc(alias || d.name)}">
           <span class="sl"></span>
         </label>
       </div>`;
-    }).join(""), this && this._config);
+    };
+    let body;
+    if (this._config.group === false) {
+      body = dels.map(rowHtml).join("");
+    } else {
+      const order = [["auto", T.grp_auto], ["named", T.grp_named], ["scen", T.grp_scen], ["fallback", T.grp_fallback]];
+      body = order.map(([k, label]) => {
+        const g = dels.filter((d) => this._group(d) === k);
+        return g.length ? `<section class="grp"><h3>${esc(label)} · ${g.length}</h3>${g.map(rowHtml).join("")}</section>` : "";
+      }).join("");
+    }
+    const foot = resetBtn ? `<button class="rstb">↺ ${esc(T.reset_overrides)}</button>` : "";
+    rows.innerHTML = snIconify(head + body + foot, this && this._config);
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
         if (e.target.closest(".sw")) return;

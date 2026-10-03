@@ -3,6 +3,19 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.51.0] - 2026-10-03
+
+Third step of the redesign: the deliveries card says how each channel starts and what it is doing now.
+
+### Changed
+- deliveries-card (0.24.0): channels grouped by how they start (on their own, only when named
+  in the call, only with a scenario, backup), each group with its count, instead of the same
+  "always on" tag on every row. Header "Channels · 7 of 8 on".
+- One status line per channel: switched off, transport off, "paused now by <scenario>" when an
+  active scenario turns it off, "on now through <scenario>" for a scenario-only channel.
+  Switched-off rows are dimmed; the other tags are quieter.
+- "Reset overrides" is a real button at the bottom. New options `title:` and `group: false`.
+
 ## [0.50.0] - 2026-10-03
 
 Second step of the redesign: Home Assistant icons instead of emoji.

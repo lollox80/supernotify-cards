@@ -2,8 +2,12 @@
 
 [← SuperNotify Cards](../../README.md) · [Common options](../configuration.md)
 
-Delivery dashboard, auto-discovered from the entities SuperNotify exposes:
-transport icon, selection/action/target tags, enabled badge. A "🎯 native
+Every channel (delivery) with its on/off switch, auto-discovered from the entities
+SuperNotify exposes and grouped by how it starts: **on its own**, **only when named in
+the call**, **only with a scenario**, **backup**. The readable name (the delivery's
+`alias`) comes first, the technical name small next to it. One status line says what is
+going on right now: switched off, transport off, "paused now by <scenario>" when an active
+scenario turns it off, "on now through <scenario>" for a scenario-only channel. A "native
 area/floor/label" tag marks deliveries whose transport resolves an
 area/floor/label target natively (`notify_entity`, `alexa_devices`, `html5`,
 `ntfy`, `kodi`, `media_player`, `tts`, `chime`) — see the composer card's
@@ -16,5 +20,7 @@ delivery attributes.
 type: custom:supernotify-deliveries-card
 # optional:
 hide_defaults: true     # hide auto-generated DEFAULT_* deliveries (default true)
+title: Canali           # header text (default "Channels" / "Canali")
+group: false            # one flat list instead of the groups (default: grouped)
 style: theme
 ```
