@@ -3,6 +3,13 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.48.2] - 2026-10-03
+
+### Fixed
+- composer-card (0.15.2): a notification with a camera and no text gets "📷 <camera name>" as its
+  text. SuperNotify sends a photo-only push with `message: ""`, and the Android companion app
+  showed nothing on the phone.
+
 ## [0.48.1] - 2026-10-03
 
 ### Fixed

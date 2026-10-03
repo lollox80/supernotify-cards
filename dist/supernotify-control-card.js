@@ -8,6 +8,9 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.48.2. composer-card 0.15.2: a notification with a camera and no text gets
+ *   "📷 <camera name>" as its text. SuperNotify sends a text-less photo push with message "",
+ *   and the Android companion app showed nothing on the phone.
  * 2026-10-03 - v0.48.1. composer-card 0.15.1: the "Try without sending" button follows what Home
  *   Assistant is running (supernotify.notify able to answer, `response` in its description), not
  *   update.supernotify_update, which says 2.12 as soon as HACS has downloaded it, before the
@@ -257,7 +260,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.48.1"; // bundle / HACS release
+const VERSION = "0.48.2"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -276,7 +279,7 @@ const SN_CARD_VERSIONS = {
   recipients: "0.22.0",
   scenarios: "0.19.0",
   simulator: "0.10.0",
-  composer: "0.15.1",
+  composer: "0.15.2",
   automations: "0.16.0",
   stats: "0.23.0",
   archive: "0.31.0",
@@ -3802,7 +3805,16 @@ class SupernotifyComposerCard extends HTMLElement {
     if (customRaw)
       payload.custom_target = customRaw.split(",").map((s) => s.trim()).filter(Boolean);
     const cam = sr.getElementById("cam").value;
-    if (cam) payload.camera_entity_id = cam;
+    if (cam) {
+      payload.camera_entity_id = cam;
+      // Tested on SuperNotify 2.12 + the Android companion app: a photo-only push reaches the
+      // phone with message "" and the app shows nothing. So a camera with no text gets the
+      // camera's name as text; a channel picked without text still goes out without one.
+      if (!payload.message) {
+        const st = this._hass && this._hass.states[cam];
+        payload.message = "📷 " + ((st && st.attributes && st.attributes.friendly_name) || cam.replace(/^camera\./, ""));
+      }
+    }
     return payload;
   }
 

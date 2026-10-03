@@ -67,14 +67,19 @@ await c._send();
 ok(calls.length === 0 && /camera o un canale/.test(toast()), `senza testo né camera: avviso (${toast()})`);
 sr.getElementById("cam").value = "camera.ingresso";
 await c._send();
-ok(calls.length === 1 && !("message" in calls[0][2]) && calls[0][2].camera_entity_id === "camera.ingresso",
-  "con la camera e SuperNotify 2.11.1: inviata senza 'message'");
+ok(calls.length === 1 && calls[0][2].message === "📷 Ingresso" && calls[0][2].camera_entity_id === "camera.ingresso",
+  "camera senza testo: inviata con testo '📷 Ingresso' (il telefono scarta i messaggi vuoti)");
 c.hass = mkHass({ ...base, "update.supernotify_update": { ...base["update.supernotify_update"], attributes: { installed_version: "v2.10.3" } } });
 await c._send();
-ok(calls.length === 1 && /2\.11\.1/.test(toast()), `su 2.10.3: non inviata (${toast()})`);
+ok(calls.length === 2 && calls[1][2].message === "📷 Ingresso", "su 2.10.3 con la camera parte lo stesso: ha il testo della camera");
+sr.getElementById("cam").value = "";
+c._picked = new Set(["mobile_push"]);
+await c._send();
+ok(calls.length === 2 && /2\.11\.1/.test(toast()), `su 2.10.3, canale senza testo: non inviata (${toast()})`);
+c._picked = new Set();
 sr.getElementById("m").value = "Ciao";
 await c._send();
-ok(calls.length === 2 && calls[1][2].message === "Ciao", "con il testo parte come prima");
+ok(calls.length === 3 && calls[2][2].message === "Ciao", "con il testo parte come prima");
 c.hass = mkHass({ ...base }, { callService: async () => { throw new Error("boom"); } });
 await c._send();
 ok(/Non inviata: boom/.test(toast()), `errore del servizio mostrato (${toast()})`);
