@@ -8,6 +8,16 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.61.0. (B1) control-card 0.32.0: the snooze tile opens a pause panel - what
+ *   (non-critical, everything, one channel, one priority), for whom (everyone or only me), how
+ *   long (15 min ... 4 h, or until resumed), and the pauses in force, each with Resume, plus
+ *   Resume everything. Same mobile_app_notification_action event as the push buttons
+ *   (SNOOZE / SILENCE / NORMAL). `snooze_panel: false` keeps the one-tap snooze.
+ *   (B2) snLive: one subscription per page to supernotify_notification - the archive store
+ *   reads the newest entries and the cards their enquire_* data as soon as a notification is
+ *   done, also when nothing was delivered. (C) why-card 0.13.0: who sent it (the automation or
+ *   script from the logbook, else the person), how long it took and the slowest channel,
+ *   targets no channel took, names that do not exist.
  * 2026-10-04 - v0.60.0. Real data (gap analysis of 03/10). (A1) Active scenarios come from
  *   enquire_active_scenarios (snActive, every 30 s and after a change) - SuperNotify 2.12.0 can leave
  *   the scenario binary_sensors at their startup value. (A2) snNotifTitle: the title lives in
@@ -401,7 +411,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.60.0"; // bundle / HACS release
+const VERSION = "0.61.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -412,19 +422,19 @@ const VERSION = "0.60.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.31.0",
-  overview: "0.30.0",
+  control: "0.32.0",
+  overview: "0.30.1",
   bands: "0.20.1",
   deliveries: "0.26.1",
   transports: "0.23.2",
-  recipients: "0.26.3",
-  scenarios: "0.26.0",
-  simulator: "0.15.2",
+  recipients: "0.26.4",
+  scenarios: "0.26.1",
+  simulator: "0.15.3",
   composer: "0.19.3",
   automations: "0.20.2",
   stats: "0.28.2",
-  archive: "0.36.3",
-  why: "0.12.3",
+  archive: "0.36.4",
+  why: "0.13.0",
 };
 
 /**
@@ -521,6 +531,11 @@ const SN_STRINGS = {
     aut_disabled_only: "Disabled only",
     grp_active: "active", repeat: "Repeat", skipped_n: "skipped", left: "left", missed_n: "missed",
     snz_all: "everything", snz_nc: "non-critical", snz_prio: "priority", snz_transport: "transport", snz_for: "for",
+    snz_choose: "choose what and how long", snz_title: "Pause notifications", snz_what: "What", snz_nc_l: "Non-critical",
+    snz_all_l: "Everything", snz_ch: "A channel", snz_pr: "A priority", snz_who: "For whom", snz_everyone: "Everyone",
+    snz_me: "Only me", snz_len: "How long", snz_forever: "Until I resume", snz_go: "Pause", snz_close: "Close",
+    snz_active: "Paused now", snz_resume: "Resume", snz_resume_all: "Resume everything", snz_until_resumed: "until resumed",
+    snz_done: "Paused", snz_resumed: "Resumed",
     no_notif: "no notification yet",
   },
   it: {
@@ -611,6 +626,11 @@ const SN_STRINGS = {
     aut_disabled_only: "Solo disattivate",
     grp_active: "attivi", repeat: "Ripeti", skipped_n: "saltati", skipped_n_1: "saltato", left: "rimasti", missed_n: "mancati", missed_n_1: "mancato",
     snz_all: "tutto", snz_nc: "non critici", snz_prio: "priorità", snz_transport: "transport", snz_for: "per",
+    snz_choose: "scegli cosa e per quanto", snz_title: "Metti in pausa le notifiche", snz_what: "Cosa", snz_nc_l: "Non critiche",
+    snz_all_l: "Tutto", snz_ch: "Un canale", snz_pr: "Una priorità", snz_who: "Per chi", snz_everyone: "Tutti",
+    snz_me: "Solo io", snz_len: "Per quanto", snz_forever: "Finché non riprendo", snz_go: "Metti in pausa", snz_close: "Chiudi",
+    snz_active: "In pausa adesso", snz_resume: "Riprendi", snz_resume_all: "Riprendi tutto", snz_until_resumed: "finché non riprendi",
+    snz_done: "In pausa", snz_resumed: "Ripreso",
     no_notif: "nessuna notifica ancora",
   },
 };
@@ -916,7 +936,7 @@ const SN_FORM_LABELS = {
     _common: "Look and text", style: "Colours", icons: "Icons", show_version: "Show the card version",
     intro: "Intro text on top", title: "Title", dnd_entity: "Do-not-disturb switch",
     quiet_entity: "Computed quiet state (optional)", presence_entity: "Person for the status bar",
-    snooze_minutes: "Snooze length (minutes)", announce_delivery: "Channel for announcements",
+    snooze_minutes: "Snooze length (minutes)", snooze_panel: "Snooze tile opens the pause panel", announce_delivery: "Channel for announcements",
     last_notification: "Show the last notification", last_channels: "One chip per channel in the last notification",
     repeat_entity: "Repeat-last button (optional)", tile_layout: "Tiles", tile_columns: "Tile columns (empty = automatic)",
     update_entity: "SuperNotify update entity", cards_update_entity: "Cards update entity",
@@ -935,7 +955,7 @@ const SN_FORM_LABELS = {
     _common: "Aspetto e testi", style: "Colori", icons: "Icone", show_version: "Mostra la versione della card",
     intro: "Testo introduttivo in alto", title: "Titolo", dnd_entity: "Interruttore non disturbare",
     quiet_entity: "Stato silenzioso calcolato (facoltativo)", presence_entity: "Persona nella barra di stato",
-    snooze_minutes: "Durata dello snooze (minuti)", announce_delivery: "Canale per gli annunci",
+    snooze_minutes: "Durata dello snooze (minuti)", snooze_panel: "Il riquadro pausa apre il pannello delle pause", announce_delivery: "Canale per gli annunci",
     last_notification: "Mostra l'ultima notifica", last_channels: "Un chip per canale nell'ultima notifica",
     repeat_entity: "Pulsante ripeti ultima (facoltativo)", tile_layout: "Tile", tile_columns: "Colonne delle tile (vuoto = automatico)",
     update_entity: "Entità di aggiornamento di SuperNotify", cards_update_entity: "Entità di aggiornamento delle card",
@@ -969,7 +989,7 @@ function snForm(kind) {
     ent("entity", "sensor"), ent("trigger_entity", "sensor")];
   const S = {
     control: [ent("dnd_entity", ["input_boolean", "switch"]), ent("quiet_entity", ["binary_sensor", "input_boolean"]),
-      ent("presence_entity", "person"), num("snooze_minutes", 5, 240, 5), txt("announce_delivery"),
+      ent("presence_entity", "person"), num("snooze_minutes", 5, 240, 5), bool("snooze_panel", true), txt("announce_delivery"),
       bool("last_notification"), bool("last_channels"), ent("repeat_entity", ["input_button", "button", "script"]),
       sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6)],
     overview: [ent("update_entity", "update"), ent("sent_today_entity", "sensor"),
@@ -1502,7 +1522,18 @@ function snArchiveDetail(doc) {
   const ctx = doc.original_context || {};
   if (snIsObj(ctx) && ctx.id) {
     out.ctx = {};
-    for (const k of ["id", "parent_id", "user_id"]) if (ctx[k]) out.ctx[k] = ctx[k];
+    for (const k of ["id", "parent_id", "user_id", "user"]) if (ctx[k]) out.ctx[k] = ctx[k];
+  }
+  // 0.61.0: targets no channel took, names that do not exist, timings
+  const flat = (v) => (snIsObj(v) ? Object.values(v).flat() : Array.isArray(v) ? v : []).map(String).filter(Boolean);
+  const ua = flat(doc.unassigned_targets).concat(flat(doc.uncategorized_targets));
+  if (ua.length) out.ua = [...new Set(ua)].slice(0, 12);
+  if (snIsObj(doc.unknown_names)) {
+    const un = Object.entries(doc.unknown_names).filter(([, v]) => Array.isArray(v) && v.length).map(([k, v]) => `${k}: ${v.join(", ")}`);
+    if (un.length) out.un = un;
+  }
+  if (snIsObj(doc.stats) && doc.stats.total_duration_ms != null) {
+    out.stt = { ms: doc.stats.total_duration_ms, slow: doc.stats.slowest_delivery || "", rate: doc.stats.delivery_success_rate };
   }
   const trace = snArchiveTrace(doc);
   if (trace) out.trace = trace;
@@ -1524,6 +1555,7 @@ const SN_ENQ = new Map();
 const SN_ENQ_TTL = 2500;
 const snEnqStats = { calls: 0, shared: 0 };
 function snEnquire(hass, service, data) {
+  snLiveEnsure(hass);
   const key = service + "|" + JSON.stringify(data || {});
   const now = Date.now();
   let hit = SN_ENQ.get(key);
@@ -1540,6 +1572,27 @@ function snEnquire(hass, service, data) {
   }
   return hit.p.then((r) => (r == null ? r : JSON.parse(JSON.stringify(r))));
 }
+/**
+ * Live updates (0.61.0): SuperNotify (>= 2.10.3) fires `supernotify_notification` once a
+ * notification is done and archived - also when nothing was delivered, which the
+ * notifications counter does not count. One subscription per page: the archive store reads
+ * the newest entries and every card reads its enquire_* data again straight away, instead of
+ * waiting for its poll. Subscribing to a custom event needs an admin user; for anyone else
+ * the cards keep polling as before.
+ */
+const snLive = { state: "", hass: null };
+function snLiveEnsure(hass) {
+  if (!hass) return;
+  snLive.hass = hass;
+  if (snLive.state || !hass.connection || !hass.connection.subscribeEvents) return;
+  if (hass.user && hass.user.is_admin === false) { snLive.state = "no-admin"; return; }
+  snLive.state = "pending";
+  Promise.resolve(hass.connection.subscribeEvents(() => {
+    snArchiveStore.poke(snLive.hass);
+    snEnquireBust(300);
+  }, "supernotify_notification")).then(() => { snLive.state = "on"; }).catch(() => { snLive.state = "denied"; });
+}
+
 function snEnquireBust(delay) {
   SN_ENQ.clear();
   snActive.t = 0; // a change made from a card: read the active scenarios again too
@@ -1562,6 +1615,14 @@ const snArchiveStore = {
   fetched: null,       // Date of the last successful fetch
   index: null,         // cached compact index, rebuilt when docs change
   version: 0,          // bumped on every fetch, so a card that missed the event still redraws
+  pokes: 0,            // 0.61.0: bumped by the supernotify_notification event (snLive)
+  trigger: null,
+
+  /** A notification just finished (live event): read the newest entries now. */
+  poke(hass) {
+    this.pokes += 1;
+    if (hass && this.fetched) this.ensure(hass, this.limit, this.trigger);
+  },
 
   async _call(hass, data) {
     const r = await hass.callWS({
@@ -1573,8 +1634,10 @@ const snArchiveStore = {
 
   /** Keep the store current for this card: first load, then only the newest few. */
   ensure(hass, limit, trigger) {
-    const st = hass.states[trigger || "sensor.supernotify_notifications"];
-    const stamp = st ? st.last_updated : "none";
+    snLiveEnsure(hass);
+    if (trigger) this.trigger = trigger;
+    const st = hass.states[trigger || this.trigger || "sensor.supernotify_notifications"];
+    const stamp = (st ? st.last_updated : "none") + "|" + this.pokes;
     const want = Math.max(1, Math.min(100, limit || 40));
     if (this.loading) return;
     let data = null;
@@ -1936,6 +1999,17 @@ class SupernotifyControlCard extends HTMLElement {
   }
 
   async _snooze() {
+    // 0.61.0: the tile opens the pause panel (what, for whom, how long, and the pauses in
+    // force, each one resumable); `snooze_panel: false` keeps the one-tap behaviour below
+    if (this._config.snooze_panel !== false) {
+      this._snzOpen = !this._snzOpen;
+      this._renderSnz();
+      if (this._snzOpen) {
+        const el = this.shadowRoot.getElementById("snzp");
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+      return;
+    }
     // SuperNotify snoozing is event-driven (same mechanism as the push
     // notification buttons): fire a mobile_app_notification_action event
     // with a SUPERNOTIFY_<CMD>_<RECIPIENT>_<TARGET>_<minutes> action name.
@@ -2087,11 +2161,34 @@ class SupernotifyControlCard extends HTMLElement {
                  border-radius: 10px; padding: 8px 16px; font-size: 12.5px; font-weight: 650;
                  opacity: 0; pointer-events: none; transition: .25s; }
         .toast.show { opacity: .95; transform: translateX(-50%) translateY(0); }
+        .snzp { border: 1.5px solid ${p.warnLine}; border-radius: 14px; padding: 12px 14px; margin: 4px 0 12px;
+                background: ${p.panel}; }
+        .snzp .sh { display: flex; align-items: center; justify-content: space-between; }
+        .snzp .sh b { font-size: 15px; }
+        .snzp .sx { border: 0; background: none; color: ${p.muted}; font-size: 16px; cursor: pointer; min-width: 32px; min-height: 32px; }
+        .snzp .sk { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800;
+                    color: ${p.muted}; margin: 10px 0 5px; }
+        .snzp .srow { display: flex; flex-wrap: wrap; gap: 6px; }
+        .snzp .sc { border: 1.5px solid ${p.line}; background: ${p.soft}; color: ${p.ink}; border-radius: 999px;
+                    padding: 6px 12px; font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; min-height: 32px; }
+        .snzp .sc.on { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }
+        .snzp select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 8px; border: 1.5px solid ${p.line};
+                       background: ${p.panel}; color: ${p.ink}; max-width: 100%; }
+        .snzp .sgo { display: flex; justify-content: flex-end; margin-top: 10px; }
+        .snzp .sp { border: 0; border-radius: 10px; background: ${p.brand}; color: ${p.onBrand}; padding: 9px 16px;
+                    font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 38px; }
+        .snzp .sb { border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
+                    padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 30px; }
+        .snzp .sr { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid ${p.line}; }
+        .snzp .sr:first-child { border-top: 0; }
+        .snzp .sl { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; }
+        .snzp .su { font-size: 12px; color: ${p.muted}; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div class="statusbar" id="statusbar"></div>
         ${this._config.last_notification ? `<div class="lastn" id="lastn"></div>` : ""}
         <div class="tiles${this._config.tile_layout === "stacked" ? " stacked" : ""}" id="tiles"></div>
+        <div class="snzp" id="snzp" hidden></div>
         ${(this._config.tiles || []).includes("announce") ? `<div class="announce" id="announceRow">
           <ha-icon icon="mdi:bullhorn"></ha-icon>
           <input id="announceInput" placeholder="${snT(this._config, this._hass).announce_ph}">
@@ -2242,11 +2339,11 @@ class SupernotifyControlCard extends HTMLElement {
         }
         const what = snSnoozeLabels(this._hass, act, T);
         return { cls: "warn", icon: "😴", name: left || T.snoozed,
-          sub: what ? what + (until ? ` · ${T.until} ${until}` : "") : (until ? T.until + " " + until + " · " : "") + T.tap_clear,
+          sub: what ? what + (until ? ` · ${T.until} ${until}` : "") : (until ? T.until + " " + until + " · " : "") + (c.snooze_panel === false ? T.tap_clear : T.snz_choose),
           act: () => this._snooze() };
       }
       return { cls: "", icon: "😴", name: `${T.snooze} ${c.snooze_minutes || 30} ${T.min}`,
-        sub: T.pause_nc, act: () => this._snooze() };
+        sub: c.snooze_panel === false ? T.pause_nc : T.snz_choose, act: () => this._snooze() };
     }
     if (t === "announce")
       return { cls: "", icon: "📢", name: T.announce, sub: T.intercom,
@@ -2274,6 +2371,109 @@ class SupernotifyControlCard extends HTMLElement {
       node.onclick = () => d.act();
       node.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") d.act(); };
     });
+    this._renderSnz();
+  }
+
+  /**
+   * Pause panel (0.61.0). SuperNotify has no snooze action: a pause is the same event the
+   * buttons of a push notification fire, mobile_app_notification_action with
+   * SUPERNOTIFY_<SNOOZE|SILENCE|NORMAL>_<EVERYONE|USER>_<target>[_<minutes>] (snoozer.py).
+   * USER = the person whose user_id is the one logged in. NORMAL resumes one pause.
+   */
+  _renderSnz() {
+    const el = this.shadowRoot && this.shadowRoot.getElementById("snzp");
+    if (!el) return;
+    if (!this._snzOpen) { el.hidden = true; el.innerHTML = ""; return; }
+    el.hidden = false;
+    const T = snT(this._config, this._hass);
+    const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const st = this._snz || (this._snz = { what: "NONCRITICAL", target: "", who: "EVERYONE", min: this._config.snooze_minutes || 30 });
+    const me = this._myPerson();
+    const dels = snEntityRows(this._hass, "delivery").filter((d) => !/^default_/i.test(d.name));
+    if (st.what === "DELIVERY" && !st.target && dels.length) st.target = dels[0].name;
+    if (st.what === "PRIORITY" && !st.target) st.target = "low";
+    const chip = (grp, val, label, on) => `<button class="sc${on ? " on" : ""}" data-g="${grp}" data-v="${esc(val)}" aria-pressed="${on}">${esc(label)}</button>`;
+    const whatRow = [["NONCRITICAL", T.snz_nc_l], ["EVERYTHING", T.snz_all_l], ["DELIVERY", T.snz_ch], ["PRIORITY", T.snz_pr]]
+      .map(([v, l]) => chip("what", v, l, st.what === v)).join("");
+    let sub = "";
+    if (st.what === "DELIVERY") {
+      sub = `<select id="snzT" aria-label="${esc(T.snz_ch)}">${dels.map((d) =>
+        `<option value="${esc(d.name)}"${d.name === st.target ? " selected" : ""}>${esc(snDeliveryAlias(this._hass, d.name) || d.name)}</option>`).join("")}</select>`;
+    } else if (st.what === "PRIORITY") {
+      sub = `<select id="snzT" aria-label="${esc(T.snz_pr)}">${["minimum", "low", "medium", "high"].map((p) =>
+        `<option value="${p}"${p === st.target ? " selected" : ""}>${esc(T["prio_" + p] || p)}</option>`).join("")}</select>`;
+    }
+    const whoRow = chip("who", "EVERYONE", T.snz_everyone, st.who === "EVERYONE") + (me ? chip("who", "USER", T.snz_me, st.who === "USER") : "");
+    const lens = [15, 30, 60, 120, 240];
+    const lenRow = lens.map((m) => chip("min", m, m < 60 ? `${m} ${T.min}` : `${m / 60} h`, +st.min === m)).join("")
+      + chip("min", 0, T.snz_forever, +st.min === 0);
+    const live = snLiveSnoozes(this._snoozes);
+    const myUser = this._hass && this._hass.user && this._hass.user.id;
+    const canResume = (s) => String(s.recipient_type || "").toUpperCase() !== "USER" ||
+      (s.recipient && this._hass.states[s.recipient] && (this._hass.states[s.recipient].attributes || {}).user_id === myUser);
+    const pad = (n) => String(n).padStart(2, "0");
+    const rows = live.map((s, i) => `<div class="sr"><span class="sl">${esc(snSnoozeLabel(this._hass, s, T))}</span>
+        <span class="su">${s._end ? `${esc(T.until)} ${pad(s._end.getHours())}:${pad(s._end.getMinutes())}` : esc(T.snz_until_resumed)}</span>
+        ${canResume(s) ? `<button class="sb" data-r="${i}">${esc(T.snz_resume)}</button>` : ""}</div>`).join("");
+    el.innerHTML = snIconify(`<div class="sh"><b>${esc(T.snz_title)}</b><button class="sx" id="snzX" aria-label="${esc(T.snz_close)}">✕</button></div>
+      <div class="sk">${esc(T.snz_what)}</div><div class="srow">${whatRow}</div>${sub ? `<div class="srow">${sub}</div>` : ""}
+      <div class="sk">${esc(T.snz_who)}</div><div class="srow">${whoRow}</div>
+      <div class="sk">${esc(T.snz_len)}</div><div class="srow">${lenRow}</div>
+      <div class="sgo"><button class="sp" id="snzGo">😴 ${esc(T.snz_go)}</button></div>
+      ${live.length ? `<div class="sk">${esc(T.snz_active)}</div><div class="slist">${rows}</div>
+        <div class="sgo"><button class="sb" id="snzAll">${esc(T.snz_resume_all)}</button></div>` : ""}`, this._config);
+    el.querySelectorAll(".sc").forEach((b) => {
+      b.onclick = () => {
+        const g = b.dataset.g, v = b.dataset.v;
+        if (g === "min") st.min = +v;
+        else st[g] = v;
+        if (g === "what") st.target = "";
+        this._renderSnz();
+      };
+    });
+    const sel = el.querySelector("#snzT");
+    if (sel) sel.onchange = () => { st.target = sel.value; };
+    el.querySelector("#snzX").onclick = () => { this._snzOpen = false; this._renderSnz(); };
+    el.querySelector("#snzGo").onclick = () => this._snzFire(this._snzAction(st), T.snz_done);
+    el.querySelectorAll(".sb[data-r]").forEach((b) => {
+      const s0 = live[+b.dataset.r];
+      b.onclick = () => this._snzFire(this._snzAction({ resume: true, what: String(s0.target_type || "").toUpperCase(),
+        target: Array.isArray(s0.target) ? s0.target.join("_") : (s0.target || ""), who: String(s0.recipient_type || "EVERYONE").toUpperCase() }), T.snz_resumed);
+    });
+    const all = el.querySelector("#snzAll");
+    if (all) all.onclick = async () => {
+      try {
+        await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
+        this._toast(T.cleared);
+      } catch (e) { this._toast(`✖ ${(e && e.message) || e}`); }
+      snEnquireBust(800);
+    };
+  }
+
+  /** The SUPERNOTIFY_... action name for a pause (or, with `resume`, for resuming it). */
+  _snzAction(st) {
+    const global = st.what === "NONCRITICAL" || st.what === "EVERYTHING";
+    const tgt = global ? st.what : `${st.what}_${st.target}`;
+    if (st.resume) return `SUPERNOTIFY_NORMAL_${st.who}_${tgt}`;
+    return +st.min > 0 ? `SUPERNOTIFY_SNOOZE_${st.who}_${tgt}_${+st.min}` : `SUPERNOTIFY_SILENCE_${st.who}_${tgt}`;
+  }
+
+  async _snzFire(action, msg) {
+    try {
+      await this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
+      this._toast(msg);
+    } catch (e) {
+      this._toast(`✖ ${(e && e.message) || e}`);
+    }
+    snEnquireBust(800);
+  }
+
+  /** person.* linked to the logged-in user, for "only me" pauses. */
+  _myPerson() {
+    const uid = this._hass && this._hass.user && this._hass.user.id;
+    if (!uid) return null;
+    return Object.keys(this._hass.states).find((e) => e.startsWith("person.") &&
+      (this._hass.states[e].attributes || {}).user_id === uid) || null;
   }
 
   _collapseKey() {
@@ -6287,7 +6487,12 @@ class SupernotifyWhyCard extends HTMLElement {
     out.push(`<div class="hd"><div class="meta">${esc(when)} · ${T.priority} ${esc(prioTxt)} · ${esc(T.outcomes[n.o] || n.o || "—")}${n.dupe ? ` · ♻ ${T.dupe}` : ""}</div>
       <b class="ttl">${esc(n.ti || "—")}</b>
       ${n.m && n.m !== n.ti ? `<div class="msg">${esc(n.m)}</div>` : ""}
-      ${n.sp ? `<div class="note">🔊 ${esc(n.sp)}</div>` : ""}</div>`);
+      ${n.sp ? `<div class="note">🔊 ${esc(n.sp)}</div>` : ""}
+      ${n.ctx && n.ctx.id ? `<div class="note sentby" id="sentBy" title="context ${esc(n.ctx.id)}">…</div>` : ""}
+      ${n.stt ? `<div class="note">⏱ ${esc(T.st_time)} ${esc(n.stt.ms)} ms${n.stt.slow ? ` · ${esc(T.st_slow)} ${esc(snDeliveryAlias(this._hass, n.stt.slow) || n.stt.slow)}` : ""}${n.stt.rate != null ? ` · ${Math.round(+n.stt.rate * 100)}% ${esc(T.st_rate)}` : ""}</div>` : ""}</div>`);
+    // 0.61.0: targets of the call that no channel took (e.g. a media_player no delivery accepts)
+    if (n.ua && n.ua.length) out.push(`<div class="pb warn"><div class="pbt">⚠ ${esc(T.ua_title)}</div><div class="pbw">${esc(n.ua.join(", "))}</div><div class="pbf">${esc(T.ua_hint)}</div></div>`);
+    if (n.un && n.un.length) out.push(`<div class="pb warn"><div class="pbt">⚠ ${esc(T.un_title)}</div><div class="pbw">${esc(n.un.join(" · "))}</div></div>`);
 
     // sort the archived channels: sent, problems (failed / missed), routine skips
     const SN_ROUTINE = new Set(["SNOOZE", "SNOOZED", "PRIORITY", "DELIVERY_CONDITION", "OCCUPANCY", "DELIVERY_DISABLED",
@@ -6400,10 +6605,41 @@ class SupernotifyWhyCard extends HTMLElement {
     } else {
       out.push(`<div class="note">ℹ️ ${T.no_trace}</div>`);
     }
-    if (n.ctx && n.ctx.id) out.push(`<div class="note">context <code>${esc(n.ctx.id)}</code>${n.ctx.parent_id ? ` ← <code>${esc(n.ctx.parent_id)}</code>` : ""}</div>`);
     el.innerHTML = snIconify(out.join(""), this && this._config);
+    if (n.ctx && n.ctx.id) this._sentBy(n);
   }
 }
+
+SupernotifyWhyCard.prototype._sentBy = async function (n) {
+  // 0.61.0: who sent it - the automation or script whose run carries the notification's context
+  // (logbook), else the person of the user that made the call
+  const T = this._T();
+  const put = (html) => { const el = this.shadowRoot && this.shadowRoot.getElementById("sentBy"); if (el) el.innerHTML = snIconify(html, this._config); };
+  const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  this._sentCache = this._sentCache || new Map();
+  let res = this._sentCache.get(n.id);
+  if (res === undefined) {
+    res = null;
+    try {
+      const t = new Date((n.t || 0) * 1000);
+      const ev = await this._hass.callWS({ type: "logbook/get_events", start_time: new Date(t.getTime() - 120000).toISOString(),
+        end_time: new Date(t.getTime() + 5000).toISOString(), context_id: n.ctx.id });
+      const hit = (ev || []).find((e) => /^(automation|script)\./.test(e.entity_id || "") && e.context_id === n.ctx.id)
+        || (ev || []).find((e) => /^(automation|script)\./.test(e.entity_id || ""));
+      if (hit) res = { kind: hit.entity_id.split(".")[0], id: hit.entity_id, name: hit.name || hit.entity_id };
+    } catch (e) { /* logbook not available to this user: fall back below */ }
+    if (!res && n.ctx.user_id) {
+      const pid = Object.keys(this._hass.states).find((e) => e.startsWith("person.") && (this._hass.states[e].attributes || {}).user_id === n.ctx.user_id);
+      if (pid) res = { kind: "person", id: pid, name: (this._hass.states[pid].attributes || {}).friendly_name || pid };
+    }
+    this._sentCache.set(n.id, res);
+  }
+  if (!res) { put(`📨 ${esc(T.sent_unknown)}`); return; }
+  const what = res.kind === "automation" ? T.sent_auto : res.kind === "script" ? T.sent_script : T.sent_person;
+  put(`📨 ${esc(T.sent_by)} ${esc(what)} <a href="#" id="sentLink">${esc(res.name)}</a>`);
+  const a = this.shadowRoot.getElementById("sentLink");
+  if (a) a.onclick = (e) => { e.preventDefault(); this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: res.id }, bubbles: true, composed: true })); };
+};
 
 customElements.define("supernotify-why-card", SupernotifyWhyCard);
 
@@ -6452,6 +6688,10 @@ const SN_WHY_STRINGS = {
     r_unknown: "not reconstructable without the trace",
     from_config: "Reasons for channels that did not start are reconstructed from the configuration as it is NOW, not as it was then.",
     from_trace: "Reasons come from the selection trace archived with the notification.",
+    st_time: "took", st_slow: "slowest", st_rate: "of the channels succeeded",
+    ua_title: "Targets no channel took", ua_hint: "They were in the call, but no selected channel accepts this kind of target.",
+    un_title: "Names that do not exist", sent_by: "Sent by", sent_auto: "automation", sent_script: "script",
+    sent_person: "", sent_unknown: "sender not known (no automation or person in its context)",
     trace: "Selection trace", no_trace: "The full selection trace is only recorded when the notify call has debug: true, and archived when the archive diagnostics include it.",
     reasons: { NO_TARGET: "no usable target", DUPE: "duplicate of a recent notification", PRIORITY: "not for this priority",
       SNOOZE: "snoozed", SNOOZED: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule", ERROR: "error",
@@ -6495,6 +6735,10 @@ const SN_WHY_STRINGS = {
     r_unknown: "non ricostruibile senza il trace",
     from_config: "I motivi dei canali non partiti sono ricostruiti dalla configurazione di ADESSO, non da quella di allora.",
     from_trace: "I motivi vengono dal trace di selezione archiviato con la notifica.",
+    st_time: "durata", st_slow: "più lento", st_rate: "dei canali riusciti",
+    ua_title: "Destinatari che nessun canale ha preso", ua_hint: "Erano nella chiamata, ma nessun canale scelto accetta questo tipo di destinatario.",
+    un_title: "Nomi che non esistono", sent_by: "Inviata da", sent_auto: "automazione", sent_script: "script",
+    sent_person: "", sent_unknown: "mittente non noto (nessuna automazione o persona nel suo contesto)",
     trace: "Trace di selezione", no_trace: "Il trace completo viene registrato solo se la chiamata ha debug: true, e archiviato se la diagnostica dell'archivio lo include.",
     reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione di una notifica recente", PRIORITY: "non per questa priorità",
       SNOOZE: "in pausa", SNOOZED: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza", ERROR: "errore",

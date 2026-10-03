@@ -3,6 +3,24 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.61.0] - 2026-10-04
+
+Pause what you want, and see a notification as soon as it is done.
+
+### Added
+- control-card: the snooze tile opens a **pause panel**. Pause non-critical notifications, everything,
+  one channel or one priority, for everyone or only you, for 15 minutes to 4 hours or until you
+  resume. The panel lists the pauses in force, each with **Resume**, plus **Resume everything**.
+  It uses the same `mobile_app_notification_action` event as the buttons of a push notification
+  (SNOOZE, SILENCE, NORMAL). `snooze_panel: false` keeps the one-tap snooze.
+- **Live updates**: the cards listen to SuperNotify's `supernotify_notification` event (2.10.3+), so
+  archive, why, overview and control show a notification as soon as it is done - also one that
+  nothing delivered, which the notifications counter does not count. Admin users only; the others
+  keep the usual polling.
+- why-card: **who sent it** (the automation or script, from the logbook, or the person), how long it
+  took, the slowest channel and the share of channels that succeeded, the **targets no channel took**
+  and **names that do not exist** in the call.
+
 ## [0.60.0] - 2026-10-04
 
 Real data: what the cards show now matches what SuperNotify does.

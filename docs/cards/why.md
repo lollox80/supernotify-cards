@@ -37,3 +37,10 @@ shell_command:
 The channels that did not start are not in the archive: their reason is reconstructed from the
 configuration as it is now (delivery and transport switches, inclusion, the scenarios in force,
 the call's own overrides) and is labelled as such, unless the archived trace says otherwise.
+
+### Who sent it, timings, targets no channel took (0.61)
+
+Under the title the card says which automation or script sent the notification (from the logbook, through the context the
+notification carries) or, for a call made from the dashboard, which person. It also shows how long the delivery took, the
+slowest channel and the share of channels that succeeded. Targets of the call that no channel took (for example a
+`media_player` no selected channel accepts) and channel or scenario names that do not exist get their own warning box.

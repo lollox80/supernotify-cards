@@ -105,7 +105,7 @@ assert.strictEqual(dom.window.__snWhyCards, 1);
 assert.ok(wc.shadowRoot.querySelectorAll(".it").length > 0, "elenco notifiche");
 await flush();
 // si apre da sola sull'ultima notifica
-assert.deepStrictEqual(calls.splice(0), [["ws", "shell_command", "sn_archive_detail", IDX.items[0].id]]);
+assert.deepStrictEqual(calls.splice(0).filter((c) => c[1]), [["ws", "shell_command", "sn_archive_detail", IDX.items[0].id]]); // 0.61.0: + logbook lookup for "sent by"
 const rc = mount("supernotify-recipients-card");
 const lor = [...rc.shadowRoot.querySelectorAll(".row")].find((r) => r.textContent.includes("Lorenzo"));
 const last = lor.querySelector(".last");
