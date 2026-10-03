@@ -8,6 +8,15 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.53.0. Redesign, step 5: why-card 0.9.0 answers first, details on demand.
+ *   - The path in four steps under the title: call (channels named, or normal routing), scenarios
+ *     in force, who was home, channels (sent / to look at / skipped).
+ *   - Problems first: a failed channel (red) or one asked for but not sent (orange: a skip whose
+ *     reason is not a routine one such as snooze, presence, priority, condition, scenario,
+ *     switched off) gets its own box with the reason and what to do (NO_TARGET, ERROR,
+ *     NO_ACTION, INVALID_ACTION_DATA).
+ *   - Then the channels that went out; routine skips, channels not involved and the full
+ *     selection trace are folded (`expand: true` opens them).
  * 2026-10-03 - v0.52.1. No card changed: HACS validation action added, release made after it passed
  *   (required to submit the repository to the HACS default store).
  * 2026-10-03 - v0.52.0. Redesign, step 4: control-card 0.27.0 and overview-card 0.25.0.
@@ -315,7 +324,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.52.1"; // bundle / HACS release
+const VERSION = "0.53.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -338,7 +347,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.18.0",
   stats: "0.25.0",
   archive: "0.33.0",
-  why: "0.8.0",
+  why: "0.9.0",
 };
 
 /**
@@ -5454,7 +5463,25 @@ class SupernotifyWhyCard extends HTMLElement {
         .det { margin-top: 12px; }
         .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800;
                color: ${p.muted}; margin: 14px 0 6px; }
-        .hd b { font-size: 14px; } .hd .meta { color: ${p.muted}; font-size: 12px; margin-top: 2px; }
+        .hd .meta { color: ${p.muted}; font-size: 12.5px; } .hd .ttl { display: block; font-size: 18px; margin-top: 3px; }
+        .det { container-type: inline-size; }
+        @container (min-width: 620px) { .path { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; } }
+        .path { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px;
+                background: ${p.line}; border: 1px solid ${p.line}; border-radius: 10px; overflow: hidden; margin: 14px 0; }
+        .step { background: ${p.panel}; padding: 10px 12px; }
+        .step .sk { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: ${p.muted}; }
+        .step .sb { margin-top: 4px; line-height: 1.4; } .step .sm { margin-top: 3px; font-size: 11.5px; color: ${p.muted}; }
+        .c-ok { color: ${p.ok}; } .c-pb { color: ${p.warn}; }
+        .pb { border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+        .pb.warn { background: ${p.warnSoft}; color: ${p.warnInk}; border: 1px solid ${p.warnLine}; }
+        .pb.crit { background: rgba(226,60,60,.08); color: ${p.ink}; border: 1px solid rgba(198,40,40,.35); }
+        .pb.crit .pbt { color: ${p.crit}; }
+        .pbt { font-size: 15px; font-weight: 700; } .pbw { margin-top: 4px; line-height: 1.45; }
+        .pbf { margin-top: 6px; line-height: 1.45; font-size: 12.5px; opacity: .9; }
+        details.fold { border: 1px dashed ${p.line}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+        details.fold summary { cursor: pointer; font-weight: 600; color: ${p.muted}; }
+        details.fold[open] summary { margin-bottom: 8px; }
+        .ch.quiet { opacity: .85; }
         .msg { margin-top: 6px; line-height: 1.45; }
         .chips { display: flex; flex-wrap: wrap; gap: 5px; }
         .chip { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; border-radius: 7px;
@@ -5681,39 +5708,52 @@ class SupernotifyWhyCard extends HTMLElement {
     const tgText = (tg) => Object.entries(tg || {}).map(([cat, vals]) =>
       `${esc(T.cats[cat] || cat)}: ${vals.map((v) => esc(String(v).replace(/^(mobile_app_|person\.|media_player\.|notify\.)/, ""))).join(", ")}`).join(" · ");
     const out = [];
+    const det = (open) => (open || this._config.expand ? " open" : "");
 
-    // header
+    // header: what and when
     const d = new Date((n.t || 0) * 1000);
-    const when = d.toLocaleString(this._loc(), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    out.push(`<div class="hd"><b>${esc(n.ti || "—")}</b>
-      <div class="meta">${esc(when)} · ${T.priority} <b>${esc(n.p || "medium")}</b> · ${T.outcome} <b>${esc(T.outcomes[n.o] || n.o || "—")}</b>${n.dupe ? ` · ♻ ${T.dupe}` : ""}${n.mi ? ` · ⚠ <b>${esc(n.mi)}</b> ${T.missed}` : ""}${n.v ? ` · SuperNotify ${esc(n.v)}` : ""}</div>
-      ${n.m ? `<div class="msg">${esc(n.m)}</div>` : ""}
+    const when = d.toLocaleString(this._loc(), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    const prioTxt = snT(this._config, this._hass)["prio_" + (n.p || "medium")] || n.p || "medium";
+    out.push(`<div class="hd"><div class="meta">${esc(when)} · ${T.priority} ${esc(prioTxt)} · ${esc(T.outcomes[n.o] || n.o || "—")}${n.dupe ? ` · ♻ ${T.dupe}` : ""}</div>
+      <b class="ttl">${esc(n.ti || "—")}</b>
+      ${n.m && n.m !== n.ti ? `<div class="msg">${esc(n.m)}</div>` : ""}
       ${n.sp ? `<div class="note">🔊 ${esc(n.sp)}</div>` : ""}</div>`);
 
-    // scenarios
-    out.push(`<div class="sec">🎬 ${T.scenarios}</div>`);
-    const chip = (s, cls) => `<span class="chip ${cls || ""}">${esc(this._scenarioLabel(s))}</span>`;
-    const parts = [];
-    if (scen.length) parts.push(`<div class="chips">${scen.map((s) => chip(s)).join("")}</div>`);
-    else parts.push(`<div class="note">${T.no_scenarios}</div>`);
-    if ((sc.ap || []).length) parts.push(`<div class="note">${T.applied}: ${sc.ap.map((s) => esc(this._scenarioLabel(s))).join(", ")}</div>`);
-    if ((sc.rq || []).length) parts.push(`<div class="note">${T.required}: ${sc.rq.map((s) => esc(this._scenarioLabel(s))).join(", ")}</div>`);
-    if ((sc.cs || []).length) parts.push(`<div class="note">${T.constrain}: ${sc.cs.map((s) => esc(this._scenarioLabel(s))).join(", ")}</div>`);
-    out.push(parts.join(""));
-
-    // presence
-    if (n.occ) {
-      const home = (n.occ.home || []).map((pid) => esc(this._personLabel(pid))).join(", ") || "—";
-      const away = (n.occ.away || []).map((pid) => esc(this._personLabel(pid))).join(", ");
-      out.push(`<div class="sec">🏠 ${T.presence}</div><div>${T.home}: <b>${home}</b>${away ? ` · ${T.away}: ${away}` : ""}</div>`);
-    }
-
-    // channels in the archive
-    out.push(`<div class="sec">📤 ${T.channels}</div>`);
-    const seen = new Set();
-    const icon = { ok: "✔", skip: "⊘", supp: "♻", err: "✖" };
+    // sort the archived channels: sent, problems (failed / missed), routine skips
+    const SN_ROUTINE = new Set(["SNOOZE", "SNOOZED", "PRIORITY", "DELIVERY_CONDITION", "OCCUPANCY", "DELIVERY_DISABLED",
+      "SCENARIO", "TRANSPORT_DISABLED", "NO_SCENARIO", "DUPE"]);
+    const sent = [], problems = [], skipped = [];
     for (const ch of n.dl || []) {
-      seen.add(ch.n);
+      if (ch.r === "ok") sent.push(ch);
+      else if (ch.r === "err") problems.push(ch);
+      else if (ch.r === "skip" && !SN_ROUTINE.has(String(ch.why || "").toUpperCase())) problems.push(ch);
+      else skipped.push(ch);
+    }
+    const seen = new Set((n.dl || []).map((ch) => ch.n));
+    const notStarted = [...rows.keys()].filter((k) => !seen.has(k) && !/^default_/i.test(k)).sort();
+    const nameOf = (k) => { const al = snDeliveryAlias(this._hass, k); return al || k; };
+
+    // the path in four steps
+    const ovNames = Object.entries(n.ov || {}).filter(([, ov]) => ov && ov.en !== false).map(([k]) => nameOf(k));
+    const callTxt = ovNames.length ? `${T.call_named} ${ovNames.join(", ")}` : T.call_auto;
+    const scenTxt = scen.length ? scen.map((x) => this._scenarioLabel(x)).join(", ") : T.no_scenarios;
+    const scenMore = [["ap", T.applied], ["rq", T.required], ["cs", T.constrain]]
+      .filter(([k]) => (sc[k] || []).length).map(([k, l]) => `${l}: ${sc[k].map((x) => this._scenarioLabel(x)).join(", ")}`);
+    const home = n.occ ? (n.occ.home || []).map((pid) => this._personLabel(pid)) : null;
+    const away = n.occ ? (n.occ.away || []).map((pid) => this._personLabel(pid)) : [];
+    const peopleTxt = home === null ? "—" : home.length ? `${T.home}: ${home.join(", ")}` : T.nobody;
+    const chTxt = [`<b class="c-ok">${sent.length}</b> ${T.ch_sent}`,
+      problems.length ? `<b class="c-pb">${problems.length}</b> ${T.ch_problems}` : "",
+      skipped.length ? `${skipped.length} ${T.ch_skipped}` : ""].filter(Boolean).join(" · ");
+    const step = (i, label, body, more) => `<div class="step"><div class="sk">${i} · ${label}</div><div class="sb">${body}</div>${more ? `<div class="sm">${more}</div>` : ""}</div>`;
+    out.push(`<div class="path">
+      ${step(1, T.step_call, esc(callTxt), n.trace ? esc(T.call_debug) : "")}
+      ${step(2, T.step_scen, esc(scenTxt), esc(scenMore.join(" · ")))}
+      ${step(3, T.step_people, esc(peopleTxt), away.length ? `${T.away}: ${esc(away.join(", "))}` : "")}
+      ${step(4, T.step_ch, chTxt, "")}</div>`);
+
+    // one channel, the same row everywhere
+    const chRow = (ch, cls) => {
       const row = rows.get(ch.n);
       const alias = snDeliveryAlias(this._hass, ch.n);
       const src = this._scenarioSources(ch.n, scen);
@@ -5721,60 +5761,72 @@ class SupernotifyWhyCard extends HTMLElement {
       const prov = (snProvOf(n) || {})[ch.n];
       let by = [], offBy = [];
       if (prov) {
-        by = (prov.enabled_by || []).map((s) => this._provLabel(s, T));
-        // only scenario:<name> belongs under "scenarios that would switch it off": call and
-        // recipient:<name> are their own sources, shown as they are
+        by = (prov.enabled_by || []).map((x) => this._provLabel(x, T));
         const dis = (prov.disabled_by || []).map(String);
-        src.off = dis.filter((d) => /^scenario:/.test(d)).map((d) => d.replace(/^scenario:/, ""));
-        offBy = dis.filter((d) => !/^scenario:/.test(d)).map((d) => this._provLabel(d, T));
+        src.off = dis.filter((x) => /^scenario:/.test(x)).map((x) => x.replace(/^scenario:/, ""));
+        offBy = dis.filter((x) => !/^scenario:/.test(x)).map((x) => this._provLabel(x, T));
       } else {
         if (this._inclusion(row).includes("default")) by.push(T.src_default);
-        if (src.on.length) by.push(`${T.src_scen} ${src.on.map((s) => this._scenarioLabel(s)).join(", ")}`);
+        if (src.on.length) by.push(`${T.src_scen} ${src.on.map((x) => this._scenarioLabel(x)).join(", ")}`);
         if (ov && ov.en) by.push(T.src_call);
       }
+      const icon = { ok: "✔", skip: "⊘", supp: "⊘", err: "✖" }[ch.r] || "?";
       let why = "";
       if (ch.r === "ok") why = T.st_ok + (ch.calls ? ` (${ch.calls} ${T.calls})` : "");
       else if (ch.r === "err") why = `${T.st_err}${ch.err ? ": " + esc(ch.err.join(" / ")) : ""}`;
-      else why = `${ch.r === "supp" ? T.st_supp : T.st_skip}: ${esc(this._reasonText(ch.why, T))}${ch.tr ? ` (${T.target_required} ${esc(ch.tr)})` : ""}`;
-      out.push(`<div class="ch"><div class="r1"><span class="st ${ch.r}">${icon[ch.r] || "?"}</span>
+      else why = `${esc(this._reasonText(ch.why, T))}${ch.tr ? ` (${T.target_required} ${esc(ch.tr)})` : ""}`;
+      const tg = ch.tg ? tgText(ch.tg) : "";
+      const meta = [by.length ? `${T.started_by}: ${esc(by.join(" · "))}` : "",
+        src.off.length ? `${T.scen_would_off}: ${esc(src.off.map((x) => this._scenarioLabel(x)).join(", "))}` : "",
+        offBy.length ? `${T.r_off_by}: ${esc(offBy.join(", "))}` : ""].filter(Boolean);
+      return `<div class="ch ${cls || ""}"><div class="r1"><span class="st ${ch.r}">${icon}</span>
         <span class="nm">${esc(alias || ch.n)}</span>${alias && alias.toLowerCase() !== ch.n.toLowerCase() ? `<span class="al tech">${esc(ch.n)}</span>` : ""}</div>
-        <div class="why">${why}</div>
-        ${by.length ? `<div class="src">${T.started_by}: ${esc(by.join(" · "))}</div>` : ""}
-        ${src.off.length ? `<div class="src">${T.scen_would_off}: ${esc(src.off.map((s) => this._scenarioLabel(s)).join(", "))}</div>` : ""}
-        ${offBy.length ? `<div class="src">${T.r_off_by}: ${esc(offBy.join(", "))}</div>` : ""}
-        ${ch.tg ? `<div class="tg">🎯 ${tgText(ch.tg)}</div>` : ""}
-        ${ov && ov.tg && tgText(ov.tg) !== tgText(ch.tg) ? `<div class="tg">📝 ${T.call_targets}: ${tgText(ov.tg)}</div>` : ""}
-      </div>`);
+        <div class="why">${why}${tg ? ` · ${tg}` : ""}</div>
+        ${meta.length ? `<div class="src">${meta.join("<br>")}</div>` : ""}
+        ${ov && ov.tg && tgText(ov.tg) !== tg ? `<div class="src">📝 ${T.call_targets}: ${tgText(ov.tg)}</div>` : ""}
+      </div>`;
+    };
+
+    // problems first, each with what it means and what to do
+    for (const ch of problems) {
+      const failed = ch.r === "err";
+      const code = failed ? "ERROR" : String(ch.why || "").toUpperCase();
+      const fix = (T.fix || {})[code];
+      out.push(`<div class="pb ${failed ? "crit" : "warn"}"><div class="pbt">${failed ? "✖" : "⚠"} ${esc(nameOf(ch.n))}: ${failed ? T.pb_failed : T.pb_missed}</div>
+        <div class="pbw">${failed ? esc((ch.err || []).join(" / ") || T.st_err) : esc(this._reasonText(ch.why, T))}${ch.tr ? ` (${T.target_required} ${esc(ch.tr)})` : ""}</div>
+        ${fix ? `<div class="pbf">${esc(fix).replace(/`([^`]+)`/g, "<code>$1</code>")}</div>` : ""}</div>`);
     }
+
+    // what went out
+    if (sent.length) out.push(sent.map((ch) => chRow(ch, "")).join(""));
     if (!(n.dl || []).length) out.push(`<div class="note">${T.no_channels}</div>`);
 
-    // channels that never started
-    const notStarted = [...rows.keys()].filter((k) => !seen.has(k) && !/^default_/i.test(k));
+    // routine skips and channels never involved, folded
+    if (skipped.length) {
+      out.push(`<details class="fold"${det(false)}><summary>${skipped.length} ${T.grp_skipped}</summary>${skipped.map((ch) => chRow(ch, "quiet")).join("")}</details>`);
+    }
     if (notStarted.length) {
-      out.push(`<div class="sec">🚫 ${T.not_started}</div>`);
-      for (const k of notStarted.sort()) {
-        const row = rows.get(k);
+      out.push(`<details class="fold"${det(false)}><summary>${notStarted.length} ${T.grp_not}</summary>${notStarted.map((k) => {
         const alias = snDeliveryAlias(this._hass, k);
-        out.push(`<div class="ch not"><div class="r1"><span class="st">·</span><span class="nm">${esc(alias || k)}</span>${alias && alias.toLowerCase() !== k.toLowerCase() ? `<span class="al tech">${esc(k)}</span>` : ""}</div>
-          <div class="why">${esc(this._whyNotStarted(k, row, n, scen, T))}</div></div>`);
-      }
-      out.push(`<div class="note">${snProvOf(n) || n.trace ? T.from_trace : T.from_config}</div>`);
+        return `<div class="ch not"><div class="r1"><span class="st">·</span><span class="nm">${esc(alias || k)}</span>${alias && alias.toLowerCase() !== k.toLowerCase() ? `<span class="al tech">${esc(k)}</span>` : ""}</div>
+          <div class="why">${esc(this._whyNotStarted(k, rows.get(k), n, scen, T))}</div></div>`;
+      }).join("")}<div class="note">${snProvOf(n) || n.trace ? T.from_trace : T.from_config}</div></details>`);
     }
 
     // full trace - only with debug: true, and `prov` alone is not a trace
     const hasTrace = n.trace && (Object.keys(n.trace.sel || {}).length || Object.keys(n.trace.res || {}).length);
     if (hasTrace) {
-      out.push(`<div class="sec">🧭 ${T.trace}</div><div class="trace">`);
+      const tr = [];
       for (const [stage, list] of Object.entries(n.trace.sel || {})) {
-        out.push(`<div class="stg"><span>${esc(stage)}</span><span>${esc((list || []).join(", ") || "—")}</span></div>`);
+        tr.push(`<div class="stg"><span>${esc(stage)}</span><span>${esc((list || []).join(", ") || "—")}</span></div>`);
       }
       for (const [dname, chain] of Object.entries(n.trace.res || {})) {
-        out.push(`<div class="note"><b>${esc(dname)}</b></div>`);
+        tr.push(`<div class="note"><b>${esc(dname)}</b></div>`);
         for (const [stage, val] of chain) {
-          out.push(`<div class="stg"><span>${esc(stage)}</span><span>${typeof val === "object" ? tgText(val) || "∅" : esc(val)}</span></div>`);
+          tr.push(`<div class="stg"><span>${esc(stage)}</span><span>${typeof val === "object" ? tgText(val) || "∅" : esc(val)}</span></div>`);
         }
       }
-      out.push(`</div>`);
+      out.push(`<details class="fold"${det(false)}><summary>${T.trace_title}</summary><div class="trace">${tr.join("")}</div></details>`);
     } else {
       out.push(`<div class="note">ℹ️ ${T.no_trace}</div>`);
     }
@@ -5801,6 +5853,15 @@ const SN_WHY_STRINGS = {
     outcomes: { success: "delivered", partial_delivery: "partly delivered", dupe: "duplicate", failed: "failed", error: "failed",
       fallback_delivery: "delivered by the fallback channel", no_delivery: "not delivered" },
     missed: "missed (asked for, not sent)",
+    step_call: "Call", step_scen: "Scenarios", step_people: "People", step_ch: "Channels",
+    call_auto: "no channel named: normal routing", call_named: "named in the call:", call_debug: "with debug",
+    nobody: "nobody home", ch_sent: "sent", ch_problems: "to look at", ch_skipped: "skipped",
+    pb_failed: "failed", pb_missed: "asked for but not sent",
+    grp_skipped: "skipped by a rule: normal", grp_not: "not involved", trace_title: "Full selection trace",
+    fix: { NO_TARGET: "No recipient has an address for this channel: add one to a recipient, give the channel fixed targets, or leave it out of this call.",
+      ERROR: "The integration behind this channel answered with an error: check its own log entry.",
+      NO_ACTION: "The channel has no action to call: set `action:` on the delivery.",
+      INVALID_ACTION_DATA: "The data passed to the action was rejected: check the `data:` of the call or of the delivery." },
     scenarios: "Scenarios in force", no_scenarios: "no scenario in force",
     applied: "forced by the call", required: "required by the call", constrain: "limited by the call to",
     presence: "Presence", home: "home", away: "away",
@@ -5835,6 +5896,15 @@ const SN_WHY_STRINGS = {
     outcomes: { success: "consegnata", partial_delivery: "consegnata in parte", dupe: "doppione", failed: "fallita", error: "fallita",
       fallback_delivery: "consegnata dal canale di riserva", no_delivery: "non consegnata" },
     missed: "mancati (richiesti, non partiti)",
+    step_call: "Chiamata", step_scen: "Scenari", step_people: "Persone", step_ch: "Canali",
+    call_auto: "nessun canale scelto: instradamento normale", call_named: "canali chiesti:", call_debug: "con debug",
+    nobody: "nessuno in casa", ch_sent: "partiti", ch_problems: "da guardare", ch_skipped: "saltati",
+    pb_failed: "fallito", pb_missed: "chiesto ma non partito",
+    grp_skipped: "saltati per regola: normale", grp_not: "non coinvolti", trace_title: "Trace di selezione completo",
+    fix: { NO_TARGET: "Nessun destinatario ha un indirizzo per questo canale: aggiungilo a un destinatario, dai al canale dei target fissi, oppure toglilo da questa chiamata.",
+      ERROR: "L'integrazione dietro questo canale ha risposto con un errore: guarda la sua voce nel log.",
+      NO_ACTION: "Il canale non ha un'azione da chiamare: imposta `action:` nella delivery.",
+      INVALID_ACTION_DATA: "I dati passati all'azione sono stati rifiutati: controlla il `data:` della chiamata o della delivery." },
     scenarios: "Scenari in vigore", no_scenarios: "nessuno scenario in vigore",
     applied: "forzati dalla chiamata", required: "richiesti dalla chiamata", constrain: "limitati dalla chiamata a",
     presence: "Presenza", home: "in casa", away: "fuori",

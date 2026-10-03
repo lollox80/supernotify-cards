@@ -117,12 +117,12 @@ last.click();               // -> evento -> la card Perché? mostra il dettaglio
 await flush();
 assert.deepStrictEqual(calls.splice(0), []);
 const det = wc.shadowRoot.getElementById("det").textContent;
-assert.ok(det.includes("Scenari in vigore") && det.includes("Persone a casa"), "scenari con nome pulito");
+assert.ok(det.includes("Scenari") && det.includes("Persone a casa"), "scenari con nome pulito (passo 2 del percorso)");
 assert.ok(det.includes("in casa") && det.includes("Lorenzo"), "presenza");
 assert.ok(det.includes("mobile_push") && det.includes("consegnata"), "canale consegnato");
 assert.ok(det.includes("nessun destinatario utilizzabile"), "motivo tradotto");
 assert.ok(det.includes("scelto da") && det.includes("sempre attivo"), "chi l'ha scelto");
-assert.ok(det.includes("Canali che non sono partiti"), "sezione non partiti");
+assert.ok(/\d+ non coinvolti/.test(det), "sezione non coinvolti (chiusa)");
 assert.ok(/tts[\s\S]*spento/.test(det), "tts spento");
 assert.ok(/sirena[\s\S]*solo se chiesto per nome/.test(det), "sirena solo esplicita");
 assert.ok(det.includes("diagnostica"), "nota sul trace");

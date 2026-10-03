@@ -17,6 +17,7 @@ type: custom:supernotify-why-card
 | Option | Required | Description |
 |---|---|---|
 | `limit` | no | notifications in the list (default 15) |
+| `expand` | no | `true` opens the folded parts (routine skips, channels not involved, full trace) |
 | `source`, `trigger_entity` | no | as for supernotify-archive-card |
 | `entity` | no | bridge only: sensor holding the archive index |
 | `service` | no | bridge only: service returning the detail (default `shell_command.sn_archive_detail`) |

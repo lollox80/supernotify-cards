@@ -96,7 +96,7 @@ ok(dots[0] === "d-warn" && dots[1] === "d-ok" && dots[2] === "d-warn", "colori: 
 const detOf = async (id) => { await w._select(id); await tick(); return w.shadowRoot.getElementById("det").textContent.replace(/\s+/g, " "); };
 let d = await detOf("aaaa1111");
 console.log("    dettaglio why 1:", d.slice(0, 160));
-ok(/ 1 mancati/.test(d) && w.shadowRoot.querySelector('#det ha-icon[icon="mdi:alert"]'), "why: intestazione con i mancati");
+ok(/da guardare|partiti/.test(d) && w.shadowRoot.querySelector("#det .path"), "why: percorso con il conteggio dei canali (0.53)");
 d = await detOf("cccc3333");
 ok(/consegnata dal canale di riserva/.test(d), "why: esito fallback_delivery tradotto");
 ok(/dati dell'azione non validi/.test(d), "why: motivo INVALID_ACTION_DATA tradotto");

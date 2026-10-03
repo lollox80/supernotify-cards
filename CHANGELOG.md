@@ -3,6 +3,20 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.53.0] - 2026-10-03
+
+Fifth and last step of the redesign: the why-card answers first, the details come on demand.
+
+### Changed
+- why-card (0.9.0): under the title, the path in four steps: the call (channels named, or
+  normal routing), the scenarios in force, who was home, the channels (sent / to look at /
+  skipped).
+- Problems first: a failed channel (red) or one asked for but not sent (orange) gets its own
+  box with the reason and what to do about it. "Asked for but not sent" is a skip whose reason
+  is not a routine one (snooze, presence, priority, condition, scenario, switched off).
+- Then the channels that went out. Routine skips, channels not involved and the full selection
+  trace are folded; `expand: true` opens them.
+
 ## [0.52.1] - 2026-10-03
 
 ### CI
