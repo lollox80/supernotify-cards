@@ -3,6 +3,23 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.59.1] - 2026-10-03
+
+Contrast checked on every text of every card, light and dark theme.
+
+### Fixed
+- The active row in the bands and scenarios cards was never highlighted: its colour was missing from
+  the palette. It is now tinted green, with the "now" / "active now" badge on a solid background.
+- Light theme: the green used for "delivered", "active now", "up to date" is a little darker
+  (#17733d), so it passes WCAG AA (4.5:1) also on the green chips; it was 4.2-4.4:1.
+- No more faded text where it fell under 4.5:1: the overview's health sentence, the version and
+  "list updated" lines, the why card's skipped channels, the technical name in the scenarios card.
+
+### Added
+- `tools/contrast_audit.mjs`: measures the contrast of every text of the 13 cards in both themes
+  (same demo data as the screenshots). What is left on purpose: the decorative "▾" and disabled
+  rows, which WCAG does not require to meet contrast.
+
 ## [0.59.0] - 2026-10-03
 
 Design review, part 2: finishing touches.

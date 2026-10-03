@@ -8,6 +8,12 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.59.1. Contrast measured on every text of the 13 cards in both themes
+ *   (tools/contrast_audit.mjs): light-theme green #1b7f45 -> #17733d (it was 4.2-4.4:1 on the green
+ *   tints of delivered/active/now chips), okSoft added to the palette (bands and scenarios used it for
+ *   the active row but it was never defined, so the row was never tinted), no opacity on the
+ *   overview's health sentence, on the version/"list updated" lines and on the why card's skipped
+ *   channels. Disabled rows stay faded on purpose.
  * 2026-10-03 - v0.59.0. Design review, part 2 (finishing touches). (A5) archive and why: times
  *   follow the HA profile's time format (snH12). (C3) bands-card 0.20.0: one line per band - name
  *   and "until 13:00", start time, volume slider, percent; about 40% shorter. (C4) scenarios: the
@@ -385,7 +391,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.59.0"; // bundle / HACS release
+const VERSION = "0.59.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -396,19 +402,19 @@ const VERSION = "0.59.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.30.2",
-  overview: "0.29.1",
-  bands: "0.20.0",
-  deliveries: "0.26.0",
-  transports: "0.23.0",
-  recipients: "0.26.2",
-  scenarios: "0.25.0",
-  simulator: "0.15.1",
-  composer: "0.19.1",
-  automations: "0.20.1",
-  stats: "0.28.1",
-  archive: "0.36.2",
-  why: "0.12.2",
+  control: "0.30.3",
+  overview: "0.29.2",
+  bands: "0.20.1",
+  deliveries: "0.26.1",
+  transports: "0.23.1",
+  recipients: "0.26.3",
+  scenarios: "0.25.1",
+  simulator: "0.15.2",
+  composer: "0.19.2",
+  automations: "0.20.2",
+  stats: "0.28.2",
+  archive: "0.36.3",
+  why: "0.12.3",
 };
 
 /**
@@ -744,7 +750,7 @@ function snToggle(hass, entityId, on) {
  * values pass WCAG AA (4.5:1) as text on the card background: the HA blue
  * #03a9f4 is only 2.6:1, so text, chips and filled buttons use #0277bd
  * (4.8:1, white text on it too). Warning text is #a04f00 (5.8:1), success
- * #1b7f45 (5.0:1), error #c62828 (5.6:1), secondary text #5b6b7c (5.5:1).
+ * #17733d (5.9:1, 0.59.1: also >= 4.9:1 on the green tints), error #c62828 (5.6:1), secondary text #5b6b7c (5.5:1).
  * Dark theme: text on a blue fill is dark (white on #03a9f4 is 2.6:1).
  * `style: theme` takes everything from the Home Assistant theme.
  * warnSoft / warnLine / warnInk: a tinted surface for "on but limited"
@@ -959,7 +965,8 @@ function snPalette(dark, style) {
     return {
       brand: "var(--primary-color)", brandD: "var(--primary-color)",
       onBrand: "var(--text-primary-color, #fff)",
-      ok: "var(--success-color, #1b7f45)", warn: "var(--warning-color, #a04f00)",
+      ok: "var(--success-color, #17733d)", warn: "var(--warning-color, #a04f00)",
+      okSoft: "rgba(var(--rgb-success-color, 23,115,61), .10)",
       crit: "var(--error-color, #c62828)",
       warnSoft: "rgba(var(--rgb-warning-color, 255,166,0), .16)",
       warnLine: "var(--warning-color, #f0c48a)", warnInk: "var(--primary-text-color)",
@@ -970,11 +977,11 @@ function snPalette(dark, style) {
     };
   }
   return dark
-    ? { brand: "#03a9f4", brandD: "#8fd0ff", onBrand: "#06131d", ok: "#7fe0a5", warn: "#f0b050",
+    ? { brand: "#03a9f4", brandD: "#8fd0ff", onBrand: "#06131d", ok: "#7fe0a5", okSoft: "rgba(127,224,165,.10)", warn: "#f0b050",
         crit: "#ff9a9a", warnSoft: "rgba(240,160,32,.18)", warnLine: "#8a5a10", warnInk: "#ffd8a3",
         line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#9aa8b6",
         dot: "#3a4653" }
-    : { brand: "#0277bd", brandD: "#01579b", onBrand: "#fff", ok: "#1b7f45", warn: "#a04f00",
+    : { brand: "#0277bd", brandD: "#01579b", onBrand: "#fff", ok: "#17733d", okSoft: "#e8f5ed", warn: "#a04f00",
         crit: "#c62828", warnSoft: "#fdf1e3", warnLine: "#f0c48a", warnInk: "#5c3200",
         line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#5b6b7c",
         dot: "#c3cdd8" };
@@ -2009,7 +2016,7 @@ class SupernotifyControlCard extends HTMLElement {
         .mpill.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
         .mpill .pd { width: 8px; height: 8px; border-radius: 50%; background: ${p.dot}; }
         .mpill.on .pd { background: ${p.ok}; box-shadow: 0 0 0 3px rgba(46,158,91,.18); }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7;
+        .ver { text-align: right; font-size: 10px; color: ${p.muted};
                margin-top: 10px; user-select: none; }
         .toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%) translateY(20px);
                  background: ${p.ink}; color: ${p.panel};
@@ -2490,7 +2497,7 @@ class SupernotifyOverviewCard extends HTMLElement {
         .chip { display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid ${p.line}; border-radius: 999px;
                 padding: 5px 12px; font-size: 12px; font-weight: 650; margin: 0 6px 6px 0;
                 background: ${p.soft}; color: ${p.brandD}; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 10px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 10px; }
         .health { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
         .health:empty { display: none; }
         .hc { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 11px;
@@ -2505,7 +2512,7 @@ class SupernotifyOverviewCard extends HTMLElement {
         .hb.ok { background: rgba(46,158,91,.12); color: ${p.ok}; }
         .hb.warn { background: ${p.warnSoft}; color: ${p.warnInk}; }
         .hb.crit { background: rgba(226,60,60,.10); color: ${p.crit}; }
-        .hbt { font-size: 17px; font-weight: 700; } .hbs { font-size: 13px; opacity: .85; margin-top: 2px; }
+        .hbt { font-size: 17px; font-weight: 700; } .hbs { font-size: 13px; margin-top: 2px; }
         .hl { margin: 6px 2px 0; }
         .hr { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid ${p.line};
               font-size: 14px; }
@@ -2813,6 +2820,7 @@ class SupernotifyBandsCard extends HTMLElement {
         }
         .pct { font-weight: 800; font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
         .row.act { background: ${p.okSoft}; }
+        .row.act .badge { background: ${p.panel}; }
         .who { min-width: 0; }
         .who b { font-size: 14px; }
         .who .rng { font-size: 11.5px; color: ${p.muted}; margin-top: 1px; }
@@ -2832,7 +2840,7 @@ class SupernotifyBandsCard extends HTMLElement {
         input[type=time]:focus { outline: none; border-color: ${p.brand}; }
         .volwrap { min-width: 0; }
         input[type=range] { width: 100%; accent-color: ${p.brand}; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
         ${SN_FLOW_CSS}
         .flow { column-gap: 22px; }
       </style>
@@ -3069,7 +3077,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
         .b-off { background: ${p.soft}; color: ${p.muted}; }
         ${SN_SWITCH_CSS}
         ${SN_FLOW_CSS}
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
         .tag.always { border-color: ${p.ok}; color: ${p.ok};
                       background: rgba(46,158,91,.12); }
         .incsum { font-size: 11.5px; line-height: 1.5; color: ${p.muted};
@@ -3313,7 +3321,7 @@ class SupernotifyTransportsCard extends HTMLElement {
         .b-off { background: ${p.soft}; color: ${p.muted}; }
         ${SN_SWITCH_CSS}
         ${SN_FLOW_CSS}
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
         .rst { text-align: right; margin: 0 0 8px; }
         .rstb { font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; border-radius: 8px;
                 border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; padding: 4px 10px; }
@@ -3488,7 +3496,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
         .gear { font-size: 17px; opacity: .5; flex-shrink: 0; cursor: pointer;
                 transition: opacity .15s; padding: 2px; }
         .gear:hover { opacity: 1; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
         .last { margin-top: 5px; font-size: 11.5px; color: ${p.muted}; cursor: pointer; }
         .last b { color: ${p.ink}; text-transform: none; }
         .last.none { cursor: default; opacity: .7; }
@@ -3755,6 +3763,7 @@ class SupernotifyScenariosCard extends HTMLElement {
         .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
                border-top: 1px solid ${p.line}; pointer-events: none; }
         .row.act { background: ${p.okSoft}; }
+        .row.act .badge { background: ${p.panel}; }
         .row:hover { background: ${p.soft}; }
         .row:last-child { border-bottom: 0; }
         .em { font-size: 20px; flex-shrink: 0; width: 26px; text-align: center; }
@@ -3777,7 +3786,7 @@ class SupernotifyScenariosCard extends HTMLElement {
         .apb.on { background: ${p.ok}; border-color: ${p.ok}; color: #fff; }
         ${SN_SWITCH_CSS}
         ${SN_FLOW_CSS}
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
@@ -3818,7 +3827,7 @@ class SupernotifyScenariosCard extends HTMLElement {
     return `<div class="row ${isAct ? "act" : ""} ${s.enabled === false ? "dis" : ""}" data-i="${i}">
       <span class="em">${em}</span>
       <div class="mid"><b>${esc(alias || s.name)}</b>
-        ${alias && !snSame(alias, s.name) ? `<span style="color:inherit;opacity:.7"> · ${snTech(s.name, alias)}</span>` : ""}
+        ${alias && !snSame(alias, s.name) ? `<span style="color:${p.muted}"> · ${snTech(s.name, alias)}</span>` : ""}
         <div class="tags">${tags.join("")}</div>
       </div>
       ${isAct ? `<span class="badge b-act">${T.active_now}</span>` : ""}
@@ -4004,7 +4013,7 @@ class SupernotifySimulatorCard extends HTMLElement {
         .sr .si { color: ${p.muted}; } .sr.go .si { color: ${p.ok}; }
         .sr .sn { font-weight: 600; } .sr.stop .sn { color: ${p.muted}; font-weight: 500; }
         .sr .sw { color: ${p.muted}; font-size: 12.5px; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div class="sec">${snT(this._config, this._hass).sim_pick}</div>
@@ -4713,7 +4722,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
         .empty { padding: 18px 8px; color: ${p.muted}; font-size: 13px; }
         .err { padding: 14px; border: 1.5px dashed ${p.line}; border-radius: 12px;
           color: ${p.muted}; font-size: 13px; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
         ${SN_FLOW_CSS}
       </style>
       <ha-card>
@@ -5235,7 +5244,7 @@ class SupernotifyStatsCard extends HTMLElement {
         .b-ok { background: rgba(46,158,91,.14); color: ${p.ok}; }
         .b-upd { background: rgba(240,160,32,.16); color: ${p.warn}; }
         .empty { color: ${p.muted}; font-size: 12.5px; padding: 8px 0; }
-        .foot { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .foot { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}
@@ -5636,7 +5645,7 @@ class SupernotifyArchiveCard extends HTMLElement {
         .row.open .det { display: block; }
         .det b { color: ${p.ink}; font-weight: 650; }
         .empty { text-align: center; color: ${p.muted}; font-size: 13px; padding: 22px 0; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 10px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 10px; }
         .why { color: ${p.brandD}; font-weight: 650; cursor: pointer; text-decoration: underline; }
         ${SN_FLOW_CSS}
       </style>
@@ -5961,7 +5970,7 @@ class SupernotifyWhyCard extends HTMLElement {
         details.fold { border: 1px dashed ${p.line}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
         details.fold summary { cursor: pointer; font-weight: 600; color: ${p.muted}; }
         details.fold[open] summary { margin-bottom: 8px; }
-        .ch.quiet { opacity: .85; }
+        .ch.quiet { }
         .msg { margin-top: 6px; line-height: 1.45; }
         .chips { display: flex; flex-wrap: wrap; gap: 5px; }
         .chip { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; border-radius: 7px;
@@ -5976,7 +5985,7 @@ class SupernotifyWhyCard extends HTMLElement {
         .tech { font-family: ui-monospace, 'Roboto Mono', monospace; font-size: 11px; }
         .ch .why { margin-top: 3px; } .ch .src { margin-top: 3px; color: ${p.muted}; font-size: 12px; }
         .ch .tg { margin-top: 4px; font-size: 12px; color: ${p.muted}; word-break: break-word; }
-        .ch.not { opacity: .85; border-style: dashed; }
+        .ch.not { border-style: dashed; }
         .note { color: ${p.muted}; font-size: 11.5px; margin-top: 4px; line-height: 1.45; }
         .trace { font-size: 12px; } .trace code { font-size: 11px; }
         .trace .stg { display: flex; gap: 6px; padding: 2px 0; }
@@ -5984,7 +5993,7 @@ class SupernotifyWhyCard extends HTMLElement {
         .empty { color: ${p.muted}; padding: 10px; text-align: center; }
         .err { color: ${p.crit}; }
         code { background: ${p.soft}; padding: 1px 4px; border-radius: 4px; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}
