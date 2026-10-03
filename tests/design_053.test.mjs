@@ -50,7 +50,7 @@ const steps = [...det.querySelectorAll(".path .step")].map((s) => s.textContent.
 console.log("    percorso:", steps.join(" | "));
 ok(steps.length === 4, "quattro passi");
 ok(/instradamento normale/.test(steps[0]) && /Qualcuno in casa/.test(steps[1]) && /Lorenzo/.test(steps[2]) && /fuori: Jessica/.test(steps[2]), "chiamata, scenari, persone");
-ok(/1 partiti · 2 da guardare · 1 saltati/.test(steps[3]), "conteggio canali");
+ok(/1 partito · 2 da guardare · 1 saltato/.test(steps[3]), "conteggio canali");
 const pbs = [...det.querySelectorAll(".pb")];
 ok(pbs.length === 2 && det.firstElementChild.nextElementSibling.classList.contains("path") && det.children[2].classList.contains("pb"), "problemi subito dopo il percorso");
 const em = pbs.find((x) => /Email/.test(x.textContent));
@@ -58,8 +58,8 @@ ok(em && em.classList.contains("warn") && /chiesto ma non partito/.test(em.textC
 const tg = pbs.find((x) => /Telegram famiglia/.test(x.textContent));
 ok(tg && tg.classList.contains("crit") && /fallito/.test(tg.textContent) && /chat not found/.test(tg.textContent), "telegram: fallito in rosso con l'errore");
 const folds = [...det.querySelectorAll("details.fold")];
-ok(folds.some((f) => /1 saltati per regola: normale/.test(f.querySelector("summary").textContent) && /Voce \(TTS\)/.test(f.textContent) && !f.open), "snooze: ripiegato tra i saltati per regola");
-ok(folds.some((f) => /1 non coinvolti/.test(f.querySelector("summary").textContent) && /sirena/.test(f.textContent)), "canali non coinvolti ripiegati");
+ok(folds.some((f) => /1 saltato per regola: normale/.test(f.querySelector("summary").textContent) && /Voce \(TTS\)/.test(f.textContent) && !f.open), "snooze: ripiegato tra i saltati per regola");
+ok(folds.some((f) => /1 non coinvolto/.test(f.querySelector("summary").textContent) && /sirena/.test(f.textContent)), "canali non coinvolti ripiegati");
 ok(/Alta/.test(det.querySelector(".hd .meta").textContent), "priorità tradotta");
 const det2 = await mk({ expand: true });
 ok([...det2.querySelectorAll("details.fold")].every((f) => f.open), "expand: true apre tutto");

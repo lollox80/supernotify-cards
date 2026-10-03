@@ -48,7 +48,7 @@ ok(sr.querySelector(".ctile .tx b") && sr.querySelector(".ctile .tx .ts"), "tile
 ok(/minmax\(150px, 1fr\)/.test(sr.innerHTML) && /flex-direction: row/.test(sr.innerHTML), "tile in riga, 150px minimo");
 ok(!/\.ctile\.warn \.ts \{ color: rgba\(255,255,255/.test(sr.innerHTML), "snooze attivo: testo non più bianco sulla tinta chiara");
 const lf = sr.querySelector(".lastn .lf").textContent.replace(/\s+/g, " ");
-ok(/2 consegnate/.test(lf) && /1 fallite/.test(lf) && /1 mancati/.test(lf) && /1 saltati/.test(lf), `ultima notifica a conteggi (${lf.trim()})`);
+ok(/2 consegnati/.test(lf) && /1 fallito/.test(lf) && /1 mancato/.test(lf) && /1 saltato/.test(lf), `ultima notifica a conteggi (${lf.trim()})`);
 ok(sr.querySelector('.lb.ok').title === "Notifica sul telefono, Annuncio vocale Alexa", "nomi dei canali nel tooltip");
 const wb = sr.querySelector("#whyBtn");
 let opened = null; window.addEventListener("supernotify-why", (e) => { opened = e.detail.id; });
@@ -67,7 +67,7 @@ ok(hb && hb.classList.contains("crit") && /3 cose da guardare/.test(hb.textConte
 ok(/il resto funziona · 3 di 4 canali accesi/.test(hb.textContent), "sottotitolo con i canali accesi");
 const rows = [...o.shadowRoot.querySelectorAll(".hr")].map((r) => [...r.querySelectorAll(".ht > div")].map((d) => d.textContent.trim()).join(" / "));
 console.log("    righe:", rows.join(" | "));
-ok(rows.some((r) => /1 canali spenti \/ SMS di riserva/.test(r)), "canali spenti con il nome leggibile");
+ok(rows.some((r) => /1 canale spento \/ SMS di riserva/.test(r)), "canali spenti con il nome leggibile");
 ok(rows.some((r) => /telegram: chat not found/.test(r)), "transport con errori con il messaggio");
 ok(rows.some((r) => /In pausa: tutto$/.test(r)), "snooze attivo nell'elenco, senza dettaglio doppio");
 ok(o.shadowRoot.querySelectorAll(".stat").length === 3, "tre numeri invece di cinque");

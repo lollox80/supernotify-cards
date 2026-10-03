@@ -70,7 +70,7 @@ const rows = () => [...a.shadowRoot.querySelectorAll(".row")];
 ok(rows().length === 3, `archivio: 3 righe (${rows().length})`);
 const det0 = rows()[0].querySelector(".det").textContent.replace(/\s+/g, " ");
 console.log("    dettaglio riga 1:", det0.trim());
-ok(/ 1 mancata/.test(det0) && rows()[0].querySelector('.det ha-icon[icon="mdi:alert"]'), "riga con missed: '1 mancata' con icona");
+ok(/ 1 mancato/.test(det0) && rows()[0].querySelector('.det ha-icon[icon="mdi:alert"]'), "riga con missed: '1 mancata' con icona");
 const tags1 = rows()[1].querySelector(".tags").textContent;
 console.log("    canali riga 2:", tags1.trim());
 ok(/pausa/.test(tags1) && /transport spento/.test(tags1), "SNOOZED → pausa, TRANSPORT_DISABLED → transport spento");
@@ -112,7 +112,7 @@ const sr = c.shadowRoot.textContent.replace(/\s+/g, " ");
 const tile = sr.match(/⏳[^😴]{0,120}/);
 console.log("    tile snooze:", tile && tile[0]);
 ok(/ portico/.test(sr) && c.shadowRoot.querySelector('ha-icon[icon="mdi:tag-outline"]'), "control: la tile dice che lo snooze è sul tag 'portico'");
-ok(/ 1 mancati/.test(sr) && c.shadowRoot.querySelector('.lb.mis ha-icon[icon="mdi:alert"]'), "control: chip 'mancati' nell'ultima notifica");
+ok(/ 1 mancato/.test(sr) && c.shadowRoot.querySelector('.lb.mis ha-icon[icon="mdi:alert"]'), "control: chip 'mancati' nell'ultima notifica");
 
 // ── overview-card ─────────────────────────────────────────────────────────
 const o = document.createElement("supernotify-overview-card");
@@ -132,7 +132,7 @@ const enTags = [...ae.shadowRoot.querySelectorAll(".row")][1].querySelector(".ta
 console.log("    canali in inglese:", enTags.trim());
 ok(/snoozed/.test(enTags) && /transport off/.test(enTags) && !/pausa/.test(enTags), "archivio in inglese: snoozed / transport off");
 const itPrio = [...a.shadowRoot.querySelectorAll(".tg.pr")].map((n) => n.textContent);
-ok(itPrio.includes("alta"), `archivio in italiano: priorità tradotta (${itPrio})`);
+ok(itPrio.includes("Alta"), `archivio in italiano: priorità tradotta (${itPrio})`);
 
 console.log(fail ? `\n${fail} TEST FALLITI` : "\nTUTTI I TEST OK");
 process.exit(fail ? 1 : 0);

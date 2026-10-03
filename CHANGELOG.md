@@ -3,6 +3,24 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.54.0] - 2026-10-03
+
+Polish after the redesign.
+
+### Fixed
+- Singular and plural: "1 channel off", "1 failure", "1 device", "1 skipped by a rule" instead
+  of "1 channels off" and the like. In Italian the channel counts are masculine plural
+  ("2 consegnati", "1 mancato"); the archive and the control card said "consegnata", "consegnate".
+
+### Changed
+- Readable names where the technical ones were left: simulator (scenarios and channels),
+  scenarios card (channel tags), stats card (top channel and insights). The technical name is
+  in the tooltip.
+- Time bands: translated names ("Late night", "Notte fonda") and listed from the morning, with
+  the band that starts after midnight last (bands card and control status bar).
+- Archive card: priorities capitalised in English too; the notification id left the details
+  (it is in the row's tooltip).
+
 ## [0.53.1] - 2026-10-03
 
 ### Fixed

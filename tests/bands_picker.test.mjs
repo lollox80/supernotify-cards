@@ -87,7 +87,7 @@ ok(el.shadowRoot.querySelector('[data-l="late_night"]').textContent === "55",
 const h3 = hass(100); h3.states["input_datetime.a"] = st("02:00:00");
 el.hass = h3;
 const names2 = [...el.shadowRoot.querySelectorAll(".row .who b")].map((n) => n.textContent.trim());
-ok(/Pomeriggio/.test(names2[0]), "spostando Pomeriggio alle 02:00 passa in cima");
+ok(/Pomeriggio/.test(names2[names2.length - 1]), "spostando Pomeriggio alle 02:00 va in fondo (la giornata parte alle 04:00, 0.54)");
 
 console.log(fail ? `\n${fail} TEST FALLITI` : "\nTUTTI I TEST OK");
 process.exit(fail ? 1 : 0);

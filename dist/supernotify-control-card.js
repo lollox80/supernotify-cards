@@ -8,6 +8,18 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.54.0. Polish after the redesign.
+ *   - Singular and plural: "1 channel off", "1 failure", "1 device", "1 skipped by a rule"
+ *     instead of "1 channels off" and the like (helpers snW / snPl, "_1" keys). In Italian the
+ *     channel counts are masculine plural: "2 consegnati", "1 mancato" (archive and control
+ *     said "consegnata", "consegnate").
+ *   - Readable names where the technical ones were left: simulator (scenarios and channels),
+ *     scenarios card (channel tags), stats card (top channel and insights); the technical name
+ *     stays in the tooltip.
+ *   - Time bands: translated names ("Late night" / "Notte fonda") and listed from the morning,
+ *     the band that starts after midnight last (bands card, control status bar).
+ *   - Archive card: priorities capitalised in English too; the notification id left the
+ *     details (it is in the row's tooltip).
  * 2026-10-03 - v0.53.1. composer-card 0.17.1 and automations-card 0.18.1: their version (composer footer,
  *   automations header) was still shown, missed by 0.49.0's `show_version`. New README / docs screenshots of every card from tools/showcase.mjs.
  * 2026-10-03 - v0.53.0. Redesign, step 5: why-card 0.9.0 answers first, details on demand.
@@ -326,7 +338,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.53.1"; // bundle / HACS release
+const VERSION = "0.54.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -337,19 +349,19 @@ const VERSION = "0.53.1"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.27.0",
-  overview: "0.25.0",
-  bands: "0.16.0",
+  control: "0.28.0",
+  overview: "0.26.0",
+  bands: "0.17.0",
   deliveries: "0.24.0",
   transports: "0.21.0",
-  recipients: "0.24.0",
-  scenarios: "0.21.0",
-  simulator: "0.12.0",
+  recipients: "0.25.0",
+  scenarios: "0.22.0",
+  simulator: "0.13.0",
   composer: "0.17.1",
-  automations: "0.18.1",
-  stats: "0.25.0",
-  archive: "0.33.0",
-  why: "0.9.0",
+  automations: "0.19.0",
+  stats: "0.26.0",
+  archive: "0.34.0",
+  why: "0.10.0",
 };
 
 /**
@@ -382,12 +394,16 @@ const SN_STRINGS = {
     grp_fallback: "Backup, when the others fail", ch_title: "Channels", ch_count: "{on} of {tot} on",
     off_manual: "switched off", paused_by: "paused now by", on_by: "on now through",
     fixed_targets: "fixed targets", no_deliveries: "no delivery entities found",
-    home: "home", away: "away", devices: "devices", overrides: "delivery overrides",
+    home: "home", away: "away", devices: "devices", devices_1: "device", overrides: "delivery overrides", overrides_1: "delivery override",
     no_contact: "no contact points", no_recipients: "no recipient entities found",
     details: "Details",
     h_update: "update available:", h_restart: "restart Home Assistant to finish the update",
     h_uptodate: "up to date", h_transport_err: "transports with errors", h_channels_off: "channels off",
     h_all_good: "All good", h_health: "Health",
+    h_failures: "failures", h_failures_1: "failure", h_transport_err_1: "transport with errors",
+    h_channels_off_1: "channel off", channels_1: "channel",
+    band_early_morning: "Early morning", band_morning: "Morning", band_afternoon: "Afternoon",
+    band_evening: "Evening", band_night: "Night", band_late_night: "Late night",
     h_look_1: "1 thing to look at", h_look_n: "{n} things to look at", h_rest_ok: "everything else works",
     h_ch_on: "{on} of {tot} channels on", h_open: "Open", ln_delivered: "delivered", ln_failed: "failed",
     ln_why: "Why",
@@ -432,7 +448,7 @@ const SN_STRINGS = {
     target_warn: "⚠️ Areas, floors and labels are only resolved by notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts and chime. With any other channel — or the default routing when no channel is picked above — the notification can silently end up with no target. Pick a compatible channel, or add a person/device directly.",
     aut_search: "Search automations…", aut_all: "All", aut_none: "No matches",
     aut_err: "Manifest not found — generate it with tools/genera_vista_automazioni.py",
-    aut_updated: "list updated", aut_count: "automations", never: "never",
+    aut_updated: "list updated", aut_count: "automations", aut_count_1: "automation", never: "never",
     ago_now: "now", ago_min: "min ago", ago_h: "h ago", ago_d: "d ago",
     aut_disabled_only: "Disabled only",
     grp_active: "active", repeat: "Repeat", skipped_n: "skipped", left: "left", missed_n: "missed",
@@ -464,14 +480,17 @@ const SN_STRINGS = {
     grp_fallback: "Di riserva, se gli altri falliscono", ch_title: "Canali", ch_count: "{on} di {tot} accesi",
     off_manual: "spento a mano", paused_by: "in pausa ora:", on_by: "acceso ora da",
     fixed_targets: "target fissi", no_deliveries: "nessuna entità delivery trovata",
-    home: "in casa", away: "fuori", devices: "dispositivi", overrides: "override delivery",
+    home: "in casa", away: "fuori", devices: "dispositivi", devices_1: "dispositivo", overrides: "override delivery",
     no_contact: "nessun recapito", no_recipients: "nessuna entità destinatario trovata",
     details: "Dettagli",
     h_update: "aggiornamento disponibile:", h_restart: "riavvia Home Assistant per completare l'aggiornamento",
     h_uptodate: "aggiornato", h_transport_err: "transport con errori", h_channels_off: "canali spenti",
     h_all_good: "Tutto ok", h_health: "Stato",
+    h_failures: "fallimenti", h_failures_1: "fallimento", h_channels_off_1: "canale spento", channels_1: "canale",
+    band_early_morning: "Mattina presto", band_morning: "Mattina", band_afternoon: "Pomeriggio",
+    band_evening: "Sera", band_night: "Notte", band_late_night: "Notte fonda",
     h_look_1: "1 cosa da guardare", h_look_n: "{n} cose da guardare", h_rest_ok: "il resto funziona",
-    h_ch_on: "{on} di {tot} canali accesi", h_open: "Apri", ln_delivered: "consegnate", ln_failed: "fallite",
+    h_ch_on: "{on} di {tot} canali accesi", h_open: "Apri", ln_delivered: "consegnati", ln_delivered_1: "consegnato", ln_failed: "falliti", ln_failed_1: "fallito",
     ln_why: "Perché",
     active_now: "attivo ora", disabled: "disattivato", other: "Altro",
     manual: "manuale", apply_now: "applica ora", enabled_lbl: "abilitato",
@@ -514,10 +533,10 @@ const SN_STRINGS = {
     target_warn: "⚠️ Aree, piani ed etichette vengono risolti solo da notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts e chime. Con qualsiasi altro canale — o con l'instradamento di default se non scegli nessun canale qui sopra — la notifica può restare senza target senza nessun errore visibile. Scegli un canale compatibile, oppure aggiungi anche una persona/dispositivo diretto.",
     aut_search: "Cerca automazione…", aut_all: "Tutte", aut_none: "Nessun risultato",
     aut_err: "Manifest non trovato — generalo con tools/genera_vista_automazioni.py",
-    aut_updated: "elenco aggiornato", aut_count: "automazioni", never: "mai",
+    aut_updated: "elenco aggiornato", aut_count: "automazioni", aut_count_1: "automazione", never: "mai",
     ago_now: "ora", ago_min: "min fa", ago_h: "h fa", ago_d: "g fa",
     aut_disabled_only: "Solo disattivate",
-    grp_active: "attivi", repeat: "Ripeti", skipped_n: "saltati", left: "rimasti", missed_n: "mancati",
+    grp_active: "attivi", repeat: "Ripeti", skipped_n: "saltati", skipped_n_1: "saltato", left: "rimasti", missed_n: "mancati", missed_n_1: "mancato",
     snz_all: "tutto", snz_nc: "non critici", snz_prio: "priorità", snz_transport: "transport", snz_for: "per",
     no_notif: "nessuna notifica ancora",
   },
@@ -737,6 +756,22 @@ function snIconify(html, cfg) {
   }
   const rest = html.slice(last);
   return out + (skip ? rest : swap(rest));
+}
+
+/**
+ * Singular or plural (0.54.0): T[key + "_1"] when n is 1 and the language has a singular,
+ * else T[key]. snPl() gives "1 channel off" / "3 channels off".
+ */
+function snW(T, key, n) {
+  return (+n === 1 && T[key + "_1"]) || T[key] || key;
+}
+function snPl(T, key, n) {
+  return `${n} ${snW(T, key, n)}`;
+}
+
+/** Readable name of a time band: config name, else the translated standard one, else the key. */
+function snBandName(T, key, custom) {
+  return custom || (T && T["band_" + key]) || String(key).replace(/_/g, " ");
 }
 
 function snPalette(dark, style) {
@@ -1588,7 +1623,7 @@ class SupernotifyControlCard extends HTMLElement {
         const raw = this._st(b.start) || "";
         const [h, m] = raw.split(":");
         if (h === undefined || m === undefined) return null;
-        return { name: b.name || name, min: +h * 60 + +m, volume: b.volume };
+        return { name: snBandName(snT(this._config, this._hass), name, b.name), min: +h * 60 + +m, volume: b.volume };
       })
       .filter(Boolean)
       .sort((a, b) => a.min - b.min);
@@ -1831,11 +1866,11 @@ class SupernotifyControlCard extends HTMLElement {
     }
     // 0.52.0: counts with the channel names in the tooltip (`last_channels: true` = one chip each)
     if (!c.last_channels) {
-      if (okNames.length) chips.push(`<span class="lb ok" title="${esc(okNames.join(", "))}">✔ ${okNames.length} ${T.ln_delivered}</span>`);
-      if (errNames.length) chips.push(`<span class="lb err" title="${esc(errNames.join(", "))}">✖ ${errNames.length} ${T.ln_failed}</span>`);
+      if (okNames.length) chips.push(`<span class="lb ok" title="${esc(okNames.join(", "))}">✔ ${snPl(T, "ln_delivered", okNames.length)}</span>`);
+      if (errNames.length) chips.push(`<span class="lb err" title="${esc(errNames.join(", "))}">✖ ${snPl(T, "ln_failed", errNames.length)}</span>`);
     }
-    if (n && +n.missed > 0) chips.push(`<span class="lb mis">⚠ ${esc(n.missed)} ${T.missed_n}</span>`);
-    if (skipped) chips.push(`<span class="lb mut">${skipped} ${T.skipped_n}</span>`);
+    if (n && +n.missed > 0) chips.push(`<span class="lb mis">⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
+    if (skipped) chips.push(`<span class="lb mut">${snPl(T, "skipped_n", skipped)}</span>`);
     const rep = c.repeat_entity
       ? `<button class="rep" id="repBtn">🔁 ${T.repeat}</button>` : "";
     const why = n && n.id && window.__snWhyCards
@@ -1870,7 +1905,7 @@ class SupernotifyControlCard extends HTMLElement {
     const band = this._activeBand();
     if (band) {
       const vol = band.volume ? Math.round(+this._st(band.volume) || 0) + "%" : "";
-      segs.push(seg("🕐 " + T.time_band, band.name.replace(/_/g, " ") + (vol ? " · vol " + vol : ""), p.brandD));
+      segs.push(seg("🕐 " + T.time_band, band.name + (vol ? " · vol " + vol : ""), p.brandD));
     }
     if (c.dnd_entity || c.quiet_entity) {
       // quiet_entity (optional): a COMPUTED quiet state (e.g. a template
@@ -2090,17 +2125,17 @@ class SupernotifyOverviewCard extends HTMLElement {
       else chips.push({ k: "ok", t: `✔ SuperNotify ${a.installed_version || ""} ${T.h_uptodate}` });
     }
     const failures = +this._st("sensor.supernotify_failures") || 0;
-    if (failures > 0) chips.push({ k: "crit", t: `✖ ${failures} ${T.failures.toLowerCase()}` });
+    if (failures > 0) chips.push({ k: "crit", t: `✖ ${snPl(T, "h_failures", failures)}` });
     const trErr = this._scan("transport").filter((t) => {
       const st = this._hass.states[t.id];
       return st && st.state !== "unavailable" && +((st.attributes || {}).error_count || 0) > 0;
     });
-    if (trErr.length) chips.push({ k: "crit", t: `⚠️ ${trErr.length} ${T.h_transport_err}`, title: trErr.map((t) => {
+    if (trErr.length) chips.push({ k: "crit", t: `⚠️ ${snPl(T, "h_transport_err", trErr.length)}`, title: trErr.map((t) => {
       const a = (this._hass.states[t.id] || {}).attributes || {};
       return a.last_error_message ? `${t.name}: ${a.last_error_message}` : t.name;
     }).join(" · ") });
     const delsOff = this._scan("delivery").filter((d) => d.state === "off" && !/^default_/i.test(d.name));
-    if (delsOff.length) chips.push({ k: "off", t: `🔕 ${delsOff.length} ${T.h_channels_off}`, title: delsOff.map((d) => snDeliveryAlias(this._hass, d.name) || d.name).join(", ") });
+    if (delsOff.length) chips.push({ k: "off", t: `🔕 ${snPl(T, "h_channels_off", delsOff.length)}`, title: delsOff.map((d) => snDeliveryAlias(this._hass, d.name) || d.name).join(", ") });
     if (c.quiet_entity && this._st(c.quiet_entity) === "on") chips.push({ k: "warn", t: `🌙 ${T.dnd} ${T.active}` });
     const snz = snLiveSnoozes(this._snoozes);
     if (snz.length) chips.push({ k: "warn",
@@ -2325,9 +2360,9 @@ class SupernotifyOverviewCard extends HTMLElement {
       const prio = n.priority
         ? `<span class="badge" style="background:${p.soft};color:${prioCol || p.muted}">${esc(T["prio_" + n.priority] || n.priority)}</span>`
         : "";
-      const ch = +n.delivered > 0 ? `<span class="badge b-off">${n.delivered} ${T.channels}</span>` : "";
+      const ch = +n.delivered > 0 ? `<span class="badge b-off">${snPl(T, "channels", n.delivered)}</span>` : "";
       lastEl.innerHTML = snIconify(`<div class="t">${when}</div><div>${msg}</div>
-        <div style="margin-top:5px">${prio}<span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ " + T.delivered : "✖ " + n.failed + " " + T.failed}</span>${+n.missed > 0 ? `<span class="badge" style="background:${p.soft};color:${p.warn || "#f0a020"}">⚠ ${esc(n.missed)} ${T.missed_n}</span>` : ""}${ch}</div>`, this && this._config);
+        <div style="margin-top:5px">${prio}<span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ " + T.delivered : "✖ " + n.failed + " " + T.failed}</span>${+n.missed > 0 ? `<span class="badge" style="background:${p.soft};color:${p.warn || "#f0a020"}">⚠ ${snPl(T, "missed_n", +n.missed)}</span>` : ""}${ch}</div>`, this && this._config);
     } else {
       lastEl.textContent = "—";
     }
@@ -2420,7 +2455,7 @@ class SupernotifyBandsCard extends HTMLElement {
       const [h, m] = raw.split(":");
       return {
         key, start: b.start, volume: b.volume,
-        name: b.name || key.replace(/_/g, " "),
+        name: snBandName(snT(this._config, this._hass), key, b.name),
         icon: b.icon || DEFAULT_ICONS[key] || "🕐",
         hhmm: h !== undefined && m !== undefined ? `${h.padStart(2, "0")}:${m}` : "",
         min: h !== undefined && m !== undefined ? +h * 60 + +m : null,
@@ -2431,9 +2466,11 @@ class SupernotifyBandsCard extends HTMLElement {
       // reserialises the card config with its keys sorted alphabetically,
       // so the order written in YAML does not survive a save. Bands with
       // no readable start time go last.
+      // the day starts at 04:00, so a band starting after midnight (late night) comes last
       if (x.min === null) return y.min === null ? 0 : 1;
       if (y.min === null) return -1;
-      return x.min - y.min;
+      const d = (m) => (m - 240 + 1440) % 1440;
+      return d(x.min) - d(y.min);
     });
   }
 
@@ -3140,9 +3177,9 @@ class SupernotifyRecipientsCard extends HTMLElement {
       if (r.a.email) tags.push(`✉️ ${r.a.email}`);
       if (r.a.phone_number) tags.push(`💬 ${r.a.phone_number}`);
       const nDev = Array.isArray(r.a.mobile_devices) ? r.a.mobile_devices.length : 0;
-      if (nDev) tags.push(`📱 ${nDev} ${T.devices}`);
+      if (nDev) tags.push(`📱 ${snPl(T, "devices", nDev)}`);
       const nOvr = r.a.delivery && typeof r.a.delivery === "object" ? Object.keys(r.a.delivery).length : 0;
-      if (nOvr) tags.push(`🔗 ${nOvr} ${T.overrides}`);
+      if (nOvr) tags.push(`🔗 ${snPl(T, "overrides", nOvr)}`);
       if (!tags.length) tags.push(`<span class="tag warn">⚠️ ${T.no_contact}</span>`);
       const alias = snCleanName(r.a.friendly_name, r.name);
       const last = this._lastNotified(r.name);
@@ -3404,7 +3441,7 @@ class SupernotifyScenariosCard extends HTMLElement {
     const dels = s.a.delivery && typeof s.a.delivery === "object" ? Object.entries(s.a.delivery) : [];
     for (const [dn, dc] of dels.slice(0, 6)) {
       const on = !dc || dc.enabled !== false;
-      tags.push(`<span class="tag ${on ? "on" : "off"}">${on ? "✓" : "✕"} ${esc(dn)}</span>`);
+      tags.push(`<span class="tag ${on ? "on" : "off"}" title="${esc(dn)}">${on ? "✓" : "✕"} ${esc(snDeliveryAlias(this._hass, dn) || dn)}</span>`);
     }
     if (dels.length > 6) tags.push(`<span class="tag">+${dels.length - 6}</span>`);
     const ags = Array.isArray(s.a.action_groups) ? s.a.action_groups : [];
@@ -3617,7 +3654,7 @@ class SupernotifySimulatorCard extends HTMLElement {
     const chips = this.shadowRoot.getElementById("chips");
     const names = Object.keys(this._byScen || {}).sort();
     chips.innerHTML = snIconify(names.map((n) =>
-      `<span class="chip ${this._sel.has(n) ? "sel" : ""}" data-n="${esc(n)}">${SN_SCENARIO_ICONS[n] || "🎬"} ${esc(n)}</span>`
+      `<span class="chip ${this._sel.has(n) ? "sel" : ""}" data-n="${esc(n)}" title="${esc(n)}">${SN_SCENARIO_ICONS[n] || "🎬"} ${esc(snScenarioName(this._hass, n))}</span>`
     ).join("") || "—", this && this._config);
     chips.querySelectorAll(".chip").forEach((node) => {
       node.onclick = () => {
@@ -3641,9 +3678,9 @@ class SupernotifySimulatorCard extends HTMLElement {
     const res = this.shadowRoot.getElementById("result");
     res.innerHTML =
       snIconify(fired.map((d) =>
-        `<span class="out">${esc(d)}${byScenAdd.has(d) && !(this._implicit || []).includes(d) ? ' <span class="tag">scenario</span>' : ""}</span>`
+        `<span class="out" title="${esc(d)}">${esc(snDeliveryAlias(this._hass, d) || d)}${byScenAdd.has(d) && !(this._implicit || []).includes(d) ? ' <span class="tag">scenario</span>' : ""}</span>`
       ).join("") +
-      suppressed.map((d) => `<span class="out sup">${esc(d)} <span class="tag">${snT(this._config, this._hass).off}</span></span>`).join("") ||
+      suppressed.map((d) => `<span class="out sup" title="${esc(d)}">${esc(snDeliveryAlias(this._hass, d) || d)} <span class="tag">${snT(this._config, this._hass).off}</span></span>`).join("") ||
       `<span class='hint'>${snT(this._config, this._hass).sim_none}</span>`, this && this._config);
   }
 }
@@ -4297,7 +4334,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
       <div class="top">
         <input type="search" id="q" placeholder="${this._esc(T.aut_search)}"
           value="${this._esc(this._q)}" aria-label="${this._esc(T.aut_search)}">
-        <span class="tot">${items.length} ${T.aut_count}${this._config.show_version ? ` · v${SN_CARD_VERSIONS.automations}` : ""}</span>
+        <span class="tot">${snPl(T, "aut_count", items.length)}${this._config.show_version ? ` · v${SN_CARD_VERSIONS.automations}` : ""}</span>
       </div>
       <div class="chips" id="chips"></div>
       <div id="list" class="flow"></div>`, this && this._config);
@@ -4841,7 +4878,7 @@ class SupernotifyStatsCard extends HTMLElement {
       kpi("📨 " + T.st_total, this._fmt(d.total), `≈ ${this._fmt(d.avg, 1)} ${T.st_avg}`) +
       kpi("📅 " + T.st_today, this._fmt(d.today), d.avg ? `${delta >= 0 ? "+" : ""}${delta}% ${T.st_vs_avg}` : "", d.avg && Math.abs(delta) >= 50 ? p.warn : undefined) +
       kpi("⏰ " + T.st_peak_hour, d.spineCount ? `${String(d.peakHour).padStart(2, "0")}:00` : "—", d.spineCount ? `${d.perHour[d.peakHour]} ${T.st_total.toLowerCase()}` : "") +
-      kpi("🏆 " + T.st_top_channel, top ? esc(top.name) : "—", top && d.sends ? `${Math.round(((top.ok + top.ko) / d.sends) * 100)}%` : "") +
+      kpi("🏆 " + T.st_top_channel, top ? ((n) => n.length > 12 ? `<span style="font-size:17px;line-height:1.25;display:inline-block">${esc(n)}</span>` : esc(n))(this._aliasFor(top.name) || top.name) : "—", top && d.sends ? `${Math.round(((top.ok + top.ko) / d.sends) * 100)}%` : "") +
       kpi("⚠️ " + T.st_errors, this._fmt(d.errors), d.sends ? `${errRate}% ${T.st_of_sends}` : "", d.errors ? p.crit : p.ok);
 
     // daily bars
@@ -4935,7 +4972,7 @@ class SupernotifyStatsCard extends HTMLElement {
     const T = snT(this._config, this._hass);
     const out = [];
     const top = d.channels[0];
-    if (top && d.sends) out.push(this._t("st_i_share", { p: Math.round(((top.ok + top.ko) / d.sends) * 100), c: this._esc(top.name) }));
+    if (top && d.sends) out.push(this._t("st_i_share", { p: Math.round(((top.ok + top.ko) / d.sends) * 100), c: this._esc(this._aliasFor(top.name) || top.name) }));
     if (d.spineCount) {
       out.push(this._t("st_i_peak", { h: String(d.peakHour).padStart(2, "0"), n: d.perHour[d.peakHour], d: d.days }));
       const np = Math.round((d.night / d.spineCount) * 100);
@@ -4955,7 +4992,7 @@ class SupernotifyStatsCard extends HTMLElement {
     if (d.sends) {
       if (d.errors) {
         const worst = d.channels.slice().sort((a, b) => b.ko - a.ko)[0];
-        out.push(this._t("st_i_errors", { n: d.errors, d: d.days, c: this._esc(worst ? worst.name : "—") }));
+        out.push(this._t("st_i_errors", { n: d.errors, d: d.days, c: this._esc(worst ? (this._aliasFor(worst.name) || worst.name) : "—") }));
       } else out.push(this._t("st_i_noerr", { d: d.days }));
     }
     return out;
@@ -5260,15 +5297,15 @@ class SupernotifyArchiveCard extends HTMLElement {
       const scen = (r.sc || []).map((s) => esc(idx.scen[s] || "?")).join(", ");
       const open = this._open.has(r.id) ? " open" : "";
       parts.push(
-        `<div class="row${open}" data-id="${esc(r.id)}">
+        `<div class="row${open}" data-id="${esc(r.id)}" title="id ${esc(r.id)}">
            <div class="r1"><span class="hm">${hm}</span><span class="ti">${esc(r.ti || "—")}</span>${prio}${wh}</div>
            ${r.m ? `<div class="msg">${esc(r.m)}${r.mt ? "…" : ""}</div>` : ""}
            <div class="tags">${chans}</div>
            <div class="det">
              ${r.sp ? `<div class="said">\u{1F50A} <b>${T.said}:</b> \u00ab${esc(r.sp)}\u00bb</div>` : ""}
              ${scen ? `<div><b>${T.scenarios}:</b> ${scen}</div>` : ""}
-             <div>${r.d ? `<b>${r.d}</b> ${T.delivered} ` : ""}${r.f ? `· <b>${r.f}</b> ${T.failed} ` : ""}${r.s ? `· <b>${r.s}</b> ${T.skipped} ` : ""}${r.mi ? `· ⚠ <b>${r.mi}</b> ${T.missed} ` : ""}
-             ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""} · ${T.id} <code>${esc(r.id)}</code>${r.mt ? ` · ${T.truncated}` : ""}</div>
+             <div>${r.d ? `<b>${r.d}</b> ${snW(T, "delivered", r.d)} ` : ""}${r.f ? `· <b>${r.f}</b> ${snW(T, "failed", r.f)} ` : ""}${r.s ? `· <b>${r.s}</b> ${snW(T, "skipped", r.s)} ` : ""}${r.mi ? `· ⚠ <b>${r.mi}</b> ${snW(T, "missed", r.mi)} ` : ""}
+             ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""}${r.mt ? ` · ${T.truncated}` : ""}</div>
              ${window.__snWhyCards ? `<div><a class="why" data-why="${esc(r.id)}">🔎 ${T.why}</a></div>` : ""}
            </div>
          </div>`);
@@ -5306,6 +5343,7 @@ const SN_ARCH_STRINGS = {
     of: "of", in_archive: "in the archive", since: "oldest", updated: "index updated",
     today: "Today", yesterday: "Yesterday",
     delivered: "delivered", failed: "failed", skipped: "skipped", missed: "missed",
+    prio: { critical: "Critical", high: "High", low: "Low", minimum: "Minimum", medium: "Medium" },
     reasons: { doppione: "duplicate", "nessun target": "no target", errore: "error", condizione: "condition",
       scenario: "scenario", presenza: "presence", priorita: "priority", spento: "off", pausa: "snoozed",
       "transport spento": "transport off", "nessuna azione": "no action", "dati non validi": "invalid data",
@@ -5322,8 +5360,9 @@ const SN_ARCH_STRINGS = {
     loading: "lettura dell'archivio…", recent: "notifiche più recenti", read_at: "lette alle",
     of: "di", in_archive: "nell'archivio", since: "più vecchia", updated: "indice aggiornato",
     today: "Oggi", yesterday: "Ieri",
-    delivered: "consegnata", failed: "fallita", skipped: "saltata", missed: "mancata",
-    prio: { critical: "critica", high: "alta", low: "bassa", minimum: "minima", medium: "media" },
+    delivered: "consegnati", delivered_1: "consegnato", failed: "falliti", failed_1: "fallito",
+    skipped: "saltati", skipped_1: "saltato", missed: "mancati", missed_1: "mancato",
+    prio: { critical: "Critica", high: "Alta", low: "Bassa", minimum: "Minima", medium: "Media" },
     scenarios: "Scenari in vigore", truncated: "messaggio troncato nell'indice",
     dur: "in", id: "id", why: "Perché? - dettaglio completo",
   },
@@ -5744,9 +5783,9 @@ class SupernotifyWhyCard extends HTMLElement {
     const home = n.occ ? (n.occ.home || []).map((pid) => this._personLabel(pid)) : null;
     const away = n.occ ? (n.occ.away || []).map((pid) => this._personLabel(pid)) : [];
     const peopleTxt = home === null ? "—" : home.length ? `${T.home}: ${home.join(", ")}` : T.nobody;
-    const chTxt = [`<b class="c-ok">${sent.length}</b> ${T.ch_sent}`,
+    const chTxt = [`<b class="c-ok">${sent.length}</b> ${snW(T, "ch_sent", sent.length)}`,
       problems.length ? `<b class="c-pb">${problems.length}</b> ${T.ch_problems}` : "",
-      skipped.length ? `${skipped.length} ${T.ch_skipped}` : ""].filter(Boolean).join(" · ");
+      skipped.length ? `${snPl(T, "ch_skipped", skipped.length)}` : ""].filter(Boolean).join(" · ");
     const step = (i, label, body, more) => `<div class="step"><div class="sk">${i} · ${label}</div><div class="sb">${body}</div>${more ? `<div class="sm">${more}</div>` : ""}</div>`;
     out.push(`<div class="path">
       ${step(1, T.step_call, esc(callTxt), n.trace ? esc(T.call_debug) : "")}
@@ -5805,10 +5844,10 @@ class SupernotifyWhyCard extends HTMLElement {
 
     // routine skips and channels never involved, folded
     if (skipped.length) {
-      out.push(`<details class="fold"${det(false)}><summary>${skipped.length} ${T.grp_skipped}</summary>${skipped.map((ch) => chRow(ch, "quiet")).join("")}</details>`);
+      out.push(`<details class="fold"${det(false)}><summary>${snPl(T, "grp_skipped", skipped.length)}</summary>${skipped.map((ch) => chRow(ch, "quiet")).join("")}</details>`);
     }
     if (notStarted.length) {
-      out.push(`<details class="fold"${det(false)}><summary>${notStarted.length} ${T.grp_not}</summary>${notStarted.map((k) => {
+      out.push(`<details class="fold"${det(false)}><summary>${snPl(T, "grp_not", notStarted.length)}</summary>${notStarted.map((k) => {
         const alias = snDeliveryAlias(this._hass, k);
         return `<div class="ch not"><div class="r1"><span class="st">·</span><span class="nm">${esc(alias || k)}</span>${alias && alias.toLowerCase() !== k.toLowerCase() ? `<span class="al tech">${esc(k)}</span>` : ""}</div>
           <div class="why">${esc(this._whyNotStarted(k, rows.get(k), n, scen, T))}</div></div>`;
@@ -5900,9 +5939,9 @@ const SN_WHY_STRINGS = {
     missed: "mancati (richiesti, non partiti)",
     step_call: "Chiamata", step_scen: "Scenari", step_people: "Persone", step_ch: "Canali",
     call_auto: "nessun canale scelto: instradamento normale", call_named: "canali chiesti:", call_debug: "con debug",
-    nobody: "nessuno in casa", ch_sent: "partiti", ch_problems: "da guardare", ch_skipped: "saltati",
+    nobody: "nessuno in casa", ch_sent: "partiti", ch_sent_1: "partito", ch_problems: "da guardare", ch_skipped: "saltati", ch_skipped_1: "saltato",
     pb_failed: "fallito", pb_missed: "chiesto ma non partito",
-    grp_skipped: "saltati per regola: normale", grp_not: "non coinvolti", trace_title: "Trace di selezione completo",
+    grp_skipped: "saltati per regola: normale", grp_skipped_1: "saltato per regola: normale", grp_not: "non coinvolti", grp_not_1: "non coinvolto", trace_title: "Trace di selezione completo",
     fix: { NO_TARGET: "Nessun destinatario ha un indirizzo per questo canale: aggiungilo a un destinatario, dai al canale dei target fissi, oppure toglilo da questa chiamata.",
       ERROR: "L'integrazione dietro questo canale ha risposto con un errore: guarda la sua voce nel log.",
       NO_ACTION: "Il canale non ha un'azione da chiamare: imposta `action:` nella delivery.",

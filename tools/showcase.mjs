@@ -70,7 +70,7 @@ const S = {
   "sensor.supernotify_notifications": st("1294"), "sensor.supernotify_failures": st("2"),
   "sensor.supernotify_sent_today": st("42", { last_period: 57 }),
   "update.supernotify_update": st("off", { installed_version: "v2.12.0", latest_version: "v2.12.0", entity_picture: "" }),
-  "update.supernotify_cards_update": st("off", { installed_version: "v0.53.1", latest_version: "v0.53.1", entity_picture: "" }),
+  "update.supernotify_cards_update": st("off", { installed_version: "v0.54.0", latest_version: "v0.54.0", entity_picture: "" }),
   "input_boolean.notifier_dnd": st("off", { friendly_name: "Do not disturb" }),
   "input_boolean.notifier_speech_notifications": st("on", { friendly_name: "Voice" }),
   "input_boolean.notifier_phone_notifications": st("on", { friendly_name: "Push" }),
