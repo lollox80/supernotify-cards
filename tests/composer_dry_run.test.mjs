@@ -69,15 +69,16 @@ ok(services.length === 0, "niente inviato davvero");
 const box = sr.getElementById("dryBox");
 const txt = box.textContent.replace(/\s+/g, " ");
 console.log("    riquadro:", txt.slice(0, 260));
-ok(/✔ 2 canali partirebbero/.test(txt), "conteggio dei canali che partirebbero");
-ok(/⚠ 1 mancati/.test(txt), "mancati");
+ok(/ 2 canali partirebbero/.test(txt) && box.querySelector('.dHead ha-icon[icon="mdi:check-circle"]'), "conteggio dei canali che partirebbero");
+ok(/ 1 mancati/.test(txt) && box.querySelector('.dWarnI ha-icon[icon="mdi:alert"]'), "mancati");
 ok(/Notifica sul telefono/.test(txt) && /s23/.test(txt), "alias e destinatario del telefono");
 ok(/Echo Cucina, sala, ufficio \+1/.test(txt), "target Alexa: nome, id accorciati, +N");
 ok(/in pausa/.test(txt) && /nessun destinatario utilizzabile/.test(txt), "motivi tradotti (SNOOZED, NO_TARGET)");
 ok(/Priorità: Alta/.test(txt) && /afternoon, Persone a casa/.test(txt) && /In casa: Lorenzo/.test(txt), "priorità, scenari, chi è in casa");
 ok(/Controllo doppioni non simulato/.test(txt), "nota sul controllo doppioni");
 const rows = [...box.querySelectorAll(".dRow")].map((r) => r.textContent.trim());
-ok(rows[0].startsWith("✔") && rows[rows.length - 1].startsWith("⊘"), "prima chi parte, poi i saltati");
+const rowIcons = [...box.querySelectorAll(".dRow")].map((r) => (r.querySelector("ha-icon") || {}).getAttribute?.("icon"));
+ok(rowIcons[0] === "mdi:check-circle" && rowIcons[rowIcons.length - 1] === "mdi:minus-circle-outline", "prima chi parte, poi i saltati");
 
 // doppione segnalato
 card._renderDry({ ...CONTENTS, outcome: "dupe", deliveries: { mobile_push: { skipped: { suppression_reason: "DUPE" } } } }, false);

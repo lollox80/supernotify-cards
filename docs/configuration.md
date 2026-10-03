@@ -10,6 +10,7 @@
 | `intro: <text>` | An info banner at the top of the card (HTML allowed) |
 | `language: it` / `en` | Pin the language; by default the card follows Home Assistant |
 | `show_version: true` | Show the card's version at the bottom (hidden since 0.49.0) |
+| `icons: emoji` | Keep the emoji the cards used before 0.50.0 instead of Home Assistant icons |
 
 Italian and English are built in; any other language falls back to English.
 

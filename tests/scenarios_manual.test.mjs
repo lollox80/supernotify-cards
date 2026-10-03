@@ -44,17 +44,17 @@ const byName = (n) => rows.find((r) => r.textContent.includes(n));
 const osp = byName("Ospiti in casa");
 assert.ok(osp, "nome pulito 'Ospiti in casa' (niente 'manuale')");
 assert.ok(!osp.querySelector(".mid b").textContent.includes("manuale"));
-assert.ok(osp.textContent.includes("✋ manuale"), "tag manuale");
+assert.ok(osp.textContent.includes(" manuale") && osp.querySelector('ha-icon[icon="mdi:hand-back-right-outline"]'), "tag manuale");
 assert.strictEqual(osp.querySelectorAll(".sw").length, 2, "abilitato + applica ora");
 assert.ok(!osp.textContent.includes("attivo ora"), "manuale spento -> non attivo");
 
 const mor = byName("Morning");
 assert.strictEqual(mor.querySelectorAll(".sw").length, 1, "scenario con condizioni: solo abilitato");
-assert.ok(!mor.textContent.includes("✋"));
+assert.ok(!mor.querySelector('ha-icon[icon="mdi:hand-back-right-outline"]'));
 assert.ok(mor.textContent.includes("attivo ora"));
 
 const tst = byName("Test");
-assert.ok(tst.textContent.includes("✋ manuale"), "fallback friendly_name");
+assert.ok(tst.textContent.includes(" manuale") && tst.querySelector('ha-icon[icon="mdi:hand-back-right-outline"]'), "fallback friendly_name");
 assert.strictEqual(tst.querySelector(".mid b").textContent, "Test");
 
 // applica ora -> scrittura stato del binary_sensor manuale

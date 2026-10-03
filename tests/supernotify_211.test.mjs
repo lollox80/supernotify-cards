@@ -70,7 +70,7 @@ const rows = () => [...a.shadowRoot.querySelectorAll(".row")];
 ok(rows().length === 3, `archivio: 3 righe (${rows().length})`);
 const det0 = rows()[0].querySelector(".det").textContent.replace(/\s+/g, " ");
 console.log("    dettaglio riga 1:", det0.trim());
-ok(/⚠ 1 mancata/.test(det0), "riga con missed: '⚠ 1 mancata'");
+ok(/ 1 mancata/.test(det0) && rows()[0].querySelector('.det ha-icon[icon="mdi:alert"]'), "riga con missed: '1 mancata' con icona");
 const tags1 = rows()[1].querySelector(".tags").textContent;
 console.log("    canali riga 2:", tags1.trim());
 ok(/pausa/.test(tags1) && /transport spento/.test(tags1), "SNOOZED → pausa, TRANSPORT_DISABLED → transport spento");
@@ -96,7 +96,7 @@ ok(dots[0] === "d-warn" && dots[1] === "d-ok" && dots[2] === "d-warn", "colori: 
 const detOf = async (id) => { await w._select(id); await tick(); return w.shadowRoot.getElementById("det").textContent.replace(/\s+/g, " "); };
 let d = await detOf("aaaa1111");
 console.log("    dettaglio why 1:", d.slice(0, 160));
-ok(/⚠ 1 mancati/.test(d), "why: intestazione con i mancati");
+ok(/ 1 mancati/.test(d) && w.shadowRoot.querySelector('#det ha-icon[icon="mdi:alert"]'), "why: intestazione con i mancati");
 d = await detOf("cccc3333");
 ok(/consegnata dal canale di riserva/.test(d), "why: esito fallback_delivery tradotto");
 ok(/dati dell'azione non validi/.test(d), "why: motivo INVALID_ACTION_DATA tradotto");
@@ -111,8 +111,8 @@ c.hass = hass; await tick(); c.hass = { ...hass }; await tick();
 const sr = c.shadowRoot.textContent.replace(/\s+/g, " ");
 const tile = sr.match(/⏳[^😴]{0,120}/);
 console.log("    tile snooze:", tile && tile[0]);
-ok(/🏷️ portico/.test(sr), "control: la tile dice che lo snooze è sul tag 'portico'");
-ok(/⚠ 1 mancati/.test(sr), "control: chip 'mancati' nell'ultima notifica");
+ok(/ portico/.test(sr) && c.shadowRoot.querySelector('ha-icon[icon="mdi:tag-outline"]'), "control: la tile dice che lo snooze è sul tag 'portico'");
+ok(/ 1 mancati/.test(sr) && c.shadowRoot.querySelector('.lb.mis ha-icon[icon="mdi:alert"]'), "control: chip 'mancati' nell'ultima notifica");
 
 // ── overview-card ─────────────────────────────────────────────────────────
 const o = document.createElement("supernotify-overview-card");

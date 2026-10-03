@@ -3,6 +3,20 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.50.0] - 2026-10-03
+
+Second step of the redesign: Home Assistant icons instead of emoji.
+
+### Changed
+- The emoji the cards used (channels, scenarios, tiles, chips, section headings, outcome signs,
+  about 80 of them) are now Home Assistant icons (`ha-icon`, Material Design Icons): the same
+  drawing on iOS, Android and Windows, in the theme's text colour, at the size the emoji had.
+  `icons: emoji` on a card keeps the old look. Emoji you wrote yourself in a card's config
+  stay as they are; `mdi:...` icons in the config already worked and still do.
+- Priority colours follow the palette: "High" in the control and overview cards was `#f0a020`
+  (2.2:1 on white), now the same readable warning colour as the rest.
+- "Critica ⚠️" and "Inviata 🚀" lost their emoji.
+
 ## [0.49.0] - 2026-10-03
 
 First step of the redesign: the same colours and the same signs in every card.

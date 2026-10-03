@@ -8,6 +8,14 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.50.0. Redesign, step 2: Home Assistant icons instead of emoji.
+ *   - Every card's HTML goes through snIconify(): the ~80 emoji the cards use (channels,
+ *     scenarios, tiles, chips, section headings, outcome signs) become <ha-icon> Material
+ *     Design Icons, as in the rest of Home Assistant: the same drawing on iOS, Android and
+ *     Windows, the theme's text colour, the size the emoji had. `icons: emoji` keeps the old
+ *     look; emoji written in a card's config that are not in the table stay emoji.
+ *   - Priority colours follow the palette (control and overview): "High" was #f0a020, 2.2:1.
+ *   - The emoji left inside translations ("Critica ⚠️", "Inviata 🚀") are gone.
  * 2026-10-03 - v0.49.0. Redesign, step 1: foundations (design study "Studio card SuperNotify").
  *   - One palette for all 13 cards (snPalette), instead of 13 diverging copies. Light theme
  *     passes WCAG AA as text: blue #0277bd instead of #03a9f4 (2.6:1), warning #a04f00,
@@ -283,7 +291,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.49.0"; // bundle / HACS release
+const VERSION = "0.50.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -294,19 +302,19 @@ const VERSION = "0.49.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.25.0",
-  overview: "0.23.0",
-  bands: "0.15.0",
-  deliveries: "0.22.0",
-  transports: "0.20.0",
-  recipients: "0.23.0",
-  scenarios: "0.20.0",
-  simulator: "0.11.0",
-  composer: "0.16.0",
-  automations: "0.17.0",
-  stats: "0.24.0",
-  archive: "0.32.0",
-  why: "0.7.0",
+  control: "0.26.0",
+  overview: "0.24.0",
+  bands: "0.16.0",
+  deliveries: "0.23.0",
+  transports: "0.21.0",
+  recipients: "0.24.0",
+  scenarios: "0.21.0",
+  simulator: "0.12.0",
+  composer: "0.17.0",
+  automations: "0.18.0",
+  stats: "0.25.0",
+  archive: "0.33.0",
+  why: "0.8.0",
 };
 
 /**
@@ -357,7 +365,7 @@ const SN_STRINGS = {
     default_prio: "default (medium)",
     comp_hint: "Picked channels are sent with delivery_selection: fixed (only those fire). Critical really is critical — sirens included.",
     critical_confirm: "Send a CRITICAL notification? Sirens and max volume included.",
-    write_first: "Write a message first", sent_toast: "Sent 🚀",
+    write_first: "Write a message first", sent_toast: "Sent",
     write_or_pick: "Write a message, or pick a camera or a channel",
     need_2111: "A notification without text needs SuperNotify 2.11.1", send_err: "Not sent",
     dry_btn: "Try without sending", dry_title: "If you sent it now",
@@ -375,7 +383,7 @@ const SN_STRINGS = {
       TRANSPORT_DISABLED: "transport off", DELIVERY_DISABLED: "switched off", NO_SCENARIO: "required scenario not in force",
       NO_ACTION: "no action", INVALID_ACTION_DATA: "invalid data", UNKNOWN: "unknown reason", ERROR: "error" },
     prio_minimum: "Minimum", prio_low: "Low", prio_medium: "Medium",
-    prio_high: "High", prio_critical: "Critical ⚠️",
+    prio_high: "High", prio_critical: "Critical",
     target_lbl: "Target — people, devices, areas, floors, labels",
     custom_target_lbl: "Custom targets (email, Telegram IDs, …) — comma separated",
     custom_target_ph: "e.g. user@example.com, 123456789",
@@ -433,7 +441,7 @@ const SN_STRINGS = {
     default_prio: "default (media)",
     comp_hint: "I canali scelti partono con delivery_selection: fixed (solo quelli). Il critical è critical davvero — sirene incluse.",
     critical_confirm: "Inviare una notifica CRITICA? Sirene e volume massimo inclusi.",
-    write_first: "Scrivi prima un messaggio", sent_toast: "Inviata 🚀",
+    write_first: "Scrivi prima un messaggio", sent_toast: "Inviata",
     write_or_pick: "Scrivi un messaggio, oppure scegli una camera o un canale",
     need_2111: "Una notifica senza testo richiede SuperNotify 2.11.1", send_err: "Non inviata",
     dry_btn: "Prova senza inviare", dry_title: "Se la inviassi adesso",
@@ -451,7 +459,7 @@ const SN_STRINGS = {
       TRANSPORT_DISABLED: "transport spento", DELIVERY_DISABLED: "spento", NO_SCENARIO: "manca uno scenario richiesto",
       NO_ACTION: "nessuna azione", INVALID_ACTION_DATA: "dati non validi", UNKNOWN: "motivo sconosciuto", ERROR: "errore" },
     prio_minimum: "Minima", prio_low: "Bassa", prio_medium: "Media",
-    prio_high: "Alta", prio_critical: "Critica ⚠️",
+    prio_high: "Alta", prio_critical: "Critica",
     target_lbl: "Target — persone, dispositivi, aree, piani, etichette",
     custom_target_lbl: "Target personalizzati (email, ID Telegram, …) — separati da virgola",
     custom_target_ph: "es. utente@esempio.com, 123456789",
@@ -619,6 +627,71 @@ function snToggle(hass, entityId, on) {
  * warnSoft / warnLine / warnInk: a tinted surface for "on but limited"
  * states (an active snooze), instead of white text on orange.
  * ════════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════
+ * Home Assistant icons instead of emoji (0.50.0)
+ *
+ * Emoji look different on iOS, Android and Windows and ignore the theme
+ * colour. Every card's HTML goes through snIconify(), which swaps the emoji
+ * the cards use for <ha-icon> (Material Design Icons, as in the rest of Home
+ * Assistant): same drawing everywhere, current text colour, 1.15em high so it
+ * keeps the size the emoji had. Text inside tags, <style>, <svg>, <select>,
+ * <option>, <textarea> and <title> is left alone. Emoji a user wrote in the
+ * card config that are not in the table stay emoji; "mdi:..." icons in the
+ * config already render as ha-icon. \`icons: emoji\` on a card keeps the old look.
+ * ════════════════════════════════════════════════════════════════════════ */
+const SN_EMOJI_MDI = [
+  ["👨‍👩‍👧", "account-group"],
+  ["✔", "check-circle"], ["✓", "check"], ["✖", "close-circle"], ["✕", "close"], ["✗", "close"],
+  ["⚠", "alert"], ["⊘", "minus-circle-outline"], ["♻", "content-duplicate"], ["⛔", "cancel"], ["🚫", "cancel"],
+  ["🎬", "movie-open-outline"], ["🔔", "bell-outline"], ["🔕", "bell-off-outline"], ["📤", "send-outline"],
+  ["📨", "email-fast-outline"], ["📷", "camera-outline"], ["🖼", "image-outline"], ["⚙", "cog-outline"],
+  ["😴", "sleep"], ["⏳", "timer-sand"], ["🎯", "target"], ["🌙", "weather-night"], ["🚀", "send"],
+  ["🕐", "clock-outline"], ["⏰", "clock-time-four-outline"], ["🏠", "home-outline"], ["🚗", "car"],
+  ["🗣", "account-voice"], ["🔍", "magnify"], ["🔎", "magnify"], ["🔁", "repeat"], ["🔄", "restart"],
+  ["📢", "bullhorn-outline"], ["⬆", "arrow-up-circle-outline"], ["🌅", "weather-sunset-up"],
+  ["🌤", "weather-partly-cloudy"], ["☀", "weather-sunny"], ["🌇", "weather-sunset-down"],
+  ["🌃", "weather-night-partly-cloudy"], ["🔇", "volume-off"], ["🔉", "volume-low"], ["🔊", "volume-high"],
+  ["🤫", "volume-low"], ["📱", "cellphone"], ["📵", "cellphone-off"], ["📺", "television"],
+  ["🖥", "monitor"], ["✉", "email-outline"], ["💬", "message-text-outline"], ["✈", "send"],
+  ["🕹", "dots-grid"], ["🎵", "music-note"], ["📌", "pin-outline"], ["📡", "access-point"],
+  ["🔀", "call-split"], ["↔", "swap-horizontal"], ["🔌", "power-plug-outline"], ["🔗", "link-variant"],
+  ["👤", "account"], ["🚨", "alarm-light-outline"], ["💼", "briefcase-outline"], ["🏖", "beach"],
+  ["🎄", "pine-tree"], ["👻", "ghost-outline"], ["🚪", "door"], ["🛡", "shield-check-outline"],
+  ["🔒", "lock-outline"], ["🔘", "gesture-tap-button"], ["✋", "hand-back-right-outline"],
+  ["🏷", "tag-outline"], ["📊", "chart-bar"], ["📅", "calendar-today"], ["🏆", "trophy-outline"],
+  ["💡", "lightbulb-on-outline"], ["📝", "pencil-outline"], ["🧭", "compass-outline"], ["🧪", "flask-outline"],
+  ["ℹ", "information-outline"], ["↺", "restore"], ["🃏", "cards-outline"],
+];
+const SN_EMOJI_MAP = new Map(SN_EMOJI_MDI);
+const SN_EMOJI_RE = new RegExp(
+  SN_EMOJI_MDI.map(([e]) => e).sort((a, b) => b.length - a.length)
+    .map((e) => e.replace(/[.*+?^$\{\}()|[\]\\]/g, "\\$&") + "\\uFE0F?").join("|"), "gu");
+const SN_ICON_SKIP = /^<(style|svg|select|option|textarea|title)\b/i;
+
+function snIconify(html, cfg) {
+  if (typeof html !== "string" || (cfg && cfg.icons === "emoji")) return html;
+  SN_EMOJI_RE.lastIndex = 0;
+  if (!SN_EMOJI_RE.test(html)) return html;
+  const swap = (text) => text.replace(SN_EMOJI_RE, (e) =>
+    '<ha-icon class="sn-i" icon="mdi:' + SN_EMOJI_MAP.get(e.replace(/️$/, "")) +
+    '" style="--mdc-icon-size:1.15em;vertical-align:-.2em"></ha-icon>');
+  const tagRe = /<[^>]*>/g;
+  let out = "", last = 0, skip = null, m;
+  while ((m = tagRe.exec(html))) {
+    const text = html.slice(last, m.index);
+    out += skip ? text : swap(text);
+    const tag = m[0];
+    if (!skip) {
+      const k = SN_ICON_SKIP.exec(tag);
+      if (k && !/\/>$/.test(tag)) skip = k[1].toLowerCase();
+    } else if (tag.toLowerCase().startsWith("</" + skip)) skip = null;
+    out += tag;
+    last = tagRe.lastIndex;
+  }
+  const rest = html.slice(last);
+  return out + (skip ? rest : swap(rest));
+}
+
 function snPalette(dark, style) {
   if (style === "theme") {
     return {
@@ -1557,7 +1630,7 @@ class SupernotifyControlCard extends HTMLElement {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; position: relative; background: ${p.panel}; color: ${p.ink}; }
@@ -1654,7 +1727,7 @@ class SupernotifyControlCard extends HTMLElement {
         <div id="groups"></div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-control-card v${SN_CARD_VERSIONS.control}</div>` : ""}
         <div class="toast" id="toast"></div>
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     const abtn = this.shadowRoot.getElementById("announceBtn");
     if (abtn) {
       abtn.addEventListener("click", () => this._announce());
@@ -1686,8 +1759,9 @@ class SupernotifyControlCard extends HTMLElement {
     if (c.last_notification_strip) {
       try { msg = msg.replace(new RegExp(c.last_notification_strip, "m"), "").trim(); } catch (e) { /* bad regex: ignore */ }
     }
-    if (!n && !title) { el.innerHTML = `<div class="lm" style="opacity:.7">${T.no_notif}</div>`; return; }
-    const prioCol = { critical: "#e23c3c", high: "#f0a020", medium: "#03a9f4", low: "#8fa1b4", minimum: "#c3ccd6" };
+    if (!n && !title) { el.innerHTML = snIconify(`<div class="lm" style="opacity:.7">${T.no_notif}</div>`, this && this._config); return; }
+    const pp = this._palette();
+    const prioCol = { critical: pp.crit, high: pp.warn, medium: pp.brandD, low: pp.muted, minimum: pp.muted };
     const prio = n && n.priority
       ? `<span class="lb" style="color:${prioCol[n.priority] || "inherit"}">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "";
     let when = "";
@@ -1707,10 +1781,10 @@ class SupernotifyControlCard extends HTMLElement {
     if (skipped) chips.push(`<span class="lb mut">${skipped} ${T.skipped_n}</span>`);
     const rep = c.repeat_entity
       ? `<button class="rep" id="repBtn">🔁 ${T.repeat}</button>` : "";
-    el.innerHTML = `
+    el.innerHTML = snIconify(`
       <div class="lh"><span class="lt">${esc(title) || "📨 " + T.last_notif}</span>${prio}${when}</div>
       ${msg ? `<div class="lm">${esc(msg)}</div>` : ""}
-      <div class="lf">${chips.join("")}${rep}</div>`;
+      <div class="lf">${chips.join("")}${rep}</div>`, this && this._config);
     const btn = el.querySelector("#repBtn");
     if (btn) btn.onclick = () => {
       const [dom] = c.repeat_entity.split(".");
@@ -1747,7 +1821,7 @@ class SupernotifyControlCard extends HTMLElement {
     const act = this._activeScenarios();
     if (act !== null) segs.push(seg("🎬 " + T.act_scen, String(act.length)));
     const bar = this.shadowRoot.getElementById("statusbar");
-    bar.innerHTML = segs.join("");
+    bar.innerHTML = snIconify(segs.join(""), this && this._config);
     bar.style.display = segs.length ? "" : "none";
   }
 
@@ -1805,12 +1879,12 @@ class SupernotifyControlCard extends HTMLElement {
   _renderTiles() {
     const defs = (this._config.tiles || []).map((t) => this._tileDef(t)).filter(Boolean);
     const el = this.shadowRoot.getElementById("tiles");
-    el.innerHTML = defs
+    el.innerHTML = snIconify(defs
       .map((d, i) =>
         `<div class="ctile ${d.cls}" data-i="${i}" role="button" tabindex="0">
            ${this._icon(d.icon)}<b>${d.name}</b><div class="ts">${d.sub}</div>
          </div>`)
-      .join("");
+      .join(""), this && this._config);
     el.querySelectorAll(".ctile").forEach((node) => {
       const d = defs[+node.dataset.i];
       node.onclick = () => d.act();
@@ -1847,7 +1921,7 @@ class SupernotifyControlCard extends HTMLElement {
     const T = snT(this._config, this._hass);
     const foldable = this._config.collapsible !== false;
     const folded = foldable ? this._loadCollapsed() : new Set();
-    el.innerHTML = (this._config.groups || [])
+    el.innerHTML = snIconify((this._config.groups || [])
       .map((g, gi) => {
         const ents = (g.entities || []).map((ent) => {
           const id = typeof ent === "string" ? ent : ent.entity;
@@ -1867,7 +1941,7 @@ class SupernotifyControlCard extends HTMLElement {
         return `<div class="mgroup ${foldable ? "clk" : ""} ${isFold ? "fold" : ""}" data-g="${gi}" role="${foldable ? "button" : ""}"
                      ${foldable ? `aria-expanded="${!isFold}" tabindex="0"` : ""}>${g.name || ""}${counter}${chev}</div><div>${pills}</div>`;
       })
-      .join("");
+      .join(""), this && this._config);
     el.querySelectorAll(".mpill").forEach((node) => {
       node.onclick = () => this._toggle(node.dataset.e);
     });
@@ -2050,7 +2124,7 @@ class SupernotifyOverviewCard extends HTMLElement {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -2093,7 +2167,7 @@ class SupernotifyOverviewCard extends HTMLElement {
         <div class="sec">${snT(this._config, this._hass).act_scen}</div>
         <div id="scen">—</div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-overview-card v${SN_CARD_VERSIONS.overview}</div>` : ""}
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     this._update();
   }
 
@@ -2125,18 +2199,18 @@ class SupernotifyOverviewCard extends HTMLElement {
     }
     const healthEl = this.shadowRoot.getElementById("health");
     if (healthEl) {
-      healthEl.innerHTML = this._config.health
+      healthEl.innerHTML = snIconify(this._config.health
         ? this._health().map((h) => h.href
             ? `<a class="hc ${h.k}" href="${esc(h.href)}" target="_blank" rel="noopener">${esc(h.t)}</a>`
             : `<span class="hc ${h.k}"${h.title ? ` title="${esc(h.title)}"` : ""}>${esc(h.t)}</span>`).join("")
-        : "";
+        : "", this && this._config);
     }
     this.shadowRoot.getElementById("stats").innerHTML =
-      sentStat +
+      snIconify(sentStat +
       stat("⚠️ " + T.failures, failures != null ? esc(failures) : "—", "", +failures > 0 ? p.crit : p.ok) +
       stat("🎬 " + T.act_scen, act ? act.length : "—", "") +
       stat("📤 " + T.deliveries, dels.length ? `${delsOn}/${dels.length}` : "—", T.enabled_total) +
-      stat("😴 " + T.snoozed, snz.length, snz.length && snz[0]._end ? T.until + " " + esc(String(snz[0]._end.getHours()).padStart(2, "0") + ":" + String(snz[0]._end.getMinutes()).padStart(2, "0")) : "", snz.length ? p.warn : undefined);
+      stat("😴 " + T.snoozed, snz.length, snz.length && snz[0]._end ? T.until + " " + esc(String(snz[0]._end.getHours()).padStart(2, "0") + ":" + String(snz[0]._end.getMinutes()).padStart(2, "0")) : "", snz.length ? p.warn : undefined), this && this._config);
 
     const lastEl = this.shadowRoot.getElementById("last");
     if (this._last) {
@@ -2144,20 +2218,20 @@ class SupernotifyOverviewCard extends HTMLElement {
       const when = n.created ? esc(String(n.created).replace("T", " ").slice(0, 16)) : "";
       const msg = esc((n.message || "").slice(0, 90));
       const ok = (n.failed || 0) === 0;
-      const prioCol = { critical: "#e23c3c", high: "#f0a020", medium: p.brandD }[n.priority];
+      const prioCol = { critical: p.crit, high: p.warn, medium: p.brandD }[n.priority];
       const prio = n.priority
         ? `<span class="badge" style="background:${p.soft};color:${prioCol || p.muted}">${esc(T["prio_" + n.priority] || n.priority)}</span>`
         : "";
       const ch = +n.delivered > 0 ? `<span class="badge b-off">${n.delivered} ${T.channels}</span>` : "";
-      lastEl.innerHTML = `<div class="t">${when}</div><div>${msg}</div>
-        <div style="margin-top:5px">${prio}<span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ " + T.delivered : "✖ " + n.failed + " " + T.failed}</span>${+n.missed > 0 ? `<span class="badge" style="background:${p.soft};color:${p.warn || "#f0a020"}">⚠ ${esc(n.missed)} ${T.missed_n}</span>` : ""}${ch}</div>`;
+      lastEl.innerHTML = snIconify(`<div class="t">${when}</div><div>${msg}</div>
+        <div style="margin-top:5px">${prio}<span class="badge ${ok ? "b-ok" : "b-crit"}">${ok ? "✔ " + T.delivered : "✖ " + n.failed + " " + T.failed}</span>${+n.missed > 0 ? `<span class="badge" style="background:${p.soft};color:${p.warn || "#f0a020"}">⚠ ${esc(n.missed)} ${T.missed_n}</span>` : ""}${ch}</div>`, this && this._config);
     } else {
       lastEl.textContent = "—";
     }
 
-    this.shadowRoot.getElementById("scen").innerHTML = act && act.length
+    this.shadowRoot.getElementById("scen").innerHTML = snIconify(act && act.length
       ? act.map((s) => `<span class="chip">🎬 ${esc(this._scenLabel(s))}</span>`).join("")
-      : `<span class="badge b-off">${T.none}</span>`;
+      : `<span class="badge b-off">${T.none}</span>`, this && this._config);
   }
 
   /** Scenario name for a chip: entity ids (reactive path) become the translated alias. */
@@ -2290,7 +2364,7 @@ class SupernotifyBandsCard extends HTMLElement {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -2324,7 +2398,7 @@ class SupernotifyBandsCard extends HTMLElement {
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         <div class="hint">🔇 ${snT(this._config, this._hass).mute_hint}</div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-bands-card v${SN_CARD_VERSIONS.bands}</div>` : ""}
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     this._update();
   }
 
@@ -2343,7 +2417,7 @@ class SupernotifyBandsCard extends HTMLElement {
     // moment it opens. Only a change in the set or order of bands rebuilds.
     const sig = bands.map((b) => b.key + ":" + (b.min === null ? "-" : b.min)).join("|");
     if (rows.dataset.sig !== sig) {
-      rows.innerHTML = bands.map((b, i) => {
+      rows.innerHTML = snIconify(bands.map((b, i) => {
         const next = bands[(i + 1) % bands.length];
         const isAct = b.key === active;
         const isMute = b.vol === 0;
@@ -2356,7 +2430,7 @@ class SupernotifyBandsCard extends HTMLElement {
         <div class="fld volwrap"><span class="k">${T.volume} <span data-l="${b.key}">${b.vol != null ? b.vol : "\u2014"}</span>%</span>
           <input type="range" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}"></div>
       </div>`;
-      }).join("");
+      }).join(""), this && this._config);
       rows.dataset.sig = sig;
       this._bind(rows);
     }
@@ -2513,7 +2587,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -2553,7 +2627,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-deliveries-card v${SN_CARD_VERSIONS.deliveries}</div>` : ""}
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     this._update();
   }
 
@@ -2565,7 +2639,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
     const dels = this._deliveries();
     const rows = this.shadowRoot.getElementById("rows");
     if (!dels.length) {
-      rows.innerHTML = `<span class="badge b-off">${T.no_deliveries}</span>`;
+      rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_deliveries}</span>`, this && this._config);
       return;
     }
     // Riepilogo: la domanda vera e' "quali canali partono senza che io li chieda".
@@ -2584,7 +2658,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       + `</span>`
       + (resetBtn ? `<button class="rstb">↺ ${esc(T.reset_overrides)}</button>` : "")
       + `</div>`;
-    rows.innerHTML = sum + dels.map((d, i) => {
+    rows.innerHTML = snIconify(sum + dels.map((d, i) => {
       const tr = d.a.transport || "";
       const em = SN_TRANSPORT_ICONS[tr] || "📤";
       const tags = [];
@@ -2619,7 +2693,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
           <span class="sl"></span>
         </label>
       </div>`;
-    }).join("");
+    }).join(""), this && this._config);
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
         if (e.target.closest(".sw")) return;
@@ -2711,7 +2785,7 @@ class SupernotifyTransportsCard extends HTMLElement {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -2740,7 +2814,7 @@ class SupernotifyTransportsCard extends HTMLElement {
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-transports-card v${SN_CARD_VERSIONS.transports}</div>` : ""}
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     this._update();
   }
 
@@ -2752,11 +2826,11 @@ class SupernotifyTransportsCard extends HTMLElement {
     const trs = this._transports();
     const rows = this.shadowRoot.getElementById("rows");
     if (!trs.length) {
-      rows.innerHTML = `<span class="badge b-off">${T.no_transports}</span>`;
+      rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_transports}</span>`, this && this._config);
       return;
     }
     const resetBtn = snResetOverridesButton(this._hass);
-    rows.innerHTML = (resetBtn ? `<div class="rst"><button class="rstb">↺ ${esc(T.reset_overrides)}</button></div>` : "")
+    rows.innerHTML = snIconify((resetBtn ? `<div class="rst"><button class="rstb">↺ ${esc(T.reset_overrides)}</button></div>` : "")
       + trs.map((t, i) => {
       const em = SN_TRANSPORT_ICONS[t.name] || "🔌";
       const tags = [];
@@ -2774,7 +2848,7 @@ class SupernotifyTransportsCard extends HTMLElement {
           <span class="sl"></span>
         </label>
       </div>`;
-    }).join("");
+    }).join(""), this && this._config);
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
         if (e.target.closest(".sw")) return;
@@ -2867,7 +2941,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -2901,7 +2975,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-recipients-card v${SN_CARD_VERSIONS.recipients}</div>` : ""}
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     this._update();
   }
 
@@ -2913,10 +2987,10 @@ class SupernotifyRecipientsCard extends HTMLElement {
     const recs = this._recipients();
     const rows = this.shadowRoot.getElementById("rows");
     if (!recs.length) {
-      rows.innerHTML = `<span class="badge b-off">${T.no_recipients}</span>`;
+      rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_recipients}</span>`, this && this._config);
       return;
     }
-    rows.innerHTML = recs.map((r, i) => {
+    rows.innerHTML = snIconify(recs.map((r, i) => {
       const personId = r.a.entity_id;
       const pState = personId ? (this._hass.states[personId] || {}).state : undefined;
       const home = pState === "home";
@@ -2946,7 +3020,7 @@ class SupernotifyRecipientsCard extends HTMLElement {
           <span class="sl"></span>
         </label>
       </div>`;
-    }).join("");
+    }).join(""), this && this._config);
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
         if (e.target.closest(".sw")) return;
@@ -3141,7 +3215,7 @@ class SupernotifyScenariosCard extends HTMLElement {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -3175,7 +3249,7 @@ class SupernotifyScenariosCard extends HTMLElement {
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-scenarios-card v${SN_CARD_VERSIONS.scenarios}</div>` : ""}
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     this._update();
   }
 
@@ -3228,7 +3302,7 @@ class SupernotifyScenariosCard extends HTMLElement {
     const active = reactive !== null ? reactive : (this._active || []);
     const rows = this.shadowRoot.getElementById("rows");
     if (!all.length) {
-      rows.innerHTML = `<span class="tag">${snT(this._config, this._hass).no_scenarios}</span>`;
+      rows.innerHTML = snIconify(`<span class="tag">${snT(this._config, this._hass).no_scenarios}</span>`, this && this._config);
       return;
     }
     const sortFn = (x, y) => {
@@ -3254,7 +3328,7 @@ class SupernotifyScenariosCard extends HTMLElement {
     } else {
       html = all.slice().sort(sortFn).map((s) => this._rowHtml(s, all.indexOf(s), active)).join("");
     }
-    rows.innerHTML = html;
+    rows.innerHTML = snIconify(html, this && this._config);
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
         if (e.target.closest(".sw")) return;
@@ -3361,7 +3435,7 @@ class SupernotifySimulatorCard extends HTMLElement {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -3391,7 +3465,7 @@ class SupernotifySimulatorCard extends HTMLElement {
         <div id="result">—</div>
         <div class="hint">${snT(this._config, this._hass).sim_hint}</div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-simulator-card v${SN_CARD_VERSIONS.simulator}</div>` : ""}
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     this._refresh();
   }
 
@@ -3400,9 +3474,9 @@ class SupernotifySimulatorCard extends HTMLElement {
     const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const chips = this.shadowRoot.getElementById("chips");
     const names = Object.keys(this._byScen || {}).sort();
-    chips.innerHTML = names.map((n) =>
+    chips.innerHTML = snIconify(names.map((n) =>
       `<span class="chip ${this._sel.has(n) ? "sel" : ""}" data-n="${esc(n)}">${SN_SCENARIO_ICONS[n] || "🎬"} ${esc(n)}</span>`
-    ).join("") || "—";
+    ).join("") || "—", this && this._config);
     chips.querySelectorAll(".chip").forEach((node) => {
       node.onclick = () => {
         const n = node.dataset.n;
@@ -3424,11 +3498,11 @@ class SupernotifySimulatorCard extends HTMLElement {
     const suppressed = [...enabled].filter((d) => disabled.has(d)).sort();
     const res = this.shadowRoot.getElementById("result");
     res.innerHTML =
-      fired.map((d) =>
+      snIconify(fired.map((d) =>
         `<span class="out">${esc(d)}${byScenAdd.has(d) && !(this._implicit || []).includes(d) ? ' <span class="tag">scenario</span>' : ""}</span>`
       ).join("") +
       suppressed.map((d) => `<span class="out sup">${esc(d)} <span class="tag">${snT(this._config, this._hass).off}</span></span>`).join("") ||
-      `<span class='hint'>${snT(this._config, this._hass).sim_none}</span>`;
+      `<span class='hint'>${snT(this._config, this._hass).sim_none}</span>`, this && this._config);
   }
 }
 
@@ -3528,7 +3602,7 @@ class SupernotifyComposerCard extends HTMLElement {
     const p = this._palette();
     const T = snT(this._config, this._hass);
     const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; container-type: inline-size; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -3584,7 +3658,7 @@ class SupernotifyComposerCard extends HTMLElement {
         ${snIntro(this._config, this._dark)}<div class="grid2">
           <div>
             <label>${T.title}</label>
-            <input type="text" id="t" placeholder="🧪 Test">
+            <input type="text" id="t" placeholder="Test">
             <label>${T.message}</label>
             <textarea id="m" rows="3" placeholder="…"></textarea>
             <label>${T.priority}</label>
@@ -3622,7 +3696,7 @@ class SupernotifyComposerCard extends HTMLElement {
         <div class="dryBox" id="dryBox" style="display:none"></div>
         <div class="toast" id="toast"></div>
         <div style="text-align:right;font-size:10px;color:${p.muted};opacity:.7;margin-top:8px">supernotify-composer-card v${SN_CARD_VERSIONS.composer}</div>
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     const sr = this.shadowRoot;
     const upd = () => {
       sr.getElementById("pvT").textContent = sr.getElementById("t").value || T.no_title;
@@ -3817,7 +3891,7 @@ class SupernotifyComposerCard extends HTMLElement {
     const n = snIsObj(doc) && (doc.deliveries || doc.outcome || doc.id) ? snArchiveDetail(doc) : null;
     const box = this.shadowRoot.getElementById("dryBox");
     if (!n) {
-      box.innerHTML = `<h4>🔍 ${T.dry_title}</h4><div class="dNo">${T.dry_empty}</div>`;
+      box.innerHTML = snIconify(`<h4>🔍 ${T.dry_title}</h4><div class="dNo">${T.dry_empty}</div>`, this && this._config);
       return;
     }
     const st = this._hass.states;
@@ -3863,7 +3937,7 @@ class SupernotifyComposerCard extends HTMLElement {
     h += `<div class="dMeta">${meta.join(" · ")}</div>`;
     if (noDupeCheck) h += `<div class="dMeta">ℹ️ ${T.dry_no_dupe}</div>`;
     h += `<details class="dMeta"><summary>${T.dry_raw}</summary><pre>${esc(JSON.stringify(doc, null, 2))}</pre></details>`;
-    box.innerHTML = h;
+    box.innerHTML = snIconify(h, this && this._config);
   }
 
   _toast(msg) {
@@ -4017,7 +4091,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
     const T = snT(this._config, this._hass);
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -4059,7 +4133,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
         ${snIntro(this._config, this._dark)}
         <div id="body"></div>
         <div class="ver" id="foot">${this._config && this._config.show_version ? `supernotify-automations-card v${SN_CARD_VERSIONS.automations}` : ""}</div>
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     this._renderBody();
   }
 
@@ -4067,24 +4141,24 @@ class SupernotifyAutomationsCard extends HTMLElement {
     const el = this.shadowRoot.getElementById("body");
     const T = snT(this._config, this._hass);
     if (this._err) {
-      el.innerHTML = `<div class="err">⚠️ ${this._esc(T.aut_err)}<br>
-        <span style="opacity:.7">${this._esc(this._config.manifest_url)} — ${this._esc(this._err)}</span></div>`;
+      el.innerHTML = snIconify(`<div class="err">⚠️ ${this._esc(T.aut_err)}<br>
+        <span style="opacity:.7">${this._esc(this._config.manifest_url)} — ${this._esc(this._err)}</span></div>`, this && this._config);
       return;
     }
     if (!this._manifest) {
-      el.innerHTML = `<div class="empty">…</div>`;
+      el.innerHTML = snIconify(`<div class="empty">…</div>`, this && this._config);
       return;
     }
     const items = this._items();
     const cats = this._cats(items);
-    el.innerHTML = `
+    el.innerHTML = snIconify(`
       <div class="top">
         <input type="search" id="q" placeholder="${this._esc(T.aut_search)}"
           value="${this._esc(this._q)}" aria-label="${this._esc(T.aut_search)}">
         <span class="tot">${items.length} ${T.aut_count} · v${SN_CARD_VERSIONS.automations}</span>
       </div>
       <div class="chips" id="chips"></div>
-      <div id="list" class="flow"></div>`;
+      <div id="list" class="flow"></div>`, this && this._config);
     const q = el.querySelector("#q");
     q.addEventListener("input", () => { this._q = q.value; this._renderList(); });
     this._renderChips();
@@ -4105,9 +4179,9 @@ class SupernotifyAutomationsCard extends HTMLElement {
     const offCount = items.filter((a) => !(a.st && a.st.state === "on")).length;
     const chip = (label, val, n) =>
       `<span class="chip ${this._cat === val ? "sel" : ""}" data-c="${this._esc(val || "")}">${this._esc(label)} · ${n}</span>`;
-    el.innerHTML = chip(T.aut_all, null, items.length) +
+    el.innerHTML = snIconify(chip(T.aut_all, null, items.length) +
       cats.map((c) => chip(c, c, items.filter((a) => a.c === c).length)).join("") +
-      `<span class="chip warn ${this._onlyDisabled ? "sel" : ""}" id="offOnly">🔕 ${this._esc(T.aut_disabled_only)} · ${offCount}</span>`;
+      `<span class="chip warn ${this._onlyDisabled ? "sel" : ""}" id="offOnly">🔕 ${this._esc(T.aut_disabled_only)} · ${offCount}</span>`, this && this._config);
     el.querySelectorAll(".chip[data-c]").forEach((ch) => {
       ch.addEventListener("click", () => {
         const v = ch.dataset.c || null;
@@ -4130,7 +4204,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
     const T = snT(this._config, this._hass);
     const rows = this._filtered(this._items());
     if (!rows.length) {
-      el.innerHTML = `<div class="empty">${this._esc(T.aut_none)}</div>`;
+      el.innerHTML = snIconify(`<div class="empty">${this._esc(T.aut_none)}</div>`, this && this._config);
       return;
     }
     let html = "", lastCat = null;
@@ -4149,7 +4223,7 @@ class SupernotifyAutomationsCard extends HTMLElement {
             aria-label="${this._esc(a.n)}"><span class="sl"></span></label>
         </div>`;
     }
-    el.innerHTML = html;
+    el.innerHTML = snIconify(html, this && this._config);
     el.querySelectorAll(".row").forEach((row) => {
       const inp = row.querySelector("input");
       inp.addEventListener("change", () => this._toggle(row.dataset.e, inp.checked));
@@ -4519,7 +4593,7 @@ class SupernotifyStatsCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
     const T = snT(this._config, this._hass);
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; container-type: inline-size; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -4576,7 +4650,7 @@ class SupernotifyStatsCard extends HTMLElement {
         <div id="body"><div class="empty">${T.st_loading}</div></div>
         <div class="ver" id="ver"></div>
         ${this._config && this._config.show_version ? `<div class="foot">supernotify-stats-card v${SN_CARD_VERSIONS.stats}</div>` : ""}
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     this.shadowRoot.querySelectorAll(".pb").forEach((b) => { b.onclick = () => this._setDays(+b.dataset.d); });
     this._updateVersions();
     if (this._data) this._draw();
@@ -4613,7 +4687,7 @@ class SupernotifyStatsCard extends HTMLElement {
       : "";
     const body = sr.getElementById("body");
     if (!d.total && !d.spineCount) {
-      body.innerHTML = `<div class="empty">${T.st_no_data}${this._error ? ` <small>(${esc(this._error)})</small>` : ""}</div>`;
+      body.innerHTML = snIconify(`<div class="empty">${T.st_no_data}${this._error ? ` <small>(${esc(this._error)})</small>` : ""}</div>`, this && this._config);
       return;
     }
     const top = d.channels[0];
@@ -4659,7 +4733,7 @@ class SupernotifyStatsCard extends HTMLElement {
     const perChips = Object.keys(d.periodCount).sort((a, b) => d.periodCount[b] - d.periodCount[a]).map((k) =>
       `<span class="chip">${esc(k)} ${Math.round((d.periodCount[k] / perTot) * 100)}%</span>`).join("") || `<span class="empty">—</span>`;
 
-    body.innerHTML = `
+    body.innerHTML = snIconify(`
       <div class="kpis">${kpis}</div>
       <div class="sec"><span>${T.st_daily}</span><span class="n">${this._fmt(d.total)}</span></div>
       <div class="bars">${daily}</div>
@@ -4674,7 +4748,7 @@ class SupernotifyStatsCard extends HTMLElement {
         <div><div class="sec"><span>${T.st_period}</span></div><div class="chips">${perChips}</div></div>
       </div>
       <div class="sec"><span>💡 ${T.st_insights}</span></div>
-      <ul class="ins">${this._insights(d).map((s) => `<li>${s}</li>`).join("")}</ul>`;
+      <ul class="ins">${this._insights(d).map((s) => `<li>${s}</li>`).join("")}</ul>`, this && this._config);
   }
 
   // Channel names are DELIVERY names; look the transport up on the delivery
@@ -4776,8 +4850,8 @@ class SupernotifyStatsCard extends HTMLElement {
       return `<a class="vbox"${href}>${icon}<div><b>${this._esc(name)}</b><div class="sm">${sub}</div></div>${badge}</a>`;
     };
     el.innerHTML =
-      box(this._config.update_entity, "SuperNotify", null, "🔔") +
-      box(this._config.cards_update_entity, "SuperNotify Cards", VERSION, "🃏");
+      snIconify(box(this._config.update_entity, "SuperNotify", null, "🔔") +
+      box(this._config.cards_update_entity, "SuperNotify Cards", VERSION, "🃏"), this && this._config);
   }
 }
 
@@ -4909,7 +4983,7 @@ class SupernotifyArchiveCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
     const T = this._T();
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
@@ -4964,7 +5038,7 @@ class SupernotifyArchiveCard extends HTMLElement {
         <div class="meta" id="meta"></div>
         <div id="list" class="flow"${this._config.max_height ? ` style="max-height:${String(this._config.max_height).replace(/[<>"]/g, "")};overflow-y:auto;padding-right:4px"` : ""}></div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-archive-card v${SN_CARD_VERSIONS.archive}</div>` : ""}
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     const q = this.shadowRoot.getElementById("q");
     q.addEventListener("input", () => { this._q = q.value.toLowerCase(); this._renderList(); });
     this._renderChips();
@@ -4979,8 +5053,8 @@ class SupernotifyArchiveCard extends HTMLElement {
     const withIdx = this._index();
     if (withIdx && (withIdx.items || []).some((r) => r.w)) defs.push(["whisper", T.f_whisper]);
     const el = this.shadowRoot.getElementById("chips");
-    el.innerHTML = defs.map(([k, label]) =>
-      `<span class="chip ${this._filter === k ? "on" : ""}" data-k="${k}">${label}</span>`).join("");
+    el.innerHTML = snIconify(defs.map(([k, label]) =>
+      `<span class="chip ${this._filter === k ? "on" : ""}" data-k="${k}">${label}</span>`).join(""), this && this._config);
     el.querySelectorAll(".chip").forEach((n) => {
       n.onclick = () => { this._filter = n.dataset.k; this._renderChips(); this._renderList(); };
     });
@@ -4996,16 +5070,16 @@ class SupernotifyArchiveCard extends HTMLElement {
     const meta = this.shadowRoot.getElementById("meta");
     if (!idx) {
       meta.textContent = "";
-      el.innerHTML = `<div class="empty"><b>${T.no_sensor}</b> — <code>${esc(this._config.entity)}</code><br>${T.no_sensor_hint}</div>`;
+      el.innerHTML = snIconify(`<div class="empty"><b>${T.no_sensor}</b> — <code>${esc(this._config.entity)}</code><br>${T.no_sensor_hint}</div>`, this && this._config);
       return;
     }
     if (idx.error) {
-      el.innerHTML = `<div class="empty">⚠️ ${esc(idx.error)}</div>`;
+      el.innerHTML = snIconify(`<div class="empty">⚠️ ${esc(idx.error)}</div>`, this && this._config);
       return;
     }
     if (idx.loading) {
       meta.textContent = "";
-      el.innerHTML = `<div class="empty">${T.loading}</div>`;
+      el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this && this._config);
       return;
     }
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -5022,12 +5096,12 @@ class SupernotifyArchiveCard extends HTMLElement {
     const parts = [];
     const gen = idx.generated ? new Date(idx.generated).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit" }) : "";
     const old = idx.oldest ? new Date(idx.oldest).toLocaleDateString(this._loc()) : "";
-    meta.innerHTML = idx.native
+    meta.innerHTML = snIconify(idx.native
       ? `${idx.items.length} ${T.recent}` + (gen ? ` · ${T.read_at} ${gen}` : "")
       : `${idx.items.length} ${T.of} ${idx.total || "?"} ${T.in_archive}` +
-        (old ? ` · ${T.since}: ${old}` : "") + (gen ? ` · ${T.updated} ${gen}` : "");
+        (old ? ` · ${T.since}: ${old}` : "") + (gen ? ` · ${T.updated} ${gen}` : ""), this && this._config);
     if (!rows.length) {
-      el.innerHTML = `<div class="empty">${T.none}</div>`;
+      el.innerHTML = snIconify(`<div class="empty">${T.none}</div>`, this && this._config);
       return;
     }
     let lastDay = "";
@@ -5057,7 +5131,7 @@ class SupernotifyArchiveCard extends HTMLElement {
            </div>
          </div>`);
     });
-    el.innerHTML = parts.join("");
+    el.innerHTML = snIconify(parts.join(""), this && this._config);
     el.querySelectorAll(".why").forEach((a) => {
       a.onclick = (e) => { e.stopPropagation(); snWhyOpen(a.dataset.why); };
     });
@@ -5231,7 +5305,7 @@ class SupernotifyWhyCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
     const T = this._T();
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; font-size: 13px; }
@@ -5280,7 +5354,7 @@ class SupernotifyWhyCard extends HTMLElement {
         <div class="list" id="list"></div>
         <div class="det" id="det"${this._config.max_height ? ` style="max-height:${String(this._config.max_height).replace(/[<>"]/g, "")};overflow-y:auto;padding-right:4px"` : ""}><div class="empty">${T.pick}</div></div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-why-card v${SN_CARD_VERSIONS.why}</div>` : ""}
-      </ha-card>`;
+      </ha-card>`, this && this._config);
     this._renderList();
     if (this._sel) this._renderDetail();
   }
@@ -5301,20 +5375,20 @@ class SupernotifyWhyCard extends HTMLElement {
     const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const idx = this._index();
     if (!idx) {
-      el.innerHTML = `<div class="empty">${T.no_sensor} <code>${esc(this._config.entity)}</code></div>`;
+      el.innerHTML = snIconify(`<div class="empty">${T.no_sensor} <code>${esc(this._config.entity)}</code></div>`, this && this._config);
       return;
     }
-    if (idx.error) { el.innerHTML = `<div class="empty">⚠️ ${esc(idx.error)}</div>`; return; }
-    if (idx.loading) { el.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
+    if (idx.error) { el.innerHTML = snIconify(`<div class="empty">⚠️ ${esc(idx.error)}</div>`, this && this._config); return; }
+    if (idx.loading) { el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this && this._config); return; }
     const items = idx.items.slice(0, this._config.limit);
-    if (!items.length) { el.innerHTML = `<div class="empty">${T.none}</div>`; return; }
-    el.innerHTML = items.map((r) => {
+    if (!items.length) { el.innerHTML = snIconify(`<div class="empty">${T.none}</div>`, this && this._config); return; }
+    el.innerHTML = snIconify(items.map((r) => {
       const d = new Date(r.t * 1000);
       const hm = d.toLocaleString(this._loc(), { weekday: "short", hour: "2-digit", minute: "2-digit" });
       return `<div class="it${this._sel === r.id ? " sel" : ""}" data-id="${esc(r.id)}">
         <span class="dot ${this._outcomeClass(r)}"></span><span class="hm">${esc(hm)}</span>
         <span class="ti">${esc(r.ti || r.m || "—")}</span></div>`;
-    }).join("");
+    }).join(""), this && this._config);
     el.querySelectorAll(".it").forEach((n) => { n.onclick = () => this._select(n.dataset.id); });
     // open the latest notification by itself, once, so the card is never an empty box
     if (!this._sel && !this._autoDone && this._config.auto_select !== false) {
@@ -5459,14 +5533,14 @@ class SupernotifyWhyCard extends HTMLElement {
     if (!el) return;
     const T = this._T();
     const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    if (!this._sel) { el.innerHTML = `<div class="empty">${T.pick}</div>`; return; }
-    if (this._loading === this._sel) { el.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
+    if (!this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.pick}</div>`, this && this._config); return; }
+    if (this._loading === this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this && this._config); return; }
     const res = this._cache.get(this._sel) || {};
     if (!res.ok) {
       const msg = res.error === "no_service"
         ? `${T.no_service} <code>${esc(this._config.service)}</code>. ${T.no_service_hint}`
         : esc(res.error || T.none);
-      el.innerHTML = `<div class="empty err">${msg}</div>`;
+      el.innerHTML = snIconify(`<div class="empty err">${msg}</div>`, this && this._config);
       return;
     }
     const n = res.n || {};
@@ -5574,7 +5648,7 @@ class SupernotifyWhyCard extends HTMLElement {
       out.push(`<div class="note">ℹ️ ${T.no_trace}</div>`);
     }
     if (n.ctx && n.ctx.id) out.push(`<div class="note">context <code>${esc(n.ctx.id)}</code>${n.ctx.parent_id ? ` ← <code>${esc(n.ctx.parent_id)}</code>` : ""}</div>`);
-    el.innerHTML = out.join("");
+    el.innerHTML = snIconify(out.join(""), this && this._config);
   }
 }
 

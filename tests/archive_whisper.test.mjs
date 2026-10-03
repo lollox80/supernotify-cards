@@ -46,7 +46,7 @@ const tags = [...a.shadowRoot.querySelectorAll(".tg.wh")];
 console.log("tag trovati:", tags.map((t) => t.textContent.trim()).join(" | "));
 ok(tags.length === 2, "due righe marcate come sussurrate");
 ok(/sussurrata/.test(tags[0].textContent), "etichetta in italiano");
-ok(tags[0].textContent.includes("\u{1F92B}"), "icona presente");
+ok(tags[0].querySelector('ha-icon[icon="mdi:volume-low"]'), "icona presente (mdi:volume-low dalla 0.50)");
 
 const chips = [...a.shadowRoot.querySelectorAll(".chip")].map((c) => c.textContent.trim());
 console.log("filtri:", chips.join(" | "));

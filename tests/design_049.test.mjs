@@ -82,7 +82,7 @@ ok(/\.st\.skip, \.st\.supp \{ color: #5b6b7c; \}/.test(css), "why: saltata in gr
 // ── 4. versione nascosta salvo show_version ─────────────────────────────────
 ok(!dc.shadowRoot.querySelector(".ver"), "deliveries: niente riga versione di default");
 const dv = mount("supernotify-deliveries-card", { show_version: true });
-ok(/supernotify-deliveries-card v0\.22\.0/.test(dv.shadowRoot.textContent), "show_version: true la mostra");
+ok(/supernotify-deliveries-card v\d+\.\d+\.\d+/.test(dv.shadowRoot.textContent), "show_version: true la mostra");
 ok(/--sn-sw-on:#0277bd/.test(dc.shadowRoot.innerHTML), "tema chiaro: gli switch usano il blu leggibile #0277bd");
 
 if (fail) { console.log(`\n${fail} FALLITI`); process.exit(1); }
