@@ -1,101 +1,118 @@
-// v0.44.0: composer-card "Try without sending" (SuperNotify issue #218 dry-run action).
+// v0.48.0: composer-card "Prova senza inviare" sul dry-run vero di SuperNotify 2.12
+// (supernotify.notify con dry_run: simulate, risposta = Notification.contents()).
+// Sostituisce il test della 0.44.0, scritto per un'azione enquire_dry_run mai esistita.
 import { JSDOM } from "jsdom";
 import fs from "fs";
-import assert from "assert";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
 global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
 global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
 dom.window.customCards = [];
+dom.window.confirm = () => true;
 new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
 
-const services = [];
-const ws = [];
-const PLAN = {
-  priority: "medium",
-  scenarios: ["afternoon", "multi_home"],
-  occupancy: { home: ["person.lorenzo"] },
+let fail = 0;
+const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
+
+// Risposta come la dà 2.12.0-beta1 con dry_run: simulate
+const CONTENTS = {
+  id: "01DRY", outcome: "partial_delivery", created: new Date().toISOString(), message: "Porta aperta",
+  priority: "high", delivered: 2, skipped: 2, missed: 1, failed: 0, dupe: false,
+  selected_scenario_names: ["afternoon", "multi_home"],
+  occupancy: { home: [{ person: "person.lorenzo" }], not_home: [] },
   deliveries: {
-    tts: { skipped: "DELIVERY_DISABLED" },
-    mobile_push: { recipients: ["person.lorenzo"], targets: [{ mobile_app_id: ["mobile_app_phone"] }] },
-    alexa_announce: { recipients: [], targets: [{ entity_id: ["media_player.a", "media_player.b"] }] },
+    mobile_push: { success: [{ target: { mobile_app_id: ["mobile_app_s23"] }, calls: [] }] },
+    alexa_announce: { success: [{ target: { entity_id: ["media_player.cucina", "media_player.sala", "media_player.ufficio", "media_player.camera"] } }] },
+    tts: { skipped: { suppression_reason: "SNOOZED" } },
+    email: { skipped: { suppression_reason: "NO_TARGET", target_required: "always" } },
   },
-  delivery_provenance: {},
 };
-const mkHass = (withAction) => ({
-  language: "it", themes: { darkMode: false },
-  services: { supernotify: { notify: {}, ...(withAction ? { enquire_dry_run: {} } : {}) } },
+const ws = [];
+const services = [];
+const ver = (v) => ({ "update.supernotify_update": { state: "off", attributes: { installed_version: v } } });
+const mkHass = (v) => ({
+  language: "it", themes: { darkMode: false }, services: { supernotify: { notify: {} } },
   states: {
-    "switch.supernotify_delivery_mobile_push": { state: "on", attributes: { transport: "mobile_push", friendly_name: "SuperNotify Delivery Notifica sul telefono abilitata" } },
-    "switch.supernotify_delivery_tts": { state: "off", attributes: { transport: "tts" } },
-    "switch.supernotify_delivery_alexa_announce": { state: "on", attributes: { transport: "alexa_devices" } },
+    ...ver(v),
+    "switch.supernotify_delivery_mobile_push": { entity_id: "switch.supernotify_delivery_mobile_push", state: "on",
+      attributes: { transport: "mobile_push", friendly_name: "SuperNotify Delivery Notifica sul telefono abilitata" } },
+    "switch.supernotify_delivery_tts": { entity_id: "switch.supernotify_delivery_tts", state: "on", attributes: { transport: "tts" } },
+    "media_player.cucina": { state: "idle", attributes: { friendly_name: "Echo Cucina" } },
     "person.lorenzo": { state: "home", attributes: { friendly_name: "Lorenzo" } },
   },
-  callService: (d, s, data) => services.push([d, s, data]),
-  callWS: async (msg) => { ws.push(msg); return { context: {}, response: PLAN }; },
+  callService: async (d, s, data) => { services.push([d, s, data]); },
+  callWS: async (msg) => { ws.push(msg); return { context: {}, response: CONTENTS }; },
 });
 
 const card = document.createElement("supernotify-composer-card");
 card.setConfig({});
 document.body.appendChild(card);
-card.hass = mkHass(false);
+card.hass = mkHass("v2.11.1");
 const sr = card.shadowRoot;
-const dry = sr.getElementById("dry");
-assert.ok(dry, "dry button rendered");
-assert.equal(dry.style.display, "none", "hidden while the action does not exist");
+ok(sr.getElementById("dry").style.display === "none", "su 2.11.1 il pulsante è nascosto");
 
-// the action appears (HA restarted on the new SuperNotify): shown without re-rendering the form
 sr.getElementById("m").value = "Porta aperta";
 sr.getElementById("p").value = "high";
-card.hass = mkHass(true);
-assert.equal(sr.getElementById("m").value, "Porta aperta", "form kept");
-assert.equal(sr.getElementById("dry").style.display, "", "visible with the action");
+card.hass = mkHass("v2.12.0-beta1");
+ok(sr.getElementById("m").value === "Porta aperta", "il modulo non si svuota");
+ok(sr.getElementById("dry").style.display === "", "su 2.12.0-beta1 il pulsante compare");
 
 await card._dryRun();
-assert.equal(ws.length, 1);
-assert.deepEqual(
-  { type: ws[0].type, domain: ws[0].domain, service: ws[0].service, rr: ws[0].return_response },
-  { type: "call_service", domain: "supernotify", service: "enquire_dry_run", rr: true });
-assert.equal(ws[0].service_data.message, "Porta aperta");
-assert.equal(ws[0].service_data.priority, "high");
-assert.equal(services.length, 0, "nothing sent");
+const call = ws[0] || {};
+ok(call.domain === "supernotify" && call.service === "notify" && call.return_response === true, "chiama supernotify.notify con la risposta");
+ok(call.service_data && call.service_data.dry_run === "simulate", "dry_run: simulate");
+ok(call.service_data && call.service_data.force_resend === true, "force_resend: niente cache dei doppioni");
+ok(call.service_data.message === "Porta aperta" && call.service_data.priority === "high", "stessi campi dell'Invia");
+ok(services.length === 0, "niente inviato davvero");
 const box = sr.getElementById("dryBox");
-const txt = box.textContent;
-assert.ok(txt.includes("Se la inviassi adesso"));
-assert.ok(txt.includes("Notifica sul telefono") && txt.includes("Lorenzo"), "alias + recipient name");
-assert.ok(txt.includes("saltato: DELIVERY_DISABLED"), "skip reason");
-assert.ok(txt.includes("2 target"), "direct targets counted");
-assert.ok(txt.includes("afternoon, multi_home"), "scenarios");
-const rows = [...box.querySelectorAll(".dRow")].map((r) => r.textContent);
-assert.ok(rows[rows.length - 1].startsWith("✖"), "skipped channels listed last");
+const txt = box.textContent.replace(/\s+/g, " ");
+console.log("    riquadro:", txt.slice(0, 260));
+ok(/✔ 2 canali partirebbero/.test(txt), "conteggio dei canali che partirebbero");
+ok(/⚠ 1 mancati/.test(txt), "mancati");
+ok(/Notifica sul telefono/.test(txt) && /s23/.test(txt), "alias e destinatario del telefono");
+ok(/Echo Cucina, sala, ufficio \+1/.test(txt), "target Alexa: nome, id accorciati, +N");
+ok(/in pausa/.test(txt) && /nessun destinatario utilizzabile/.test(txt), "motivi tradotti (SNOOZED, NO_TARGET)");
+ok(/Priorità: Alta/.test(txt) && /afternoon, multi_home/.test(txt) && /In casa: Lorenzo/.test(txt), "priorità, scenari, chi è in casa");
+ok(/Controllo doppioni non simulato/.test(txt), "nota sul controllo doppioni");
+const rows = [...box.querySelectorAll(".dRow")].map((r) => r.textContent.trim());
+ok(rows[0].startsWith("✔") && rows[rows.length - 1].startsWith("⊘"), "prima chi parte, poi i saltati");
 
-// suppressed + fallback, and the plan wrapped in result
-card._renderDry({ result: { deliveries: {}, suppressed: "DUPE" } });
-assert.ok(box.textContent.includes("soppressa: DUPE"));
-card._renderDry({ deliveries: { tts: { skipped: "NO_TARGET" } }, fallback: ["persistent"] });
-assert.ok(box.textContent.includes("ripiego su persistent"));
+// doppione segnalato
+card._renderDry({ ...CONTENTS, outcome: "dupe", deliveries: { mobile_push: { skipped: { suppression_reason: "DUPE" } } } }, false);
+ok(/Doppione di una notifica recente/.test(box.textContent), "doppione segnalato");
+// risposta vuota
+card._renderDry({}, true);
+ok(/è la 2\.12/.test(box.textContent), "risposta vuota spiegata");
 
-// error path
+// con dry_run_dupe_check: la prova controlla i doppioni, l'Invia dopo porta force_resend
+const c2 = document.createElement("supernotify-composer-card");
+c2.setConfig({ dry_run_dupe_check: true });
+document.body.appendChild(c2);
+c2.hass = mkHass("v2.12.0");
+c2.shadowRoot.getElementById("m").value = "Garage aperto";
+await c2._dryRun();
+ok(!("force_resend" in ws[ws.length - 1].service_data), "dry_run_dupe_check: la prova controlla i doppioni");
+await c2._send();
+ok(services.length === 1 && services[0][2].force_resend === true, "l'Invia subito dopo porta force_resend");
+await c2._send();
+ok(!("force_resend" in services[1][2]), "il secondo Invia no (vale solo una volta)");
+c2.shadowRoot.getElementById("m").value = "Altro testo";
+await c2._dryRun();
+c2.shadowRoot.getElementById("m").value = "Testo cambiato";
+await c2._send();
+ok(!("force_resend" in services[2][2]), "testo cambiato dopo la prova: niente force_resend");
+
+// forzato da config senza entità update
+const c3 = document.createElement("supernotify-composer-card");
+c3.setConfig({ dry_run: true });
+document.body.appendChild(c3);
+c3.hass = { ...mkHass("x"), states: {} };
+ok(c3.shadowRoot.getElementById("dry").style.display === "", "dry_run: true lo mostra anche senza versione");
+
+// errore
 card._hass.callWS = async () => { throw { code: "service_validation_error", message: "boom" }; };
 await card._dryRun();
-assert.ok(box.textContent.includes("Simulazione non riuscita: boom"));
+ok(/Simulazione non riuscita: boom/.test(box.textContent), "errore mostrato");
 
-// custom name via config
-const c2 = document.createElement("supernotify-composer-card");
-c2.setConfig({ dry_run_action: "preview" });
-document.body.appendChild(c2);
-const h2 = mkHass(false); h2.services.supernotify.preview = {};
-c2.hass = h2;
-assert.equal(c2._dryAction(), "preview");
-
-// Send still works and still refuses an empty message
-sr.getElementById("p").value = "";
-card._send();
-assert.equal(services.length, 1);
-assert.deepEqual(services[0].slice(0, 2), ["supernotify", "notify"]);
-assert.equal(services[0][2].message, "Porta aperta");
-sr.getElementById("m").value = "";
-card._send();
-assert.equal(services.length, 1, "empty message not sent");
-
-console.log("composer dry run: OK");
+console.log(fail ? `\n${fail} TEST FALLITI` : "\nTUTTI I TEST OK");
+process.exit(fail ? 1 : 0);

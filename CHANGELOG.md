@@ -3,6 +3,23 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.48.0] - 2026-10-03
+
+### Changed
+- **composer-card (0.15.0): "Try without sending" uses SuperNotify 2.12's dry run.** 2.12 has
+  no separate action: it is `supernotify.notify` with `dry_run: simulate`, answering with the
+  notification itself (the archive JSON). The button shows on SuperNotify 2.12 or later
+  (`update.supernotify_update`, or `dry_run: true`), and the answer shows the channels that
+  would send and to whom, skipped ones with the reason, missed channels, priority, scenarios
+  and who is home.
+- The dry run carries `force_resend` by default: on 2.12.0-beta1 a simulated notification is
+  written into the duplicate cache, so the real Send right after would be dropped as a
+  duplicate. `dry_run_dupe_check: true` simulates the duplicate check and makes the next Send of
+  the same content carry `force_resend`.
+
+### Removed
+- `dry_run_action:` (the action name guessed in 0.44.0, never released upstream).
+
 ## [0.47.0] - 2026-10-03
 
 Lighter, and checked on a phone-sized screen in both themes.

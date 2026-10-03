@@ -255,17 +255,24 @@ end up with no recipient at all. The card shows an inline warning in this
 case; pick a compatible channel above (the deliveries card flags them) or add
 a person/device directly to the target.
 
-**Try without sending** (🔍): shows which channels would fire right now and to
-whom, which would be skipped and why, the active scenarios, and whether the
-notification would be suppressed or fall back — without sending anything. It
-calls SuperNotify's dry-run action (being added upstream, see
-[issue #218](https://github.com/rhizomatics/supernotify/issues/218)); the button
-stays hidden until Home Assistant has that action. If the released action ends
-up with another name, set it with `dry_run_action:`.
+**Try without sending** (🔍): shows which channels would send right now and to
+whom, which would be skipped and why, missed channels, priority, scenarios in
+force and who is home — without sending anything. It uses SuperNotify's dry
+run (2.12 or later, [issue #218](https://github.com/rhizomatics/supernotify/issues/218)):
+`supernotify.notify` with `dry_run: simulate`. The button shows when
+`update.supernotify_update` says 2.12 or later; `dry_run: true` shows it anyway.
+
+By default the dry run skips the duplicate check (`force_resend`): on
+2.12.0-beta1 a simulated notification is remembered as sent, so the real Send
+right after, with the same text, would be dropped as a duplicate. With
+`dry_run_dupe_check: true` the dry run does check duplicates, and the next Send
+of the same content carries `force_resend` instead.
 
 ```yaml
 type: custom:supernotify-composer-card
-# dry_run_action: enquire_dry_run   # optional, name of the dry-run action
+# dry_run: true               # optional: show the button whatever the version
+# dry_run_dupe_check: true    # optional: simulate the duplicate check too
+# update_entity: update.supernotify_update
 ```
 
 ## supernotify-automations-card

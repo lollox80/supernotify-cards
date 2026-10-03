@@ -8,6 +8,17 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.48.0. composer-card 0.15.0: "Try without sending" on SuperNotify 2.12's real dry run.
+ *   - 2.12 has no separate dry-run action: it is supernotify.notify with `dry_run: simulate`,
+ *     answering with the notification itself (the archive JSON). The button shows on SuperNotify
+ *     2.12 or later (read from update.supernotify_update; `dry_run: true|false` forces it), and the
+ *     answer is drawn through snArchiveDetail: channels that would send and to whom, skipped ones
+ *     with the reason, missed channels, priority, scenarios, who is home, raw JSON.
+ *   - 2.12.0-beta1 writes a simulated notification into the duplicate cache, so the real Send
+ *     right after would be dropped as a duplicate. The dry run therefore carries force_resend
+ *     (no duplicate check, nothing cached); with `dry_run_dupe_check: true` it checks duplicates
+ *     and the next Send of the same content carries force_resend instead.
+ *   - `dry_run_action:` (for the action name guessed in 0.44.0) is gone.
  * 2026-10-03 - v0.47.0. Lighter, phone and dark theme.
  *   - Cards redraw only when something they show changed: control, overview, bands, deliveries,
  *     transports, recipients, scenarios and automations used to rescan every state and rebuild
@@ -242,7 +253,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.47.0"; // bundle / HACS release
+const VERSION = "0.48.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -261,7 +272,7 @@ const SN_CARD_VERSIONS = {
   recipients: "0.22.0",
   scenarios: "0.19.0",
   simulator: "0.10.0",
-  composer: "0.14.0",
+  composer: "0.15.0",
   automations: "0.16.0",
   stats: "0.23.0",
   archive: "0.31.0",
@@ -324,7 +335,14 @@ const SN_STRINGS = {
     dry_nobody: "no recipient, direct targets only", dry_targets: "targets",
     dry_suppressed: "The notification would be suppressed", dry_fallback: "No channel would fire: fallback to",
     dry_none: "No channel selected", dry_scen: "Active scenarios", dry_raw: "Raw response",
-    dry_prio: "Priority",
+    dry_prio: "Priority", dry_would_n: "channels would send", dry_nothing: "Nothing would be sent",
+    dry_dupe: "Duplicate of a recent notification: it would be dropped",
+    dry_no_dupe: "Duplicate check not simulated, so the real Send right after is not blocked.",
+    dry_home: "Home", dry_empty: "SuperNotify gave no answer: is it 2.12 or later?",
+    dry_reasons: { NO_TARGET: "no usable target", DUPE: "duplicate", PRIORITY: "not for this priority",
+      SNOOZED: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule",
+      TRANSPORT_DISABLED: "transport off", DELIVERY_DISABLED: "switched off", NO_SCENARIO: "required scenario not in force",
+      NO_ACTION: "no action", INVALID_ACTION_DATA: "invalid data", UNKNOWN: "unknown reason", ERROR: "error" },
     prio_minimum: "Minimum", prio_low: "Low", prio_medium: "Medium",
     prio_high: "High", prio_critical: "Critical ⚠️",
     target_lbl: "Target — people, devices, areas, floors, labels",
@@ -392,7 +410,14 @@ const SN_STRINGS = {
     dry_nobody: "nessun destinatario, solo target diretti", dry_targets: "target",
     dry_suppressed: "La notifica verrebbe soppressa", dry_fallback: "Nessun canale partirebbe: ripiego su",
     dry_none: "Nessun canale selezionato", dry_scen: "Scenari attivi", dry_raw: "Risposta completa",
-    dry_prio: "Priorità",
+    dry_prio: "Priorità", dry_would_n: "canali partirebbero", dry_nothing: "Non partirebbe niente",
+    dry_dupe: "Doppione di una notifica recente: verrebbe scartata",
+    dry_no_dupe: "Controllo doppioni non simulato, così l'Invia subito dopo non viene bloccato.",
+    dry_home: "In casa", dry_empty: "SuperNotify non ha risposto: è la 2.12 o successiva?",
+    dry_reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione", PRIORITY: "non per questa priorità",
+      SNOOZED: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza",
+      TRANSPORT_DISABLED: "transport spento", DELIVERY_DISABLED: "spento", NO_SCENARIO: "manca uno scenario richiesto",
+      NO_ACTION: "nessuna azione", INVALID_ACTION_DATA: "dati non validi", UNKNOWN: "motivo sconosciuto", ERROR: "errore" },
     prio_minimum: "Minima", prio_low: "Bassa", prio_medium: "Media",
     prio_high: "Alta", prio_critical: "Critica ⚠️",
     target_lbl: "Target — persone, dispositivi, aree, piani, etichette",
@@ -3477,18 +3502,20 @@ class SupernotifyComposerCard extends HTMLElement {
     return 8;
   }
 
-  // Dry-run action (SuperNotify issue #218): not released yet, and its name may still
-  // change, so look it up instead of assuming it. null -> the button stays hidden.
-  _dryAction() {
-    const svc = (this._hass && this._hass.services && this._hass.services.supernotify) || {};
-    const names = [this._config.dry_run_action, "enquire_dry_run", "dry_run"].filter(Boolean);
-    return names.find((n) => svc[n]) || null;
+  // Dry run (SuperNotify 2.12, issue #218): supernotify.notify with `dry_run: simulate`
+  // does everything a real notification does except calling the integrations, so
+  // the button shows on 2.12 or later. `dry_run: true|false` in the card config
+  // forces it, e.g. when there is no update.supernotify_update entity to read.
+  _dryAvailable() {
+    const c = this._config;
+    if (c.dry_run === true || c.dry_run === false) return c.dry_run;
+    return snSupernotifyAtLeast(this._hass, "2.12.0", c.update_entity) === true;
   }
 
   _syncDry() {
     const b = this.shadowRoot && this.shadowRoot.getElementById("dry");
     if (!b) return;
-    const has = !!this._dryAction();
+    const has = this._dryAvailable();
     b.style.display = has ? "" : "none";
     if (!has) this.shadowRoot.getElementById("dryBox").style.display = "none";
   }
@@ -3556,8 +3583,10 @@ class SupernotifyComposerCard extends HTMLElement {
                   padding: 10px 12px; background: ${p.soft}; font-size: 12.5px; }
         .dryBox h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .05em;
                      text-transform: uppercase; color: ${p.muted}; }
-        .dRow { display: flex; gap: 8px; align-items: baseline; padding: 4px 0;
+        .dRow { display: flex; flex-wrap: wrap; column-gap: 8px; align-items: baseline; padding: 5px 0;
                 border-top: 1px solid ${p.line}; }
+        .dHead { font-weight: 650; margin-bottom: 6px; }
+        .dErr { color: ${p.crit || "#e23c3c"}; } .dWarnI { color: ${p.warn}; }
         .dRow:first-of-type { border-top: 0; }
         .dName { font-weight: 750; min-width: 130px; }
         .dOk { color: ${p.ok}; } .dNo { color: ${p.muted}; }
@@ -3723,6 +3752,11 @@ class SupernotifyComposerCard extends HTMLElement {
     }
     if (payload.priority === "critical" && !confirm(T.critical_confirm))
       return;
+    // a dry run with the duplicate check left this content in SuperNotify's dupe cache:
+    // without force_resend the real one would be dropped as a duplicate of the simulation
+    const k = this._dryKey;
+    if (k && k.key === JSON.stringify(payload) && Date.now() - k.at < 3600000) payload.force_resend = true;
+    this._dryKey = null;
     try {
       await this._hass.callService("supernotify", "notify", payload);
       this._toast(T.sent_toast);
@@ -3761,66 +3795,89 @@ class SupernotifyComposerCard extends HTMLElement {
     return payload;
   }
 
+  // Dry run: the notification as SuperNotify would send it now, without sending it.
+  // By default it also carries force_resend, so it skips the duplicate check: in 2.12.0-beta1
+  // a simulated notification is written into the duplicate cache, and the real one sent right
+  // after (same text, within the dupe TTL) would be dropped as a duplicate. With
+  // `dry_run_dupe_check: true` the simulation does check for duplicates, and the next Send of
+  // the same content carries force_resend instead.
   async _dryRun() {
     const T = snT(this._config, this._hass);
-    const action = this._dryAction();
     const box = this.shadowRoot.getElementById("dryBox");
-    if (!action) return;
+    if (!this._dryAvailable()) return;
     const payload = this._payload();
-    if (!payload.message) payload.message = T.no_message; // nothing is sent: any text will do
+    const dupeCheck = !!this._config.dry_run_dupe_check;
+    const data = { ...payload, dry_run: "simulate" };
+    if (!dupeCheck) data.force_resend = true;
     box.style.display = "";
     box.textContent = "…";
     try {
       const res = await this._hass.callWS({
-        type: "call_service", domain: "supernotify", service: action,
-        service_data: payload, return_response: true,
+        type: "call_service", domain: "supernotify", service: "notify",
+        service_data: data, return_response: true,
       });
-      this._renderDry((res && res.response) || res || {});
+      if (dupeCheck) this._dryKey = { key: JSON.stringify(payload), at: Date.now() };
+      this._renderDry((res && res.response) || {}, !dupeCheck);
     } catch (e) {
       box.textContent = `✖ ${T.dry_err}: ${(e && (e.message || e.code)) || e}`;
     }
   }
 
-  // Shape of Notification.plan() (SuperNotify 2.10): priority, scenarios, occupancy,
-  // deliveries {name: {recipients, targets} | {skipped}}, suppressed?, fallback?.
-  // Also accepts it wrapped in `result`, and always offers the raw JSON.
-  _renderDry(res) {
+  // The response is the notification itself (Notification.contents(), the same JSON the
+  // archive keeps), read through snArchiveDetail like the why-card does.
+  _renderDry(doc, noDupeCheck) {
     const T = snT(this._config, this._hass);
     const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    const plan = res.result && res.result.deliveries ? res.result : res;
+    const n = snIsObj(doc) && (doc.deliveries || doc.outcome || doc.id) ? snArchiveDetail(doc) : null;
+    const box = this.shadowRoot.getElementById("dryBox");
+    if (!n) {
+      box.innerHTML = `<h4>🔍 ${T.dry_title}</h4><div class="dNo">${T.dry_empty}</div>`;
+      return;
+    }
     const st = this._hass.states;
-    const person = (id) => (st[id] && st[id].attributes.friendly_name) || String(id).replace(/^person\./, "");
-    const chan = (n) => {
-      const e = st["switch.supernotify_delivery_" + n] || st["binary_sensor.supernotify_delivery_" + n];
-      const alias = e ? snCleanName(e.attributes.friendly_name, n) : "";
-      return alias ? `${esc(alias)} <span class="dNo">(${esc(n)})</span>` : esc(n);
+    const chan = (name) => {
+      const alias = snDeliveryAlias(this._hass, name);
+      return alias && alias !== name ? `${esc(alias)} <span class="dNo">(${esc(name)})</span>` : esc(name);
     };
-    const nTargets = (tg) => (tg || []).reduce((acc, t) =>
-      acc + Object.values(t || {}).reduce((a, v) => a + (Array.isArray(v) ? v.length : 0), 0), 0);
-    const dels = plan.deliveries || {};
-    const names = Object.keys(dels).sort((a, b) => ("skipped" in dels[a]) - ("skipped" in dels[b]) || a.localeCompare(b));
+    const reason = (code) => {
+      const k = String(code || "").toUpperCase();
+      return esc((T.dry_reasons && T.dry_reasons[k]) || code || "?");
+    };
+    const short = (v) => String(v).replace(/^(mobile_app_|person\.|media_player\.|notify\.)/, "");
+    const tgText = (tg) => {
+      const vals = Object.values(tg || {}).flat();
+      if (!vals.length) return "";
+      const shown = vals.slice(0, 3).map((v) => esc((st[v] && st[v].attributes && st[v].attributes.friendly_name) || short(v)));
+      return shown.join(", ") + (vals.length > 3 ? ` +${vals.length - 3}` : "");
+    };
+    const order = { ok: 0, err: 1, supp: 2, skip: 3 };
+    const dl = [...(n.dl || [])].sort((a, b) => (order[a.r] ?? 4) - (order[b.r] ?? 4) || a.n.localeCompare(b.n));
+    const going = dl.filter((d) => d.r === "ok").length;
     let h = `<h4>🔍 ${T.dry_title}</h4>`;
-    if (plan.suppressed) h += `<div class="dWarn">⛔ ${T.dry_suppressed}: ${esc(plan.suppressed)}</div>`;
-    if (plan.fallback && plan.fallback.length)
-      h += `<div class="dWarn">↪ ${T.dry_fallback} ${plan.fallback.map(chan).join(", ")}</div>`;
-    if (!names.length && !plan.suppressed) h += `<div class="dNo">${T.dry_none}</div>`;
-    for (const n of names) {
-      const d = dels[n] || {};
-      if ("skipped" in d) {
-        h += `<div class="dRow"><span class="dName dNo">✖ ${chan(n)}</span><span class="dNo">${T.dry_skip}: ${esc(d.skipped)}</span></div>`;
+    h += `<div class="dHead">${going ? `✔ <b>${going}</b> ${T.dry_would_n}` : `⛔ ${T.dry_nothing}`}` +
+      `${n.mi ? ` · <span class="dWarnI">⚠ <b>${esc(n.mi)}</b> ${T.missed_n}</span>` : ""}</div>`;
+    if (n.o === "dupe" || dl.some((d) => d.why === "DUPE")) h += `<div class="dWarn">♻ ${T.dry_dupe}</div>`;
+    if (!dl.length) h += `<div class="dNo">${T.dry_none}</div>`;
+    for (const d of dl) {
+      if (d.r === "ok") {
+        const tg = tgText(d.tg);
+        h += `<div class="dRow"><span class="dName dOk">✔ ${chan(d.n)}</span><span>${tg || T.dry_nobody}</span></div>`;
+      } else if (d.r === "err") {
+        h += `<div class="dRow"><span class="dName dErr">✖ ${chan(d.n)}</span><span class="dErr">${esc((d.err || [])[0] || T.dry_err)}</span></div>`;
       } else {
-        const who = (d.recipients || []).map(person);
-        const nt = nTargets(d.targets);
-        h += `<div class="dRow"><span class="dName dOk">✔ ${chan(n)}</span><span>${
-          who.length ? esc(who.join(", ")) : T.dry_nobody}${nt ? ` <span class="dNo">· ${nt} ${T.dry_targets}</span>` : ""}</span></div>`;
+        h += `<div class="dRow"><span class="dName dNo">⊘ ${chan(d.n)}</span><span class="dNo">${reason(d.why)}</span></div>`;
       }
     }
     const meta = [];
-    if (plan.priority) meta.push(`${T.dry_prio}: ${esc(plan.priority)}`);
-    if (plan.scenarios && plan.scenarios.length) meta.push(`${T.dry_scen}: ${esc(plan.scenarios.join(", "))}`);
-    if (meta.length) h += `<div class="dMeta">${meta.join(" · ")}</div>`;
-    h += `<details class="dMeta"><summary>${T.dry_raw}</summary><pre>${esc(JSON.stringify(res, null, 2))}</pre></details>`;
-    this.shadowRoot.getElementById("dryBox").innerHTML = h;
+    meta.push(`${T.dry_prio}: ${esc(T["prio_" + n.p] || n.p || "medium")}`);
+    const scen = (n.sc && (n.sc.sel || n.sc.on)) || [];
+    if (scen.length) meta.push(`${T.dry_scen}: ${esc(scen.join(", "))}`);
+    if (n.occ && n.occ.home && n.occ.home.length)
+      meta.push(`${T.dry_home}: ${esc(n.occ.home.map((p) => (st[p] && st[p].attributes.friendly_name) || short(p)).join(", "))}`);
+    h += `<div class="dMeta">${meta.join(" · ")}</div>`;
+    if (noDupeCheck) h += `<div class="dMeta">ℹ️ ${T.dry_no_dupe}</div>`;
+    h += `<details class="dMeta"><summary>${T.dry_raw}</summary><pre>${esc(JSON.stringify(doc, null, 2))}</pre></details>`;
+    box.innerHTML = h;
   }
 
   _toast(msg) {
