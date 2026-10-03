@@ -3,6 +3,26 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.52.0] - 2026-10-03
+
+Fourth step of the redesign: the control and overview cards.
+
+### Changed
+- control-card (0.27.0): the status bar is one line of text; tiles have the icon on the left
+  and one colour logic (on = blue tint, needs attention = orange tint), two per row on a phone
+  (`tile_layout: stacked` keeps the old tall tiles); the last notification shows counts
+  (delivered, failed, missed, skipped, with the channel names in the tooltip;
+  `last_channels: true` keeps one chip per channel) and a "Why ›" button when a why-card is on
+  the dashboard.
+- overview-card (0.25.0): health is one sentence on top ("2 things to look at", or "All good"
+  with how many channels are on) and a list of what to look at, each with its detail (which
+  channels are off, by readable name; the transport's last error) and an "Open" link where
+  there is one (`health: chips` keeps the old chips). Three numbers instead of five
+  (`stats: full` keeps all five).
+
+### Fixed
+- control-card: the text under an active snooze tile was white on the light orange tint (0.49.0).
+
 ## [0.51.0] - 2026-10-03
 
 Third step of the redesign: the deliveries card says how each channel starts and what it is doing now.

@@ -8,6 +8,18 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.52.0. Redesign, step 4: control-card 0.27.0 and overview-card 0.25.0.
+ *   control: the status bar is one line of text (no box, no capital labels); tiles have the icon
+ *   on the left and one colour logic (on = blue tint, needs attention = orange tint), 2 per row on
+ *   a phone (`tile_layout: stacked` = the old tall tiles); the last notification shows counts
+ *   ("2 delivered", "1 failed", "1 missed", "2 skipped", channel names in the tooltip;
+ *   `last_channels: true` = one chip per channel) and a "Why ›" button when a why-card is on the
+ *   dashboard. Fixed: the text under an active snooze tile was white on the light orange tint (0.49).
+ *   overview: health is one sentence on top ("2 things to look at" / "All good" with how many
+ *   channels are on) and a list of what to look at, each with its detail (which channels are off,
+ *   by readable name; the transport error message) and an "Open" link where there is one
+ *   (`health: chips` = the old chips). Three numbers instead of five (`stats: full` = all five):
+ *   active scenarios and snoozes are already in the list below and in the health list.
  * 2026-10-03 - v0.51.0. Redesign, step 3: deliveries-card 0.24.0 grouped by how a channel starts.
  *   - Sections "Start on their own", "Only when named in the call", "Only with a scenario",
  *     "Backup" with their count, instead of the same "always on" tag repeated on every row and a
@@ -301,7 +313,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.51.0"; // bundle / HACS release
+const VERSION = "0.52.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -312,8 +324,8 @@ const VERSION = "0.51.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.26.0",
-  overview: "0.24.0",
+  control: "0.27.0",
+  overview: "0.25.0",
   bands: "0.16.0",
   deliveries: "0.24.0",
   transports: "0.21.0",
@@ -363,6 +375,9 @@ const SN_STRINGS = {
     h_update: "update available:", h_restart: "restart Home Assistant to finish the update",
     h_uptodate: "up to date", h_transport_err: "transports with errors", h_channels_off: "channels off",
     h_all_good: "All good", h_health: "Health",
+    h_look_1: "1 thing to look at", h_look_n: "{n} things to look at", h_rest_ok: "everything else works",
+    h_ch_on: "{on} of {tot} channels on", h_open: "Open", ln_delivered: "delivered", ln_failed: "failed",
+    ln_why: "Why",
     active_now: "active now", disabled: "disabled", other: "Other",
     manual: "manual", apply_now: "apply now", enabled_lbl: "enabled",
     reset_overrides: "Reset overrides", reset_done: "overrides reset",
@@ -442,6 +457,9 @@ const SN_STRINGS = {
     h_update: "aggiornamento disponibile:", h_restart: "riavvia Home Assistant per completare l'aggiornamento",
     h_uptodate: "aggiornato", h_transport_err: "transport con errori", h_channels_off: "canali spenti",
     h_all_good: "Tutto ok", h_health: "Stato",
+    h_look_1: "1 cosa da guardare", h_look_n: "{n} cose da guardare", h_rest_ok: "il resto funziona",
+    h_ch_on: "{on} di {tot} canali accesi", h_open: "Apri", ln_delivered: "consegnate", ln_failed: "fallite",
+    ln_why: "Perché",
     active_now: "attivo ora", disabled: "disattivato", other: "Altro",
     manual: "manuale", apply_now: "applica ora", enabled_lbl: "abilitato",
     reset_overrides: "Ripristina override", reset_done: "override ripristinati",
@@ -1650,33 +1668,35 @@ class SupernotifyControlCard extends HTMLElement {
       <style>
         :host { display: block; }
         ha-card { padding: 14px; position: relative; background: ${p.panel}; color: ${p.ink}; }
-        .statusbar { display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 13px 18px;
-                     margin-bottom: 14px; border: 1px solid ${p.line}; border-radius: 14px;
-                     background: ${p.panel}; box-shadow: 0 1px 3px rgba(16,42,67,.06); }
-        .sseg { display: flex; flex-direction: column; gap: 2px; }
-        .sl { font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
-              font-weight: 800; color: ${p.muted}; white-space: nowrap; }
-        .sv { font-size: 14px; font-weight: 750; white-space: nowrap; }
+        .statusbar { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 0 4px; margin-bottom: 12px;
+                     font-size: 13.5px; }
+        .sseg { display: inline-flex; align-items: baseline; gap: 6px; }
+        .sl { color: ${p.muted}; white-space: nowrap; }
+        .sv { font-weight: 650; white-space: nowrap; }
         .tiles { display: grid; gap: 10px;
                  grid-template-columns: ${this._config.tile_columns
                    ? `repeat(${+this._config.tile_columns}, minmax(0, 1fr))`
-                   : "repeat(auto-fit, minmax(84px, 1fr))"}; }
-        .ctile { border: 1.5px solid ${p.line}; border-radius: 16px;
-                 background: ${p.panel}; padding: 14px 8px;
-                 text-align: center; cursor: pointer; user-select: none;
-                 min-height: 96px; display: flex; flex-direction: column;
-                 align-items: center; justify-content: center; gap: 5px;
-                 transition: transform .1s, border-color .15s;
-                 box-shadow: 0 1px 3px rgba(16,42,67,.06); }
+                   : this._config.tile_layout === "stacked" ? "repeat(auto-fit, minmax(84px, 1fr))" : "repeat(auto-fill, minmax(150px, 1fr))"}; }
+        .ctile { border: 1.5px solid ${p.line}; border-radius: 12px;
+                 background: ${p.panel}; padding: 12px 14px;
+                 text-align: left; cursor: pointer; user-select: none;
+                 min-height: 64px; display: flex; flex-direction: row;
+                 align-items: center; justify-content: flex-start; gap: 12px;
+                 transition: transform .1s, border-color .15s; }
+        .ctile .tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .stacked .ctile { flex-direction: column; text-align: center; justify-content: center; gap: 5px;
+                          min-height: 96px; padding: 14px 8px; }
+        .stacked .ctile .tx { align-items: center; }
         .ctile:hover { border-color: ${p.brand}; transform: translateY(-1px); }
         .ctile:active { transform: scale(.97); }
-        .ctile .ti { --mdc-icon-size: 30px; font-size: 30px; line-height: 1.1; }
-        .ctile b { font-size: 12.5px; line-height: 1.2; }
+        .ctile .ti { --mdc-icon-size: 26px; font-size: 24px; line-height: 1.1; flex: none; color: ${p.muted}; }
+        .stacked .ctile .ti { --mdc-icon-size: 30px; font-size: 30px; }
+        .ctile b { font-size: 14px; line-height: 1.25; }
         .ctile .ts { font-size: 11px; color: ${p.muted}; line-height: 1.25; }
-        .ctile.on { background: ${p.brand}; border-color: ${p.brandD}; color: ${p.onBrand}; }
-        .ctile.on .ts { color: rgba(255,255,255,.88); }
+        .ctile.on { background: ${p.soft}; border-color: ${p.brand}; color: ${p.ink}; }
+        .ctile.on .ti { color: ${p.brand}; }
         .ctile.warn { background: ${p.warnSoft}; border-color: ${p.warnLine}; color: ${p.warnInk}; }
-        .ctile.warn .ts { color: rgba(255,255,255,.92); }
+        .ctile.warn .ti, .ctile.warn .ts { color: ${p.warnInk}; }
         .announce { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
         .announce input { flex: 1; border: 1.5px solid ${p.line}; border-radius: 10px;
                           padding: 10px 12px; font-size: 13.5px; background: ${p.panel};
@@ -1713,6 +1733,7 @@ class SupernotifyControlCard extends HTMLElement {
                       color: ${p.brandD}; border-radius: 999px; padding: 5px 12px; font-size: 12px;
                       font-weight: 700; cursor: pointer; }
         .lastn .rep:hover { border-color: ${p.brand}; }
+        .lastn .why + .rep { margin-left: 0; }
         .lastn .rep:active { transform: scale(.96); }
         .mpill { display: inline-flex; align-items: center; gap: 7px;
                  border: 1.5px solid ${p.line}; background: ${p.panel};
@@ -1734,7 +1755,7 @@ class SupernotifyControlCard extends HTMLElement {
       <ha-card>
         ${snIntro(this._config, this._dark)}<div class="statusbar" id="statusbar"></div>
         ${this._config.last_notification ? `<div class="lastn" id="lastn"></div>` : ""}
-        <div class="tiles" id="tiles"></div>
+        <div class="tiles${this._config.tile_layout === "stacked" ? " stacked" : ""}" id="tiles"></div>
         ${(this._config.tiles || []).includes("announce") ? `<div class="announce" id="announceRow">
           <ha-icon icon="mdi:bullhorn"></ha-icon>
           <input id="announceInput" placeholder="${snT(this._config, this._hass).announce_ph}">
@@ -1783,6 +1804,7 @@ class SupernotifyControlCard extends HTMLElement {
     let when = "";
     if (n && n.created) { const d = new Date(n.created); if (!isNaN(d)) when = `<span class="lb mut">🕐 ${esc(snAgo(d, T))}</span>`; }
     const chips = [];
+    const okNames = [], errNames = [];
     let skipped = 0;
     if (n && n.deliveries && typeof n.deliveries === "object") {
       for (const [name, d] of Object.entries(n.deliveries)) {
@@ -1790,17 +1812,27 @@ class SupernotifyControlCard extends HTMLElement {
         const err = d && Array.isArray(d.error) && d.error.length;
         if (!ok && !err) { skipped++; continue; }
         const label = snDeliveryAlias(this._hass, name) || name;
-        chips.push(`<span class="lb ${err ? "err" : "ok"}">${err ? "✖" : "✔"} ${esc(label)}</span>`);
+        (err ? errNames : okNames).push(label);
+        if (c.last_channels) chips.push(`<span class="lb ${err ? "err" : "ok"}">${err ? "✖" : "✔"} ${esc(label)}</span>`);
       }
+    }
+    // 0.52.0: counts with the channel names in the tooltip (`last_channels: true` = one chip each)
+    if (!c.last_channels) {
+      if (okNames.length) chips.push(`<span class="lb ok" title="${esc(okNames.join(", "))}">✔ ${okNames.length} ${T.ln_delivered}</span>`);
+      if (errNames.length) chips.push(`<span class="lb err" title="${esc(errNames.join(", "))}">✖ ${errNames.length} ${T.ln_failed}</span>`);
     }
     if (n && +n.missed > 0) chips.push(`<span class="lb mis">⚠ ${esc(n.missed)} ${T.missed_n}</span>`);
     if (skipped) chips.push(`<span class="lb mut">${skipped} ${T.skipped_n}</span>`);
     const rep = c.repeat_entity
       ? `<button class="rep" id="repBtn">🔁 ${T.repeat}</button>` : "";
+    const why = n && n.id && window.__snWhyCards
+      ? `<button class="rep why" id="whyBtn">${esc(T.ln_why)} ›</button>` : "";
     el.innerHTML = snIconify(`
       <div class="lh"><span class="lt">${esc(title) || "📨 " + T.last_notif}</span>${prio}${when}</div>
       ${msg ? `<div class="lm">${esc(msg)}</div>` : ""}
-      <div class="lf">${chips.join("")}${rep}</div>`, this && this._config);
+      <div class="lf">${chips.join("")}${why}${rep}</div>`, this && this._config);
+    const wb = el.querySelector("#whyBtn");
+    if (wb) wb.onclick = () => snWhyOpen(n.id);
     const btn = el.querySelector("#repBtn");
     if (btn) btn.onclick = () => {
       const [dom] = c.repeat_entity.split(".");
@@ -1898,7 +1930,7 @@ class SupernotifyControlCard extends HTMLElement {
     el.innerHTML = snIconify(defs
       .map((d, i) =>
         `<div class="ctile ${d.cls}" data-i="${i}" role="button" tabindex="0">
-           ${this._icon(d.icon)}<b>${d.name}</b><div class="ts">${d.sub}</div>
+           ${this._icon(d.icon)}<span class="tx"><b>${d.name}</b><span class="ts">${d.sub}</span></span>
          </div>`)
       .join(""), this && this._config);
     el.querySelectorAll(".ctile").forEach((node) => {
@@ -2050,9 +2082,12 @@ class SupernotifyOverviewCard extends HTMLElement {
       const st = this._hass.states[t.id];
       return st && st.state !== "unavailable" && +((st.attributes || {}).error_count || 0) > 0;
     });
-    if (trErr.length) chips.push({ k: "crit", t: `⚠️ ${trErr.length} ${T.h_transport_err}`, title: trErr.map((t) => t.name).join(", ") });
+    if (trErr.length) chips.push({ k: "crit", t: `⚠️ ${trErr.length} ${T.h_transport_err}`, title: trErr.map((t) => {
+      const a = (this._hass.states[t.id] || {}).attributes || {};
+      return a.last_error_message ? `${t.name}: ${a.last_error_message}` : t.name;
+    }).join(" · ") });
     const delsOff = this._scan("delivery").filter((d) => d.state === "off" && !/^default_/i.test(d.name));
-    if (delsOff.length) chips.push({ k: "off", t: `🔕 ${delsOff.length} ${T.h_channels_off}`, title: delsOff.map((d) => d.name).join(", ") });
+    if (delsOff.length) chips.push({ k: "off", t: `🔕 ${delsOff.length} ${T.h_channels_off}`, title: delsOff.map((d) => snDeliveryAlias(this._hass, d.name) || d.name).join(", ") });
     if (c.quiet_entity && this._st(c.quiet_entity) === "on") chips.push({ k: "warn", t: `🌙 ${T.dnd} ${T.active}` });
     const snz = snLiveSnoozes(this._snoozes);
     if (snz.length) chips.push({ k: "warn",
@@ -2144,9 +2179,8 @@ class SupernotifyOverviewCard extends HTMLElement {
       <style>
         :host { display: block; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
-        .stat { border: 1.5px solid ${p.line}; border-radius: 14px; padding: 12px 14px;
-                background: ${p.panel}; box-shadow: 0 1px 3px rgba(16,42,67,.06); }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+        .stat { border: 0; border-radius: 10px; padding: 12px 14px; background: ${p.soft}; }
         .stat .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
                    font-weight: 800; color: ${p.muted}; white-space: nowrap; }
         .stat .v { font-size: 22px; font-weight: 800; margin-top: 3px; }
@@ -2167,7 +2201,7 @@ class SupernotifyOverviewCard extends HTMLElement {
                 padding: 5px 12px; font-size: 12px; font-weight: 650; margin: 0 6px 6px 0;
                 background: ${p.soft}; color: ${p.brandD}; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 10px; }
-        .health { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .health { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
         .health:empty { display: none; }
         .hc { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 11px;
               font-size: 11.5px; font-weight: 700; text-decoration: none; }
@@ -2175,6 +2209,23 @@ class SupernotifyOverviewCard extends HTMLElement {
         .hc.warn { background: rgba(240,160,32,.16); color: ${p.warn}; }
         .hc.crit { background: rgba(226,60,60,.12); color: ${p.crit}; }
         .hc.off { background: ${p.soft}; color: ${p.muted}; }
+        .health:has(.hb) { display: block; }
+        .hb { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 10px; }
+        .hb .hbi { --mdc-icon-size: 26px; font-size: 22px; }
+        .hb.ok { background: rgba(46,158,91,.12); color: ${p.ok}; }
+        .hb.warn { background: ${p.warnSoft}; color: ${p.warnInk}; }
+        .hb.crit { background: rgba(226,60,60,.10); color: ${p.crit}; }
+        .hbt { font-size: 17px; font-weight: 700; } .hbs { font-size: 13px; opacity: .85; margin-top: 2px; }
+        .hl { margin: 6px 2px 0; }
+        .hr { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid ${p.line};
+              font-size: 14px; }
+        .hr:last-child { border-bottom: 0; }
+        .hr .hi { flex: none; } .hr.crit .hi { color: ${p.crit}; } .hr.warn .hi { color: ${p.warn}; }
+        .hr.off .hi { color: ${p.muted}; } .hr.ok .hi { color: ${p.ok}; } .hr.ok .ht { color: ${p.muted}; }
+        .hr .ht { flex: 1; min-width: 0; } .hr .ht > div:first-child { font-weight: 600; }
+        .hr.ok .ht > div:first-child { font-weight: 400; }
+        .hr .hd { font-size: 12.5px; color: ${p.muted}; margin-top: 2px; overflow-wrap: anywhere; }
+        .hr .ha { flex: none; font-weight: 600; text-decoration: none; color: ${p.brandD}; padding: 8px 4px; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div class="health" id="health"></div><div class="stats" id="stats"></div>
@@ -2215,18 +2266,41 @@ class SupernotifyOverviewCard extends HTMLElement {
     }
     const healthEl = this.shadowRoot.getElementById("health");
     if (healthEl) {
-      healthEl.innerHTML = snIconify(this._config.health
-        ? this._health().map((h) => h.href
-            ? `<a class="hc ${h.k}" href="${esc(h.href)}" target="_blank" rel="noopener">${esc(h.t)}</a>`
-            : `<span class="hc ${h.k}"${h.title ? ` title="${esc(h.title)}"` : ""}>${esc(h.t)}</span>`).join("")
-        : "", this && this._config);
+      let html = "";
+      if (this._config.health === "chips") {
+        html = this._health().map((h) => h.href
+          ? `<a class="hc ${h.k}" href="${esc(h.href)}" target="_blank" rel="noopener">${esc(h.t)}</a>`
+          : `<span class="hc ${h.k}"${h.title ? ` title="${esc(h.title)}"` : ""}>${esc(h.t)}</span>`).join("");
+      } else if (this._config.health) {
+        // 0.52.0: one sentence on top, then what to look at, each with its detail and action
+        const all = this._health();
+        const todo = all.filter((h) => h.k === "crit" || h.k === "warn" || h.k === "off");
+        const fine = all.filter((h) => h.k === "ok" && !/^✔ (Tutto ok|All good)/.test(h.t));
+        const chOn = T.h_ch_on.replace("{on}", delsOn).replace("{tot}", dels.length);
+        const lvl = todo.some((h) => h.k === "crit") ? "crit" : todo.length ? "warn" : "ok";
+        const head = todo.length
+          ? (todo.length === 1 ? T.h_look_1 : T.h_look_n.replace("{n}", todo.length))
+          : T.h_all_good;
+        const sub = todo.length ? `${T.h_rest_ok}${dels.length ? " · " + chOn : ""}` : (dels.length ? chOn : "");
+        const row = (h) => {
+          const m = String(h.t).match(/^(\S+)\s+(.*)$/);
+          const icon = m ? m[1] : "", text = m ? m[2] : h.t;
+          return `<div class="hr ${h.k}"><span class="hi">${esc(icon)}</span>
+            <div class="ht"><div>${esc(text)}</div>${h.title && !text.includes(h.title) ? `<div class="hd">${esc(h.title)}</div>` : ""}</div>
+            ${h.href ? `<a class="ha" href="${esc(h.href)}" target="_blank" rel="noopener">${esc(T.h_open)}</a>` : ""}</div>`;
+        };
+        html = `<div class="hb ${lvl}"><span class="hbi">${lvl === "ok" ? "✔" : "⚠"}</span>
+            <div><div class="hbt">${esc(head)}</div>${sub ? `<div class="hbs">${esc(sub)}</div>` : ""}</div></div>`
+          + (todo.length || fine.length ? `<div class="hl">${todo.map(row).join("")}${fine.map(row).join("")}</div>` : "");
+      }
+      healthEl.innerHTML = snIconify(html, this && this._config);
     }
     this.shadowRoot.getElementById("stats").innerHTML =
       snIconify(sentStat +
       stat("⚠️ " + T.failures, failures != null ? esc(failures) : "—", "", +failures > 0 ? p.crit : p.ok) +
-      stat("🎬 " + T.act_scen, act ? act.length : "—", "") +
+      (this._config.stats === "full" ? stat("🎬 " + T.act_scen, act ? act.length : "—", "") : "") +
       stat("📤 " + T.deliveries, dels.length ? `${delsOn}/${dels.length}` : "—", T.enabled_total) +
-      stat("😴 " + T.snoozed, snz.length, snz.length && snz[0]._end ? T.until + " " + esc(String(snz[0]._end.getHours()).padStart(2, "0") + ":" + String(snz[0]._end.getMinutes()).padStart(2, "0")) : "", snz.length ? p.warn : undefined), this && this._config);
+      (this._config.stats !== "full" ? "" : stat("😴 " + T.snoozed, snz.length, snz.length && snz[0]._end ? T.until + " " + esc(String(snz[0]._end.getHours()).padStart(2, "0") + ":" + String(snz[0]._end.getMinutes()).padStart(2, "0")) : "", snz.length ? p.warn : undefined)), this && this._config);
 
     const lastEl = this.shadowRoot.getElementById("last");
     if (this._last) {

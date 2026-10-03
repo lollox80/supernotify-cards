@@ -64,12 +64,14 @@ bands:
 | `tiles` | no | list of `dnd`, `snooze`, `announce`, or `{toggle, name, icon}` |
 | `groups` | no | grouped `input_boolean` toggles with a `name` |
 | `bands` | no | time bands (`input_datetime` start + `input_number` volume) for the status bar |
-| `last_notification` | no | `true` shows the native last-notification block (title, message, priority, relative time, channels ✔/✖ with delivery alias) |
+| `last_notification` | no | `true` shows the native last-notification block (title, message, priority, relative time, how many channels delivered / failed / missed / skipped, and "Why ›" when a why-card is on the dashboard) |
+| `last_channels` | no | `true` = one chip per channel in the last-notification block instead of the counts |
 | `last_notification_entity` | no | `input_text` holding the last title (fallback when the engine has no title) |
 | `last_notification_strip` | no | regex removed from the message, e.g. `\\s*🕐 Ora:.*$` to drop a timestamp line |
 | `repeat_entity` | no | `input_button` (or `script`) pressed by the "Repeat" button of the block |
 | `collapsible` | no | groups fold on header tap with an active/total counter (default `true`); per-group `collapsed: true` folds by default |
-| `tile_columns` | no | force N tile columns (default: auto-fit, min 84 px) |
+| `tile_columns` | no | force N tile columns (default: as many 150 px tiles as fit, 2 on a phone) |
+| `tile_layout` | no | `stacked` = the tall tiles with the icon on top (before 0.52) |
 
 Active scenarios are read from `binary_sensor.supernotify_scenario_*`. Since
 SuperNotify 2.4.0 these report a live `on`/`off` state (recomputed reactively
