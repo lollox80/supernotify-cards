@@ -2,6 +2,13 @@
 
 [← SuperNotify Cards](../README.md)
 
+## Visual editor
+
+Since 0.55.0 every card has a visual editor: **Add card** or **Edit card** shows a form for the
+common options (entity pickers, switches, numbers), with colours, icons, version and intro
+under "Look and text". Options a form cannot express (control tiles and groups, time bands,
+scenario groups) are edited in the code editor; the form keeps them.
+
 ## Options every card accepts
 
 | Option | What it does |

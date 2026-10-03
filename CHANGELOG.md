@@ -3,6 +3,22 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.55.0] - 2026-10-03
+
+Visual editor and a simulator that explains.
+
+### Added
+- Visual editor for every card: **Add card** / **Edit card** show a form drawn by Home Assistant
+  (entity pickers, switches, numbers, dropdowns) for the common options, with a folded "Look and
+  text" section (colours, icons, version, intro). Options a form cannot express (control tiles
+  and groups, time bands, scenario groups) stay in the code editor, and the form keeps them.
+  Labels in English and Italian.
+
+### Changed
+- simulator-card: one row per channel with the reason. *Would go out*: starts on its own,
+  turned on by a scenario. *Would not go out*: turned off by a scenario, only when named in the
+  call, only with a scenario, backup, switched off.
+
 ## [0.54.0] - 2026-10-03
 
 Polish after the redesign.

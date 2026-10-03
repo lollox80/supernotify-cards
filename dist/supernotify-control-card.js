@@ -8,6 +8,15 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-03 - v0.55.0. Visual editor and a simulator that explains.
+ *   - Every card answers getConfigForm(): "Add card" / "Edit card" shows a form drawn by Home
+ *     Assistant (entity pickers, switches, numbers, dropdowns) for the common options, with a
+ *     folded "Look and text" section (colours, icons, version, intro). Options a form cannot
+ *     express (control tiles and groups, time bands, scenario groups) stay in the code editor;
+ *     the form keeps them. Labels in English and Italian (snForm, SN_FORM_LABELS).
+ *   - simulator-card: one row per channel with the reason - "would go out: starts on its own /
+ *     turned on by <scenario>", "would not go out: turned off by <scenario> / only when named in
+ *     the call / only with a scenario / backup / switched off" - instead of bare chips.
  * 2026-10-03 - v0.54.0. Polish after the redesign.
  *   - Singular and plural: "1 channel off", "1 failure", "1 device", "1 skipped by a rule"
  *     instead of "1 channels off" and the like (helpers snW / snPl, "_1" keys). In Italian the
@@ -338,7 +347,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.54.0"; // bundle / HACS release
+const VERSION = "0.55.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -349,19 +358,19 @@ const VERSION = "0.54.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.28.0",
-  overview: "0.26.0",
-  bands: "0.17.0",
-  deliveries: "0.24.0",
-  transports: "0.21.0",
-  recipients: "0.25.0",
-  scenarios: "0.22.0",
-  simulator: "0.13.0",
-  composer: "0.17.1",
-  automations: "0.19.0",
-  stats: "0.26.0",
-  archive: "0.34.0",
-  why: "0.10.0",
+  control: "0.29.0",
+  overview: "0.27.0",
+  bands: "0.18.0",
+  deliveries: "0.25.0",
+  transports: "0.22.0",
+  recipients: "0.26.0",
+  scenarios: "0.23.0",
+  simulator: "0.14.0",
+  composer: "0.18.0",
+  automations: "0.20.0",
+  stats: "0.27.0",
+  archive: "0.35.0",
+  why: "0.11.0",
 };
 
 /**
@@ -412,9 +421,13 @@ const SN_STRINGS = {
     reset_overrides: "Reset overrides", reset_done: "overrides reset",
     transport_off: "transport off", last_notified: "last notified", never_notified: "never notified",
     media: "media", no_scenarios: "no scenario entities found",
-    sim_pick: "🎬 Scenarios — tap to simulate", sim_fire: "📤 Deliveries that would fire",
+    sim_pick: "🎬 Scenarios — tap to simulate", sim_fire: "📤 Channels",
     sim_hint: "Real engine data (enquire services). Priority-based delivery filtering happens engine-side and is not simulated here. Disabled wins over enabled, like the runtime merge.",
     sim_none: "no deliveries would fire", scenario_tag: "scenario",
+    sim_go: "Would go out", sim_stop: "Would not go out", sim_r_default: "starts on its own",
+    sim_r_on: "turned on by", sim_r_off: "turned off by", sim_r_named: "only when named in the call",
+    sim_r_scen: "only with a scenario that turns it on", sim_r_fallback: "backup, when the others fail",
+    sim_r_switched: "switched off",
     title: "Title", message: "Message", priority: "Priority",
     channels_lbl: "Channels — none picked = normal routing",
     camera_lbl: "Camera snapshot", preview: "Preview",
@@ -497,9 +510,13 @@ const SN_STRINGS = {
     reset_overrides: "Ripristina override", reset_done: "override ripristinati",
     transport_off: "transport spento", last_notified: "ultimo avviso", never_notified: "nessun avviso",
     media: "media", no_scenarios: "nessuna entità scenario trovata",
-    sim_pick: "🎬 Scenari — tocca per simulare", sim_fire: "📤 Canali che partirebbero",
+    sim_pick: "🎬 Scenari — tocca per simulare", sim_fire: "📤 Canali",
     sim_hint: "Dati reali del motore (servizi enquire). Il filtro per priorità delle delivery avviene lato motore e non è simulato qui. Lo spegnimento vince sull'accensione, come nel merge reale.",
     sim_none: "nessun canale partirebbe", scenario_tag: "scenario",
+    sim_go: "Partirebbero", sim_stop: "Non partirebbero", sim_r_default: "parte da solo",
+    sim_r_on: "acceso da", sim_r_off: "spento da", sim_r_named: "solo se chiamato per nome",
+    sim_r_scen: "solo con uno scenario che lo accende", sim_r_fallback: "di riserva, se gli altri falliscono",
+    sim_r_switched: "spento a mano",
     title: "Titolo", message: "Messaggio", priority: "Priorità",
     channels_lbl: "Canali — nessuno scelto = instradamento normale",
     camera_lbl: "Foto camera", preview: "Anteprima",
@@ -772,6 +789,93 @@ function snPl(T, key, n) {
 /** Readable name of a time band: config name, else the translated standard one, else the key. */
 function snBandName(T, key, custom) {
   return custom || (T && T["band_" + key]) || String(key).replace(/_/g, " ");
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Visual editor (0.55.0)
+ *
+ * Every card answers getConfigForm(): Home Assistant draws the form with its own
+ * selectors (entity pickers, switches, numbers) in "Add card" / "Edit card", so the
+ * common options need no YAML. Options a form cannot express (control tiles and
+ * groups, time bands, scenario groups) stay in the code editor: the form keeps the
+ * keys it does not show. Labels follow the UI language (document lang).
+ * ════════════════════════════════════════════════════════════════════════ */
+const SN_FORM_LABELS = {
+  en: {
+    _common: "Look and text", style: "Colours", icons: "Icons", show_version: "Show the card version",
+    intro: "Intro text on top", title: "Title", dnd_entity: "Do-not-disturb switch",
+    quiet_entity: "Computed quiet state (optional)", presence_entity: "Person for the status bar",
+    snooze_minutes: "Snooze length (minutes)", announce_delivery: "Channel for announcements",
+    last_notification: "Show the last notification", last_channels: "One chip per channel in the last notification",
+    repeat_entity: "Repeat-last button (optional)", tile_layout: "Tiles", tile_columns: "Tile columns (empty = automatic)",
+    update_entity: "SuperNotify update entity", cards_update_entity: "Cards update entity",
+    sent_today_entity: "Daily counter (utility meter)", health: "Health on top", stats: "Numbers",
+    poll_seconds: "Refresh every (seconds)", group: "Group by how a channel starts",
+    hide_defaults: "Hide automatic DEFAULT_ channels", limit: "Notifications in the list",
+    expand: "Open the folded parts", max_height: "Maximum height (CSS, e.g. 70vh)",
+    source: "Archive source", entity: "Archive sensor (bridge only)", trigger_entity: "Refresh when this changes",
+    dry_run: "Show \"Try without sending\"", dry_run_dupe_check: "Simulate the duplicate check too",
+    days: "Days shown by default", manifest_url: "Automations manifest URL",
+    o_supernotify: "SuperNotify", o_theme: "Home Assistant theme", o_mdi: "Home Assistant icons", o_emoji: "Emoji",
+    o_row: "Icon on the left", o_stacked: "Tall, icon on top", o_three: "Sent, failures, channels", o_full: "All five",
+    o_auto: "Automatic", o_sensor: "Sensor bridge (before SuperNotify 2.10)",
+  },
+  it: {
+    _common: "Aspetto e testi", style: "Colori", icons: "Icone", show_version: "Mostra la versione della card",
+    intro: "Testo introduttivo in alto", title: "Titolo", dnd_entity: "Interruttore non disturbare",
+    quiet_entity: "Stato silenzioso calcolato (facoltativo)", presence_entity: "Persona nella barra di stato",
+    snooze_minutes: "Durata dello snooze (minuti)", announce_delivery: "Canale per gli annunci",
+    last_notification: "Mostra l'ultima notifica", last_channels: "Un chip per canale nell'ultima notifica",
+    repeat_entity: "Pulsante ripeti ultima (facoltativo)", tile_layout: "Tile", tile_columns: "Colonne delle tile (vuoto = automatico)",
+    update_entity: "Entità di aggiornamento di SuperNotify", cards_update_entity: "Entità di aggiornamento delle card",
+    sent_today_entity: "Contatore giornaliero (utility meter)", health: "Stato in alto", stats: "Numeri",
+    poll_seconds: "Aggiorna ogni (secondi)", group: "Raggruppa per come parte il canale",
+    hide_defaults: "Nascondi i canali automatici DEFAULT_", limit: "Notifiche nell'elenco",
+    expand: "Apri le parti chiuse", max_height: "Altezza massima (CSS, es. 70vh)",
+    source: "Sorgente dell'archivio", entity: "Sensore archivio (solo ponte)", trigger_entity: "Aggiorna quando cambia",
+    dry_run: "Mostra \"Prova senza inviare\"", dry_run_dupe_check: "Simula anche il controllo doppioni",
+    days: "Giorni mostrati di default", manifest_url: "URL del manifest delle automazioni",
+    o_supernotify: "SuperNotify", o_theme: "Tema di Home Assistant", o_mdi: "Icone di Home Assistant", o_emoji: "Emoji",
+    o_row: "Icona a sinistra", o_stacked: "Alte, icona sopra", o_three: "Inviate, fallimenti, canali", o_full: "Tutti e cinque",
+    o_auto: "Automatica", o_sensor: "Ponte con sensore (prima di SuperNotify 2.10)",
+  },
+};
+
+function snForm(kind) {
+  const lang = String((document.documentElement && document.documentElement.lang) || navigator.language || "en").slice(0, 2);
+  const L = SN_FORM_LABELS[lang] || SN_FORM_LABELS.en;
+  const sel = (name, opts, extra = {}) => ({ name, ...extra, selector: { select: { mode: "dropdown",
+    options: opts.map(([value, key]) => ({ value, label: L[key] || key })) } } });
+  const ent = (name, domain) => ({ name, selector: { entity: { domain } } });
+  const bool = (name, def) => ({ name, ...(def !== undefined ? { default: def } : {}), selector: { boolean: {} } });
+  const num = (name, min, max, step = 1) => ({ name, selector: { number: { min, max, step, mode: "box" } } });
+  const txt = (name, multiline) => ({ name, selector: { text: multiline ? { multiline: true } : {} } });
+  const common = { type: "expandable", name: "", flatten: true, title: L._common, schema: [
+    sel("style", [["supernotify", "o_supernotify"], ["theme", "o_theme"]]),
+    sel("icons", [["", "o_mdi"], ["emoji", "o_emoji"]]),
+    bool("show_version"), txt("intro", true)] };
+  const archive = [num("limit", 5, 100), sel("source", [["", "o_auto"], ["sensor", "o_sensor"]]),
+    ent("entity", "sensor"), ent("trigger_entity", "sensor")];
+  const S = {
+    control: [ent("dnd_entity", ["input_boolean", "switch"]), ent("quiet_entity", ["binary_sensor", "input_boolean"]),
+      ent("presence_entity", "person"), num("snooze_minutes", 5, 240, 5), txt("announce_delivery"),
+      bool("last_notification"), bool("last_channels"), ent("repeat_entity", ["input_button", "button", "script"]),
+      sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6)],
+    overview: [ent("update_entity", "update"), ent("sent_today_entity", "sensor"),
+      ent("quiet_entity", ["binary_sensor", "input_boolean"]), bool("health", true),
+      sel("stats", [["", "o_three"], ["full", "o_full"]]), num("poll_seconds", 10, 600, 10)],
+    deliveries: [txt("title"), bool("group", true), bool("hide_defaults", true)],
+    transports: [], recipients: [], simulator: [], bands: [],
+    scenarios: [num("poll_seconds", 10, 600, 10)],
+    composer: [ent("update_entity", "update"), bool("dry_run"), bool("dry_run_dupe_check")],
+    automations: [txt("manifest_url")],
+    stats: [num("days", 2, 90), ent("sent_today_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update")],
+    archive, why: [...archive, bool("expand"), txt("max_height")],
+  };
+  return {
+    schema: [...(S[kind] || []), common],
+    computeLabel: (item) => L[item.name] || item.name,
+  };
 }
 
 function snPalette(dark, style) {
@@ -1486,6 +1590,11 @@ const SN_SWITCH_CSS = `
 `;
 
 class SupernotifyControlCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("control");
+  }
+
   static getStubConfig() {
     return {
       dnd_entity: "input_boolean.notifier_dnd",
@@ -2068,6 +2177,11 @@ window.customCards.push({
  * ════════════════════════════════════════════════════════════════════════ */
 
 class SupernotifyOverviewCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("overview");
+  }
+
   static getStubConfig() {
     return { poll_seconds: 60 };
   }
@@ -2401,6 +2515,11 @@ window.customCards.push({
  * ════════════════════════════════════════════════════════════════════════ */
 
 class SupernotifyBandsCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("bands");
+  }
+
   static getStubConfig() {
     return { bands: {} };
   }
@@ -2667,6 +2786,11 @@ function snSelectionLabel(sel, T) {
 }
 
 class SupernotifyDeliveriesCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("deliveries");
+  }
+
   static getStubConfig() {
     return { hide_defaults: true };
   }
@@ -2909,6 +3033,11 @@ window.customCards.push({
  * ════════════════════════════════════════════════════════════════════════ */
 
 class SupernotifyTransportsCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("transports");
+  }
+
   static getStubConfig() {
     return {};
   }
@@ -3062,6 +3191,11 @@ window.customCards.push({
  * ════════════════════════════════════════════════════════════════════════ */
 
 class SupernotifyRecipientsCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("recipients");
+  }
+
   static getStubConfig() {
     return {};
   }
@@ -3283,6 +3417,11 @@ const SN_SCENARIO_ICONS = {
 };
 
 class SupernotifyScenariosCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("scenarios");
+  }
+
   static getStubConfig() {
     return {};
   }
@@ -3544,6 +3683,11 @@ window.customCards.push({
  * ════════════════════════════════════════════════════════════════════════ */
 
 class SupernotifySimulatorCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("simulator");
+  }
+
   static getStubConfig() {
     return {};
   }
@@ -3635,6 +3779,14 @@ class SupernotifySimulatorCard extends HTMLElement {
         .out.sup { opacity: .55; text-decoration: line-through; color: ${p.crit}; }
         .out.sup .tag { color: ${p.crit}; text-decoration: none; }
         .hint { font-size: 11.5px; color: ${p.muted}; margin-top: 8px; }
+        .sh { font-size: 12px; font-weight: 700; color: ${p.muted}; margin: 10px 0 4px; }
+        .sh.go { color: ${p.ok}; }
+        .sr { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1.3fr); gap: 8px; align-items: baseline;
+              padding: 7px 2px; border-bottom: 1px solid ${p.line}; font-size: 13.5px; }
+        .sr:last-child { border-bottom: 0; }
+        .sr .si { color: ${p.muted}; } .sr.go .si { color: ${p.ok}; }
+        .sr .sn { font-weight: 600; } .sr.stop .sn { color: ${p.muted}; font-weight: 500; }
+        .sr .sw { color: ${p.muted}; font-size: 12.5px; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; opacity: .7; margin-top: 8px; }
       </style>
       <ha-card>
@@ -3676,12 +3828,33 @@ class SupernotifySimulatorCard extends HTMLElement {
     const fired = [...enabled].filter((d) => !disabled.has(d)).sort();
     const suppressed = [...enabled].filter((d) => disabled.has(d)).sort();
     const res = this.shadowRoot.getElementById("result");
-    res.innerHTML =
-      snIconify(fired.map((d) =>
-        `<span class="out" title="${esc(d)}">${esc(snDeliveryAlias(this._hass, d) || d)}${byScenAdd.has(d) && !(this._implicit || []).includes(d) ? ' <span class="tag">scenario</span>' : ""}</span>`
-      ).join("") +
-      suppressed.map((d) => `<span class="out sup" title="${esc(d)}">${esc(snDeliveryAlias(this._hass, d) || d)} <span class="tag">${snT(this._config, this._hass).off}</span></span>`).join("") ||
-      `<span class='hint'>${snT(this._config, this._hass).sim_none}</span>`, this && this._config);
+    const T = snT(this._config, this._hass);
+    const name = (d) => snDeliveryAlias(this._hass, d) || d;
+    const scenName = (n) => snScenarioName(this._hass, n);
+    const onBy = (d) => [...this._sel].filter((n) => this._byScen[n] && (this._byScen[n].enabled || []).includes(d)).map(scenName);
+    const offBy = (d) => [...this._sel].filter((n) => this._byScen[n] && (this._byScen[n].disabled || []).includes(d)).map(scenName);
+    const row = (d, cls, icon, why) => `<div class="sr ${cls}"><span class="si">${icon}</span><span class="sn" title="${esc(d)}">${esc(name(d))}</span><span class="sw">${esc(why)}</span></div>`;
+    const goRows = fired.map((d) => {
+      const by = onBy(d);
+      const why = [(this._implicit || []).includes(d) ? T.sim_r_default : "", by.length ? `${T.sim_r_on} ${by.join(", ")}` : ""].filter(Boolean).join(" · ");
+      return row(d, "go", "✔", why);
+    });
+    // channels that would not go out: switched off by a selected scenario, or never selected
+    const known = snEntityRows(this._hass, "delivery").filter((x) => !/^default_/i.test(x.name));
+    const stopRows = suppressed.map((d) => row(d, "stop", "⊘", `${T.sim_r_off} ${offBy(d).join(", ")}`));
+    for (const x of known.filter((k) => !enabled.has(k.name)).sort((p, q) => name(p.name).localeCompare(name(q.name)))) {
+      const r = x.a.inclusion ?? x.a.selection;
+      const inc = Array.isArray(r) ? r : r ? [r] : ["default"];
+      const why = !x.on ? T.sim_r_switched
+        : inc.includes("scenario") ? T.sim_r_scen
+        : inc.some((i) => /^fallback/.test(i)) ? T.sim_r_fallback
+        : inc.includes("default") ? T.sim_r_default
+        : T.sim_r_named;
+      stopRows.push(row(x.name, "stop", "⊘", why));
+    }
+    res.innerHTML = snIconify(
+      (goRows.length ? `<div class="sh go">${esc(T.sim_go)} · ${goRows.length}</div>${goRows.join("")}` : `<span class='hint'>${T.sim_none}</span>`) +
+      (stopRows.length ? `<div class="sh">${esc(T.sim_stop)} · ${stopRows.length}</div>${stopRows.join("")}` : ""), this && this._config);
   }
 }
 
@@ -3700,6 +3873,11 @@ window.customCards.push({
  * ════════════════════════════════════════════════════════════════════════ */
 
 class SupernotifyComposerCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("composer");
+  }
+
   static getStubConfig() {
     return {};
   }
@@ -4153,6 +4331,11 @@ window.customCards.push({
  *   language      override, else follows hass.language
  * ==================================================================== */
 class SupernotifyAutomationsCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("automations");
+  }
+
   static getStubConfig() {
     return {};
   }
@@ -4507,6 +4690,11 @@ Object.assign(SN_STRINGS.it, SN_STATS_STRINGS.it);
 const SN_PRIO_COLORS = { critical: "#e23c3c", high: "#f0a020", medium: "#03a9f4", low: "#8fa1b4", minimum: "#c3ccd6" };
 
 class SupernotifyStatsCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("stats");
+  }
+
   static getStubConfig() {
     return { days: 14 };
   }
@@ -5044,6 +5232,11 @@ window.customCards.push({
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");
 class SupernotifyArchiveCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("archive");
+  }
+
   static getStubConfig() {
     return { entity: "sensor.supernotify_archivio" };
   }
@@ -5393,6 +5586,11 @@ const SN_ARCH_STRINGS = {
  * ════════════════════════════════════════════════════════════════════════ */
 
 class SupernotifyWhyCard extends HTMLElement {
+  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
+  static getConfigForm() {
+    return snForm("why");
+  }
+
   static getStubConfig() {
     return { entity: "sensor.supernotify_archivio", service: "shell_command.sn_archive_detail" };
   }
