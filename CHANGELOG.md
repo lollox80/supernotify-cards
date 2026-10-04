@@ -3,6 +3,24 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.68.0] - 2026-10-04
+
+Phone and accessibility, in every card.
+
+### Added
+- Keyboard: whatever can be tapped (rows, chips, links between cards) can be reached with Tab and
+  used with Enter or Space, with a visible focus ring.
+- Screen readers: tappable rows and chips are buttons with a name (their text, else their tooltip),
+  each on/off switch is named after its row, toasts and results are read out, the icons that
+  replace emoji are hidden (the text beside them says the same).
+- Touch screens (pointer: coarse): rows at least 48 px high, buttons and chips 40 px, a larger touch
+  area around the switches. Nothing changes with a mouse.
+- No animations when the system asks for reduced motion.
+- README: a complete example dashboard (four views, sections layout).
+
+### Fixed
+- bands: no console error when no band is configured yet.
+
 ## [0.67.0] - 2026-10-04
 
 Links between cards now work across the views of a dashboard.

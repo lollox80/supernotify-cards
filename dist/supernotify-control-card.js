@@ -8,6 +8,12 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.68.0. Phone and accessibility, every card: whatever can be tapped can also be
+ *   reached with Tab and used with Enter or Space, has role button and a name for screen readers
+ *   (its text, else its tooltip); switches are named after their row, emoji icons are left out
+ *   (the text beside them says it), toasts and results are announced. On touch screens rows are
+ *   at least 48 px high and buttons and chips 40 px, the switches' touch area is larger; a visible focus ring; no
+ *   animations when the system asks for reduced motion.
  * 2026-10-04 - v0.67.0. Links across views: the overview's "Show ›", its people and scenario chips,
  *   and the control card's status links now also reach a card on another view of the same
  *   dashboard - the card reads the dashboard's configuration once (lovelace/config, views the user
@@ -463,7 +469,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.67.0"; // bundle / HACS release
+const VERSION = "0.68.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -474,20 +480,20 @@ const VERSION = "0.67.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.35.0",
-  overview: "0.33.0",
-  bands: "0.20.2",
-  deliveries: "0.29.0",
-  transports: "0.25.0",
-  recipients: "0.28.0",
-  scenarios: "0.28.0",
-  simulator: "0.16.0",
-  composer: "0.22.0",
-  automations: "0.20.3",
-  stats: "0.28.3",
-  archive: "0.37.1",
-  tools: "0.1.1",
-  why: "0.13.2",
+  control: "0.36.0",
+  overview: "0.34.0",
+  bands: "0.21.0",
+  deliveries: "0.30.0",
+  transports: "0.26.0",
+  recipients: "0.29.0",
+  scenarios: "0.29.0",
+  simulator: "0.17.0",
+  composer: "0.23.0",
+  automations: "0.21.0",
+  stats: "0.29.0",
+  archive: "0.38.0",
+  tools: "0.2.0",
+  why: "0.14.0",
 };
 
 /**
@@ -906,6 +912,7 @@ class SnCard extends HTMLElement {
     // native controls (time pickers, selects, scrollbars) follow the HA theme too
     this.style.colorScheme = this._dark ? "dark" : "light";
     this._onHass(hass, !this._rendered || wasDark !== this._dark, changed, first);
+    snA11yInit(this);
   }
 
   _onHass(hass, fresh, changed) {
@@ -933,6 +940,96 @@ class SnCard extends HTMLElement {
   getGridOptions() {
     return { columns: 12, min_columns: 6 };
   }
+}
+
+/* ── 0.68.0: phone and accessibility, for every card ──
+ * The cards draw with innerHTML and attach onclick to plain divs and spans. After every draw
+ * (a MutationObserver on the shadow root, delivered once the drawing code has finished)
+ * snA11yScan gives each tappable element that is not a native control: tabindex 0, role
+ * button and a name (its title when it has no text); Enter and Space then click it. Switches
+ * get the name of their row, toasts and results are announced (aria-live). SN_A11Y_CSS adds a
+ * visible focus ring, 48 px rows / 40 px buttons on touch screens (pointer: coarse) and no
+ * animations when the system asks for reduced motion.
+ */
+const SN_A11Y_CSS = `
+  [data-sn-a11y]:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible,
+  textarea:focus-visible, a:focus-visible {
+    outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 2px; border-radius: 6px; }
+  .sw:has(input:focus-visible) { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 2px; border-radius: 12px; }
+  @media (pointer: coarse) {
+    [data-sn-a11y="row"] { min-height: 48px; box-sizing: border-box; }
+    [data-sn-a11y="tap"], button { min-height: 40px; }
+    [data-sn-a11y="tap"].chip, [data-sn-a11y="tap"].go { display: inline-flex; align-items: center; }
+    .sw input { position: absolute; inset: -13px -4px; width: auto; height: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+`;
+const SN_A11Y_NATIVE = /^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY|LABEL|OPTION|HA-CARD)$/;
+const SN_A11Y_TAP = ".chip, .who";
+const SN_A11Y_LIVE = ".toast, .res, .dres, .err";
+const SN_A11Y_ROWTAG = /^(DIV|LI|TR|SECTION|ARTICLE)$/;
+
+function snA11yText(el) {
+  return (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+function snA11yScan(root) {
+  if (!root) return;
+  if (!root.querySelector("style[data-sn-a11y-css]")) {
+    const st = document.createElement("style");
+    st.setAttribute("data-sn-a11y-css", "");
+    st.textContent = SN_A11Y_CSS;
+    root.appendChild(st);
+  }
+  const tap = new Set(root.querySelectorAll(SN_A11Y_TAP));
+  root.querySelectorAll("*").forEach((el) => {
+    if (el.hasAttribute("data-sn-a11y")) return;
+    const tag = el.tagName;
+    if (!(el.onclick || tap.has(el))) return;
+    if (SN_A11Y_NATIVE.test(tag) || (tag.includes("-") && tag !== "HA-ICON")) return;
+    el.setAttribute("data-sn-a11y", SN_A11Y_ROWTAG.test(tag) && !el.classList.contains("chip") ? "row" : "tap");
+    if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "0");
+    if (!el.hasAttribute("role")) el.setAttribute("role", "button");
+    if (!el.hasAttribute("aria-label") && !snA11yText(el)) {
+      const name = el.getAttribute("title") || el.dataset.label || el.getAttribute("icon") || "";
+      if (name) el.setAttribute("aria-label", name);
+    }
+  });
+  // icon-only native buttons: their title is their name
+  root.querySelectorAll("button:not([aria-label])").forEach((b) => {
+    if (!snA11yText(b) && b.title) b.setAttribute("aria-label", b.title);
+  });
+  // a switch says what it switches: the text of its row
+  root.querySelectorAll('input[type="checkbox"]:not([aria-label])').forEach((i) => {
+    if (i.id && root.querySelector(`label[for="${i.id}"]`)) return;
+    const own = i.closest("label");
+    if (own && snA11yText(own)) return;
+    const row = i.closest("[data-e], [data-id], [data-n], [data-sn-a11y], .row, .it, .tile, li");
+    const name = i.title || (row && snA11yText(row));
+    if (name) i.setAttribute("aria-label", name);
+  });
+  root.querySelectorAll(SN_A11Y_LIVE).forEach((el) => {
+    if (!el.hasAttribute("aria-live")) el.setAttribute("aria-live", "polite");
+  });
+}
+
+function snA11yInit(card) {
+  const root = card.shadowRoot;
+  if (!root || card._snA11y) return;
+  card._snA11y = true;
+  snA11yScan(root);
+  if (typeof MutationObserver !== "undefined") {
+    new MutationObserver(() => snA11yScan(root)).observe(root, { childList: true, subtree: true });
+  }
+  root.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const t = e.target;
+    if (!t || !t.hasAttribute || !t.hasAttribute("data-sn-a11y") || e.defaultPrevented) return;
+    e.preventDefault();
+    t.click();
+  });
 }
 
 /* ── 0.65.0: the cards on the page know each other ── */
@@ -1415,7 +1512,7 @@ function snIconify(html, cfg) {
   SN_EMOJI_RE.lastIndex = 0;
   if (!SN_EMOJI_RE.test(html)) return html;
   const swap = (text) => text.replace(SN_EMOJI_RE, (e) =>
-    '<ha-icon class="sn-i" icon="mdi:' + SN_EMOJI_MAP.get(e.replace(/️$/, "")) +
+    '<ha-icon class="sn-i" aria-hidden="true" icon="mdi:' + SN_EMOJI_MAP.get(e.replace(/️$/, "")) +
     '" style="--mdc-icon-size:1.15em;vertical-align:-.2em"></ha-icon>');
   const tagRe = /<[^>]*>/g;
   let out = "", last = 0, skip = null, m;
@@ -3832,6 +3929,7 @@ class SupernotifyBandsCard extends SnCard {
     const active = this._activeKey(bands);
     const T = snT(this._config, this._hass);
     const rows = this.shadowRoot.getElementById("rows");
+    if (!rows) return; // 0.68.0: nothing drawn yet (no bands configured)
 
     // Build the row DOM once. Home Assistant calls `set hass` on every state
     // change in the system, so rebuilding here would tear down the

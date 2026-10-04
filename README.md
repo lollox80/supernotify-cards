@@ -62,6 +62,83 @@ Each link opens the card's page: screenshot, every option, examples.
 
 All cards follow the Home Assistant dark theme ([screenshot](https://raw.githubusercontent.com/lollox80/supernotify-cards/main/docs/images/dark.png)).
 
+**Phone and accessibility** (0.68.0): rows at least 48 px high on touch screens, everything usable
+with the keyboard (Tab, Enter, Space), names for screen readers, reduced motion respected.
+
+## A full dashboard
+
+Paste it in a new dashboard (**Settings → Dashboards → Add dashboard → New dashboard from scratch**,
+then ⋮ → **Edit dashboard** → ⋮ → **Raw configuration editor**). Four views, each card where it is
+used; the links between cards (a channel off, a person, a scenario) open the right view.
+
+<details><summary>Dashboard YAML</summary>
+
+```yaml
+title: Notifications
+views:
+  - title: Home
+    path: home
+    icon: mdi:bell
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - type: custom:supernotify-control-card
+      - type: grid
+        cards:
+          - type: custom:supernotify-overview-card
+          - type: custom:supernotify-archive-card
+  - title: Send
+    path: send
+    icon: mdi:send
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - type: custom:supernotify-composer-card
+      - type: grid
+        cards:
+          - type: custom:supernotify-why-card
+          - type: custom:supernotify-simulator-card
+  - title: Setup
+    path: setup
+    icon: mdi:tune-variant
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        cards:
+          - type: custom:supernotify-deliveries-card
+          - type: custom:supernotify-transports-card
+      - type: grid
+        cards:
+          - type: custom:supernotify-scenarios-card
+          - type: custom:supernotify-recipients-card
+      - type: grid
+        cards:
+          - type: custom:supernotify-bands-card
+          - type: custom:supernotify-automations-card
+  - title: Stats
+    path: stats
+    icon: mdi:chart-bar
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - type: custom:supernotify-stats-card
+      - type: grid
+        cards:
+          - type: custom:supernotify-tools-card
+```
+</details>
+
+The bands card needs its time bands set up first ([bands](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/bands.md));
+the tools card is meant for administrators - put it in a view only they can see
+(view → **Visibility**).
+
 ## More
 
 - [Common options and required versions](https://github.com/lollox80/supernotify-cards/blob/main/docs/configuration.md)
