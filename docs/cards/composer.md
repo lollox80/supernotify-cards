@@ -67,5 +67,6 @@ check duplicates, and the next Send of the same content carries `force_resend` i
 type: custom:supernotify-composer-card
 # dry_run: true               # optional: show the button whatever the version
 # dry_run_dupe_check: true    # optional: simulate the duplicate check too
+# show_off: true              # optional: also offer channels switched off or whose transport is off
 # update_entity: update.supernotify_update
 ```

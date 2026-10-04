@@ -3,6 +3,26 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.74.0] - 2026-10-04
+
+Ready for SuperNotify's next release. Each new feature is used only when the installed SuperNotify
+has it; with older versions everything works as before.
+
+### Added
+- Pauses through `supernotify.snooze`: any user gets the full pause panel (what, for whom, how long)
+  and its Resume buttons, with no admin and no voice commands. The one-tap tile and the pause tile
+  feature use it too. `snooze_via: action | event | voice` picks one way.
+- Status badge and overview: "channels off" counts only the channels switched off by hand (the
+  switches' `overridden` attribute), so channels meant to be off need no `ignore`.
+- stats-card: with `enquire_archive` `verbosity: daily` the whole window comes in one call of a
+  few KB, instead of reading every notification day by day. `daily: false` keeps the old way.
+- control-card: `status: false` hides the status row, for a second control card in the same view.
+- composer-card: `show_off: true` offers the channels that are off too.
+
+### Fixed
+- automations-card: one heading per category, also when the manifest mixes categories.
+- composer-card: channels switched off, or whose transport is off, are no longer offered.
+
 ## [0.73.2] - 2026-10-04
 
 From a look at every view on a real installation.

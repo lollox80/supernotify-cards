@@ -58,11 +58,12 @@ bands:
 |---|---|---|
 | `presence_entity` | no | `person.*` shown in the status bar |
 | `occupancy` | no | without `presence_entity`, the status bar shows who is home for SuperNotify (`enquire_occupancy`, what its conditions see). `false` hides it |
-| `snooze_via` | no | how the pause panel pauses: `event` (the push buttons event, needs an admin), `voice` (SuperNotify's voice commands, the user's own pauses). Default: `event` for admins, `voice` for everyone else |
+| `snooze_via` | no | how pauses are made: `action` (`supernotify.snooze`, any user, full panel), `event` (the push buttons event, needs an admin), `voice` (SuperNotify's voice commands, the user's own pauses). Default: `action` when SuperNotify has it, otherwise `event` for admins and `voice` for everyone else |
+| `status` | no | `false` hides the status row (who is home, time band, quiet, active scenarios): for a second control card in the same view. Default `true` |
 | `dnd_entity` | no | `input_boolean` used by the DND tile and status bar |
 | `announce_delivery` | no | SuperNotify delivery used by Announce (default `alexa_announce`) |
 | `snooze_minutes` | no | minutes for the snooze tile (default 30) |
-| `snooze_panel` | no | `true` (default): the snooze tile opens a panel to pause non-critical notifications, everything, one channel or one priority, for everyone or only you, for 15 min to 4 h or until resumed, and lists the pauses in force with Resume. `false`: one tap snoozes as before (`snooze_minutes`, `snooze_action`). Pausing fires the same `mobile_app_notification_action` event as the push buttons, which needs an admin user. |
+| `snooze_panel` | no | `true` (default): the snooze tile opens a panel to pause non-critical notifications, everything, one channel or one priority, for everyone or only you, for 15 min to 4 h or until resumed, and lists the pauses in force with Resume. `false`: one tap snoozes as before (`snooze_minutes`, `snooze_action`). Pausing goes through `supernotify.snooze` when SuperNotify has it; before that it fires the same `mobile_app_notification_action` event as the push buttons, which needs an admin user. |
 | `snooze_announce` | no | `true` says a pause out loud on the announce channel (`announce_delivery`, e.g. Alexa): before pausing, since the pause would stop its own announcement, and after resuming one or all. With a pause for everyone already in force SuperNotify would hold the announcement back, so the card then calls the channel's own action (e.g. `notify.alexa_media`) with its targets and data. Default `false`; a switch in the visual editor |
 | `snooze_action` | no | override the snooze command (default `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_<minutes>`; e.g. use `..._EVERYTHING_...` to pause critical too) |
 | `tiles` | no | list of `dnd`, `snooze`, `announce`, or `{toggle, name, icon}` |

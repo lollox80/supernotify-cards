@@ -10,7 +10,7 @@ card**. They come with the same download as the cards.
 SuperNotify's health in one badge, on top of any view (sections dashboards): transports with errors,
 channels off, pauses in force, otherwise *All good*. The colour and icon follow the worst of them, and
 the badge's tooltip lists them all. Channels off alone show in grey, not as a warning: a
-fallback channel switched off in the YAML is often meant to be off (leave it out with `ignore`). **Edit dashboard → Add badge → SuperNotify status**, or:
+fallback channel switched off in the YAML is often meant to be off (leave it out with `ignore`). Once SuperNotify's switches have the `overridden` attribute, only channels switched off by hand count, so `ignore` is rarely needed. **Edit dashboard → Add badge → SuperNotify status**, or:
 
 ```yaml
 badges:
@@ -52,6 +52,7 @@ features:
   - type: custom:supernotify-test
 ```
 
-Pauses work like the control card's: an administrator pauses through the same event as the push
-notification buttons; anyone else through SuperNotify's voice commands, which pause their own person
-(voice commands must be on in SuperNotify's options).
+Pauses go through `supernotify.snooze`, for any user, when SuperNotify has it. Before that they work
+like the control card's: an administrator pauses through the same event as the push notification
+buttons; anyone else through SuperNotify's voice commands, which pause their own person (voice
+commands must be on in SuperNotify's options).

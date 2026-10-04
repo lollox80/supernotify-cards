@@ -54,7 +54,9 @@ await wait(150);
 const d = c._data;
 ok(d && d.archive, "2.12.1: statistiche dall'archivio");
 ok(!asks.includes("history"), "niente cronologia degli helper");
-ok(asks.every((a) => a.verbosity === "summary" && a.limit >= 1000), "verbosity summary e limit alto");
+// 0.74.0: first a probe for verbosity daily; this SuperNotify does not answer it, so day by day
+ok(asks[0].verbosity === "daily", "prima prova verbosity daily");
+ok(asks.slice(1).every((a) => a.verbosity === "summary" && a.limit >= 1000), "poi verbosity summary e limit alto");
 const perDayCalls = asks.filter((a) => a.before).length;
 ok(perDayCalls >= 14 && perDayCalls <= 16, `un giorno per chiamata (${perDayCalls})`);
 const full = d.perDay.filter((x) => !x.today);

@@ -8,6 +8,18 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.74.0. Ready for the next SuperNotify release, and four fixes. Each new SuperNotify
+ *   feature is used only when the installed version has it; older ones keep working as before.
+ *   (1) pauses go through supernotify.snooze when it exists: any user gets the full pause panel
+ *   (what, for whom, how long) and its Resume buttons, no admin needed and no voice commands
+ *   (`snooze_via: action`; `event` and `voice` still force the old ways). The tile features too.
+ *   (2) status badge and overview count as "channels off" only those switched off by hand (the
+ *   switch's `overridden` attribute), so a channel meant to be off needs no `ignore`. (3) stats:
+ *   with enquire_archive `verbosity: daily` the whole window is one call of a few KB instead of a
+ *   day-by-day read of every notification (`daily: false` keeps the old way). (4) automations: one
+ *   heading per category even when the manifest mixes them. (5) composer: channels switched off,
+ *   or whose transport is off, are not offered (`show_off: true` shows them). (6) control:
+ *   `status: false` hides the status row, for a second control card in the same view.
  * 2026-10-04 - v0.73.2. From a look at every view on a real installation. (1) why: a channel
  *   skipped for no target is a problem only when the call asked for it by name or SuperNotify
  *   counted a missed channel; an automatic channel with nobody to reach (e.g. notify_entity) is
@@ -524,7 +536,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.73.2"; // bundle / HACS release
+const VERSION = "0.74.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -535,17 +547,17 @@ const VERSION = "0.73.2"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.36.1",
-  overview: "0.35.1",
+  control: "0.37.0",
+  overview: "0.36.0",
   bands: "0.21.0",
   deliveries: "0.30.0",
   transports: "0.26.0",
   recipients: "0.29.0",
   scenarios: "0.29.0",
   simulator: "0.17.0",
-  composer: "0.24.0",
-  automations: "0.21.1",
-  stats: "0.31.0",
+  composer: "0.25.0",
+  automations: "0.21.2",
+  stats: "0.32.0",
   archive: "0.38.1",
   tools: "0.2.1",
   why: "0.14.1",
@@ -1300,6 +1312,33 @@ function snFeatureSupports(test) {
     return test(String(id));
   };
 }
+/** 0.74.0: supernotify.snooze exists (SuperNotify after 2.12.1-beta2): open to any user. */
+function snHasSnoozeAction(hass) {
+  const svc = hass && hass.services && hass.services.supernotify;
+  return !!(svc && svc.snooze);
+}
+/** supernotify.snooze: command snooze | silence | resume, scope, name, person, minutes. */
+async function snSnoozeCall(hass, data) {
+  const d = { reason: "Dashboard" };
+  for (const [k, v] of Object.entries(data || {})) if (v !== undefined && v !== null && v !== "") d[k] = v;
+  if (d.command === "resume") delete d.reason;
+  return hass.callWS({ type: "call_service", domain: "supernotify", service: "snooze", service_data: d, return_response: true });
+}
+/**
+ * 0.74.0: delivery rows that count as "channels off". Once SuperNotify gives its switches the
+ * `overridden` attribute, only the ones switched off by hand: a channel off in the YAML is meant
+ * to be off. Before that, every channel off. DEFAULT_ ones and `ignore` are left out either way.
+ */
+function snChannelsOff(hass, rows, ignore) {
+  const ign = ignore instanceof Set ? ignore : new Set((ignore || []).map((x) => String(x).toLowerCase()));
+  const attrs = (d) => d.a || ((hass.states[d.id] || {}).attributes) || {};
+  const known = rows.some((d) => "overridden" in attrs(d));
+  return rows.filter((d) => {
+    const off = d.state !== undefined ? d.state === "off" : !d.on;
+    return off && !/^default_/i.test(d.name) && !ign.has(String(d.name).toLowerCase())
+      && (!known || attrs(d).overridden === true);
+  });
+}
 /** SuperNotify's health: [{k: crit|off|pause, n, text, title}] worst first, [] = all good. */
 function snNativeHealth(hass, snoozes, opts) {
   opts = opts || {};
@@ -1312,8 +1351,7 @@ function snNativeHealth(hass, snoozes, opts) {
   });
   if (tr.length) out.push({ k: "crit", n: tr.length, text: `${tr.length} ${T.err}`,
     title: tr.map((t) => (t.a.last_error_message ? `${t.name}: ${t.a.last_error_message}` : t.name)).join(" · ") });
-  const off = opts.channels_off === false ? [] : snEntityRows(hass, "delivery")
-    .filter((d) => !d.on && !/^default_/i.test(d.name) && !ignore.has(String(d.name).toLowerCase()));
+  const off = opts.channels_off === false ? [] : snChannelsOff(hass, snEntityRows(hass, "delivery"), ignore);
   if (off.length) out.push({ k: "off", n: off.length, text: `${off.length} ${T.off}`,
     title: off.map((d) => snDeliveryAlias(hass, d.name) || d.name).join(", ") });
   const live = snLiveSnoozes(snoozes || []);
@@ -1328,7 +1366,9 @@ function snNativeHealth(hass, snoozes, opts) {
 /** Pause for everyone (non-critical) or resume, as the control card does. */
 async function snNativePause(hass, minutes) {
   const admin = !(hass.user && hass.user.is_admin === false);
-  if (minutes) {
+  if (minutes && snHasSnoozeAction(hass)) {
+    await snSnoozeCall(hass, { command: "snooze", scope: "noncritical", minutes });
+  } else if (minutes) {
     if (admin) await hass.callApi("POST", "events/mobile_app_notification_action", { action: `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_${minutes}` });
     else {
       const it = String(hass.language || "en").startsWith("it");
@@ -2045,7 +2085,8 @@ const SN_FORM_LABELS = {
     quiet_entity: "Computed quiet state (optional)", presence_entity: "Person for the status bar",
     archive_days: "Archive cleanup: older than (days)", media_days: "Picture cleanup: older than (days)",
     occupancy: "Who is home (from SuperNotify)", repairs: "SuperNotify repairs in the health list",
-    snooze_announce: "Say pauses out loud (announce channel)", snooze_via: "Pauses go through", o_event: "the push buttons event (admin)", o_voice: "the voice commands",
+    snooze_announce: "Say pauses out loud (announce channel)", snooze_via: "Pauses go through", o_event: "the push buttons event (admin)", o_voice: "the voice commands", o_action: "SuperNotify's snooze action",
+    status: "Status row (who is home, time band, quiet)", show_off: "Also offer channels that are off", daily: "Daily counts from the archive when available",
     snooze_minutes: "Snooze length (minutes)", snooze_panel: "Snooze tile opens the pause panel", announce_delivery: "Channel for announcements",
     last_notification: "Show the last notification", last_channels: "One chip per channel in the last notification",
     repeat_entity: "Repeat-last button (optional)", tile_layout: "Tiles", tile_columns: "Tile columns (empty = automatic)",
@@ -2068,7 +2109,8 @@ const SN_FORM_LABELS = {
     quiet_entity: "Stato silenzioso calcolato (facoltativo)", presence_entity: "Persona nella barra di stato",
     archive_days: "Pulizia archivio: piu' vecchie di (giorni)", media_days: "Pulizia foto: piu' vecchie di (giorni)",
     occupancy: "Chi è in casa (da SuperNotify)", repairs: "Riparazioni di SuperNotify nella salute",
-    snooze_announce: "Annuncia le pause a voce (canale annunci)", snooze_via: "Le pause passano da", o_event: "l'evento dei pulsanti push (admin)", o_voice: "i comandi vocali",
+    snooze_announce: "Annuncia le pause a voce (canale annunci)", snooze_via: "Le pause passano da", o_event: "l'evento dei pulsanti push (admin)", o_voice: "i comandi vocali", o_action: "l'azione snooze di SuperNotify",
+    status: "Riga di stato (chi è in casa, fascia, silenzio)", show_off: "Mostra anche i canali spenti", daily: "Conteggi giornalieri dall'archivio quando ci sono",
     snooze_minutes: "Durata dello snooze (minuti)", snooze_panel: "Il riquadro pausa apre il pannello delle pause", announce_delivery: "Canale per gli annunci",
     last_notification: "Mostra l'ultima notifica", last_channels: "Un chip per canale nell'ultima notifica",
     repeat_entity: "Pulsante ripeti ultima (facoltativo)", tile_layout: "Tile", tile_columns: "Colonne delle tile (vuoto = automatico)",
@@ -2105,9 +2147,9 @@ function snForm(kind) {
   const S = {
     control: [ent("dnd_entity", ["input_boolean", "switch"]), ent("quiet_entity", ["binary_sensor", "input_boolean"]),
       ent("presence_entity", "person"), bool("occupancy", true), num("snooze_minutes", 5, 240, 5), bool("snooze_panel", true),
-      sel("snooze_via", [["", "o_auto"], ["event", "o_event"], ["voice", "o_voice"]]), bool("snooze_announce", false), txt("announce_delivery"),
+      sel("snooze_via", [["", "o_auto"], ["action", "o_action"], ["event", "o_event"], ["voice", "o_voice"]]), bool("snooze_announce", false), txt("announce_delivery"),
       bool("last_notification"), bool("last_channels"), ent("repeat_entity", ["input_button", "button", "script"]),
-      sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6)],
+      sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6), bool("status", true)],
     overview: [ent("update_entity", "update"), ent("sent_today_entity", "sensor"),
       ent("quiet_entity", ["binary_sensor", "input_boolean"]), bool("health", true),
       sel("stats", [["", "o_three"], ["full", "o_full"]]), bool("last_notification"), bool("occupancy", true),
@@ -2115,9 +2157,9 @@ function snForm(kind) {
     deliveries: [txt("title"), bool("group", true), bool("hide_defaults", true)],
     transports: [], recipients: [], simulator: [bool("dry_run")], bands: [],
     scenarios: [num("poll_seconds", 10, 600, 10)],
-    composer: [ent("update_entity", "update"), bool("dry_run"), bool("dry_run_dupe_check")],
+    composer: [ent("update_entity", "update"), bool("dry_run"), bool("dry_run_dupe_check"), bool("show_off")],
     automations: [txt("manifest_url")],
-    stats: [num("days", 2, 90), sel("source", [["", "o_auto"], ["archive", "o_archive"], ["history", "o_history"]]), ent("sent_today_entity", "sensor"), ent("count_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update")],
+    stats: [num("days", 2, 90), sel("source", [["", "o_auto"], ["archive", "o_archive"], ["history", "o_history"]]), ent("sent_today_entity", "sensor"), ent("count_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update"), bool("daily", true)],
     archive, why: [...archive, bool("expand"), txt("max_height")],
     tools: [num("archive_days", 1, 365), num("media_days", 1, 365)],
   };
@@ -3195,8 +3237,14 @@ class SupernotifyControlCard extends SnCard {
       const action =
         this._config.snooze_action || `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_${minutes}`;
       await this._snzSpeak(this._snzText("snooze", { what: /_EVERYTHING_/.test(action) ? "EVERYTHING" : "NONCRITICAL", min: minutes }));
-      this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
-      this._toast(`${T.snoozed_for} ${minutes} ${T.min}`);
+      try {
+        // 0.74.0: supernotify.snooze when there is one (any user); snooze_action keeps the event
+        if (!this._config.snooze_action && this._snzUseAction()) await snSnoozeCall(this._hass, { command: "snooze", scope: "noncritical", minutes });
+        else await this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
+        this._toast(`${T.snoozed_for} ${minutes} ${T.min}`);
+      } catch (e) {
+        this._toast(`✖ ${(e && e.message) || e}`);
+      }
     }
     snEnquireBust(800); // this card and the others read the snoozes again
   }
@@ -3461,6 +3509,7 @@ class SupernotifyControlCard extends SnCard {
     if (act !== null) segs.push(seg("🎬 " + T.act_scen, String(act.length))
       .replace('<div class="sseg"', snCardReach("scenarios") ? '<div class="sseg go" data-go="scenarios"' : '<div class="sseg"'));
     const bar = this.shadowRoot.getElementById("statusbar");
+    if (c.status === false) { bar.innerHTML = ""; bar.style.display = "none"; return; } // 0.74.0
     bar.innerHTML = snIconify(segs.join(""), this && this._config);
     // 0.65.0: who is home -> recipients card, active scenarios -> scenarios card
     bar.querySelectorAll("[data-go]").forEach((g) => {
@@ -3603,15 +3652,16 @@ class SupernotifyControlCard extends SnCard {
     el.querySelector("#snzGo").onclick = async () => {
       const kind = +st.min > 0 ? "snooze" : "silence";
       await this._snzSpeak(this._snzText(kind, voice ? { ...st, mine: true } : st));
-      if (voice) this._snzSay(kind, +st.min); else this._snzFire(this._snzAction(st), T.snz_done);
+      if (voice) this._snzSay(kind, +st.min); else this._snzGo(st, T.snz_done);
     };
     const mine = el.querySelector("#snzMine");
     if (mine) mine.onclick = async () => { await this._snzSay("resume"); this._snzSpeak(this._snzText("resume", { mine: true })); };
     el.querySelectorAll(".sb[data-r]").forEach((b) => {
       const s0 = live[+b.dataset.r];
       b.onclick = async () => {
-        await this._snzFire(this._snzAction({ resume: true, what: String(s0.target_type || "").toUpperCase(),
-          target: Array.isArray(s0.target) ? s0.target.join("_") : (s0.target || ""), who: String(s0.recipient_type || "EVERYONE").toUpperCase() }), T.snz_resumed);
+        await this._snzGo({ resume: true, what: String(s0.target_type || "").toUpperCase(),
+          target: Array.isArray(s0.target) ? s0.target.join("_") : (s0.target || ""), who: String(s0.recipient_type || "EVERYONE").toUpperCase(),
+          person: s0.recipient || "" }, T.snz_resumed);
         this._snzSpeak(this._snzText("resume_one", { label: snSnoozeLabel(this._hass, s0, T) }));
       };
     });
@@ -3628,6 +3678,7 @@ class SupernotifyControlCard extends SnCard {
     const v = this._config.snooze_via;
     if (v === "voice") return true;
     if (v === "event") return false;
+    if (this._snzUseAction()) return false;
     return !!(this._hass && this._hass.user && this._hass.user.is_admin === false);
   }
 
@@ -3719,6 +3770,37 @@ class SupernotifyControlCard extends SnCard {
       await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
       this._toast(T.cleared);
       this._snzSpeak(this._snzText("resume_all"));
+    } catch (e) {
+      this._toast(`✖ ${(e && e.message) || e}`);
+    }
+    snEnquireBust(800);
+  }
+
+  /** 0.74.0: pauses through supernotify.snooze - when SuperNotify has it, unless snooze_via says otherwise. */
+  _snzUseAction() {
+    const v = this._config.snooze_via;
+    if (v === "event" || v === "voice") return false;
+    return snHasSnoozeAction(this._hass);
+  }
+
+  /** The panel's choice (or a pause in force, with `resume`) as supernotify.snooze data. */
+  _snzData(st) {
+    const scope = String(st.what || "NONCRITICAL").toLowerCase();
+    const d = { scope };
+    if (!["noncritical", "everything"].includes(scope)) d.name = st.target;
+    if (st.who === "USER") d.person = st.person || this._myPerson();
+    if (st.resume) d.command = "resume";
+    else if (+st.min > 0) { d.command = "snooze"; d.minutes = +st.min; }
+    else d.command = "silence";
+    return d;
+  }
+
+  /** A pause from the panel: the action, or the event as before. */
+  async _snzGo(st, msg) {
+    if (!this._snzUseAction()) return this._snzFire(this._snzAction(st), msg);
+    try {
+      await snSnoozeCall(this._hass, this._snzData(st));
+      this._toast(msg);
     } catch (e) {
       this._toast(`✖ ${(e && e.message) || e}`);
     }
@@ -3888,7 +3970,7 @@ class SupernotifyOverviewCard extends SnCard {
       return a.last_error_message ? `${t.name}: ${a.last_error_message}` : t.name;
     }).join(" · ") });
     const ign = new Set((c.ignore || []).map((x) => String(x).toLowerCase()));
-    const delsOff = this._scan("delivery").filter((d) => d.state === "off" && !/^default_/i.test(d.name) && !ign.has(String(d.name).toLowerCase()));
+    const delsOff = snChannelsOff(this._hass, this._scan("delivery"), ign); // 0.74.0: switched off by hand
     if (delsOff.length) chips.push({ k: "off", go: ["deliveries", { ids: delsOff.map((d) => d.id) }], t: `🔕 ${snPl(T, "h_channels_off", delsOff.length)}`, title: delsOff.map((d) => snDeliveryAlias(this._hass, d.name) || d.name).join(", ") });
     if (c.quiet_entity && this._st(c.quiet_entity) === "on") chips.push({ k: "warn", t: `🌙 ${T.dnd} ${T.active}` });
     const snz = snLiveSnoozes(this._snoozes);
@@ -5837,7 +5919,11 @@ class SupernotifyComposerCard extends SnCard {
     // picked channel actually resolves an area/floor/label target).
     if (!this._hass) return [];
     // 0.60.0: snEntityRows - switch over the deprecated binary_sensor, no double chips
-    return snEntityRows(this._hass, "delivery").filter((d) => !/^default_/i.test(d.name))
+    // 0.74.0: a channel switched off, or whose transport is off, can't go out - not offered
+    // unless `show_off: true`
+    const trOff = new Set(snEntityRows(this._hass, "transport").filter((t) => !t.on).map((t) => t.name));
+    const can = (d) => this._config.show_off === true || (d.on && !trOff.has((d.a && d.a.transport) || ""));
+    return snEntityRows(this._hass, "delivery").filter((d) => !/^default_/i.test(d.name) && can(d))
       .map((d) => ({ name: d.name, transport: (d.a && d.a.transport) || "" }))
       .sort((x, y) => x.name.localeCompare(y.name));
   }
@@ -6470,7 +6556,11 @@ class SupernotifyAutomationsCard extends SnCard {
     const el = this.shadowRoot.getElementById("list");
     if (!el) return;
     const T = snT(this._config, this._hass);
-    const rows = this._filtered(this._items());
+    const all = this._items();
+    // 0.74.0: grouped by category (first appearance order), so a manifest that mixes them
+    // does not repeat a heading; inside a category the manifest order stays (stable sort)
+    const order = this._cats(all);
+    const rows = this._filtered(all).sort((x, y) => order.indexOf(x.c) - order.indexOf(y.c));
     if (!rows.length) {
       el.innerHTML = snIconify(`<div class="empty">${this._esc(T.aut_none)}</div>`, this && this._config);
       return;
@@ -6630,6 +6720,29 @@ const snStatsArchive = {
       return this.rows;
     })().finally(() => { this.busy = null; });
     return this.busy;
+  },
+};
+
+/**
+ * 0.74.0: enquire_archive `verbosity: daily` (SuperNotify after 2.12.1-beta2): totals per local
+ * day, so the whole window is one call of a few KB. `ok` is null until the first answer, false
+ * when this SuperNotify does not know `daily` - then the card reads notification by notification.
+ */
+const snStatsDaily = {
+  ok: null,
+  async get(hass, startMs) {
+    if (this.ok === false) return null;
+    try {
+      const r = await hass.callWS({ type: "call_service", domain: "supernotify", service: "enquire_archive",
+        service_data: { verbosity: "daily", after: new Date(startMs).toISOString() }, return_response: true });
+      const days = r && r.response && r.response.days;
+      if (!Array.isArray(days)) throw new Error("no days");
+      this.ok = true;
+      return days.filter(snIsObj);
+    } catch (e) {
+      if (this.ok === null) { this.ok = false; return null; }
+      throw e;
+    }
   },
 };
 
@@ -6813,6 +6926,20 @@ class SupernotifyStatsCard extends SnCard {
     start.setHours(0, 0, 0, 0);
     if (this._fromArchive()) {
       const bands = (Array.isArray(c.period_scenarios) ? c.period_scenarios : SN_BAND_KEYS).map(String);
+      if (c.daily !== false) {
+        let dd = null;
+        this._error = null;
+        try { dd = await snStatsDaily.get(this._hass, start.getTime()); } catch (e) { this._error = (e && e.message) || String(e); }
+        if (seq !== this._seq) return;
+        if (dd || this._error) {
+          this._data = this._compute({}, {}, start, now, days, this._dailyEvents(dd || [], bands, start.getTime()));
+          this._data.archive = true;
+          this._data.daily = true;
+          this._loading = false;
+          if (this._rendered) this._draw();
+          return;
+        }
+      }
       const rows = await snStatsArchive.ensure(this._hass, start.getTime(), bands, (n, of) => {
         const w = this.shadowRoot && this.shadowRoot.getElementById("win");
         if (w && !this._data) w.textContent = this._t("st_reading", { n, of });
@@ -6870,6 +6997,37 @@ class SupernotifyStatsCard extends SnCard {
     }));
   }
 
+  /**
+   * 0.74.0: daily totals as weighted events for _compute: per hour (time of day and weekday),
+   * per day (duplicates left out, nothing was sent), priority, band of the day and channels.
+   * The hour and priority counts include the few duplicates: the archive does not split them.
+   */
+  _dailyEvents(list, bands, startMs) {
+    const out = [];
+    for (const d of list) {
+      const [y, m, dd] = String(d.date || "").split("-").map(Number);
+      if (!y || !m || !dd) continue;
+      const day = new Date(y, m - 1, dd);
+      if (day.getTime() + 86400000 <= startMs) continue;
+      const count = +d.count || 0;
+      const sent = Math.max(0, count - (+((d.outcome || {}).dupe) || 0));
+      out.push({ dk: this._dayKey(day), dn: sent, noch: true });
+      (Array.isArray(d.hour) ? d.hour : []).forEach((n, h) => {
+        if (+n > 0) out.push({ t: new Date(y, m - 1, dd, h, 30).getTime(), w: +n, nd: true, noch: true });
+      });
+      for (const [p, n] of Object.entries(d.priority || {})) if (+n > 0 && p !== "unknown") out.push({ p, w: +n, noch: true });
+      for (const [sc, n] of Object.entries(d.scenarios || {})) if (+n > 0 && bands.includes(sc)) out.push({ dp: sc, w: +n, noch: true });
+      const ok = {}, ko = {};
+      for (const [name, r] of Object.entries(d.deliveries || {})) {
+        if (!snIsObj(r)) continue;
+        if (+r.success > 0) ok[name] = +r.success;
+        if (+r.failed > 0) ko[name] = +r.failed;
+      }
+      out.push({ cw: { known: sent, ok, ko } });
+    }
+    return out;
+  }
+
   /** The helpers' history as events: one change of time_entity = one notification. */
   _historyEvents(hist, startMs) {
     const c = this._config;
@@ -6924,17 +7082,34 @@ class SupernotifyStatsCard extends SnCard {
     let chanUnknown = 0;
     let night = 0;
 
+    let spineCount = 0;
+    // 0.74.0: an event may carry a weight `w` (daily totals); `nd` = not a day count of its own,
+    // `dk`/`dn` = a day's count, `noch` = says nothing about channels, `cw` = channel totals
     spine.forEach((ev) => {
-      const d = new Date(ev.t);
-      perHour[d.getHours()]++;
-      perWd[(d.getDay() + 6) % 7]++;
-      const key = this._dayKey(d);
-      perDayHist[key] = (perDayHist[key] || 0) + 1;
-      if (d.getHours() >= 23 || d.getHours() < 7) night++;
+      const w = ev.w == null ? 1 : +ev.w;
+      if (ev.t != null) {
+        const d = new Date(ev.t);
+        perHour[d.getHours()] += w;
+        perWd[(d.getDay() + 6) % 7] += w;
+        if (!ev.nd) {
+          const key = this._dayKey(d);
+          perDayHist[key] = (perDayHist[key] || 0) + w;
+        }
+        if (d.getHours() >= 23 || d.getHours() < 7) night += w;
+        spineCount += w;
+      }
+      if (ev.dk) perDayHist[ev.dk] = (perDayHist[ev.dk] || 0) + (+ev.dn || 0);
       const p = ev.p;
-      if (p) prioCount[p] = (prioCount[p] || 0) + 1;
+      if (p) prioCount[p] = (prioCount[p] || 0) + w;
       const dp = ev.dp;
-      if (dp) periodCount[dp] = (periodCount[dp] || 0) + 1;
+      if (dp) periodCount[dp] = (periodCount[dp] || 0) + w;
+      if (ev.cw) {
+        chanKnown += ev.cw.known;
+        for (const [n, k] of Object.entries(ev.cw.ok)) chanOk[n] = (chanOk[n] || 0) + k;
+        for (const [n, k] of Object.entries(ev.cw.ko)) chanKo[n] = (chanKo[n] || 0) + k;
+        return;
+      }
+      if (ev.noch) return;
       const parsed = ev.ch;
       if (!parsed) { chanUnknown++; return; }
       chanKnown++;
@@ -6988,7 +7163,7 @@ class SupernotifyStatsCard extends SnCard {
     const weDays = daysWithData.filter((x) => (x.d.getDay() + 6) % 7 >= 5).length;
 
     return {
-      days, histDays: daysWithData.length, spineCount: spine.length, perHour, perWd, perDay, prioCount, periodCount, channels, sends, errors,
+      days, histDays: daysWithData.length, spineCount, perHour, perWd, perDay, prioCount, periodCount, channels, sends, errors,
       chanKnown, chanUnknown, total, avg, today, peakHour, night, m7, mp7,
       wdPerDay: wdDays ? wdCount / wdDays : null, wePerDay: weDays ? weCount / weDays : null,
     };

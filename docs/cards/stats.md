@@ -40,6 +40,7 @@ type: custom:supernotify-stats-card
 days: 14
 periods: [7, 14, 30]    # window switch in the header; the choice is remembered per browser
 source: ""              # 0.70.0: "" automatic (archive on SuperNotify 2.12.1+), archive, history
+daily: true             # 0.74.0: per-day totals in one call when SuperNotify has them (enquire_archive verbosity daily); false = day by day
 period_scenarios: [early_morning, morning, afternoon, evening, night, late_night]   # archive: scenarios that name the band of the day
 # the entities below are read only from the history (before 2.12.1)
 time_entity: input_datetime.supernotify_last_time
