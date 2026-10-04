@@ -3,6 +3,13 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.74.1] - 2026-10-04
+
+### Fixed
+- archive-card and why-card: opened straight on their view, the list could stay on "reading the
+  archive" although the archive had been read. They now redraw on the next update, and a reading
+  that never answers is tried again after 20 s.
+
 ## [0.74.0] - 2026-10-04
 
 Ready for SuperNotify's next release. Each new feature is used only when the installed SuperNotify

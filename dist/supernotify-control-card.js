@@ -8,6 +8,10 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.74.1. Archive and why: opened straight on their view, the list could stay on
+ *   "reading the archive" although the archive had been read (the redraw was missed). The card
+ *   now redraws on the next update whenever it still shows "reading" and the archive is there,
+ *   and a reading that never answers is given up after 20 s and tried again.
  * 2026-10-04 - v0.74.0. Ready for the next SuperNotify release, and four fixes. Each new SuperNotify
  *   feature is used only when the installed version has it; older ones keep working as before.
  *   (1) pauses go through supernotify.snooze when it exists: any user gets the full pause panel
@@ -536,7 +540,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.74.0"; // bundle / HACS release
+const VERSION = "0.74.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -558,9 +562,9 @@ const SN_CARD_VERSIONS = {
   composer: "0.25.0",
   automations: "0.21.2",
   stats: "0.32.0",
-  archive: "0.38.1",
+  archive: "0.38.2",
   tools: "0.2.1",
-  why: "0.14.1",
+  why: "0.14.2",
 };
 
 /**
@@ -2856,14 +2860,20 @@ const snArchiveStore = {
     const st = hass.states[trigger || this.trigger || "sensor.supernotify_notifications"];
     const stamp = (st ? st.last_updated : "none") + "|" + this.pokes;
     const want = Math.max(1, Math.min(100, limit || 40));
-    if (this.loading) return;
+    // 0.74.1: a reading that never answered (e.g. made while the page was still connecting)
+    // is given up after 20 s, so the next update tries again
+    if (this.loading && Date.now() - (this.loadingAt || 0) < 20000) return;
     let data = null;
     if (!this.fetched || want > this.limit) data = { limit: want };
     else if (stamp !== this.stamp) data = { limit: SN_ARCHIVE_REFRESH };
     if (!data) return;
     this.limit = Math.max(this.limit, want);
     this.stamp = stamp;
+    const run = (this.run || 0) + 1;
+    this.run = run;
+    this.loadingAt = Date.now();
     this.loading = this._call(hass, data).then((resp) => {
+      if (run !== this.run) return; // a newer reading replaced this one
       const got = (resp.notifications || []).filter(snIsObj);
       const seen = new Set(got.map((d) => d.id));
       const merged = got.concat(this.docs.filter((d) => !seen.has(d.id)));
@@ -2873,8 +2883,9 @@ const snArchiveStore = {
       this.error = null;
       this.fetched = new Date();
     }).catch((e) => {
-      this.error = (e && e.message) || String(e);
+      if (run === this.run) this.error = (e && e.message) || String(e);
     }).finally(() => {
+      if (run !== this.run) return;
       this.loading = null;
       this.version += 1;
       window.dispatchEvent(new CustomEvent("supernotify-archive"));
@@ -7505,7 +7516,7 @@ class SupernotifyArchiveCard extends SnCard {
       // the store redraws this card through the "supernotify-archive" event
       snArchiveStore.ensure(hass, this._config.limit, this._config.trigger_entity);
       if (fresh) this._render();
-      else if (this._storeVer !== snArchiveStore.version) { this._renderChips(); this._renderList(); }
+      else if (this._storeVer !== snArchiveStore.version || (this._waitStore && snArchiveStore.fetched)) { this._renderChips(); this._renderList(); }
       this._storeVer = snArchiveStore.version;
       return;
     }
@@ -7691,6 +7702,7 @@ class SupernotifyArchiveCard extends SnCard {
       el.innerHTML = snIconify(`<div class="empty">⚠️ ${esc(idx.error)}</div>`, this && this._config);
       return;
     }
+    this._waitStore = !!idx.loading; // 0.74.1: redrawn on the next update once the archive is there
     if (idx.loading) {
       meta.textContent = "";
       el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this && this._config);
@@ -7857,7 +7869,7 @@ class SupernotifyWhyCard extends SnCard {
     if (snArchiveNative(hass, this._config)) {
       snArchiveStore.ensure(hass, Math.max(this._config.limit, 40), this._config.trigger_entity);
       if (fresh) this._render();
-      else if (this._storeVer !== snArchiveStore.version) this._renderList();
+      else if (this._storeVer !== snArchiveStore.version || (this._waitStore && snArchiveStore.fetched)) this._renderList();
       this._storeVer = snArchiveStore.version;
       return;
     }
@@ -8013,6 +8025,7 @@ class SupernotifyWhyCard extends SnCard {
       return;
     }
     if (idx.error) { el.innerHTML = snIconify(`<div class="empty">⚠️ ${esc(idx.error)}</div>`, this && this._config); return; }
+    this._waitStore = !!idx.loading; // 0.74.1
     if (idx.loading) { el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this && this._config); return; }
     const items = idx.items.slice(0, this._config.limit);
     if (!items.length) { el.innerHTML = snIconify(`<div class="empty">${T.none}</div>`, this && this._config); return; }
