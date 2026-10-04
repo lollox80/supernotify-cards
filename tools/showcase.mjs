@@ -189,11 +189,21 @@ window.__mkHass = (dark) => ({
     if (m.type === "recorder/statistics_during_period") return { "sensor.supernotify_sent_today": stats };
     if (m.domain === "shell_command") return { response: { stdout: JSON.stringify(DET), stderr: "", returncode: 0 } };
     const s = m.service || "";
-    if (s === "notify") return { context: {}, response: DRY };
+    if (s === "notify") {
+      if (((m.service_data || {}).apply_scenarios || []).includes("night")) {
+        const d = JSON.parse(JSON.stringify(DRY));
+        if (d.deliveries.alexa_announce) d.deliveries.alexa_announce = { skipped: { suppression_reason: "SCENARIO" } };
+        return { context: {}, response: d };
+      }
+      return { context: {}, response: DRY };
+    }
     if (s === "enquire_last_notification") return { response: LAST };
     if (s === "enquire_snoozes") return { response: { snoozes: SNOOZES } };
     if (s === "enquire_occupancy") return { response: { scenarios: { home: [{ person: "person.alex", enabled: true, email: "alex@example.com" }, { person: "person.sam", enabled: true }], not_home: [{ person: "person.robin", enabled: false }] } } };
-    if (s === "enquire_active_scenarios") return { response: { scenarios: ["people_home", "morning", "voice_off_guests"] } };
+    if (s === "enquire_active_scenarios") return { response: { scenarios: ["people_home", "morning", "voice_off_guests"],
+      ...(m.service_data && m.service_data.trace ? { trace: [[], [{ name: "night", enabled: true,
+        conditions: [{ condition: "and", conditions: [{ condition: "time", after: "22:30:00", before: "06:30:00" }, { condition: "state", entity_id: ["input_boolean.bedtime"], state: "on" }] }],
+        trace: { trace: { "condition/conditions/condition/0": [{ result: { result: false } }], "condition/conditions/condition/0/conditions/0": [{ result: { result: false } }] } } }], {}] } : {}) } };
     if (s === "enquire_deliveries_by_scenario") return { response: {
       people_home: { enabled: ["alexa_announce", "doorbell_chime"], disabled: [] }, morning: { enabled: ["tts"], disabled: [] },
       voice_off_guests: { enabled: [], disabled: ["tts"] }, night: { enabled: [], disabled: ["alexa_announce", "tts"] },
@@ -228,6 +238,7 @@ const SHOTS = {
   tools: [460, [["tools", {}]], 1, false, "tools"],
   composer: [700, [["composer", {}]], 1, false, "composer"],
   composer_adv: [460, [["composer", {}]], 1, false, "adv"],
+  scenarios_why: [460, [["scenarios", {}]], 1, false, "why"],
   hero: [920, [["control", CONTROL], ["overview", OVERVIEW], ["composer", {}]], 2, false, "composer"],
   dark: [1200, [["control", CONTROL], ["overview", OVERVIEW], ["deliveries", {}]], 3, true],
 };
@@ -284,6 +295,12 @@ for (const [name, [width, cards, cols = 1, dark = false, before]] of Object.entr
       sr.getElementById("dbg").checked = true;
     });
     await page.waitForTimeout(200);
+  }
+  if (before === "why") {
+    await page.evaluate(() => { const c = document.querySelector("supernotify-scenarios-card"); c.shadowRoot.querySelector('.row[data-name="night"] .mid b').click(); });
+    await page.waitForTimeout(500);
+    await page.evaluate(() => { const c = document.querySelector("supernotify-scenarios-card"); c.shadowRoot.querySelector('.row[data-name="night"] .sdiff').click(); });
+    await page.waitForTimeout(500);
   }
   if (before === "open") {
     await page.evaluate(() => {

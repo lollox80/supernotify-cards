@@ -8,6 +8,12 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.66.0. (1) Active scenarios: SuperNotify's own list (enquire_active_scenarios)
+ *   first in control and overview too - from 2.12.1 the binary_sensors stay "unknown" unless
+ *   scenario_control.refresh is on. (2) deliveries 0.28.0: "Try this channel" in the detail - a dry
+ *   run through that channel only. (3) scenarios 0.27.0: a tap opens why it applies or not (each
+ *   condition with its result, from enquire_active_scenarios trace: true) and "What changes if it
+ *   applies / without it" (two dry runs compared); "All attributes" opens HA's dialog.
  * 2026-10-04 - v0.65.0. Cards linked, fewer repeats. (1) The cards on a page know each other
  *   (snCards, snGo, snFlash): in the overview, transports with errors open the transports card on
  *   those rows, channels off the channels card, a pause the control card's pause panel, a person
@@ -453,7 +459,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.65.0"; // bundle / HACS release
+const VERSION = "0.66.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -464,13 +470,13 @@ const VERSION = "0.65.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.34.0",
-  overview: "0.32.0",
+  control: "0.34.1",
+  overview: "0.32.1",
   bands: "0.20.2",
-  deliveries: "0.28.0",
+  deliveries: "0.29.0",
   transports: "0.25.0",
   recipients: "0.28.0",
-  scenarios: "0.27.0",
+  scenarios: "0.28.0",
   simulator: "0.16.0",
   composer: "0.22.0",
   automations: "0.20.3",
@@ -585,7 +591,16 @@ const SN_STRINGS = {
     snz_voice_info: "Your pauses go through SuperNotify's voice commands: they are yours only.",
     snz_voice_off: "SuperNotify's voice commands are off: turn them on in the integration options.",
     snz_resume_mine: "Resume mine",
-    go_open: "Show", sim_hint_dry: "SuperNotify's own answer (dry run, nothing is sent): a notification now, with the priority and only the scenarios picked above.",
+    go_open: "Show",
+    dl_probe: "Try this channel", probe_msg: "Channel test from the dashboard",
+    sc_why: "Why", sc_yes: "Applies now", sc_no: "Does not apply now", sc_manual_why: "Manual scenario: applied by hand",
+    sc_no_cond: "No conditions", sc_off_sw: "Switched off", sc_not_eval: "not checked", sc_now: "now",
+    sc_diff_btn_on: "What changes if it applies", sc_diff_btn_off: "What changes without it",
+    sc_diff_on: "If it applied, for a medium notification now:", sc_diff_off: "Without it, for a medium notification now:",
+    sc_diff_add: "would also send", sc_diff_rem: "would no longer send", sc_diff_none: "no difference",
+    c_state: "{e} is {s}", c_template: "template condition", c_time: "time", c_after: "after", c_before: "before",
+    c_numeric: "{e}", c_above: "above", c_below: "below", c_and: "all of these", c_or: "at least one of these", c_not: "none of these",
+    c_or_join: " or ", sim_hint_dry: "SuperNotify's own answer (dry run, nothing is sent): a notification now, with the priority and only the scenarios picked above.",
     sim_msg: "Simulator test", sim_prio: "Priority",
     sa_snooze: "{what} paused for {len}.", sa_silence: "{what} silenced until further notice.",
     sa_resume: "{what} back on.", sa_resume_one: "Pause over: {x}.", sa_resume_all: "Notifications back on.",
@@ -705,7 +720,16 @@ const SN_STRINGS = {
     snz_voice_info: "Le tue pause passano dai comandi vocali di SuperNotify: valgono solo per te.",
     snz_voice_off: "I comandi vocali di SuperNotify sono spenti: accendili nelle opzioni dell'integrazione.",
     snz_resume_mine: "Riprendi le mie",
-    go_open: "Mostra", sim_hint_dry: "Risposta vera di SuperNotify (prova senza inviare, non parte niente): una notifica adesso, con la priorità e solo gli scenari scelti sopra.",
+    go_open: "Mostra",
+    dl_probe: "Prova questo canale", probe_msg: "Prova del canale dalla dashboard",
+    sc_why: "Perché", sc_yes: "Attivo adesso", sc_no: "Non attivo adesso", sc_manual_why: "Scenario manuale: si attiva a mano",
+    sc_no_cond: "Nessuna condizione", sc_off_sw: "Spento con l'interruttore", sc_not_eval: "non valutata", sc_now: "ora",
+    sc_diff_btn_on: "Cosa cambia se si attiva", sc_diff_btn_off: "Cosa cambia senza",
+    sc_diff_on: "Se si attivasse, per una notifica media adesso:", sc_diff_off: "Senza questo scenario, per una notifica media adesso:",
+    sc_diff_add: "partirebbe anche", sc_diff_rem: "non partirebbe più", sc_diff_none: "nessuna differenza",
+    c_state: "{e} è {s}", c_template: "condizione con modello", c_time: "orario", c_after: "dopo le", c_before: "prima delle",
+    c_numeric: "{e}", c_above: "sopra", c_below: "sotto", c_and: "tutte vere", c_or: "almeno una vera", c_not: "nessuna vera",
+    c_or_join: " o ", sim_hint_dry: "Risposta vera di SuperNotify (prova senza inviare, non parte niente): una notifica adesso, con la priorità e solo gli scenari scelti sopra.",
     sim_msg: "Prova dal simulatore", sim_prio: "Priorità",
     sa_snooze: "{what} in pausa per {len}.", sa_silence: "{what} in silenzio fino a nuovo ordine.",
     sa_resume: "{what} di nuovo attive.", sa_resume_one: "Pausa finita: {x}.", sa_resume_all: "Notifiche di nuovo attive.",
@@ -818,6 +842,15 @@ function snVer(config, kind, p) {
 /** Active scenarios from the binary_sensors (with snScenarioActive), null when not exposed. */
 function snActiveScenarioIds(hass) {
   if (!hass) return null;
+  // 0.66.0: SuperNotify's own answer first - from 2.12.1 the binary_sensors stay "unknown" unless
+  // scenario_control.refresh is on
+  snActiveEnsure(hass);
+  if (snActive.names) {
+    return [...snActive.names].filter((n) => {
+      const sw = hass.states[`switch.supernotify_scenario_${n}`];
+      return !sw || sw.state !== "off";
+    }).map((n) => `binary_sensor.supernotify_scenario_${n}`);
+  }
   const ids = Object.keys(hass.states).filter((e) => e.startsWith("binary_sensor.supernotify_scenario_"));
   if (!ids.length) return null;
   const known = ids.filter((e) => !["unknown", "unavailable"].includes(hass.states[e].state));
@@ -1001,6 +1034,77 @@ function snDryHtml(hass, T, doc, noDupeCheck) {
   h += `<div class="dMeta">${meta.join(" · ")}</div>`;
   if (noDupeCheck) h += `<div class="dMeta">ℹ️ ${T.dry_no_dupe}</div>`;
   h += `<details class="dMeta"><summary>${T.dry_raw}</summary><pre>${esc(JSON.stringify(doc, null, 2))}</pre></details>`;
+  return h;
+}
+
+/* ── 0.66.0: dry runs from any card ── */
+function snDryAvailable(hass, config) {
+  if (config && config.dry_run === false) return false;
+  const svc = hass && hass.services && hass.services.supernotify;
+  return !!(svc && svc.notify && svc.notify.response);
+}
+
+/** supernotify.notify with dry_run: simulate (nothing is sent, no duplicate check) -> the notification. */
+async function snDryRun(hass, data) {
+  const r = await hass.callWS({ type: "call_service", domain: "supernotify", service: "notify",
+    service_data: { priority: "medium", ...data, dry_run: "simulate", force_resend: true }, return_response: true });
+  return (r && r.response) || {};
+}
+
+/** Channels a dry run would send through. */
+function snDrySending(doc) {
+  const out = new Set();
+  for (const [name, res] of Object.entries((doc && doc.deliveries) || {})) {
+    if (res && Array.isArray(res.success) && res.success.length) out.add(name);
+  }
+  return out;
+}
+
+/** One condition of a scenario, in words. */
+function snCondText(hass, c, T) {
+  if (!c || typeof c !== "object") return String(c);
+  const name = (id) => (hass.states[id] && hass.states[id].attributes && hass.states[id].attributes.friendly_name) || String(id);
+  const ents = [].concat(c.entity_id || []).map(name).join(", ");
+  const t = c.condition;
+  if (t === "state") return T.c_state.replace("{e}", ents).replace("{s}", [].concat(c.state).join(T.c_or_join));
+  if (t === "numeric_state") return [T.c_numeric.replace("{e}", ents), c.above != null ? `${T.c_above} ${c.above}` : "", c.below != null ? `${T.c_below} ${c.below}` : ""].filter(Boolean).join(" ");
+  const hm = (v) => String(v).replace(/^(\d{1,2}:\d{2}):00$/, "$1");
+  if (t === "time") return [T.c_time, c.after ? `${T.c_after} ${hm(c.after)}` : "", c.before ? `${T.c_before} ${hm(c.before)}` : "", c.weekday ? [].concat(c.weekday).join(", ") : ""].filter(Boolean).join(" ");
+  if (t === "template") return T.c_template;
+  if (t === "and" || t === "or" || t === "not") return T["c_" + t];
+  return String(t || "?");
+}
+
+/**
+ * Why a scenario applies or not (0.66.0), from enquire_active_scenarios trace: true - each condition
+ * with its result; for a state condition also the state it has now. Paths as HA traces write them:
+ * condition/conditions/condition/<i>[/conditions/<j>][/entity_id/0].
+ */
+function snScenarioWhyHtml(hass, T, sc, active) {
+  const esc = snEsc;
+  if (!sc) return "";
+  const tr = (sc.trace && sc.trace.trace) || {};
+  const res = (p) => { const v = tr[p]; const last = Array.isArray(v) && v.length ? v[v.length - 1] : null; return last && last.result ? last.result : null; };
+  const line = (c, path, depth) => {
+    const r = res(path);
+    const ok = r ? r.result === true : null;
+    const now = c && c.condition === "state" ? res(path + "/entity_id/0") : null;
+    const icon = ok === true ? "✔" : ok === false ? "✖" : "–";
+    const extra = ok === null ? ` <span class="wq">(${esc(T.sc_not_eval)})</span>`
+      : (ok === false && now && now.state != null ? ` <span class="wq">(${esc(T.sc_now)}: ${esc(now.state)})</span>` : "");
+    return `<div class="wl ${ok === true ? "y" : ok === false ? "n" : "q"}" style="padding-left:${depth * 16}px">${icon} ${esc(snCondText(hass, c, T))}${extra}</div>`;
+  };
+  const conds = Array.isArray(sc.conditions) ? sc.conditions : sc.conditions ? [sc.conditions] : [];
+  let h = `<div class="wh">${esc(active ? T.sc_yes : T.sc_no)}</div>`;
+  if (sc.enabled === false) h += `<div class="wl n">✖ ${esc(T.sc_off_sw)}</div>`;
+  if (!conds.length) h += `<div class="wl q">${esc(T.sc_no_cond)}</div>`;
+  conds.forEach((c, i) => {
+    const base = `condition/conditions/condition/${i}`;
+    h += line(c, base, 0);
+    if (c && Array.isArray(c.conditions) && ["and", "or", "not"].includes(c.condition)) {
+      c.conditions.forEach((cc, j) => { h += line(cc, `${base}/conditions/${j}`, 1); });
+    }
+  });
   return h;
 }
 
@@ -3872,6 +3976,10 @@ class SupernotifyDeliveriesCard extends SnCard {
         .grp .row:last-child { border-bottom: 0; }
         .row.dim .em, .row.dim .mid b { opacity: .6; }
         ${snDetailCss(p)}
+        ${snDryCss(p)}
+        .dprobe { margin: 6px 0 2px; border: 1.5px solid ${p.brand}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
+                  padding: 7px 14px; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; min-height: 36px; }
+        .dres { cursor: default; }
         .mid .tr { margin-top: 2px; }
         .st.warn { color: ${p.warn}; font-weight: 600; } .st.crit { color: ${p.crit}; font-weight: 600; }
         .st.ok { color: ${p.ok}; font-weight: 600; }
@@ -3911,6 +4019,21 @@ class SupernotifyDeliveriesCard extends SnCard {
       (dl[name] && dl[name].enabled === false ? off : on).push(snScenarioName(this._hass, m[1]));
     }
     return { off, on };
+  }
+
+  /** 0.66.0: a dry run through this channel only - SuperNotify says if it would send, to whom, or why not. */
+  async _runProbe(name) {
+    const T = snT(this._config, this._hass);
+    this._probe = this._probe || {};
+    this._probe[name] = "…";
+    this._update();
+    try {
+      const doc = await snDryRun(this._hass, { message: T.probe_msg, delivery_selection: "fixed", delivery: { [name]: {} } });
+      this._probe[name] = snDryHtml(this._hass, T, doc, false);
+    } catch (e) {
+      this._probe[name] = `✖ ${snEsc((e && (e.message || e.code)) || e)}`;
+    }
+    this._update();
   }
 
   /** A link from another card (0.65.0): open these rows. */
@@ -3971,7 +4094,8 @@ class SupernotifyDeliveriesCard extends SnCard {
         ...Object.entries(d.a.options || {}).map(([k, v]) => [k, v, true]),
         [T.det_data, d.a.data && Object.keys(d.a.data).length ? d.a.data : undefined],
         [T.det_debug, d.a.debug ? true : undefined],
-      ], T, this._config, this._hass) : "";
+      ], T, this._config, this._hass) + (snDryAvailable(this._hass, this._config)
+        ? `<button class="dprobe" data-n="${esc(d.name)}">▶ ${esc(T.dl_probe)}</button>${this._probe && this._probe[d.name] ? `<div class="dryBox dres">${this._probe[d.name]}</div>` : ""}` : "") : "";
       return `<div class="row${d.on ? "" : " dim"}" data-i="${i}" aria-expanded="${open ? "true" : "false"}">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(alias || d.name)}</b>
@@ -4003,7 +4127,9 @@ class SupernotifyDeliveriesCard extends SnCard {
         if (e.target.closest(".sw")) return;
         const id = dels[+node.dataset.i].id;
         if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
-        if (e.target.closest(".det")) return;
+        const pb = e.target.closest(".dprobe");
+        if (pb) { this._runProbe(pb.dataset.n); return; }
+        if (e.target.closest(".det") || e.target.closest(".dres")) return;
         this._open = this._open || new Set();
         if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
         this._update();
@@ -4542,6 +4668,61 @@ class SupernotifyScenariosCard extends SnCard {
     return known.filter((s) => s.state === "on" && s.enabled).map((s) => s.name);
   }
 
+  /** enquire_active_scenarios with trace: true, read when a row opens (at most every 30 s). */
+  async _loadTrace() {
+    if (this._traceBusy || (this._traceAt && Date.now() - this._traceAt < 30000)) return;
+    this._traceBusy = true;
+    try {
+      const r = await snEnquire(this._hass, "enquire_active_scenarios", { trace: true });
+      const t = (r && r.response && r.response.trace) || [];
+      const map = {};
+      for (const list of [t[0] || [], t[1] || []]) for (const sc of list) if (sc && sc.name) map[sc.name] = sc;
+      this._trace = map;
+      this._traceAt = Date.now();
+    } catch (e) { this._trace = this._trace || {}; }
+    this._traceBusy = false;
+    if (this._rendered) this._update();
+  }
+
+  /** What a scenario changes: two dry runs, with and without it, compared channel by channel. */
+  async _runDiff(name, isAct) {
+    const T = snT(this._config, this._hass);
+    this._diff = this._diff || {};
+    this._diff[name] = "…";
+    this._update();
+    try {
+      const act = [...(snActive.names || [])];
+      const msg = { message: T.probe_msg };
+      const base = await snDryRun(this._hass, msg);
+      const other = isAct
+        ? await snDryRun(this._hass, { ...msg, constrain_scenarios: act.filter((n) => n !== name).length ? act.filter((n) => n !== name) : ["__none__"] })
+        : await snDryRun(this._hass, { ...msg, apply_scenarios: [name] });
+      const a = snDrySending(base), b = snDrySending(other);
+      const add = [...b].filter((x) => !a.has(x)), rem = [...a].filter((x) => !b.has(x));
+      const nm = (x) => snEsc(snDeliveryAlias(this._hass, x) || x);
+      this._diff[name] = `<div class="wh">${snEsc(isAct ? T.sc_diff_off : T.sc_diff_on)}</div>`
+        + add.map((x) => `<div class="wl y">+ ${snEsc(T.sc_diff_add)} ${nm(x)}</div>`).join("")
+        + rem.map((x) => `<div class="wl n">− ${snEsc(T.sc_diff_rem)} ${nm(x)}</div>`).join("")
+        + (add.length || rem.length ? "" : `<div class="wl q">${snEsc(T.sc_diff_none)}</div>`);
+    } catch (e) {
+      this._diff[name] = `✖ ${snEsc((e && (e.message || e.code)) || e)}`;
+    }
+    this._update();
+  }
+
+  _detailHtml(s, isAct) {
+    const T = snT(this._config, this._hass);
+    const esc = snEsc;
+    const sc = this._trace && this._trace[s.name];
+    let h = `<div class="det"><div class="dsec">${esc(T.sc_why)}</div>`;
+    h += s.manual ? `<div class="wl">${esc(T.sc_manual_why)}</div>` : sc ? snScenarioWhyHtml(this._hass, T, sc, isAct) : `<div class="wl q">…</div>`;
+    if (snDryAvailable(this._hass, this._config)) {
+      h += `<button class="sdiff" data-act="${isAct ? 1 : 0}">${esc(isAct ? T.sc_diff_btn_off : T.sc_diff_btn_on)}</button>`;
+      if (this._diff && this._diff[s.name]) h += `<div class="sdres">${this._diff[s.name]}</div>`;
+    }
+    return h + `<button class="dmore">${esc(T.det_more)} ›</button></div>`;
+  }
+
   /** A link from another card (0.65.0): outline these scenarios. */
   _focus(d) {
     const names = (d && d.names) || [];
@@ -4586,6 +4767,14 @@ class SupernotifyScenariosCard extends SnCard {
         .apb { flex-shrink: 0; border: 1.5px solid ${p.brand}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
                padding: 6px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 32px; }
         .apb.on { background: ${p.ok}; border-color: ${p.ok}; color: #fff; }
+        ${snDetailCss(p)}
+        .det { cursor: default; }
+        .dsec { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; font-weight: 800; color: ${p.muted}; margin-bottom: 4px; }
+        .wh { font-weight: 700; margin: 2px 0 4px; }
+        .wl { padding: 2px 0; } .wl.y { color: ${p.ok}; } .wl.n { color: ${p.crit}; } .wl.q, .wq { color: ${p.muted}; }
+        .sdiff { margin: 8px 0 2px; border: 1.5px solid ${p.brand}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
+                 padding: 7px 14px; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; min-height: 36px; }
+        .sdres { margin-top: 6px; }
         ${SN_SWITCH_CSS}
         ${SN_FLOW_CSS}
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
@@ -4626,11 +4815,12 @@ class SupernotifyScenariosCard extends SnCard {
       ? `<button class="apb${s.state === "on" ? " on" : ""}" data-id="${esc(s.bsId)}" data-on="${s.state === "on" ? 1 : 0}"
           aria-pressed="${s.state === "on"}" title="${esc(s.state === "on" ? T.apply_off : T.apply_now)}">${s.state === "on" ? "✔ " + esc(T.applied) : esc(T.apply_now.charAt(0).toUpperCase() + T.apply_now.slice(1))}</button>`
       : "";
-    return `<div class="row ${isAct ? "act" : ""} ${s.enabled === false ? "dis" : ""}" data-i="${i}" data-name="${esc(s.name)}">
+    return `<div class="row ${isAct ? "act" : ""} ${s.enabled === false ? "dis" : ""}" data-i="${i}" data-name="${esc(s.name)}" aria-expanded="${this._open && this._open.has(s.name) ? "true" : "false"}">
       <span class="em">${em}</span>
       <div class="mid"><b>${esc(alias || s.name)}</b>
         ${alias && !snSame(alias, s.name) ? `<span style="color:${p.muted}"> · ${snTech(s.name, alias)}</span>` : ""}
         <div class="tags">${tags.join("")}</div>
+        ${this._open && this._open.has(s.name) ? this._detailHtml(s, isAct) : ""}
       </div>
       ${isAct ? `<span class="badge b-act">${T.active_now}</span>` : ""}
       ${man}
@@ -4675,7 +4865,15 @@ class SupernotifyScenariosCard extends SnCard {
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
         if (e.target.closest(".sw") || e.target.closest(".apb")) return;
-        this._moreInfo(all[+node.dataset.i].id);
+        const sc = all[+node.dataset.i];
+        // 0.66.0: a tap opens why it applies and what it changes; "All attributes" = HA's dialog
+        if (e.target.closest(".dmore")) { this._moreInfo(sc.id); return; }
+        const db = e.target.closest(".sdiff");
+        if (db) { this._runDiff(sc.name, db.dataset.act === "1"); return; }
+        if (e.target.closest(".det")) return;
+        this._open = this._open || new Set();
+        if (this._open.has(sc.name)) this._open.delete(sc.name); else { this._open.add(sc.name); this._loadTrace(); }
+        this._update();
       };
     });
     // the manual scenario's binary_sensor: SuperNotify applies the scenario while it is on

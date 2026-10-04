@@ -28,3 +28,7 @@ style: theme
 
 To undo the changes made by hand (all, or only channels, transports…) use the
 [tools card](tools.md) (0.65.0: the button left this card).
+
+**Try this channel** (0.66.0, SuperNotify 2.12+): in a channel's detail, a dry run through that channel
+only - nothing is sent - says whether it would send now and to whom, or why not (snoozed, off,
+no usable target…).

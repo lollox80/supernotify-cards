@@ -3,6 +3,23 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.66.0] - 2026-10-04
+
+Why a scenario applies, what it changes, and a test for each channel.
+
+### Added
+- scenarios-card: **tap a scenario** to see **why it applies or not** - each condition with its result
+  and, for a state that does not match, the state it has now (`enquire_active_scenarios` with
+  `trace: true`) - and **What changes if it applies / without it**: two dry runs compared, the channels
+  that would be added or dropped. "All attributes" opens Home Assistant's dialog.
+- deliveries-card: **Try this channel** in the detail of a channel: a dry run through that channel only,
+  with who would receive it or why it would not send (SuperNotify 2.12+).
+
+### Changed
+- control-card / overview-card: active scenarios come from SuperNotify's own list first. Ready for
+  SuperNotify 2.12.1, whose scenario `binary_sensor`s stay `unknown` unless `scenario_control.refresh`
+  is on.
+
 ## [0.65.0] - 2026-10-04
 
 The cards are linked to each other, and things are no longer repeated.
