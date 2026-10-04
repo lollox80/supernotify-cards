@@ -8,6 +8,16 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.72.0. SuperNotify in Home Assistant's own cards, no card of ours needed.
+ *   (1) Badge `custom:supernotify-status-badge` for any view: SuperNotify's health in one pill -
+ *   transports with errors, channels off, pauses in force, else "All good" - colour and icon to
+ *   match, the detail in its tooltip; a tap opens `navigation_path` or the counter's dialog.
+ *   (2) Tile card features: `custom:supernotify-pause` on the tile of
+ *   sensor.supernotify_notifications (30 min / 1 h / 2 h, Resume while paused; administrators
+ *   through the push-button event, everyone else through SuperNotify's voice commands, as in the
+ *   control card), `custom:supernotify-test` on the tile of a notify.recipient_<name> (send a test
+ *   through the whole pipeline, two taps), `custom:supernotify-last` on the counter's tile (title
+ *   and age of the last notification). Both the old (stateObj) and new (context) feature APIs.
  * 2026-10-04 - v0.71.0. A dashboard that builds itself: `strategy: {type: custom:supernotify}` in a
  *   dashboard's raw configuration (or "SuperNotify" in Add dashboard, where Home Assistant lists
  *   custom strategies). Views Home, Send, Setup, Stats and - for administrators only - Tools, each
@@ -493,7 +503,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.71.0"; // bundle / HACS release
+const VERSION = "0.72.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -1217,8 +1227,11 @@ class SupernotifyDashboardStrategy extends HTMLElement {
         .filter((cards) => cards.length)
         .map((cards) => ({ type: "grid", cards }));
       if (!sections.length) continue;
-      views.push({ title: T[key], path: key, icon: v.icon, type: "sections",
-        max_columns: Math.min(v.cols, sections.length) || 1, sections });
+      const view = { title: T[key], path: key, icon: v.icon, type: "sections",
+        max_columns: Math.min(v.cols, sections.length) || 1, sections };
+      // 0.72.0: SuperNotify's health as a badge on top of Home
+      if (key === "home" && !hide.has("badge")) view.badges = [{ type: "custom:supernotify-status-badge", ...(extra.badge || {}) }];
+      views.push(view);
     }
     return { title: cfg.title || T.title, views };
   }
@@ -1235,6 +1248,281 @@ if (!window.customStrategies.some((x) => x && x.type === "supernotify")) {
     description: "Every SuperNotify card, in views built from what your installation has.",
     documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/dashboard.md",
   });
+}
+
+/**
+ * 0.72.0: SuperNotify inside Home Assistant's own cards. Shared by the badge and the tile features.
+ */
+const SN_NATIVE_STR = {
+  en: { all_good: "All good", paused: "Paused", until: "until", resume: "Resume", test: "Send a test",
+    sure: "Tap again to send", sent: "Sent", last: "Last", none: "No notification yet", ago: "ago",
+    min: "min", h: "h", err: "transports with errors", off: "channels off" },
+  it: { all_good: "Tutto ok", paused: "In pausa", until: "fino alle", resume: "Riprendi", test: "Manda una prova",
+    sure: "Tocca di nuovo per inviare", sent: "Inviata", last: "Ultima", none: "Nessuna notifica ancora", ago: "fa",
+    min: "min", h: "h", err: "transport con errori", off: "canali spenti" },
+};
+function snNativeT(hass) {
+  const l = String((hass && (hass.locale && hass.locale.language || hass.language)) || "en").slice(0, 2);
+  return SN_NATIVE_STR[l] || SN_NATIVE_STR.en;
+}
+/** The entity a card feature is on: new API (context.entity_id) or old (stateObj). */
+function snFeatureEntity(el) {
+  return (el.context && el.context.entity_id) || (el.stateObj && el.stateObj.entity_id) || "";
+}
+/** customCardFeatures.supported: (stateObj) on older HA, (hass, context) on newer. */
+function snFeatureSupports(test) {
+  return (a, b) => {
+    const id = (b && b.entity_id) || (a && a.entity_id) || "";
+    return test(String(id));
+  };
+}
+/** SuperNotify's health: [{k: crit|off|pause, n, text, title}] worst first, [] = all good. */
+function snNativeHealth(hass, snoozes) {
+  const T = snNativeT(hass);
+  const out = [];
+  const tr = snEntityRows(hass, "transport").filter((t) => {
+    const st = hass.states[t.id];
+    return st && st.state !== "unavailable" && +((st.attributes || {}).error_count || 0) > 0;
+  });
+  if (tr.length) out.push({ k: "crit", n: tr.length, text: `${tr.length} ${T.err}`,
+    title: tr.map((t) => (t.a.last_error_message ? `${t.name}: ${t.a.last_error_message}` : t.name)).join(" · ") });
+  const off = snEntityRows(hass, "delivery").filter((d) => !d.on && !/^default_/i.test(d.name));
+  if (off.length) out.push({ k: "off", n: off.length, text: `${off.length} ${T.off}`,
+    title: off.map((d) => snDeliveryAlias(hass, d.name) || d.name).join(", ") });
+  const live = snLiveSnoozes(snoozes || []);
+  if (live.length) {
+    const end = live.map((x) => x._end).filter(Boolean).sort((a, b) => b - a)[0];
+    const hm = end ? `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}` : "";
+    out.push({ k: "pause", n: live.length, text: hm ? `${T.paused} ${T.until} ${hm}` : T.paused,
+      title: snSnoozeLabels(hass, live, snT({}, hass), 4) });
+  }
+  return out;
+}
+/** Pause for everyone (non-critical) or resume, as the control card does. */
+async function snNativePause(hass, minutes) {
+  const admin = !(hass.user && hass.user.is_admin === false);
+  if (minutes) {
+    if (admin) await hass.callApi("POST", "events/mobile_app_notification_action", { action: `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_${minutes}` });
+    else {
+      const it = String(hass.language || "en").startsWith("it");
+      await hass.callWS({ type: "conversation/process", language: it ? "it" : "en",
+        text: it ? `metti in pausa le mie notifiche per ${minutes} minuti` : `pause my notifications for ${minutes} minutes` });
+    }
+  } else {
+    await hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
+  }
+  snEnquireBust(800);
+}
+const SN_NATIVE_CSS = `:host { display: block; }
+  .row { display: flex; gap: 8px; height: var(--feature-height, 42px); align-items: stretch; }
+  button { flex: 1 1 0; min-width: 0; border: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
+    border-radius: var(--feature-border-radius, 12px); padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: var(--primary-text-color); background: var(--secondary-background-color, rgba(127,127,127,.15)); }
+  button.on { background: var(--state-icon-color, var(--primary-color)); color: var(--text-primary-color, #fff); }
+  button.arm { background: var(--warning-color, #e3a008); color: #fff; }
+  button:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+  .txt { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--secondary-text-color);
+    height: var(--feature-height, 42px); overflow: hidden; white-space: nowrap; }
+  .txt b { color: var(--primary-text-color); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }`;
+
+/** Badge: SuperNotify's health in one pill, for any view. */
+class SupernotifyStatusBadge extends HTMLElement {
+  setConfig(config) { this._config = { ...(config || {}) }; }
+  set hass(hass) {
+    this._hass = hass;
+    const now = Date.now();
+    if (!this._at || now - this._at > 60000) {
+      this._at = now;
+      snEnquire(hass, "enquire_snoozes").then((r) => { this._snz = ((r && r.response) || {}).snoozes || []; this._draw(); }).catch(() => {});
+    }
+    this._draw();
+  }
+  connectedCallback() {
+    this._onRefresh = this._onRefresh || (() => { this._at = 0; if (this._hass) this.hass = this._hass; });
+    window.addEventListener("supernotify-refresh", this._onRefresh);
+  }
+  disconnectedCallback() { window.removeEventListener("supernotify-refresh", this._onRefresh); }
+  _draw() {
+    if (!this._hass) return;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const T = snNativeT(this._hass);
+    const h = snNativeHealth(this._hass, this._snz);
+    const top = h[0];
+    const icon = !top ? "mdi:bell-check" : top.k === "crit" ? "mdi:bell-alert" : top.k === "off" ? "mdi:bell-off" : "mdi:bell-sleep";
+    const color = !top ? "var(--success-color, #43a047)" : top.k === "crit" ? "var(--error-color, #db4437)"
+      : top.k === "off" ? "var(--warning-color, #ffa600)" : "var(--info-color, #039be5)";
+    const text = !top ? T.all_good : top.text + (h.length > 1 ? ` +${h.length - 1}` : "");
+    const title = h.length ? h.map((x) => `${x.text}${x.title ? ": " + x.title : ""}`).join("\n") : T.all_good;
+    const key = icon + text + title;
+    if (key === this._key) return;
+    this._key = key;
+    const label = this._config.name || "SuperNotify";
+    this.shadowRoot.innerHTML = `<style>
+      :host { display: inline-block; }
+      .b { display: inline-flex; align-items: center; gap: 8px; height: var(--ha-badge-size, 36px); box-sizing: border-box;
+        padding: 0 12px 0 8px; border-radius: var(--ha-badge-border-radius, 18px); cursor: pointer;
+        background: var(--ha-card-background, var(--card-background-color, #fff));
+        border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--divider-color, #e0e0e0));
+        -webkit-backdrop-filter: var(--ha-card-backdrop-filter, none); backdrop-filter: var(--ha-card-backdrop-filter, none); }
+      .b:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+      ha-icon { --mdc-icon-size: 18px; color: ${color}; }
+      .i { display: flex; flex-direction: column; line-height: 1.15; }
+      .l { font-size: 10px; font-weight: 500; color: var(--secondary-text-color); }
+      .c { font-size: 12px; font-weight: 500; color: var(--primary-text-color); white-space: nowrap; }
+    </style><div class="b" role="button" tabindex="0" title="${snEsc(title)}" aria-label="${snEsc(label + ": " + text)}">
+      <ha-icon icon="${icon}"></ha-icon><span class="i">${this._config.show_name === false ? "" : `<span class="l">${snEsc(label)}</span>`}
+      <span class="c">${snEsc(text)}</span></span></div>`;
+    const b = this.shadowRoot.querySelector(".b");
+    const go = () => {
+      if (this._config.navigation_path) snNavigate(this._config.navigation_path);
+      else this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true,
+        detail: { entityId: this._config.entity || "sensor.supernotify_notifications" } }));
+    };
+    b.onclick = go;
+    b.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+  }
+}
+if (!customElements.get("supernotify-status-badge")) customElements.define("supernotify-status-badge", SupernotifyStatusBadge);
+window.customBadges = window.customBadges || [];
+if (!window.customBadges.some((x) => x && x.type === "supernotify-status-badge")) {
+  window.customBadges.push({ type: "supernotify-status-badge", name: "SuperNotify status", preview: true,
+    description: "SuperNotify's health in one badge: transports with errors, channels off, pauses, else all good.",
+    documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/native.md" });
+}
+
+/** Base for the tile features: hass, entity from either feature API, config. */
+class SnFeature extends HTMLElement {
+  static getStubConfig() { return { type: this.featureType }; }
+  setConfig(config) { if (!config) throw new Error("Invalid configuration"); this._config = config; }
+  set hass(hass) { this._hass = hass; this._draw(); }
+  get hass() { return this._hass; }
+  set context(c) { this._context = c; this._draw(); }
+  get context() { return this._context; }
+  set stateObj(s) { this._stateObj = s; this._draw(); }
+  get stateObj() { return this._stateObj; }
+  _root() { if (!this.shadowRoot) this.attachShadow({ mode: "open" }); return this.shadowRoot; }
+}
+
+/** Tile feature: pause (non-critical, everyone) for 30 min / 1 h / 2 h, Resume while paused. */
+class SupernotifyPauseFeature extends SnFeature {
+  static get featureType() { return "custom:supernotify-pause"; }
+  _draw() {
+    const hass = this._hass;
+    if (!hass) return;
+    const now = Date.now();
+    if (!this._at || now - this._at > 60000) {
+      this._at = now;
+      snEnquire(hass, "enquire_snoozes").then((r) => { this._snz = ((r && r.response) || {}).snoozes || []; this._paint(); }).catch(() => {});
+    }
+    this._paint();
+  }
+  _paint() {
+    const hass = this._hass;
+    if (!hass) return;
+    const T = snNativeT(hass);
+    const mins = (this._config && this._config.minutes) || [30, 60, 120];
+    const live = snLiveSnoozes(this._snz || []);
+    const lbl = (m) => (m % 60 === 0 ? `${m / 60} ${T.h}` : `${m} ${T.min}`);
+    const html = live.length
+      ? `<button class="on" data-m="0">${snEsc(T.resume)} · ${snEsc(snNativeHealth(hass, this._snz).find((x) => x.k === "pause").text)}</button>`
+      : mins.map((m) => `<button data-m="${+m}" aria-label="${snEsc(T.paused + " " + lbl(+m))}">${snEsc(lbl(+m))}</button>`).join("");
+    if (html === this._html) return;
+    this._html = html;
+    const root = this._root();
+    root.innerHTML = `<style>${SN_NATIVE_CSS}</style><div class="row">${html}</div>`;
+    root.querySelectorAll("button").forEach((b) => {
+      b.onclick = async (e) => {
+        e.stopPropagation();
+        b.disabled = true;
+        try { await snNativePause(hass, +b.dataset.m); } catch (err) { b.textContent = "✖"; }
+        this._at = 0;
+        setTimeout(() => this._draw(), 900);
+      };
+    });
+  }
+}
+
+/** Tile feature on notify.recipient_<name>: a test through the whole pipeline, two taps. */
+class SupernotifyTestFeature extends SnFeature {
+  static get featureType() { return "custom:supernotify-test"; }
+  _draw() {
+    const hass = this._hass;
+    const id = snFeatureEntity(this);
+    if (!hass || !id) return;
+    const T = snNativeT(hass);
+    const txt = this._state === "sent" ? `✔ ${T.sent}` : this._state === "arm" ? T.sure : T.test;
+    const html = `<button class="${this._state === "arm" ? "arm" : ""}">${snEsc(txt)}</button>`;
+    if (html === this._html) return;
+    this._html = html;
+    const root = this._root();
+    root.innerHTML = `<style>${SN_NATIVE_CSS}</style><div class="row">${html}</div>`;
+    root.querySelector("button").onclick = (e) => {
+      e.stopPropagation();
+      clearTimeout(this._t);
+      if (this._state !== "arm") {
+        this._state = "arm";
+        this._t = setTimeout(() => { this._state = null; this._draw(); }, 4000);
+        this._draw();
+        return;
+      }
+      const T2 = snT({}, hass);
+      const d = new Date();
+      hass.callService("notify", "send_message", { entity_id: id, title: T2.rc_test_title,
+        message: `${T2.rc_test_msg} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` })
+        .then(() => { this._state = "sent"; this._draw(); this._t = setTimeout(() => { this._state = null; this._draw(); }, 4000); })
+        .catch(() => { this._state = null; this._draw(); });
+      snEnquireBust(1500);
+    };
+  }
+}
+
+/** Tile feature on the counter: title and age of the last notification. */
+class SupernotifyLastFeature extends SnFeature {
+  static get featureType() { return "custom:supernotify-last"; }
+  _draw() {
+    const hass = this._hass;
+    if (!hass) return;
+    const cnt = hass.states["sensor.supernotify_notifications"];
+    const mark = cnt ? cnt.last_changed : "";
+    if (mark !== this._mark || !this._at || Date.now() - this._at > 60000) {
+      this._mark = mark;
+      this._at = Date.now();
+      snEnquire(hass, "enquire_last_notification").then((r) => { this._last = (r && r.response) || null; this._paint(); }).catch(() => {});
+    }
+    this._paint();
+  }
+  _paint() {
+    const hass = this._hass;
+    if (!hass) return;
+    const T = snNativeT(hass);
+    const n = this._last && Object.keys(this._last).length ? this._last : null;
+    let html;
+    if (!n) html = `<span>${snEsc(T.none)}</span>`;
+    else {
+      const title = snNotifTitle(n) || String(n.message || "").slice(0, 80);
+      const t = n.created ? new Date(n.created) : null;
+      const m = t && !isNaN(t) ? Math.max(0, Math.round((Date.now() - t) / 60000)) : null;
+      const age = m == null ? "" : m < 60 ? `${m} ${T.min} ${T.ago}` : `${Math.round(m / 60)} ${T.h} ${T.ago}`;
+      html = `<span>${snEsc(T.last)}:</span> <b>${snEsc(title)}</b>${age ? ` <span>· ${snEsc(age)}</span>` : ""}`;
+    }
+    if (html === this._html) return;
+    this._html = html;
+    const root = this._root();
+    root.innerHTML = `<style>${SN_NATIVE_CSS}</style><div class="txt">${html}</div>`;
+  }
+}
+
+for (const [tag, cls] of [["supernotify-pause", SupernotifyPauseFeature], ["supernotify-test", SupernotifyTestFeature],
+  ["supernotify-last", SupernotifyLastFeature]]) {
+  if (!customElements.get(tag)) customElements.define(tag, cls);
+}
+window.customCardFeatures = window.customCardFeatures || [];
+for (const x of [
+  { type: "supernotify-pause", name: "SuperNotify pause", supported: snFeatureSupports((id) => id === "sensor.supernotify_notifications"), configurable: false },
+  { type: "supernotify-last", name: "SuperNotify last notification", supported: snFeatureSupports((id) => id === "sensor.supernotify_notifications"), configurable: false },
+  { type: "supernotify-test", name: "SuperNotify test", supported: snFeatureSupports((id) => /^notify\.recipient_/.test(id)), configurable: false },
+]) {
+  if (!window.customCardFeatures.some((y) => y && y.type === x.type)) window.customCardFeatures.push(x);
 }
 
 function snDryCss(p) {

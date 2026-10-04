@@ -20,7 +20,7 @@ Where Home Assistant lists custom strategies in **Add dashboard**, *SuperNotify*
 
 | View | Cards |
 |---|---|
-| Home | control · overview, archive |
+| Home | status badge on top; control · overview, archive |
 | Send | composer · why, simulator |
 | Setup | channels, transports · scenarios, recipients · time bands, automations |
 | Stats | stats |
@@ -44,7 +44,7 @@ strategy:
   type: custom:supernotify
   title: Notifications                 # default "SuperNotify"
   views: [home, send, setup, stats]    # which views, in this order (default: all five)
-  hide: [simulator, automations]       # card kinds to leave out
+  hide: [simulator, automations]       # card kinds to leave out (badge: the status badge)
   cards:                               # extra configuration per card kind, over the suggested one
     control:
       dnd_entity: input_boolean.notifier_dnd

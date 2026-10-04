@@ -13,7 +13,10 @@ new dom.window.Function(SRC)();
 let fail = 0;
 const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 
-ok((SRC.match(/^  set hass\(hass\) \{/gm) || []).length === 1, "un solo setter hass (in SnCard)");
+// 0.72.0: the badge and the tile features (not cards, no SnCard) have their own setter: leave their block out
+const NB = SRC.indexOf(" * 0.72.0: SuperNotify inside Home Assistant's own cards");
+const CARDS = SRC.slice(0, NB) + SRC.slice(SRC.indexOf("function snDryCss(p)", NB));
+ok((CARDS.match(/^  set hass\(hass\) \{/gm) || []).length === 1, "un solo setter hass (in SnCard)");
 ok((SRC.match(/^\s*const esc = \(\w+\) => String/gm) || []).length === 0, "nessuna copia locale di esc");
 ok((SRC.match(/const prioCol = \{ critical:/g) || []).length === 0, "colori priorità da snPrioColor");
 const tags = window.customCards.map((c) => c.type);

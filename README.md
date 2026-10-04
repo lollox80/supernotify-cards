@@ -150,6 +150,11 @@ The bands card needs its time bands set up first ([bands](https://github.com/lol
 the tools card is meant for administrators - put it in a view only they can see
 (view → **Visibility**).
 
+## In Home Assistant's own cards
+
+A **status badge** for any view and **tile features** (pause, last notification, test a recipient) for
+Home Assistant's tile card, no SuperNotify card needed: [docs/native.md](docs/native.md).
+
 ## More
 
 - [Common options and required versions](https://github.com/lollox80/supernotify-cards/blob/main/docs/configuration.md)

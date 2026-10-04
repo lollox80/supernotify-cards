@@ -3,6 +3,24 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.72.0] - 2026-10-04
+
+SuperNotify in Home Assistant's own cards.
+
+### Added
+- **Status badge** `custom:supernotify-status-badge` for any view: transports with errors, channels
+  off, pauses in force, otherwise *All good*. The colour and icon follow the worst of them, and the
+  tooltip lists them all. A tap opens `navigation_path` or the counter's dialog. It is on top of
+  *Home* in the dashboard strategy (`hide: [badge]` leaves it out).
+- **Tile features**, under *Add feature* of a tile card:
+  - `custom:supernotify-pause` on `sensor.supernotify_notifications`: 30 min, 1 h or 2 h, and
+    *Resume* while paused. Administrators pause through the push-button event, anyone else through
+    SuperNotify's voice commands;
+  - `custom:supernotify-last` on the same tile: the title and age of the last notification;
+  - `custom:supernotify-test` on `notify.recipient_<name>`: a test through the whole pipeline,
+    with two taps.
+- [docs/native.md](docs/native.md).
+
 ## [0.71.0] - 2026-10-04
 
 A dashboard that builds itself.
