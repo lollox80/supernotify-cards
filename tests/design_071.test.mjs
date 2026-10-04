@@ -48,7 +48,7 @@ ok(!d2.views.some((v) => v.path === "tools"), "niente Strumenti per chi non è a
 const setup2 = d2.views.find((v) => v.path === "setup");
 const k2 = setup2.sections.flatMap((s) => s.cards).map((c) => c.type);
 ok(k2.join() === "custom:supernotify-deliveries-card", `setup minimo: solo canali (${k2.join()})`);
-ok(setup2.max_columns === 1, "colonne pari alle sezioni presenti");
+ok(setup2.max_columns === 2 && setup2.sections[0].column_span === 2, "una sola sezione: tutta la larghezza (0.73.2)");
 ok(d2.views[0].title === "Home", "titoli in inglese");
 
 // opzioni: views, hide, cards, title

@@ -3,6 +3,24 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.73.2] - 2026-10-04
+
+From a look at every view on a real installation.
+
+### Fixed
+- why-card: a channel skipped for *no target* is shown as a problem only when the call asked for it
+  by name, or when SuperNotify counted a missed channel. An automatic channel with nobody to reach (e.g. `notify_entity`) is routine; SuperNotify
+  2.11 doesn't count it as missed either.
+- archive and why: messages with markdown links show the link text, also when the archive index cut
+  the link in half.
+- Dashboard strategy: the view tabs show their names, and Stats and Tools use the full width.
+
+### Added
+- overview-card: `ignore: [channel, ...]`, as on the status badge.
+
+### Changed
+- Italian: the snooze tile is called "Pausa".
+
 ## [0.73.1] - 2026-10-04
 
 ### Changed

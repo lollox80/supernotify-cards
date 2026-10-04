@@ -8,6 +8,14 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.73.2. From a look at every view on a real installation. (1) why: a channel
+ *   skipped for no target is a problem only when the call asked for it by name or SuperNotify
+ *   counted a missed channel; an automatic channel with nobody to reach (e.g. notify_entity) is
+ *   routine, as SuperNotify 2.11 counts it.
+ *   (2) archive and why: messages with markdown links show the link text, also when the archive
+ *   index cut the link in half. (3) overview: `ignore: [channel, ...]` as on the status badge.
+ *   (4) Italian: the snooze tile is "Pausa". (5) strategy: view tabs show their names (no icons),
+ *   a view with one section (Stats, Tools) uses the full width.
  * 2026-10-04 - v0.73.1. Status badge: channels off that are meant to be off no longer keep it amber.
  *   `ignore: [channel, ...]` leaves channels out of the count (e.g. fallbacks switched off in the
  *   YAML); `channels_off: false` leaves the count out altogether. Channels off alone now show in
@@ -516,7 +524,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.73.1"; // bundle / HACS release
+const VERSION = "0.73.2"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -527,8 +535,8 @@ const VERSION = "0.73.1"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.36.0",
-  overview: "0.35.0",
+  control: "0.36.1",
+  overview: "0.35.1",
   bands: "0.21.0",
   deliveries: "0.30.0",
   transports: "0.26.0",
@@ -538,9 +546,9 @@ const SN_CARD_VERSIONS = {
   composer: "0.24.0",
   automations: "0.21.1",
   stats: "0.31.0",
-  archive: "0.38.0",
+  archive: "0.38.1",
   tools: "0.2.1",
-  why: "0.14.0",
+  why: "0.14.1",
 };
 
 /**
@@ -683,7 +691,7 @@ const SN_STRINGS = {
     presence: "Presenza", time_band: "Fascia oraria", quiet: "Silenzioso",
     act_scen: "Scenari attivi", on: "attivo", off: "spento", active: "attivo",
     dnd: "Non disturbare", tap_silence: "tocca per silenziare",
-    snooze: "Snooze", min: "min", pause_nc: "pausa ai non critici",
+    snooze: "Pausa", min: "min", pause_nc: "pausa ai non critici",
     snoozed: "In pausa", until: "fino alle", tap_clear: "tocca per annullare",
     announce: "Annuncia", intercom: "interfono",
     announce_ph: "Annuncia su tutti gli Echo di casa…", send: "Invia",
@@ -1241,8 +1249,10 @@ class SupernotifyDashboardStrategy extends HTMLElement {
         .filter((cards) => cards.length)
         .map((cards) => ({ type: "grid", cards }));
       if (!sections.length) continue;
-      const view = { title: T[key], path: key, icon: v.icon, type: "sections",
-        max_columns: Math.min(v.cols, sections.length) || 1, sections };
+      // 0.73.2: no icon, so the tabs show the view names; one section = the full width
+      if (sections.length === 1) sections[0].column_span = 2;
+      const view = { title: T[key], path: key, type: "sections",
+        max_columns: sections.length === 1 ? 2 : Math.min(v.cols, sections.length), sections };
       // 0.72.0: SuperNotify's health as a badge on top of Home
       if (key === "home" && !hide.has("badge")) view.badges = [{ type: "custom:supernotify-status-badge", ...(extra.badge || {}) }];
       views.push(view);
@@ -1960,6 +1970,7 @@ function snIconify(html, cfg) {
 function snPlainMsg(s) {
   return String(s == null ? "" : s)
     .replace(/!?\[([^\]]*)\]\((?:[^()]|\([^)]*\))*\)/g, "$1")
+    .replace(/!?\[([^\]]*)\]\([^)]*$/, "$1")
     .replace(/(\*\*|__)(.+?)\1/g, "$2")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/^#{1,6}\s+/gm, "")
@@ -3876,7 +3887,8 @@ class SupernotifyOverviewCard extends SnCard {
       const a = (this._hass.states[t.id] || {}).attributes || {};
       return a.last_error_message ? `${t.name}: ${a.last_error_message}` : t.name;
     }).join(" · ") });
-    const delsOff = this._scan("delivery").filter((d) => d.state === "off" && !/^default_/i.test(d.name));
+    const ign = new Set((c.ignore || []).map((x) => String(x).toLowerCase()));
+    const delsOff = this._scan("delivery").filter((d) => d.state === "off" && !/^default_/i.test(d.name) && !ign.has(String(d.name).toLowerCase()));
     if (delsOff.length) chips.push({ k: "off", go: ["deliveries", { ids: delsOff.map((d) => d.id) }], t: `🔕 ${snPl(T, "h_channels_off", delsOff.length)}`, title: delsOff.map((d) => snDeliveryAlias(this._hass, d.name) || d.name).join(", ") });
     if (c.quiet_entity && this._st(c.quiet_entity) === "on") chips.push({ k: "warn", t: `🌙 ${T.dnd} ${T.active}` });
     const snz = snLiveSnoozes(this._snoozes);
@@ -7547,7 +7559,7 @@ class SupernotifyArchiveCard extends SnCard {
       parts.push(
         `<div class="row${open}" data-id="${esc(r.id)}" title="id ${esc(r.id)}">
            <div class="r1"><span class="hm">${hm}</span><span class="ti">${esc(r.ti || "—")}</span>${prio}${wh}</div>
-           ${r.m ? `<div class="msg">${esc(r.m)}${r.mt ? "…" : ""}</div>` : ""}
+           ${r.m ? `<div class="msg">${esc(snPlainMsg(r.m))}${r.mt ? "…" : ""}</div>` : ""}
            <div class="tags">${chans}</div>
            <div class="det">
              ${r.sp ? `<div class="said">\u{1F50A} <b>${r.spn && !/alexa/i.test(r.spn) ? esc(T.said_by.replace("{ch}", snDeliveryAlias(this._hass, r.spn) || r.spn)) : T.said}:</b> \u00ab${esc(r.sp)}\u00bb</div>` : ""}
@@ -8005,7 +8017,7 @@ class SupernotifyWhyCard extends SnCard {
     const prioTxt = snT(this._config, this._hass)["prio_" + (n.p || "medium")] || n.p || "medium";
     out.push(`<div class="hd"><div class="meta">${esc(when)} · ${T.priority} ${esc(prioTxt)} · ${esc(T.outcomes[n.o] || n.o || "—")}${n.dupe ? ` · ♻ ${T.dupe}` : ""}</div>
       <b class="ttl">${esc(n.ti || "—")}</b>
-      ${n.m && n.m !== n.ti ? `<div class="msg">${esc(n.m)}</div>` : ""}
+      ${n.m && n.m !== n.ti ? `<div class="msg">${esc(snPlainMsg(n.m))}</div>` : ""}
       ${n.sp ? `<div class="note">🔊 ${esc(n.sp)}</div>` : ""}
       ${n.ctx && n.ctx.id ? `<div class="note sentby" id="sentBy" title="context ${esc(n.ctx.id)}">…</div>` : ""}
       ${n.stt ? `<div class="note">⏱ ${esc(T.st_time)} ${esc(n.stt.ms)} ms${n.stt.slow ? ` · ${esc(T.st_slow)} ${esc(snDeliveryAlias(this._hass, n.stt.slow) || n.stt.slow)}` : ""}${n.stt.rate != null ? ` · ${Math.round(+n.stt.rate * 100)}% ${esc(T.st_rate)}` : ""}</div>` : ""}</div>`);
@@ -8020,7 +8032,8 @@ class SupernotifyWhyCard extends SnCard {
     for (const ch of n.dl || []) {
       if (ch.r === "ok") sent.push(ch);
       else if (ch.r === "err") problems.push(ch);
-      else if (ch.r === "skip" && !SN_ROUTINE.has(String(ch.why || "").toUpperCase())) problems.push(ch);
+      else if (ch.r === "skip" && !SN_ROUTINE.has(String(ch.why || "").toUpperCase())
+        && !(String(ch.why || "").toUpperCase() === "NO_TARGET" && !((n.ov || {})[ch.n]) && !(+n.mi > 0))) problems.push(ch);
       else skipped.push(ch);
     }
     const seen = new Set((n.dl || []).map((ch) => ch.n));
