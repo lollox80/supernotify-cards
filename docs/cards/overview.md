@@ -26,7 +26,7 @@ occupancy: false       # hide "Who is home"
 repairs: false         # leave SuperNotify's repairs out of the health list
 update_entity: update.supernotify_update   # HACS update entity for the version chip
 quiet_entity: binary_sensor.notifier_dnd   # your DND sensor, for the 🌙 chip
-sent_today_entity: sensor.supernotify_sent_today   # daily utility_meter for "sent today"
+sent_today_entity: sensor.supernotify_sent_today   # optional daily utility_meter for "sent today"; without it (0.69.0+) the long-term statistics of sensor.supernotify_notifications
 style: theme            # follow the HA theme instead of the SuperNotify look
 ```
 

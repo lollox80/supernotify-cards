@@ -33,7 +33,8 @@ time_entity: input_datetime.supernotify_last_time
 priority_entity: input_text.supernotify_last_priority
 channels_entity: input_text.supernotify_last_channels
 period_entity: input_text.supernotify_last_day_period
-sent_today_entity: sensor.supernotify_sent_today      # daily utility_meter
+sent_today_entity: sensor.supernotify_sent_today      # daily utility_meter (optional)
+count_entity: sensor.supernotify_notifications       # SuperNotify's counter: long-term statistics, no helper needed
 update_entity: update.supernotify_update                # HACS update entity
 cards_update_entity: update.supernotify_cards_update
 refresh_minutes: 10
@@ -51,6 +52,7 @@ input_text:
 input_datetime:
   supernotify_last_time: { has_date: true, has_time: true }
 
+# optional since 0.69.0: without it, the daily counts come from count_entity's statistics
 utility_meter:
   supernotify_inviate_oggi:
     source: sensor.supernotify_notifications

@@ -3,6 +3,22 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.69.0] - 2026-10-04
+
+Daily counts without a utility meter.
+
+### Added
+- stats-card: **`count_entity`** (default `sensor.supernotify_notifications`). SuperNotify's own
+  counter is kept in Home Assistant's long-term statistics with no helper, so the daily chart is
+  filled from it for the days the utility meter (`sent_today_entity`) has nothing for, or for all of
+  them when there is no meter. Today is the live counter minus its value at midnight, not the last
+  hourly compile. `count_entity: ""` turns it off.
+- overview-card: without a utility meter, **Sent today** and yesterday come from the same
+  statistics instead of "since startup".
+
+### Changed
+- docs: the `utility_meter` in the stats card setup is now optional.
+
 ## [0.68.0] - 2026-10-04
 
 Phone and accessibility, in every card.

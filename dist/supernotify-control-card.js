@@ -8,6 +8,13 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.69.0. Daily counts from SuperNotify's own counter: sensor.supernotify_notifications
+ *   is a total_increasing RestoreSensor, so Home Assistant keeps its long-term statistics with no
+ *   helper. (1) stats 0.30.0: `count_entity` (default sensor.supernotify_notifications) fills the
+ *   days the daily utility_meter (`sent_today_entity`) has no statistics for - or all of them when
+ *   there is no meter; today = live counter minus its value at midnight. (2) overview 0.35.0:
+ *   without a utility meter, "Sent today" and yesterday come from the same statistics instead of
+ *   "since startup" (snDailyCounts, read once every 5 minutes).
  * 2026-10-04 - v0.68.0. Phone and accessibility, every card: whatever can be tapped can also be
  *   reached with Tab and used with Enter or Space, has role button and a name for screen readers
  *   (its text, else its tooltip); switches are named after their row, emoji icons are left out
@@ -469,7 +476,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.68.0"; // bundle / HACS release
+const VERSION = "0.69.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -481,7 +488,7 @@ const VERSION = "0.68.0"; // bundle / HACS release
  */
 const SN_CARD_VERSIONS = {
   control: "0.36.0",
-  overview: "0.34.0",
+  overview: "0.35.0",
   bands: "0.21.0",
   deliveries: "0.30.0",
   transports: "0.26.0",
@@ -490,7 +497,7 @@ const SN_CARD_VERSIONS = {
   simulator: "0.17.0",
   composer: "0.23.0",
   automations: "0.21.0",
-  stats: "0.29.0",
+  stats: "0.30.0",
   archive: "0.38.0",
   tools: "0.2.0",
   why: "0.14.0",
@@ -1622,7 +1629,7 @@ const SN_FORM_LABELS = {
     last_notification: "Show the last notification", last_channels: "One chip per channel in the last notification",
     repeat_entity: "Repeat-last button (optional)", tile_layout: "Tiles", tile_columns: "Tile columns (empty = automatic)",
     update_entity: "SuperNotify update entity", cards_update_entity: "Cards update entity",
-    sent_today_entity: "Daily counter (utility meter)", health: "Health on top", stats: "Numbers",
+    sent_today_entity: "Daily counter (utility meter, optional)", count_entity: "SuperNotify counter (long-term statistics)", health: "Health on top", stats: "Numbers",
     poll_seconds: "Refresh every (seconds)", group: "Group by how a channel starts",
     hide_defaults: "Hide automatic DEFAULT_ channels", limit: "Notifications in the list",
     expand: "Open the folded parts", max_height: "Maximum height (CSS, e.g. 70vh)",
@@ -1644,7 +1651,7 @@ const SN_FORM_LABELS = {
     last_notification: "Mostra l'ultima notifica", last_channels: "Un chip per canale nell'ultima notifica",
     repeat_entity: "Pulsante ripeti ultima (facoltativo)", tile_layout: "Tile", tile_columns: "Colonne delle tile (vuoto = automatico)",
     update_entity: "Entità di aggiornamento di SuperNotify", cards_update_entity: "Entità di aggiornamento delle card",
-    sent_today_entity: "Contatore giornaliero (utility meter)", health: "Stato in alto", stats: "Numeri",
+    sent_today_entity: "Contatore giornaliero (utility meter, facoltativo)", count_entity: "Contatore di SuperNotify (statistiche a lungo termine)", health: "Stato in alto", stats: "Numeri",
     poll_seconds: "Aggiorna ogni (secondi)", group: "Raggruppa per come parte il canale",
     hide_defaults: "Nascondi i canali automatici DEFAULT_", limit: "Notifiche nell'elenco",
     expand: "Apri le parti chiuse", max_height: "Altezza massima (CSS, es. 70vh)",
@@ -1687,7 +1694,7 @@ function snForm(kind) {
     scenarios: [num("poll_seconds", 10, 600, 10)],
     composer: [ent("update_entity", "update"), bool("dry_run"), bool("dry_run_dupe_check")],
     automations: [txt("manifest_url")],
-    stats: [num("days", 2, 90), ent("sent_today_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update")],
+    stats: [num("days", 2, 90), ent("sent_today_entity", "sensor"), ent("count_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update")],
     archive, why: [...archive, bool("expand"), txt("max_height")],
     tools: [num("archive_days", 1, 365), num("media_days", 1, 365)],
   };
@@ -2251,6 +2258,51 @@ function snArchiveDetail(doc) {
  * everything after an action that changes the data (snooze, clear, send) and tells the other
  * cards to read again ("supernotify-refresh" on window).
  */
+/**
+ * Daily counts (0.69.0) from the long-term statistics of a total_increasing counter, by default
+ * SuperNotify's own sensor.supernotify_notifications: Home Assistant compiles them for every such
+ * sensor, so no utility_meter is needed. Returns { byDay: {YYYY-MM-DD: n}, today, yesterday } or
+ * null when the counter has no statistics (yet). Today = live state minus the counter at the end
+ * of the last complete day, so it does not wait for the hourly compile. Cached 5 minutes.
+ */
+const SN_DAILY = new Map();
+function snDayKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function snDailyCounts(hass, id, days, force) {
+  if (!hass || !id || !hass.callWS) return Promise.resolve(null);
+  const key = id + "|" + days;
+  const hit = SN_DAILY.get(key);
+  if (hit && !force && Date.now() - hit.t < 300000) return hit.p;
+  const start = new Date(Date.now() - days * 86400000);
+  start.setHours(0, 0, 0, 0);
+  const p = Promise.resolve(hass.callWS({
+    type: "recorder/statistics_during_period",
+    start_time: start.toISOString(), end_time: new Date().toISOString(),
+    statistic_ids: [id], period: "day", types: ["change", "state"],
+  })).then((r) => {
+    const rows = (r && r[id]) || [];
+    if (!rows.length) return null;
+    const todayKey = snDayKey(new Date());
+    const byDay = {};
+    let before = null;
+    rows.forEach((x) => {
+      const k = snDayKey(new Date(x.start));
+      byDay[k] = Math.round(+x.change || 0);
+      if (k !== todayKey && x.state != null) before = +x.state;
+    });
+    const live = hass.states[id];
+    const lv = live && !["unknown", "unavailable"].includes(live.state) ? +live.state : NaN;
+    if (before != null && Number.isFinite(lv) && lv >= before) {
+      byDay[todayKey] = Math.max(byDay[todayKey] || 0, Math.round(lv - before));
+    }
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    return { byDay, today: byDay[todayKey] != null ? byDay[todayKey] : null, yesterday: byDay[snDayKey(y)] ?? null };
+  }).catch(() => null);
+  SN_DAILY.set(key, { t: Date.now(), p });
+  return p;
+}
+
 const SN_ENQ = new Map();
 const SN_ENQ_TTL = 2500;
 const snEnqStats = { calls: 0, shared: 0 };
@@ -3481,6 +3533,8 @@ class SupernotifyOverviewCard extends SnCard {
       this._snoozes = snz.snoozes || [];
       this._occ = snOccupancy(this._hass, occ);
       this._repairs = rep || [];
+      const meter = this._config.sent_today_entity && this._hass.states[this._config.sent_today_entity];
+      this._daily = meter ? null : await snDailyCounts(this._hass, "sensor.supernotify_notifications", 2);
     } catch (e) {
       this._active = this._active || null;
       this._last = this._last || null;
@@ -3628,6 +3682,10 @@ class SupernotifyOverviewCard extends SnCard {
       const yd = todayState.attributes && todayState.attributes.last_period;
       sentStat = stat("📨 " + T.sent_today, esc(Math.round(+todayState.state)),
         yd != null ? T.yesterday + ": " + esc(Math.round(+yd)) : "");
+    } else if (this._daily && this._daily.today != null) {
+      // 0.69.0: no utility meter - the long-term statistics of SuperNotify's own counter
+      const yd = this._daily.yesterday;
+      sentStat = stat("📨 " + T.sent_today, esc(this._daily.today), yd != null ? T.yesterday + ": " + esc(yd) : "");
     } else {
       sentStat = stat("📨 " + T.sent, sent != null ? esc(sent) : "—", T.since_startup);
     }
@@ -6045,7 +6103,9 @@ window.customCards.push({
  * Everything is derived from entities that already exist, no extra sensor:
  *   • daily series   → long-term statistics of the daily utility_meter
  *                      (sent_today_entity, default sensor.supernotify_inviate_oggi),
- *                      so it survives recorder purges;
+ *                      so it survives recorder purges; from 0.69.0 the days it has
+ *                      nothing for (or all, without a meter) come from the
+ *                      statistics of SuperNotify's own counter (count_entity);
  *   • per-notification detail (hour, weekday, priority, day period, channels)
  *                    → recorder history of the "last notification" helpers
  *                      written by the user's logging automation: one change of
@@ -6131,6 +6191,7 @@ class SupernotifyStatsCard extends SnCard {
       channels_entity: "input_text.supernotify_last_channels",
       period_entity: "input_text.supernotify_last_day_period",
       sent_today_entity: "sensor.supernotify_inviate_oggi",
+      count_entity: "sensor.supernotify_notifications",
       update_entity: "update.supernotify_update",
       cards_update_entity: "update.supernotify_cards_update",
       refresh_minutes: 10,
@@ -6227,6 +6288,8 @@ class SupernotifyStatsCard extends SnCard {
             }).catch(() => ({}))
           : Promise.resolve({}),
       ]);
+      // 0.69.0: SuperNotify's own counter, for the days the meter has nothing for
+      this._native = c.count_entity ? await snDailyCounts(this._hass, c.count_entity, days, force) : null;
     } catch (e) {
       this._error = String(e && (e.message || e));
     }
@@ -6311,10 +6374,12 @@ class SupernotifyStatsCard extends SnCard {
     // state of the daily meter (it resets at midnight = today's count).
     const liveToday = c.sent_today_entity && this._hass.states[c.sent_today_entity];
     const liveVal = liveToday && !["unknown", "unavailable"].includes(liveToday.state) ? Math.round(+liveToday.state) : null;
+    const nativeByKey = (this._native && this._native.byDay) || {};
     while (dayCursor <= now) {
       const k = this._dayKey(dayCursor);
       let v = statByKey[k];
       if (k === todayKey && liveVal != null && (v == null || liveVal >= v)) v = liveVal;
+      if (v == null) v = nativeByKey[k];
       if (v == null) v = perDayHist[k] || 0;
       perDay.push({ key: k, d: new Date(dayCursor), n: v, today: k === todayKey });
       dayCursor.setDate(dayCursor.getDate() + 1);
