@@ -3,6 +3,14 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.76.0] - 2026-10-05
+
+### Added
+- control-card: "while notifications were paused". Once a pause is over, the control card with the
+  snooze tile shows what the pause held back: how many notifications (and how many only on some
+  channels), the most frequent ones and the list, from SuperNotify's archive (notifications
+  suppressed as SNOOZED). OK hides it until the next pause. `catch_up: false` turns it off.
+
 ## [0.75.2] - 2026-10-05
 
 ### Changed

@@ -8,6 +8,11 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-05 - v0.76.0. control: "while you were paused". When no pause is in force, the control
+ *   card with the snooze tile asks SuperNotify's archive (enquire_archive, summary) for what a
+ *   pause held back since the last time you saw it (at most the last 24 h): notifications
+ *   suppressed as SNOOZED, wholly or on some channels. It shows how many, the most frequent ones and
+ *   the list; OK hides them until the next pause. `catch_up: false` turns it off.
  * 2026-10-05 - v0.75.2. Stats: SuperNotify reads every archive file for the daily counts, about 11 s
  *   for 30 days on a real installation, and meanwhile the archive and why cards wait too. The daily
  *   counts are now kept in this browser like the per-notification rows: a finished day does not
@@ -553,7 +558,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.75.2"; // bundle / HACS release
+const VERSION = "0.76.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -564,7 +569,7 @@ const VERSION = "0.75.2"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.37.1",
+  control: "0.38.0",
   overview: "0.36.0",
   bands: "0.21.0",
   deliveries: "0.31.0",
@@ -681,7 +686,7 @@ const SN_STRINGS = {
     aut_disabled_only: "Disabled only",
     grp_active: "active", repeat: "Repeat", skipped_n: "skipped", left: "left", missed_n: "missed",
     snz_all: "everything", snz_nc: "non-critical", snz_prio: "priority", snz_transport: "transport", snz_for: "for",
-    snz_choose: "choose what and how long", snz_title: "Pause notifications", snz_what: "What", snz_nc_l: "Non-critical",
+    snz_choose: "choose what and how long", cu_title: "While notifications were paused", cu_held: "{n} held back", cu_part: "{n} only on some channels", cu_ok: "OK", cu_list: "Show them", cu_from: "from", cu_to: "to", snz_title: "Pause notifications", snz_what: "What", snz_nc_l: "Non-critical",
     snz_all_l: "Everything", snz_ch: "A channel", snz_pr: "A priority", snz_who: "For whom", snz_everyone: "Everyone",
     snz_me: "Only me", snz_len: "How long", snz_forever: "Until I resume", snz_go: "Pause", snz_close: "Close",
     rs_hand: "by hand", rs_voice: "by voice", rs_assist: "by the assistant",
@@ -812,7 +817,7 @@ const SN_STRINGS = {
     aut_disabled_only: "Solo disattivate",
     grp_active: "attivi", repeat: "Ripeti", skipped_n: "saltati", skipped_n_1: "saltato", left: "rimasti", missed_n: "mancati", missed_n_1: "mancato",
     snz_all: "tutto", snz_nc: "non critici", snz_prio: "priorità", snz_transport: "transport", snz_for: "per",
-    snz_choose: "scegli cosa e per quanto", snz_title: "Metti in pausa le notifiche", snz_what: "Cosa", snz_nc_l: "Non critiche",
+    snz_choose: "scegli cosa e per quanto", cu_title: "Mentre le notifiche erano in pausa", cu_held: "{n} trattenute", cu_part: "{n} solo su alcuni canali", cu_ok: "OK", cu_list: "Mostrale", cu_from: "dalle", cu_to: "alle", snz_title: "Metti in pausa le notifiche", snz_what: "Cosa", snz_nc_l: "Non critiche",
     snz_all_l: "Tutto", snz_ch: "Un canale", snz_pr: "Una priorità", snz_who: "Per chi", snz_everyone: "Tutti",
     snz_me: "Solo io", snz_len: "Per quanto", snz_forever: "Finché non riprendo", snz_go: "Metti in pausa", snz_close: "Chiudi",
     rs_hand: "a mano", rs_voice: "a voce", rs_assist: "dall'assistente",
@@ -1333,6 +1338,7 @@ function snFeatureSupports(test) {
     return test(String(id));
   };
 }
+const SN_CU_KEY = "supernotify-catchup-seen"; // 0.76.0: last OK on "while you were paused"
 /** 0.74.0: supernotify.snooze exists (SuperNotify after 2.12.1-beta2): open to any user. */
 function snHasSnoozeAction(hass) {
   const svc = hass && hass.services && hass.services.supernotify;
@@ -2124,7 +2130,7 @@ const SN_FORM_LABELS = {
     archive_days: "Archive cleanup: older than (days)", media_days: "Picture cleanup: older than (days)",
     occupancy: "Who is home (from SuperNotify)", repairs: "SuperNotify repairs in the health list",
     snooze_announce: "Say pauses out loud (announce channel)", snooze_via: "Pauses go through", o_event: "the push buttons event (admin)", o_voice: "the voice commands", o_action: "SuperNotify's snooze action",
-    status: "Status row (who is home, time band, quiet)", show_off: "Also offer channels that are off", daily: "Daily counts from the archive when available",
+    status: "Status row (who is home, time band, quiet)", catch_up: "After a pause: what it held back", show_off: "Also offer channels that are off", daily: "Daily counts from the archive when available",
     snooze_minutes: "Snooze length (minutes)", snooze_panel: "Snooze tile opens the pause panel", announce_delivery: "Channel for announcements",
     last_notification: "Show the last notification", last_channels: "One chip per channel in the last notification",
     repeat_entity: "Repeat-last button (optional)", tile_layout: "Tiles", tile_columns: "Tile columns (empty = automatic)",
@@ -2148,7 +2154,7 @@ const SN_FORM_LABELS = {
     archive_days: "Pulizia archivio: piu' vecchie di (giorni)", media_days: "Pulizia foto: piu' vecchie di (giorni)",
     occupancy: "Chi è in casa (da SuperNotify)", repairs: "Riparazioni di SuperNotify nella salute",
     snooze_announce: "Annuncia le pause a voce (canale annunci)", snooze_via: "Le pause passano da", o_event: "l'evento dei pulsanti push (admin)", o_voice: "i comandi vocali", o_action: "l'azione snooze di SuperNotify",
-    status: "Riga di stato (chi è in casa, fascia, silenzio)", show_off: "Mostra anche i canali spenti", daily: "Conteggi giornalieri dall'archivio quando ci sono",
+    status: "Riga di stato (chi è in casa, fascia, silenzio)", catch_up: "Dopo una pausa: cosa ha trattenuto", show_off: "Mostra anche i canali spenti", daily: "Conteggi giornalieri dall'archivio quando ci sono",
     snooze_minutes: "Durata dello snooze (minuti)", snooze_panel: "Il riquadro pausa apre il pannello delle pause", announce_delivery: "Canale per gli annunci",
     last_notification: "Mostra l'ultima notifica", last_channels: "Un chip per canale nell'ultima notifica",
     repeat_entity: "Pulsante ripeti ultima (facoltativo)", tile_layout: "Tile", tile_columns: "Colonne delle tile (vuoto = automatico)",
@@ -2187,7 +2193,7 @@ function snForm(kind) {
       ent("presence_entity", "person"), bool("occupancy", true), num("snooze_minutes", 5, 240, 5), bool("snooze_panel", true),
       sel("snooze_via", [["", "o_auto"], ["action", "o_action"], ["event", "o_event"], ["voice", "o_voice"]]), bool("snooze_announce", false), txt("announce_delivery"),
       bool("last_notification"), bool("last_channels"), ent("repeat_entity", ["input_button", "button", "script"]),
-      sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6), bool("status", true)],
+      sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6), bool("status", true), bool("catch_up", true)],
     overview: [ent("update_entity", "update"), ent("sent_today_entity", "sensor"),
       ent("quiet_entity", ["binary_sensor", "input_boolean"]), bool("health", true),
       sel("stats", [["", "o_three"], ["full", "o_full"]]), bool("last_notification"), bool("occupancy", true),
@@ -3203,9 +3209,73 @@ class SupernotifyControlCard extends SnCard {
         this._snoozes = list;
         if (this._rendered) this._renderTiles();
       }
+      this._catchUp(list);
     } catch (e) {
       // supernotify may still be loading; retry on next poll
     }
+  }
+
+  /**
+   * 0.76.0: what a pause held back. Read once when the card starts without a pause in force, and
+   * again each time a pause ends: the archive's notifications suppressed as SNOOZED (all channels,
+   * or some) since the last OK in this browser, at most the last 24 h.
+   */
+  async _catchUp(list) {
+    const c = this._config;
+    if (c.catch_up === false || !(c.tiles || []).includes("snooze") || !this._hass) return;
+    const svc = this._hass.services && this._hass.services.supernotify;
+    if (!svc || !svc.enquire_archive) return;
+    const live = snLiveSnoozes(list).length > 0;
+    if (live) { this._cuLive = true; return; }
+    if (this._cuChecked && !this._cuLive) return;
+    this._cuChecked = true;
+    this._cuLive = false;
+    let ack = 0;
+    try { ack = +(window.localStorage.getItem(SN_CU_KEY) || 0); } catch (e) { /* private mode */ }
+    const since = Math.max(ack, Date.now() - 86400000);
+    try {
+      const r = await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "enquire_archive",
+        service_data: { verbosity: "summary", after: new Date(since).toISOString(), limit: 500 }, return_response: true });
+      const ns = ((r && r.response && r.response.notifications) || []).filter(snIsObj);
+      const held = [];
+      for (const n of ns) {
+        const all = String(n.suppressed || "").toUpperCase() === "SNOOZED";
+        const some = !all && Object.values(n.deliveries || {}).some((d) => d && String(d.skipped || "").toUpperCase() === "SNOOZED");
+        if (all || some) held.push({ t: Date.parse(n.created) || 0, ti: String(n.title || n.message || "").trim(), all });
+      }
+      held.sort((a, b) => a.t - b.t);
+      this._cu = held.length ? held : null;
+    } catch (e) {
+      this._cu = null;
+    }
+    this._renderCatchUp();
+  }
+
+  _renderCatchUp() {
+    const el = this.shadowRoot && this.shadowRoot.getElementById("cu");
+    if (!el) return;
+    const held = this._cu;
+    if (!held || !held.length) { el.hidden = true; el.innerHTML = ""; return; }
+    const T = snT(this._config, this._hass);
+    const esc = snEsc;
+    const hm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    const nAll = held.filter((h) => h.all).length;
+    const nSome = held.length - nAll;
+    const groups = {};
+    for (const h of held) { const k = snCut(h.ti || "—", 40); groups[k] = (groups[k] || 0) + 1; }
+    const top = Object.entries(groups).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${n}× ${k}`).join(" · ");
+    const span = `${T.cu_from} ${hm(held[0].t)} ${T.cu_to} ${hm(held[held.length - 1].t)}`;
+    const rows = held.slice(-30).reverse().map((h) => `<div class="sr"><span class="sl">${esc(h.ti || "—")}</span><span class="su">${hm(h.t)}${h.all ? "" : " · " + esc(T.cu_part.replace("{n} ", ""))}</span></div>`).join("");
+    el.hidden = false;
+    el.innerHTML = snIconify(`<div class="sh"><b>😴 ${esc(T.cu_title)}</b><button class="sb" id="cuOk">${esc(T.cu_ok)}</button></div>
+      <div class="sk">${esc(T.cu_held.replace("{n}", held.length))}${nSome ? ` (${esc(T.cu_part.replace("{n}", nSome))})` : ""} · ${esc(span)}</div>
+      <div class="su">${esc(top)}</div>
+      <details><summary class="su">${esc(T.cu_list)}</summary><div class="slist">${rows}</div></details>`, this._config);
+    el.querySelector("#cuOk").onclick = () => {
+      try { window.localStorage.setItem(SN_CU_KEY, String(Date.now())); } catch (e) { /* private mode */ }
+      this._cu = null;
+      this._renderCatchUp();
+    };
   }
 
   // ── helpers ────────────────────────────────────────────────────────────
@@ -3444,6 +3514,7 @@ class SupernotifyControlCard extends SnCard {
         ${this._config.last_notification ? `<div class="lastn" id="lastn"></div>` : ""}
         <div class="tiles${this._config.tile_layout === "stacked" ? " stacked" : ""}" id="tiles"></div>
         <div class="snzp" id="snzp" hidden></div>
+        <div class="snzp" id="cu" hidden></div>
         ${(this._config.tiles || []).includes("announce") ? `<div class="announce" id="announceRow">
           <ha-icon icon="mdi:bullhorn"></ha-icon>
           <input id="announceInput" placeholder="${snT(this._config, this._hass).announce_ph}">
@@ -3469,6 +3540,7 @@ class SupernotifyControlCard extends SnCard {
     if (this._config.last_notification) this._renderLast();
     this._renderTiles();
     this._renderGroups();
+    this._renderCatchUp();
   }
 
   _renderLast() {
