@@ -3,6 +3,19 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.71.0] - 2026-10-04
+
+A dashboard that builds itself.
+
+### Added
+- **Dashboard strategy** `custom:supernotify`: put `strategy: {type: custom:supernotify}` in a
+  dashboard's raw configuration and the views come from your installation. You get Home, Send,
+  Setup, Stats, and Tools for administrators only. Each card gets the configuration its card picker
+  would suggest; transports, scenarios, recipients, time bands and automations appear only when
+  there is something to show. Options: `title`, `views`, `hide`, `cards`. See
+  [docs/dashboard.md](docs/dashboard.md).
+- Links between cards work on such a dashboard too: the view map is built from the generated views.
+
 ## [0.70.0] - 2026-10-04
 
 SuperNotify 2.12.1: statistics from the archive, dry runs without workarounds.

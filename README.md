@@ -67,6 +67,17 @@ with the keyboard (Tab, Enter, Space), names for screen readers, reduced motion 
 
 ## A full dashboard
 
+**Quickest:** a dashboard that builds itself from what your installation has. In a new dashboard's
+raw configuration editor:
+
+```yaml
+strategy:
+  type: custom:supernotify
+```
+
+Views, options and how to make it your own: [docs/dashboard.md](docs/dashboard.md). Or, to place
+every card yourself:
+
 Paste it in a new dashboard (**Settings → Dashboards → Add dashboard → New dashboard from scratch**,
 then ⋮ → **Edit dashboard** → ⋮ → **Raw configuration editor**). Four views, each card where it is
 used; the links between cards (a channel off, a person, a scenario) open the right view.

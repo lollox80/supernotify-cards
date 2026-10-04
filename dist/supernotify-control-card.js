@@ -8,6 +8,15 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.71.0. A dashboard that builds itself: `strategy: {type: custom:supernotify}` in a
+ *   dashboard's raw configuration (or "SuperNotify" in Add dashboard, where Home Assistant lists
+ *   custom strategies). Views Home, Send, Setup, Stats and - for administrators only - Tools, each
+ *   card with the configuration its card picker would suggest (bands from the helpers named like the
+ *   README's, automations only when the manifest is there, transports/scenarios/recipients only when
+ *   SuperNotify has them). Options: title, views (which and in what order), hide (card kinds),
+ *   cards (extra configuration per card kind, e.g. control tiles). Links between views work on it
+ *   too: the view map is built from the generated views. "Take control" in the dashboard menu turns
+ *   it into an ordinary editable dashboard, as for Home Assistant's own strategies.
  * 2026-10-04 - v0.70.0. SuperNotify 2.12.1. (1) stats: on 2.12.1 or later the figures come from
  *   SuperNotify's own archive (enquire_archive, verbosity summary): hour, weekday, priority,
  *   channels sent and failed, band of the day (the applied scenario named like a band,
@@ -484,7 +493,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.70.0"; // bundle / HACS release
+const VERSION = "0.71.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -1084,6 +1093,12 @@ function snDashEnsure(hass) {
   snDash.key = key;
   const uid = hass.user && hass.user.id;
   Promise.resolve(hass.callWS({ type: "lovelace/config", url_path: key === "lovelace" ? null : key })).then((cfg) => {
+    // 0.71.0: a strategy dashboard stores only {strategy: ...}; build its views the same way HA does
+    const strat = cfg && !cfg.views && cfg.strategy;
+    const m0 = strat && typeof strat.type === "string" && strat.type.match(/^custom:(.+)$/);
+    const gen = m0 && customElements.get(`ll-strategy-dashboard-${m0[1]}`);
+    return gen && gen.generate ? gen.generate(strat, hass) : cfg;
+  }).then((cfg) => {
     const map = {};
     const walk = (o, path) => {
       if (Array.isArray(o)) { o.forEach((x) => walk(x, path)); return; }
@@ -1138,6 +1153,88 @@ function snFlash(card, selector) {
   rows.forEach((r) => { r.style.outline = `2px solid ${p.brand}`; r.style.outlineOffset = "-2px"; r.style.borderRadius = "10px"; });
   if (rows[0] && rows[0].scrollIntoView) setTimeout(() => rows[0].scrollIntoView({ behavior: "smooth", block: "center" }), 250);
   setTimeout(() => rows.forEach((r) => { r.style.outline = ""; }), 2600);
+}
+
+/**
+ * Dashboard strategy (0.71.0): `strategy: {type: custom:supernotify}` builds the whole dashboard
+ * from what SuperNotify has in this installation, for the user who opens it.
+ *   title   - dashboard title (default "SuperNotify")
+ *   views   - which views and in what order: home, send, setup, stats, tools (tools: admins only)
+ *   hide    - card kinds to leave out, e.g. [automations, simulator]
+ *   cards   - extra configuration per card kind, merged over the suggested one,
+ *             e.g. {control: {tiles: [dnd, snooze]}, archive: {limit: 30}}
+ */
+const SN_STRATEGY_VIEWS = {
+  home: { icon: "mdi:bell", cols: 2, sections: [["control"], ["overview", "archive"]] },
+  send: { icon: "mdi:send", cols: 2, sections: [["composer"], ["why", "simulator"]] },
+  setup: { icon: "mdi:tune-variant", cols: 3,
+    sections: [["deliveries", "transports"], ["scenarios", "recipients"], ["bands", "automations"]] },
+  stats: { icon: "mdi:chart-bar", cols: 1, sections: [["stats"]] },
+  tools: { icon: "mdi:toolbox-outline", cols: 1, sections: [["tools"]], admin: true },
+};
+const SN_STRATEGY_TITLES = {
+  en: { home: "Home", send: "Send", setup: "Setup", stats: "Stats", tools: "Tools", title: "SuperNotify" },
+  it: { home: "Casa", send: "Invia", setup: "Configurazione", stats: "Statistiche", tools: "Strumenti", title: "SuperNotify" },
+};
+
+class SupernotifyDashboardStrategy extends HTMLElement {
+  static async generate(config, hass) {
+    const cfg = config || {};
+    const st = (hass && hass.states) || {};
+    const lang = String((hass && (hass.locale && hass.locale.language || hass.language)) || "en").slice(0, 2);
+    const T = SN_STRATEGY_TITLES[lang] || SN_STRATEGY_TITLES.en;
+    const admin = !hass || !hass.user || hass.user.is_admin !== false;
+    const hide = new Set((cfg.hide || []).map(String));
+    const extra = cfg.cards || {};
+    const has = (re) => Object.keys(st).some((id) => re.test(id));
+    let manifest = false;
+    if (!hide.has("automations")) {
+      const url = (extra.automations && extra.automations.manifest_url) || "/local/supernotify/automations.json";
+      try { manifest = !!(await window.fetch(url, { method: "HEAD", cache: "no-store" })).ok; } catch (e) { manifest = false; }
+    }
+    const wanted = {
+      transports: has(/^(switch|binary_sensor)\.supernotify_transport_/),
+      scenarios: has(/^(switch|binary_sensor)\.supernotify_scenario_/),
+      recipients: has(/^(switch|binary_sensor)\.supernotify_recipient_/) || has(/^notify\.recipient_/),
+      automations: manifest,
+    };
+    const card = (kind) => {
+      if (hide.has(kind) || wanted[kind] === false) return null;
+      const cls = customElements.get(`supernotify-${kind}-card`);
+      if (!cls) return null;
+      let stub = {};
+      try { stub = (cls.getStubConfig && cls.getStubConfig(hass)) || {}; } catch (e) { stub = {}; }
+      if (kind === "bands" && !(extra.bands && extra.bands.bands) && !Object.keys(stub.bands || {}).length) return null;
+      return { type: `custom:supernotify-${kind}-card`, ...stub, ...(extra[kind] || {}) };
+    };
+    const order = (Array.isArray(cfg.views) && cfg.views.length ? cfg.views : Object.keys(SN_STRATEGY_VIEWS)).map(String);
+    const views = [];
+    for (const key of order) {
+      const v = SN_STRATEGY_VIEWS[key];
+      if (!v || (v.admin && !admin)) continue;
+      const sections = v.sections
+        .map((kinds) => kinds.map(card).filter(Boolean))
+        .filter((cards) => cards.length)
+        .map((cards) => ({ type: "grid", cards }));
+      if (!sections.length) continue;
+      views.push({ title: T[key], path: key, icon: v.icon, type: "sections",
+        max_columns: Math.min(v.cols, sections.length) || 1, sections });
+    }
+    return { title: cfg.title || T.title, views };
+  }
+}
+if (!customElements.get("ll-strategy-dashboard-supernotify")) {
+  customElements.define("ll-strategy-dashboard-supernotify", SupernotifyDashboardStrategy);
+}
+window.customStrategies = window.customStrategies || [];
+if (!window.customStrategies.some((x) => x && x.type === "supernotify")) {
+  window.customStrategies.push({
+    type: "supernotify",
+    strategyType: "dashboard",
+    name: "SuperNotify",
+    description: "Every SuperNotify card, in views built from what your installation has.",
+    documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/dashboard.md",
+  });
 }
 
 function snDryCss(p) {
