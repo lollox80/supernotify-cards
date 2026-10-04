@@ -1,3 +1,6 @@
+# Attaches dist/supernotify-control-card.js to every published release. HACS installs the card
+# from it, and GitHub counts its downloads for the README badge. Run it by hand (Actions ->
+# Attach release asset -> Run workflow) for a release published before this workflow existed.
 name: Attach release asset
 
 on:
@@ -21,6 +24,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TAG }}
+
+      - name: The bundle version must match the tag
+        run: |
+          v=$(grep -oP 'const VERSION = "\K[^"]+' dist/supernotify-control-card.js)
+          if [ "v$v" != "$TAG" ]; then
+            echo "dist/supernotify-control-card.js says $v, the tag is $TAG"
+            exit 1
+          fi
 
       - name: Upload dist/supernotify-control-card.js to the release
         env:
