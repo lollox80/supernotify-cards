@@ -8,6 +8,10 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-05 - v0.75.2. Stats: SuperNotify reads every archive file for the daily counts, about 11 s
+ *   for 30 days on a real installation, and meanwhile the archive and why cards wait too. The daily
+ *   counts are now kept in this browser like the per-notification rows: a finished day does not
+ *   change, so after the first opening only the days since the last reading are asked for.
  * 2026-10-05 - v0.75.1. Pauses on SuperNotify 2.13.0: the snooze action became three,
  *   supernotify.snooze (minutes), supernotify.silence (until resumed) and supernotify.unsnooze, with
  *   no `command`. The cards call the one that fits; the single action with `command` of the first
@@ -549,7 +553,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.75.1"; // bundle / HACS release
+const VERSION = "0.75.2"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -569,8 +573,8 @@ const SN_CARD_VERSIONS = {
   scenarios: "0.30.0",
   simulator: "0.17.0",
   composer: "0.25.0",
-  automations: "0.21.2",
-  stats: "0.32.0",
+  automations: "0.21.3",
+  stats: "0.32.1",
   archive: "0.38.2",
   tools: "0.2.1",
   why: "0.14.2",
@@ -6774,21 +6778,63 @@ const snStatsArchive = {
  * day, so the whole window is one call of a few KB. `ok` is null until the first answer, false
  * when this SuperNotify does not know `daily` - then the card reads notification by notification.
  */
+const SN_DAILY_KEY = "supernotify-stats-daily";
 const snStatsDaily = {
-  ok: null,
-  async get(hass, startMs) {
-    if (this.ok === false) return null;
+  ok: null, busy: null,
+
+  // 0.75.2: kept in this browser - {v, from: first day covered (ms), at: last reading (ms), days: {date: totals}}
+  _load() {
     try {
-      const r = await hass.callWS({ type: "call_service", domain: "supernotify", service: "enquire_archive",
-        service_data: { verbosity: "daily", after: new Date(startMs).toISOString() }, return_response: true });
-      const days = r && r.response && r.response.days;
-      if (!Array.isArray(days)) throw new Error("no days");
-      this.ok = true;
-      return days.filter(snIsObj);
-    } catch (e) {
-      if (this.ok === null) { this.ok = false; return null; }
-      throw e;
-    }
+      const c = JSON.parse(window.localStorage.getItem(SN_DAILY_KEY) || "null");
+      if (c && c.v === 1 && c.days && typeof c.days === "object") return c;
+    } catch (e) { /* private mode or a broken cache */ }
+    return { v: 1, from: 0, at: 0, days: {} };
+  },
+
+  _save(c) {
+    try { window.localStorage.setItem(SN_DAILY_KEY, JSON.stringify(c)); } catch (e) { /* full or private */ }
+  },
+
+  async _ask(hass, afterMs) {
+    const r = await hass.callWS({ type: "call_service", domain: "supernotify", service: "enquire_archive",
+      service_data: { verbosity: "daily", after: new Date(afterMs).toISOString() }, return_response: true });
+    const days = r && r.response && r.response.days;
+    if (!Array.isArray(days)) throw new Error("no days");
+    return days.filter(snIsObj);
+  },
+
+  get(hass, startMs) {
+    if (this.ok === false) return Promise.resolve(null);
+    if (this.busy) return this.busy;
+    this.busy = (async () => {
+      const c = this._load();
+      // a finished day does not change: once the window is covered, read again only from the
+      // start of the day of the last reading
+      let after = startMs;
+      if (c.from && c.from <= startMs && c.at) {
+        const d = new Date(c.at); d.setHours(0, 0, 0, 0);
+        after = Math.max(startMs, d.getTime());
+      }
+      try {
+        const got = await this._ask(hass, after);
+        this.ok = true;
+        for (const d of got) if (d.date) c.days[d.date] = d;
+        if (after === startMs && (!c.from || startMs < c.from)) c.from = startMs;
+        c.at = Date.now();
+        const keep = new Date(Date.now() - SN_STATS_KEEP * 86400000);
+        const keepKey = `${keep.getFullYear()}-${String(keep.getMonth() + 1).padStart(2, "0")}-${String(keep.getDate()).padStart(2, "0")}`;
+        for (const k of Object.keys(c.days)) if (k < keepKey) delete c.days[k];
+        if (c.from < keep.getTime()) c.from = keep.getTime();
+        this._save(c);
+      } catch (e) {
+        if (this.ok === null) { this.ok = false; return null; }
+        throw e;
+      }
+      const s0 = new Date(startMs);
+      const startKey = `${s0.getFullYear()}-${String(s0.getMonth() + 1).padStart(2, "0")}-${String(s0.getDate()).padStart(2, "0")}`;
+      return Object.keys(c.days).filter((k) => k >= startKey).sort().map((k) => c.days[k]);
+    })().finally(() => { this.busy = null; });
+    return this.busy;
   },
 };
 

@@ -3,6 +3,14 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.75.2] - 2026-10-05
+
+### Changed
+- stats-card: SuperNotify reads every archive file for the daily counts (about 11 s for 30 days on
+  a real installation, and the archive and why cards wait meanwhile). The daily counts are now kept
+  in this browser: a finished day does not change, so after the first opening only the days since
+  the last reading are asked for.
+
 ## [0.75.1] - 2026-10-05
 
 ### Fixed
