@@ -8,6 +8,12 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.64.0. Code cleanup, nothing changes on screen. Every card extends SnCard (the
+ *   hass setter, palette, state read, more-info dialog and default grid size were copied in each
+ *   card; a card now says what to do with a new hass in _onHass). One snEsc instead of 19 local
+ *   copies, snVer for the version footer, snActiveScenarioIds (control, overview),
+ *   snLastDeliveries + snPrioColor for the last notification (control, overview), one
+ *   _resumeAll in the control card.
  * 2026-10-04 - v0.63.2. control 0.33.2: with a pause for everyone already in force, SuperNotify held
  *   back the announcement of the next pause too (is_global_snooze, seen on the real archive at
  *   09:29). Then the card calls the announce channel's own action with its targets and data.
@@ -437,7 +443,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.63.2"; // bundle / HACS release
+const VERSION = "0.64.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -448,20 +454,20 @@ const VERSION = "0.63.2"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.33.2",
-  overview: "0.31.0",
-  bands: "0.20.1",
-  deliveries: "0.27.0",
-  transports: "0.24.0",
-  recipients: "0.27.0",
-  scenarios: "0.26.1",
-  simulator: "0.15.3",
-  composer: "0.21.0",
-  automations: "0.20.2",
-  stats: "0.28.2",
-  archive: "0.37.0",
-  tools: "0.1.0",
-  why: "0.13.1",
+  control: "0.33.3",
+  overview: "0.31.1",
+  bands: "0.20.2",
+  deliveries: "0.27.1",
+  transports: "0.24.1",
+  recipients: "0.27.1",
+  scenarios: "0.26.2",
+  simulator: "0.15.4",
+  composer: "0.21.1",
+  automations: "0.20.3",
+  stats: "0.28.3",
+  archive: "0.37.1",
+  tools: "0.1.1",
+  why: "0.13.2",
 };
 
 /**
@@ -783,6 +789,99 @@ function snLiveSnoozes(list, now) {
   return out;
 }
 
+/* ── 0.64.0 shared helpers: one copy of what every card used to carry ── */
+/** Text for innerHTML and attribute values. */
+function snEsc(v) {
+  return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** The "supernotify-<kind>-card vX" footer of `show_version: true`. */
+function snVer(config, kind, p) {
+  if (!config || !config.show_version) return "";
+  return `<div class="ver" style="text-align:right;font-size:10px;color:${p.muted};margin-top:8px">supernotify-${kind}-card v${SN_CARD_VERSIONS[kind]}</div>`;
+}
+
+/** Active scenarios from the binary_sensors (with snScenarioActive), null when not exposed. */
+function snActiveScenarioIds(hass) {
+  if (!hass) return null;
+  const ids = Object.keys(hass.states).filter((e) => e.startsWith("binary_sensor.supernotify_scenario_"));
+  if (!ids.length) return null;
+  const known = ids.filter((e) => !["unknown", "unavailable"].includes(hass.states[e].state));
+  if (!known.length) return null; // scenario state not exposed yet
+  return known.filter((e) => snScenarioActive(hass, e));
+}
+
+/** Channels of a notification: delivered / failed (readable names) and how many were skipped. */
+function snLastDeliveries(hass, n) {
+  const ok = [], err = [];
+  let skipped = 0;
+  if (n && n.deliveries && typeof n.deliveries === "object") {
+    for (const [name, d] of Object.entries(n.deliveries)) {
+      const isOk = d && Array.isArray(d.success) && d.success.length;
+      const isErr = d && Array.isArray(d.error) && d.error.length;
+      if (!isOk && !isErr) { skipped++; continue; }
+      (isErr ? err : ok).push(snDeliveryAlias(hass, name) || name);
+    }
+  }
+  return { ok, err, skipped };
+}
+
+function snPrioColor(p, prio) {
+  return { critical: p.crit, high: p.warn, medium: p.brandD, low: p.muted, minimum: p.muted }[prio];
+}
+
+/**
+ * Base of every card (0.64.0). The hass setter, palette, state read, more-info dialog and the
+ * default grid size were the same in each card. A card says what to do with a new hass in
+ * _onHass(hass, fresh, changed, first): fresh = (re)draw from scratch, changed = something it
+ * read before changed (only with `static snTracked = true`, the default), first = first hass.
+ */
+class SnCard extends HTMLElement {
+  set hass(hass) {
+    const first = !this._hass;
+    let changed = true;
+    if (this.constructor.snTracked !== false) {
+      const raw = hass;
+      const tr = this._snTr || (this._snTr = snTracker());
+      changed = snChanged(tr, raw);
+      hass = snTrackedHass(raw, tr);
+      queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
+    }
+    const wasDark = this._dark;
+    this._hass = hass;
+    this._dark = !!(hass.themes && hass.themes.darkMode);
+    // native controls (time pickers, selects, scrollbars) follow the HA theme too
+    this.style.colorScheme = this._dark ? "dark" : "light";
+    this._onHass(hass, !this._rendered || wasDark !== this._dark, changed, first);
+  }
+
+  _onHass(hass, fresh, changed) {
+    if (fresh) this._render();
+    else if (changed) this._update();
+  }
+
+  _palette() {
+    return snPalette(this._dark, this._config && this._config.style);
+  }
+
+  _st(id) {
+    const s = this._hass && this._hass.states[id];
+    return s ? s.state : undefined;
+  }
+
+  _moreInfo(entityId) {
+    this.dispatchEvent(new CustomEvent("hass-more-info", {
+      detail: { entityId }, bubbles: true, composed: true,
+    }));
+  }
+
+  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
+  // `grid_options:` in the dashboard still wins.
+  getGridOptions() {
+    return { columns: 12, min_columns: 6 };
+  }
+}
+
 /* ── 0.63.0 shared helpers ── */
 /** Who paused it, readable: SuperNotify writes "User command", "Voice command" or "Assistant". */
 function snSnoozeReason(s, T) {
@@ -875,7 +974,7 @@ function snValText(v, T) {
 
 /** The expanded detail of a channel or transport row: label / value lines, then the attributes link. */
 function snDetailHtml(rows, T, config, hass) {
-  const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  const esc = snEsc;
   const lang = (config && config.language) || (hass && hass.language) || "en";
   const L = SN_OPT_LABELS[String(lang).slice(0, 2)] || SN_OPT_LABELS.en;
   const lines = rows.filter((r) => r && r[1] !== undefined && r[1] !== null && r[1] !== "").map(([k, v, opt, cls]) =>
@@ -2041,7 +2140,7 @@ const SN_SWITCH_CSS = `
   .sw input:checked + .sl::after { left: 21px; }
 `;
 
-class SupernotifyControlCard extends HTMLElement {
+class SupernotifyControlCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("control");
@@ -2072,31 +2171,14 @@ class SupernotifyControlCard extends HTMLElement {
     this._collapsed = null; // lazily loaded from localStorage
   }
 
-  set hass(hass) {
-    const raw = hass;
-    const tr = this._snTr || (this._snTr = snTracker());
-    const changed = snChanged(tr, raw);
-    hass = snTrackedHass(raw, tr);
-    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
-    if (!this._rendered || wasDark !== this._dark) this._render();
-    else if (changed) this._update();
+  _onHass(hass, fresh, changed) {
+    super._onHass(hass, fresh, changed);
     if (this._config.last_notification) {
       const cnt = this._st("sensor.supernotify_notifications");
       if (cnt !== this._lastCount) { this._lastCount = cnt; this._refreshLast(); }
     }
     // first hass after connect: connectedCallback may have run without hass
     if (!this._booted) { this._booted = true; this._refreshSnoozes(); }
-  }
-
-  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
-  // `grid_options:` in the dashboard still wins.
-  getGridOptions() {
-    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -2217,14 +2299,7 @@ class SupernotifyControlCard extends HTMLElement {
   }
 
   _activeScenarios() {
-    if (!this._hass) return null;
-    const ids = Object.keys(this._hass.states).filter((e) =>
-      e.startsWith("binary_sensor.supernotify_scenario_")
-    );
-    if (!ids.length) return null;
-    const known = ids.filter((e) => !["unknown", "unavailable"].includes(this._st(e)));
-    if (!known.length) return null; // scenario state not exposed yet
-    return known.filter((e) => snScenarioActive(this._hass, e));
+    return snActiveScenarioIds(this._hass);
   }
 
   async _snooze() {
@@ -2246,16 +2321,8 @@ class SupernotifyControlCard extends HTMLElement {
     // When a snooze is already active, tapping the tile clears it instead.
     const T = snT(this._config, this._hass);
     if (snLiveSnoozes(this._snoozes).length) {
-      try {
-        await this._hass.callWS({
-          type: "call_service", domain: "supernotify", service: "clear_snoozes",
-          service_data: {}, return_response: true,
-        });
-        this._toast(T.cleared);
-        this._snzSpeak(this._snzText("resume_all"));
-      } catch (e) {
-        this._toast(`✖ ${(e && e.message) || e}`);
-      }
+      await this._resumeAll();
+      return;
     } else {
       const minutes = this._config.snooze_minutes || 30;
       const action =
@@ -2294,10 +2361,6 @@ class SupernotifyControlCard extends HTMLElement {
   }
 
   // ── palette ────────────────────────────────────────────────────────────
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
-  }
-
   // ── render ─────────────────────────────────────────────────────────────
   _render() {
     if (!this._hass) return;
@@ -2426,7 +2489,7 @@ class SupernotifyControlCard extends HTMLElement {
           <button id="announceBtn">${snT(this._config, this._hass).send}</button>
         </div>` : ""}
         <div id="groups"></div>
-        ${this._config && this._config.show_version ? `<div class="ver">supernotify-control-card v${SN_CARD_VERSIONS.control}</div>` : ""}
+        ${snVer(this._config, "control", p)}
         <div class="toast" id="toast"></div>
       </ha-card>`, this && this._config);
     const abtn = this.shadowRoot.getElementById("announceBtn");
@@ -2452,7 +2515,7 @@ class SupernotifyControlCard extends HTMLElement {
     if (!el) return;
     const c = this._config;
     const T = snT(c, this._hass);
-    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const n = this._last;
     const titleFromEntity = c.last_notification_entity ? this._st(c.last_notification_entity) : undefined;
     const title = snNotifTitle(n) || (titleFromEntity && !["unknown", "unavailable", ""].includes(titleFromEntity) ? titleFromEntity : "");
@@ -2461,24 +2524,15 @@ class SupernotifyControlCard extends HTMLElement {
       try { msg = msg.replace(new RegExp(c.last_notification_strip, "m"), "").trim(); } catch (e) { /* bad regex: ignore */ }
     }
     if (!n && !title) { el.innerHTML = snIconify(`<div class="lm" style="opacity:.7">${T.no_notif}</div>`, this && this._config); return; }
-    const pp = this._palette();
-    const prioCol = { critical: pp.crit, high: pp.warn, medium: pp.brandD, low: pp.muted, minimum: pp.muted };
     const prio = n && n.priority
-      ? `<span class="lb" style="color:${prioCol[n.priority] || "inherit"}">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "";
+      ? `<span class="lb" style="color:${snPrioColor(this._palette(), n.priority) || "inherit"}">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "";
     let when = "";
     if (n && n.created) { const d = new Date(n.created); if (!isNaN(d)) when = `<span class="lb mut">🕐 ${esc(snAgo(d, T))}</span>`; }
     const chips = [];
-    const okNames = [], errNames = [];
-    let skipped = 0;
-    if (n && n.deliveries && typeof n.deliveries === "object") {
-      for (const [name, d] of Object.entries(n.deliveries)) {
-        const ok = d && Array.isArray(d.success) && d.success.length;
-        const err = d && Array.isArray(d.error) && d.error.length;
-        if (!ok && !err) { skipped++; continue; }
-        const label = snDeliveryAlias(this._hass, name) || name;
-        (err ? errNames : okNames).push(label);
-        if (c.last_channels) chips.push(`<span class="lb ${err ? "err" : "ok"}">${err ? "✖" : "✔"} ${esc(label)}</span>`);
-      }
+    const { ok: okNames, err: errNames, skipped } = snLastDeliveries(this._hass, n);
+    if (c.last_channels) {
+      for (const l of okNames) chips.push(`<span class="lb ok">✔ ${esc(l)}</span>`);
+      for (const l of errNames) chips.push(`<span class="lb err">✖ ${esc(l)}</span>`);
     }
     // 0.52.0: counts with the channel names in the tooltip (`last_channels: true` = one chip each)
     if (!c.last_channels) {
@@ -2622,7 +2676,7 @@ class SupernotifyControlCard extends HTMLElement {
     if (!this._snzOpen) { el.hidden = true; el.innerHTML = ""; return; }
     el.hidden = false;
     const T = snT(this._config, this._hass);
-    const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const esc = snEsc;
     const st = this._snz || (this._snz = { what: "NONCRITICAL", target: "", who: "EVERYONE", min: this._config.snooze_minutes || 30 });
     const me = this._myPerson();
     const dels = snEntityRows(this._hass, "delivery").filter((d) => !/^default_/i.test(d.name));
@@ -2687,14 +2741,7 @@ class SupernotifyControlCard extends HTMLElement {
       };
     });
     const all = el.querySelector("#snzAll");
-    if (all) all.onclick = async () => {
-      try {
-        await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
-        this._toast(T.cleared);
-        this._snzSpeak(this._snzText("resume_all"));
-      } catch (e) { this._toast(`✖ ${(e && e.message) || e}`); }
-      snEnquireBust(800);
-    };
+    if (all) all.onclick = () => this._resumeAll();
   }
 
   /**
@@ -2779,6 +2826,19 @@ class SupernotifyControlCard extends HTMLElement {
       const res = (r && r.response) || {};
       const said = (((res.speech || {}).plain || {}).speech) || "";
       this._toast(res.response_type === "error" ? T.snz_voice_off : said || T.snz_done);
+    } catch (e) {
+      this._toast(`✖ ${(e && e.message) || e}`);
+    }
+    snEnquireBust(800);
+  }
+
+  /** clear_snoozes, said out loud with snooze_announce (0.64.0: one copy for tile and panel). */
+  async _resumeAll() {
+    const T = snT(this._config, this._hass);
+    try {
+      await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
+      this._toast(T.cleared);
+      this._snzSpeak(this._snzText("resume_all"));
     } catch (e) {
       this._toast(`✖ ${(e && e.message) || e}`);
     }
@@ -2892,7 +2952,7 @@ window.customCards.push({
  * Live Scenarios) over the polled enquire_active_scenarios count.
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyOverviewCard extends HTMLElement {
+class SupernotifyOverviewCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("overview");
@@ -2914,27 +2974,10 @@ class SupernotifyOverviewCard extends HTMLElement {
     this._rendered = false;
   }
 
-  set hass(hass) {
-    const raw = hass;
-    const tr = this._snTr || (this._snTr = snTracker());
-    const changed = snChanged(tr, raw);
-    hass = snTrackedHass(raw, tr);
-    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
-    if (!this._rendered || wasDark !== this._dark) this._render();
-    else if (changed) this._update();
+  _onHass(hass, fresh, changed) {
+    super._onHass(hass, fresh, changed);
     // connectedCallback may have run before hass: first data now, not at the first poll
     if (!this._booted) { this._booted = true; this._refresh(); }
-  }
-
-  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
-  // `grid_options:` in the dashboard still wins.
-  getGridOptions() {
-    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -2996,29 +3039,13 @@ class SupernotifyOverviewCard extends HTMLElement {
     if (this._onArchive) window.removeEventListener("supernotify-archive", this._onArchive);
   }
 
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
-  }
-
-  _st(id) {
-    const s = this._hass && this._hass.states[id];
-    return s ? s.state : undefined;
-  }
-
   // SuperNotify >= 2.4.0 (Live Scenarios): binary_sensor.supernotify_scenario_*
   // reports a real, reactive on/off state — read it directly instead of
   // waiting for the next enquire_active_scenarios poll. Returns null on
   // older versions (state stuck at "unknown"), so the caller falls back
   // to the polled count from _refresh().
   _activeScenarios() {
-    if (!this._hass) return null;
-    const ids = Object.keys(this._hass.states).filter((e) =>
-      e.startsWith("binary_sensor.supernotify_scenario_")
-    );
-    if (!ids.length) return null;
-    const known = ids.filter((e) => !["unknown", "unavailable"].includes(this._st(e)));
-    if (!known.length) return null;
-    return known.filter((e) => snScenarioActive(this._hass, e));
+    return snActiveScenarioIds(this._hass);
   }
 
   async _ws(service, data) {
@@ -3157,14 +3184,14 @@ class SupernotifyOverviewCard extends HTMLElement {
         ${this._config.occupancy === false ? "" : `<div class="sec">${snT(this._config, this._hass).occ_title}</div><div id="occ">—</div>`}
         <div class="sec">${snT(this._config, this._hass).act_scen}</div>
         <div id="scen">—</div>
-        ${this._config && this._config.show_version ? `<div class="ver">supernotify-overview-card v${SN_CARD_VERSIONS.overview}</div>` : ""}
+        ${snVer(this._config, "overview", p)}
       </ha-card>`, this && this._config);
     this._update();
   }
 
   _update() {
     if (!this.shadowRoot) return;
-    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const sent = this._st("sensor.supernotify_notifications");
     const fail = this._failures();
     const failures = fail.n;
@@ -3240,20 +3267,11 @@ class SupernotifyOverviewCard extends HTMLElement {
       const n = this._last;
       const title = snPlainMsg(snNotifTitle(n));
       const msg = snPlainMsg(n.message).slice(0, 600);
-      const prioCol = { critical: p.crit, high: p.warn, medium: p.brandD, low: p.muted, minimum: p.muted }[n.priority];
+      const prioCol = snPrioColor(p, n.priority);
       const d = n.created ? new Date(n.created) : null;
       const meta = [n.priority ? `<span style="color:${prioCol || p.muted};font-weight:600">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "",
         d && !isNaN(d) ? `🕐 ${esc(snAgo(d, T))}` : ""].filter(Boolean).join(" · ");
-      const okN = [], errN = [];
-      let skipped = 0;
-      if (n.deliveries && typeof n.deliveries === "object") {
-        for (const [name, dd] of Object.entries(n.deliveries)) {
-          const ok = dd && Array.isArray(dd.success) && dd.success.length;
-          const err = dd && Array.isArray(dd.error) && dd.error.length;
-          if (!ok && !err) { skipped++; continue; }
-          (err ? errN : okN).push(snDeliveryAlias(this._hass, name) || name);
-        }
-      }
+      const { ok: okN, err: errN, skipped } = snLastDeliveries(this._hass, n);
       const chips = [];
       if (okN.length) chips.push(`<span class="badge b-ok" title="${esc(okN.join(", "))}">✔ ${snPl(T, "ln_delivered", okN.length)}</span>`);
       else if (+n.delivered > 0) chips.push(`<span class="badge b-ok">✔ ${snPl(T, "ln_delivered", +n.delivered)}</span>`);
@@ -3314,7 +3332,7 @@ window.customCards.push({
  * (input_number). Mirrors the prototype's "Fasce" page.
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyBandsCard extends HTMLElement {
+class SupernotifyBandsCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("bands");
@@ -3341,38 +3359,8 @@ class SupernotifyBandsCard extends HTMLElement {
     this._rendered = false;
   }
 
-  set hass(hass) {
-    const raw = hass;
-    const tr = this._snTr || (this._snTr = snTracker());
-    const changed = snChanged(tr, raw);
-    hass = snTrackedHass(raw, tr);
-    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
-    if (!this._rendered || wasDark !== this._dark) this._render();
-    else if (changed) this._update();
-  }
-
-  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
-  // `grid_options:` in the dashboard still wins.
-  getGridOptions() {
-    return { columns: 12, min_columns: 6 };
-  }
-
   getCardSize() {
     return 1 + Object.keys(this._config.bands).length;
-  }
-
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
-  }
-
-  _st(id) {
-    const s = this._hass && this._hass.states[id];
-    return s ? s.state : undefined;
   }
 
   _bands() {
@@ -3487,7 +3475,7 @@ class SupernotifyBandsCard extends HTMLElement {
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         <div class="hint">🔇 ${snT(this._config, this._hass).mute_hint}</div>
-        ${this._config && this._config.show_version ? `<div class="ver">supernotify-bands-card v${SN_CARD_VERSIONS.bands}</div>` : ""}
+        ${snVer(this._config, "bands", p)}
       </ha-card>`, this && this._config);
     this._update();
   }
@@ -3626,7 +3614,7 @@ function snSelectionLabel(sel, T) {
     fallback: T.fallback, fallback_on_error: T.fallback_err }[sel];
 }
 
-class SupernotifyDeliveriesCard extends HTMLElement {
+class SupernotifyDeliveriesCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("deliveries");
@@ -3642,33 +3630,8 @@ class SupernotifyDeliveriesCard extends HTMLElement {
     this._rendered = false;
   }
 
-  set hass(hass) {
-    const raw = hass;
-    const tr = this._snTr || (this._snTr = snTracker());
-    const changed = snChanged(tr, raw);
-    hass = snTrackedHass(raw, tr);
-    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
-    if (!this._rendered || wasDark !== this._dark) this._render();
-    else if (changed) this._update();
-  }
-
-  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
-  // `grid_options:` in the dashboard still wins.
-  getGridOptions() {
-    return { columns: 12, min_columns: 6 };
-  }
-
   getCardSize() {
     return 8;
-  }
-
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _deliveries() {
@@ -3679,12 +3642,6 @@ class SupernotifyDeliveriesCard extends HTMLElement {
     // enabled first, then alphabetical — like the prototype list
     out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
     return out;
-  }
-
-  _moreInfo(entityId) {
-    this.dispatchEvent(new CustomEvent("hass-more-info", {
-      detail: { entityId }, bubbles: true, composed: true,
-    }));
   }
 
   _render() {
@@ -3744,7 +3701,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        ${this._config && this._config.show_version ? `<div class="ver">supernotify-deliveries-card v${SN_CARD_VERSIONS.deliveries}</div>` : ""}
+        ${snVer(this._config, "deliveries", p)}
       </ha-card>`, this && this._config);
     this._update();
   }
@@ -3780,7 +3737,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
 
   _update() {
     if (!this.shadowRoot) return;
-    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const T = snT(this._config, this._hass);
     const p = this._palette();
     const dels = this._deliveries();
@@ -3898,7 +3855,7 @@ window.customCards.push({
  * live on/off switch. Tap a row for full attributes (more-info).
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyTransportsCard extends HTMLElement {
+class SupernotifyTransportsCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("transports");
@@ -3913,45 +3870,14 @@ class SupernotifyTransportsCard extends HTMLElement {
     this._rendered = false;
   }
 
-  set hass(hass) {
-    const raw = hass;
-    const tr = this._snTr || (this._snTr = snTracker());
-    const changed = snChanged(tr, raw);
-    hass = snTrackedHass(raw, tr);
-    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
-    if (!this._rendered || wasDark !== this._dark) this._render();
-    else if (changed) this._update();
-  }
-
-  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
-  // `grid_options:` in the dashboard still wins.
-  getGridOptions() {
-    return { columns: 12, min_columns: 6 };
-  }
-
   getCardSize() {
     return 6;
-  }
-
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _transports() {
     const out = snEntityRows(this._hass, "transport");
     out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
     return out;
-  }
-
-  _moreInfo(entityId) {
-    this.dispatchEvent(new CustomEvent("hass-more-info", {
-      detail: { entityId }, bubbles: true, composed: true,
-    }));
   }
 
   _render() {
@@ -3991,14 +3917,14 @@ class SupernotifyTransportsCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        ${this._config && this._config.show_version ? `<div class="ver">supernotify-transports-card v${SN_CARD_VERSIONS.transports}</div>` : ""}
+        ${snVer(this._config, "transports", p)}
       </ha-card>`, this && this._config);
     this._update();
   }
 
   _update() {
     if (!this.shadowRoot) return;
-    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const T = snT(this._config, this._hass);
     const p = this._palette();
     const trs = this._transports();
@@ -4089,7 +4015,7 @@ window.customCards.push({
  * devices, delivery overrides) and enabled badge. Tap for full attributes.
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyRecipientsCard extends HTMLElement {
+class SupernotifyRecipientsCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("recipients");
@@ -4104,33 +4030,8 @@ class SupernotifyRecipientsCard extends HTMLElement {
     this._rendered = false;
   }
 
-  set hass(hass) {
-    const raw = hass;
-    const tr = this._snTr || (this._snTr = snTracker());
-    const changed = snChanged(tr, raw);
-    hass = snTrackedHass(raw, tr);
-    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
-    if (!this._rendered || wasDark !== this._dark) this._render();
-    else if (changed) this._update();
-  }
-
-  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
-  // `grid_options:` in the dashboard still wins.
-  getGridOptions() {
-    return { columns: 12, min_columns: 6 };
-  }
-
   getCardSize() {
     return 4;
-  }
-
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _recipients() {
@@ -4140,12 +4041,6 @@ class SupernotifyRecipientsCard extends HTMLElement {
     const out = snEntityRows(this._hass, "recipient");
     out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
     return out;
-  }
-
-  _moreInfo(entityId) {
-    this.dispatchEvent(new CustomEvent("hass-more-info", {
-      detail: { entityId }, bubbles: true, composed: true,
-    }));
   }
 
   _render() {
@@ -4194,14 +4089,14 @@ class SupernotifyRecipientsCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        ${this._config && this._config.show_version ? `<div class="ver">supernotify-recipients-card v${SN_CARD_VERSIONS.recipients}</div>` : ""}
+        ${snVer(this._config, "recipients", p)}
       </ha-card>`, this && this._config);
     this._update();
   }
 
   _update() {
     if (!this.shadowRoot) return;
-    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const T = snT(this._config, this._hass);
     const p = this._palette();
     const recs = this._recipients();
@@ -4370,7 +4265,7 @@ const SN_SCENARIO_ICONS = {
   alarm_disarmed: "🛡️", alarm_armed: "🔒",
 };
 
-class SupernotifyScenariosCard extends HTMLElement {
+class SupernotifyScenariosCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("scenarios");
@@ -4385,27 +4280,10 @@ class SupernotifyScenariosCard extends HTMLElement {
     this._rendered = false;
   }
 
-  set hass(hass) {
-    const raw = hass;
-    const tr = this._snTr || (this._snTr = snTracker());
-    const changed = snChanged(tr, raw);
-    hass = snTrackedHass(raw, tr);
-    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
-    if (!this._rendered || wasDark !== this._dark) this._render();
-    else if (changed) this._update();
+  _onHass(hass, fresh, changed) {
+    super._onHass(hass, fresh, changed);
     // connectedCallback may have run before hass: first data now, not at the first poll
     if (!this._booted) { this._booted = true; this._refresh(); }
-  }
-
-  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
-  // `grid_options:` in the dashboard still wins.
-  getGridOptions() {
-    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -4432,10 +4310,6 @@ class SupernotifyScenariosCard extends HTMLElement {
       this._active = (r && r.response && r.response.scenarios) || [];
     } catch (e) { /* retry on next poll */ }
     if (this._rendered) this._update();
-  }
-
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _scenarios() {
@@ -4476,12 +4350,6 @@ class SupernotifyScenariosCard extends HTMLElement {
     const known = all.filter((s) => !["unknown", "unavailable"].includes(s.state));
     if (!known.length) return null;
     return known.filter((s) => s.state === "on" && s.enabled).map((s) => s.name);
-  }
-
-  _moreInfo(entityId) {
-    this.dispatchEvent(new CustomEvent("hass-more-info", {
-      detail: { entityId }, bubbles: true, composed: true,
-    }));
   }
 
   _render() {
@@ -4528,13 +4396,13 @@ class SupernotifyScenariosCard extends HTMLElement {
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        ${this._config && this._config.show_version ? `<div class="ver">supernotify-scenarios-card v${SN_CARD_VERSIONS.scenarios}</div>` : ""}
+        ${snVer(this._config, "scenarios", p)}
       </ha-card>`, this && this._config);
     this._update();
   }
 
   _rowHtml(s, i, active) {
-    const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const T = snT(this._config, this._hass);
     const isAct = active.includes(s.name);
     const em = SN_SCENARIO_ICONS[s.name] || "🎬";
@@ -4649,7 +4517,7 @@ window.customCards.push({
  * the engine merge semantics.
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifySimulatorCard extends HTMLElement {
+class SupernotifySimulatorCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("simulator");
@@ -4665,13 +4533,10 @@ class SupernotifySimulatorCard extends HTMLElement {
     this._sel = null;
   }
 
-  set hass(hass) {
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
-    if (!this._rendered || wasDark !== this._dark) this._render();
+  static snTracked = false;
+
+  _onHass(hass, fresh) {
+    if (fresh) this._render();
     // connectedCallback may have run before hass: first data now, not at the first poll
     if (!this._booted) { this._booted = true; this._refresh(); }
   }
@@ -4711,10 +4576,6 @@ class SupernotifySimulatorCard extends HTMLElement {
       if (this._sel === null) this._sel = new Set(act.scenarios || []);
       this._simulate();
     } catch (e) { /* supernotify may still be loading */ }
-  }
-
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _render() {
@@ -4759,14 +4620,14 @@ class SupernotifySimulatorCard extends HTMLElement {
         <div class="sec">${snT(this._config, this._hass).sim_fire}</div>
         <div id="result">—</div>
         <div class="hint">${snT(this._config, this._hass).sim_hint}</div>
-        ${this._config && this._config.show_version ? `<div class="ver">supernotify-simulator-card v${SN_CARD_VERSIONS.simulator}</div>` : ""}
+        ${snVer(this._config, "simulator", p)}
       </ha-card>`, this && this._config);
     this._refresh();
   }
 
   _simulate() {
     if (!this.shadowRoot) return;
-    const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const chips = this.shadowRoot.getElementById("chips");
     const names = Object.keys(this._byScen || {}).sort();
     chips.innerHTML = snIconify(names.map((n) =>
@@ -4838,7 +4699,7 @@ window.customCards.push({
  * chips, live phone preview, send via notify.supernotify.
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyComposerCard extends HTMLElement {
+class SupernotifyComposerCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("composer");
@@ -4855,13 +4716,10 @@ class SupernotifyComposerCard extends HTMLElement {
     this._targetValue = {};
   }
 
-  set hass(hass) {
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
-    if (!this._rendered || wasDark !== this._dark) this._render();
+  static snTracked = false;
+
+  _onHass(hass, fresh) {
+    if (fresh) this._render();
     else {
       if (this._targetSelEl) this._targetSelEl.hass = hass;
       this._syncDry();
@@ -4901,10 +4759,6 @@ class SupernotifyComposerCard extends HTMLElement {
     if (!has) this.shadowRoot.getElementById("dryBox").style.display = "none";
   }
 
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
-  }
-
   _deliveries() {
     // name + transport (the latter needed to tell whether an explicitly
     // picked channel actually resolves an area/floor/label target).
@@ -4921,7 +4775,7 @@ class SupernotifyComposerCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
     const T = snT(this._config, this._hass);
-    const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; container-type: inline-size; }
@@ -5046,7 +4900,7 @@ class SupernotifyComposerCard extends HTMLElement {
         </div>
         <div class="dryBox" id="dryBox" style="display:none"></div>
         <div class="toast" id="toast"></div>
-        ${this._config && this._config.show_version ? `<div style="text-align:right;font-size:10px;color:${p.muted};opacity:.7;margin-top:8px">supernotify-composer-card v${SN_CARD_VERSIONS.composer}</div>` : ""}
+        ${snVer(this._config, "composer", p)}
       </ha-card>`, this && this._config);
     const sr = this.shadowRoot;
     const upd = () => {
@@ -5069,7 +4923,7 @@ class SupernotifyComposerCard extends HTMLElement {
     sr.getElementById("cam").addEventListener("change", upd);
     this._adv = { apply_scenarios: new Set(), require_scenarios: new Set(), constrain_scenarios: new Set() };
     // 0.63.0: rows for the buttons and the per-channel settings
-    const escA = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const escA = snEsc;
     const addRow = (box, html) => {
       const div = document.createElement("div");
       div.innerHTML = html;
@@ -5308,7 +5162,7 @@ class SupernotifyComposerCard extends HTMLElement {
   // archive keeps), read through snArchiveDetail like the why-card does.
   _renderDry(doc, noDupeCheck) {
     const T = snT(this._config, this._hass);
-    const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const n = snIsObj(doc) && (doc.deliveries || doc.outcome || doc.id) ? snArchiveDetail(doc) : null;
     const box = this.shadowRoot.getElementById("dryBox");
     if (!n) {
@@ -5396,7 +5250,7 @@ window.customCards.push({
  *   style         "supernotify" (default) | "theme"
  *   language      override, else follows hass.language
  * ==================================================================== */
-class SupernotifyAutomationsCard extends HTMLElement {
+class SupernotifyAutomationsCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("automations");
@@ -5418,26 +5272,10 @@ class SupernotifyAutomationsCard extends HTMLElement {
     this._onlyDisabled = false;
   }
 
-  set hass(hass) {
-    const raw = hass;
-    const tr = this._snTr || (this._snTr = snTracker());
-    const changed = snChanged(tr, raw);
-    hass = snTrackedHass(raw, tr);
-    queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
+  _onHass(hass, fresh, changed) {
     if (!this._manifest && !this._loading && !this._err) this._load();
-    if (!this._rendered || wasDark !== this._dark) this._render();
+    if (fresh) this._render();
     else if (changed) this._updateRows();
-  }
-
-  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
-  // `grid_options:` in the dashboard still wins.
-  getGridOptions() {
-    return { columns: 12, min_columns: 6 };
   }
 
   getCardSize() {
@@ -5460,13 +5298,8 @@ class SupernotifyAutomationsCard extends HTMLElement {
     if (this._hass) this._render();
   }
 
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
-  }
-
   _esc(s) {
-    return String(s == null ? "" : s).replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    return snEsc(s);
   }
 
   _rel(iso) {
@@ -5505,12 +5338,6 @@ class SupernotifyAutomationsCard extends HTMLElement {
   _toggle(ent, on) {
     this._hass.callService("automation", on ? "turn_on" : "turn_off",
       { entity_id: ent });
-  }
-
-  _moreInfo(entityId) {
-    this.dispatchEvent(new CustomEvent("hass-more-info", {
-      detail: { entityId }, bubbles: true, composed: true,
-    }));
   }
 
   _render() {
@@ -5757,7 +5584,7 @@ Object.assign(SN_STRINGS.it, SN_STATS_STRINGS.it);
 
 const SN_PRIO_COLORS = { critical: "#e23c3c", high: "#f0a020", medium: "#03a9f4", low: "#8fa1b4", minimum: "#c3ccd6" };
 
-class SupernotifyStatsCard extends HTMLElement {
+class SupernotifyStatsCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("stats");
@@ -5801,14 +5628,10 @@ class SupernotifyStatsCard extends HTMLElement {
     this._load(true);
   }
 
-  set hass(hass) {
-    const first = !this._hass;
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
-    if (!this._rendered || wasDark !== this._dark) this._render();
+  static snTracked = false;
+
+  _onHass(hass, fresh, changed, first) {
+    if (fresh) this._render();
     else this._updateVersions();
     if (first) this._load();
   }
@@ -5844,10 +5667,6 @@ class SupernotifyStatsCard extends HTMLElement {
 
   getCardSize() {
     return 12;
-  }
-
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
   }
 
   // ── data ──────────────────────────────────────────────────────────────
@@ -6098,7 +5917,7 @@ class SupernotifyStatsCard extends HTMLElement {
   }
 
   _esc(s) {
-    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    return snEsc(s);
   }
 
   _t(key, vars) {
@@ -6306,7 +6125,7 @@ window.customCards.push({
 });
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");
-class SupernotifyArchiveCard extends HTMLElement {
+class SupernotifyArchiveCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("archive");
@@ -6329,23 +6148,20 @@ class SupernotifyArchiveCard extends HTMLElement {
     this._rendered = false;
   }
 
-  set hass(hass) {
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
+  static snTracked = false;
+
+  _onHass(hass, fresh) {
     if (snArchiveNative(hass, this._config)) {
       // the store redraws this card through the "supernotify-archive" event
       snArchiveStore.ensure(hass, this._config.limit, this._config.trigger_entity);
-      if (!this._rendered || wasDark !== this._dark) this._render();
+      if (fresh) this._render();
       else if (this._storeVer !== snArchiveStore.version) { this._renderChips(); this._renderList(); }
       this._storeVer = snArchiveStore.version;
       return;
     }
     const st = hass.states[this._config.entity];
     const stamp = st ? st.last_updated : "none";
-    if (!this._rendered || wasDark !== this._dark) this._render();
+    if (fresh) this._render();
     else if (stamp !== this._stamp) this._renderList();
     this._stamp = stamp;
   }
@@ -6376,10 +6192,6 @@ class SupernotifyArchiveCard extends HTMLElement {
   _loc() { return (this._config.language || (this._hass && this._hass.language) || undefined); }
 
   _T() { return SN_ARCH_STRINGS[((this._config.language || (this._hass && this._hass.language) || "en").split("-")[0])] || SN_ARCH_STRINGS.en; }
-
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
-  }
 
   /**
    * L'indice pubblicato negli attributi di sensor.supernotify_archivio dal
@@ -6489,7 +6301,7 @@ class SupernotifyArchiveCard extends HTMLElement {
         </div>
         <div class="meta" id="meta"></div>
         <div id="list" class="flow"${this._config.max_height ? ` style="max-height:${String(this._config.max_height).replace(/[<>"]/g, "")};overflow-y:auto;padding-right:4px"` : ""}></div>
-        ${this._config && this._config.show_version ? `<div class="ver">supernotify-archive-card v${SN_CARD_VERSIONS.archive}</div>` : ""}
+        ${snVer(this._config, "archive", p)}
       </ha-card>`, this && this._config);
     const q = this.shadowRoot.getElementById("q");
     q.addEventListener("input", () => { this._q = q.value.toLowerCase(); this._renderList(); });
@@ -6517,7 +6329,7 @@ class SupernotifyArchiveCard extends HTMLElement {
     if (!el) return;
     const T = this._T();
     const p = this._palette();
-    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const idx = this._index();
     const meta = this.shadowRoot.getElementById("meta");
     if (!idx) {
@@ -6667,7 +6479,7 @@ const SN_ARCH_STRINGS = {
  * Other cards open a notification here with snWhyOpen(id).
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyWhyCard extends HTMLElement {
+class SupernotifyWhyCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("why");
@@ -6689,22 +6501,19 @@ class SupernotifyWhyCard extends HTMLElement {
     this._rendered = false;
   }
 
-  set hass(hass) {
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
+  static snTracked = false;
+
+  _onHass(hass, fresh) {
     if (snArchiveNative(hass, this._config)) {
       snArchiveStore.ensure(hass, Math.max(this._config.limit, 40), this._config.trigger_entity);
-      if (!this._rendered || wasDark !== this._dark) this._render();
+      if (fresh) this._render();
       else if (this._storeVer !== snArchiveStore.version) this._renderList();
       this._storeVer = snArchiveStore.version;
       return;
     }
     const st = hass.states[this._config.entity];
     const stamp = st ? st.last_updated : "none";
-    if (!this._rendered || wasDark !== this._dark) this._render();
+    if (fresh) this._render();
     else if (stamp !== this._stamp) this._renderList();
     this._stamp = stamp;
   }
@@ -6747,10 +6556,6 @@ class SupernotifyWhyCard extends HTMLElement {
   }
 
   _loc() { return this._config.language || (this._hass && this._hass.language) || undefined; }
-
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
-  }
 
   _index() {
     if (this._hass && snArchiveNative(this._hass, this._config)) return snArchiveStore.getIndex();
@@ -6832,7 +6637,7 @@ class SupernotifyWhyCard extends HTMLElement {
         <h3>🔎 ${T.title}</h3>
         <div class="list" id="list"></div>
         <div class="det" id="det"${this._config.max_height ? ` style="max-height:${String(this._config.max_height).replace(/[<>"]/g, "")};overflow-y:auto;padding-right:4px"` : ""}><div class="empty">${T.pick}</div></div>
-        ${this._config && this._config.show_version ? `<div class="ver">supernotify-why-card v${SN_CARD_VERSIONS.why}</div>` : ""}
+        ${snVer(this._config, "why", p)}
       </ha-card>`, this && this._config);
     this._renderList();
     if (this._sel) this._renderDetail();
@@ -6851,7 +6656,7 @@ class SupernotifyWhyCard extends HTMLElement {
     const el = this.shadowRoot && this.shadowRoot.getElementById("list");
     if (!el) return;
     const T = this._T();
-    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const idx = this._index();
     if (!idx) {
       el.innerHTML = snIconify(`<div class="empty">${T.no_sensor} <code>${esc(this._config.entity)}</code></div>`, this && this._config);
@@ -7011,7 +6816,7 @@ class SupernotifyWhyCard extends HTMLElement {
     const el = this.shadowRoot && this.shadowRoot.getElementById("det");
     if (!el) return;
     const T = this._T();
-    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     if (!this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.pick}</div>`, this && this._config); return; }
     if (this._loading === this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this && this._config); return; }
     const res = this._cache.get(this._sel) || {};
@@ -7166,7 +6971,7 @@ SupernotifyWhyCard.prototype._sentBy = async function (n) {
   // (logbook), else the person of the user that made the call
   const T = this._T();
   const put = (html) => { const el = this.shadowRoot && this.shadowRoot.getElementById("sentBy"); if (el) el.innerHTML = snIconify(html, this._config); };
-  const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const esc = snEsc;
   this._sentCache = this._sentCache || new Map();
   let res = this._sentCache.get(n.id);
   if (res === undefined) {
@@ -7342,7 +7147,7 @@ const SN_TOOLS_STRINGS = {
   },
 };
 
-class SupernotifyToolsCard extends HTMLElement {
+class SupernotifyToolsCard extends SnCard {
   static getConfigForm() {
     return snForm("tools");
   }
@@ -7356,23 +7161,14 @@ class SupernotifyToolsCard extends HTMLElement {
     this._rendered = false;
   }
 
-  set hass(hass) {
-    const wasDark = this._dark;
-    this._hass = hass;
-    this._dark = !!(hass.themes && hass.themes.darkMode);
-    if (!this._rendered || wasDark !== this._dark) this._render();
-  }
+  static snTracked = false;
 
-  getGridOptions() {
-    return { columns: 12, min_columns: 6 };
+  _onHass(hass, fresh) {
+    if (fresh) this._render();
   }
 
   getCardSize() {
     return 6;
-  }
-
-  _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
   }
 
   _T() {
@@ -7394,7 +7190,7 @@ class SupernotifyToolsCard extends HTMLElement {
     const p = this._palette();
     const T = this._T();
     const c = this._config;
-    const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const esc = snEsc;
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
@@ -7443,7 +7239,7 @@ class SupernotifyToolsCard extends HTMLElement {
         <div class="qs">${SN_TOOLS_ENQ.map(([svc, key]) => `<button class="b q" data-q="${svc}">${esc(T[key])}</button>`).join("")}</div>
         <div id="out"></div>
         <a class="lnk" href="/config/integrations/integration/supernotify">⚙️ ${esc(T.settings)} ›</a>
-        ${c.show_version ? `<div class="ver">supernotify-tools-card v${SN_CARD_VERSIONS.tools}</div>` : ""}
+        ${snVer(c, "tools", p)}
       </ha-card>`, c);
     const $ = (id) => this.shadowRoot.getElementById(id);
     const say = (id, text, cls) => { const el = $("r_" + id); if (el) { el.className = "res " + (cls || ""); el.textContent = text; } };
@@ -7499,7 +7295,7 @@ class SupernotifyToolsCard extends HTMLElement {
   async _ask(svc) {
     const T = this._T();
     const out = this.shadowRoot.getElementById("out");
-    const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     this.shadowRoot.querySelectorAll(".q").forEach((b) => b.classList.toggle("on", b.dataset.q === svc));
     const title = T[(SN_TOOLS_ENQ.find(([s]) => s === svc) || [])[1]] || svc;
     out.innerHTML = `<div class="out"><div class="oh"><b>${esc(title)}</b></div><div class="res">${esc(T.running)}</div></div>`;
@@ -7526,7 +7322,7 @@ class SupernotifyToolsCard extends HTMLElement {
   /** A JSON value as a readable tree: scalars inline, objects and lists foldable (first level open). */
   _tree(v, depth) {
     const T = this._T();
-    const esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = snEsc;
     const scalar = (x) => x === null || x === undefined ? `<span class="n">—</span>`
       : typeof x === "boolean" ? `<span class="v">${x ? "✔" : "✖"} ${x}</span>`
       : `<span class="v">${esc(x)}</span>`;

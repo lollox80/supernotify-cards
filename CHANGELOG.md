@@ -3,6 +3,17 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.64.0] - 2026-10-04
+
+Code cleanup: nothing changes on screen (the README screenshots match pixel for pixel, apart from the clock).
+
+### Changed
+- Every card extends one base class: the hass handling, colours, theme, attribute dialog and grid
+  size were copied in each card. A fix there now reaches all 14 cards.
+- One HTML escape function instead of 19 copies; shared helpers for the version footer, the active
+  scenarios and the last notification (control and overview card); one "resume everything" in the
+  control card. About 200 lines less.
+
 ## [0.63.2] - 2026-10-04
 
 ### Fixed
