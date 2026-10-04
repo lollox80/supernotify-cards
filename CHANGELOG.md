@@ -3,6 +3,13 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.75.1] - 2026-10-05
+
+### Fixed
+- Pauses on SuperNotify 2.13.0: the snooze action became three, `supernotify.snooze` (minutes),
+  `supernotify.silence` (until resumed) and `supernotify.unsnooze`, with no `command`. The cards
+  call the one that fits (0.74.0 sent `command` and SuperNotify 2.13.0 refused it).
+
 ## [0.75.0] - 2026-10-05
 
 ### Added

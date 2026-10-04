@@ -8,6 +8,10 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-05 - v0.75.1. Pauses on SuperNotify 2.13.0: the snooze action became three,
+ *   supernotify.snooze (minutes), supernotify.silence (until resumed) and supernotify.unsnooze, with
+ *   no `command`. The cards call the one that fits; the single action with `command` of the first
+ *   draft is still understood when it is the only one there.
  * 2026-10-05 - v0.75.0. "Changed by hand" on the rows, from the switches' `overridden` attribute
  *   (SuperNotify after 2.12.1-beta2; nothing changes before it). Channels, transports, recipients
  *   and scenarios switched at runtime, on or off, show "changed by hand" with a tooltip that says
@@ -545,7 +549,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.75.0"; // bundle / HACS release
+const VERSION = "0.75.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -556,7 +560,7 @@ const VERSION = "0.75.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.37.0",
+  control: "0.37.1",
   overview: "0.36.0",
   bands: "0.21.0",
   deliveries: "0.31.0",
@@ -1335,7 +1339,15 @@ async function snSnoozeCall(hass, data) {
   const d = { reason: "Dashboard" };
   for (const [k, v] of Object.entries(data || {})) if (v !== undefined && v !== null && v !== "") d[k] = v;
   if (d.command === "resume") delete d.reason;
-  return hass.callWS({ type: "call_service", domain: "supernotify", service: "snooze", service_data: d, return_response: true });
+  const svc = (hass.services && hass.services.supernotify) || {};
+  let service = "snooze";
+  // 0.75.1: SuperNotify 2.13.0 has three actions - snooze (minutes), silence, unsnooze - and no `command`
+  if (svc.unsnooze) {
+    service = d.command === "resume" ? "unsnooze" : d.command === "silence" ? "silence" : "snooze";
+    delete d.command;
+    if (service !== "snooze") delete d.minutes;
+  }
+  return hass.callWS({ type: "call_service", domain: "supernotify", service, service_data: d, return_response: true });
 }
 /**
  * 0.74.0: delivery rows that count as "channels off". Once SuperNotify gives its switches the

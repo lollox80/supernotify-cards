@@ -58,7 +58,7 @@ bands:
 |---|---|---|
 | `presence_entity` | no | `person.*` shown in the status bar |
 | `occupancy` | no | without `presence_entity`, the status bar shows who is home for SuperNotify (`enquire_occupancy`, what its conditions see). `false` hides it |
-| `snooze_via` | no | how pauses are made: `action` (`supernotify.snooze`, any user, full panel), `event` (the push buttons event, needs an admin), `voice` (SuperNotify's voice commands, the user's own pauses). Default: `action` when SuperNotify has it, otherwise `event` for admins and `voice` for everyone else |
+| `snooze_via` | no | how pauses are made: `action` (`supernotify.snooze`, `silence` and `unsnooze`, SuperNotify 2.13.0, any user, full panel), `event` (the push buttons event, needs an admin), `voice` (SuperNotify's voice commands, the user's own pauses). Default: `action` when SuperNotify has it, otherwise `event` for admins and `voice` for everyone else |
 | `status` | no | `false` hides the status row (who is home, time band, quiet, active scenarios): for a second control card in the same view. Default `true` |
 | `dnd_entity` | no | `input_boolean` used by the DND tile and status bar |
 | `announce_delivery` | no | SuperNotify delivery used by Announce (default `alexa_announce`) |
