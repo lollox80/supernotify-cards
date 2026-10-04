@@ -102,5 +102,5 @@ person linked to the user. They work when the voice commands are on in SuperNoti
 otherwise the card says so.
 
 **Links to the other cards** (0.65.0): in the status bar, *Home* opens the recipients card and
-*Active scenarios* the scenarios card, when they are on the same page. The overview's pause row opens
+*Active scenarios* the scenarios card, on the same page or on another view of the same dashboard (0.67.0). The overview's pause row opens
 this card's pause panel.

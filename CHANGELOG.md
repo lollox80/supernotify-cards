@@ -3,6 +3,16 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.67.0] - 2026-10-04
+
+Links between cards now work across the views of a dashboard.
+
+### Changed
+- overview-card / control-card: **Show ›**, the people and scenario chips and the status links also
+  reach a card on **another view of the same dashboard**: the card reads the dashboard's configuration
+  once (views you cannot see are left out), opens that view, and the target card shows what was asked
+  (rows opened and outlined, pause panel open) as soon as it is drawn.
+
 ## [0.66.0] - 2026-10-04
 
 Why a scenario applies, what it changes, and a test for each channel.

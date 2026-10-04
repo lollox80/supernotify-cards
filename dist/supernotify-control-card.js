@@ -8,6 +8,10 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.67.0. Links across views: the overview's "Show ›", its people and scenario chips,
+ *   and the control card's status links now also reach a card on another view of the same
+ *   dashboard - the card reads the dashboard's configuration once (lovelace/config, views the user
+ *   cannot see left out), opens that view and the target card shows what was asked when it is drawn.
  * 2026-10-04 - v0.66.0. (1) Active scenarios: SuperNotify's own list (enquire_active_scenarios)
  *   first in control and overview too - from 2.12.1 the binary_sensors stay "unknown" unless
  *   scenario_control.refresh is on. (2) deliveries 0.28.0: "Try this channel" in the detail - a dry
@@ -459,7 +463,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.66.0"; // bundle / HACS release
+const VERSION = "0.67.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -470,8 +474,8 @@ const VERSION = "0.66.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.34.1",
-  overview: "0.32.1",
+  control: "0.35.0",
+  overview: "0.33.0",
   bands: "0.20.2",
   deliveries: "0.29.0",
   transports: "0.25.0",
@@ -887,6 +891,7 @@ class SnCard extends HTMLElement {
   set hass(hass) {
     const first = !this._hass;
     snCardRegister(this);
+    snDash.hass = hass;
     let changed = true;
     if (this.constructor.snTracked !== false) {
       const raw = hass;
@@ -942,19 +947,73 @@ function snCardRegister(card) {
 /** The first card of that kind on the page (connected), or null. */
 function snCardOn(kind, filter) {
   const tag = `supernotify-${kind}-card`.toUpperCase();
+  // 0.67.0: a card on another view is only disconnected - it comes back when that view opens
   for (const c of snCards) {
-    if (!c.isConnected) { snCards.delete(c); continue; }
-    if (c.tagName === tag && (!filter || filter(c))) return c;
+    if (c.isConnected && c.tagName === tag && (!filter || filter(c))) return c;
   }
   return null;
 }
 
-/** Bring a card into view and let it show what was asked (its _focus). */
+/**
+ * 0.67.0: which view of this dashboard holds each kind of card, from the dashboard's own
+ * configuration (WS lovelace/config), read once per dashboard. Views the user cannot see
+ * (`visible:` users) are left out.
+ */
+const snDash = { key: null, map: null, busy: false, hass: null };
+function snDashKey() {
+  const seg = String((window.location && window.location.pathname) || "").split("/")[1] || "";
+  return seg || "lovelace";
+}
+function snDashEnsure(hass) {
+  if (!hass || !hass.callWS) return;
+  const key = snDashKey();
+  if (snDash.busy || (snDash.key === key && snDash.map)) return;
+  snDash.busy = true;
+  snDash.key = key;
+  const uid = hass.user && hass.user.id;
+  Promise.resolve(hass.callWS({ type: "lovelace/config", url_path: key === "lovelace" ? null : key })).then((cfg) => {
+    const map = {};
+    const walk = (o, path) => {
+      if (Array.isArray(o)) { o.forEach((x) => walk(x, path)); return; }
+      if (!o || typeof o !== "object") return;
+      const m = typeof o.type === "string" && o.type.match(/^custom:supernotify-(\w+)-card$/);
+      if (m && !(m[1] in map)) map[m[1]] = path;
+      for (const k of ["cards", "sections", "card", "elements"]) if (o[k]) walk(o[k], path);
+    };
+    ((cfg && cfg.views) || []).forEach((v, i) => {
+      if (Array.isArray(v.visible) && uid && !v.visible.some((x) => x && x.user === uid)) return;
+      walk([...(v.sections || []), ...(v.cards || [])], v.path || String(i));
+    });
+    snDash.map = map;
+    window.dispatchEvent(new CustomEvent("supernotify-cards"));
+  }).catch(() => { snDash.map = {}; }).finally(() => { snDash.busy = false; });
+}
+
+/** A card of that kind on this page or on another view of the dashboard. */
+function snCardReach(kind) {
+  if (snCardOn(kind)) return true;
+  snDashEnsure(snDash.hass); // read only when a link might be needed
+  return !!(snDash.map && snDash.key === snDashKey() && snDash.map[kind]);
+}
+
+/** Bring a card into view and let it show what was asked (its _focus) - on another view too. */
 function snGo(kind, detail) {
+  const show = (c) => {
+    if (c._focus) c._focus(detail || {});
+    c.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const c = snCardOn(kind);
-  if (!c) return false;
-  if (c._focus) c._focus(detail || {});
-  c.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (c) { show(c); return true; }
+  const path = snDash.map && snDash.key === snDashKey() && snDash.map[kind];
+  if (!path) return false;
+  snNavigate(`/${snDash.key}/${path}`);
+  // the view draws its cards after the navigation: wait for this one (at most 8 s)
+  let n = 0;
+  const t = setInterval(() => {
+    const d = snCardOn(kind);
+    if (d && d._rendered) { clearInterval(t); setTimeout(() => show(d), 150); }
+    else if (++n > 40) clearInterval(t);
+  }, 200);
   return true;
 }
 
@@ -2812,7 +2871,7 @@ class SupernotifyControlCard extends SnCard {
       // 0.63.0: who is home for SuperNotify (enquire_occupancy) - what its conditions see
       const o = this._occ;
       segs.push(seg("🏠 " + T.occ_home_l, o.home.length ? o.home.join(", ") : T["occ_" + o.state],
-        o.home.length ? p.ok : undefined).replace('<div class="sseg"', snCardOn("recipients") ? '<div class="sseg go" data-go="recipients"' : '<div class="sseg"'));
+        o.home.length ? p.ok : undefined).replace('<div class="sseg"', snCardReach("recipients") ? '<div class="sseg go" data-go="recipients"' : '<div class="sseg"'));
     }
     const band = this._activeBand();
     if (band) {
@@ -2828,7 +2887,7 @@ class SupernotifyControlCard extends SnCard {
     }
     const act = this._activeScenarios();
     if (act !== null) segs.push(seg("🎬 " + T.act_scen, String(act.length))
-      .replace('<div class="sseg"', snCardOn("scenarios") ? '<div class="sseg go" data-go="scenarios"' : '<div class="sseg"'));
+      .replace('<div class="sseg"', snCardReach("scenarios") ? '<div class="sseg go" data-go="scenarios"' : '<div class="sseg"'));
     const bar = this.shadowRoot.getElementById("statusbar");
     bar.innerHTML = snIconify(segs.join(""), this && this._config);
     // 0.65.0: who is home -> recipients card, active scenarios -> scenarios card
@@ -3503,7 +3562,7 @@ class SupernotifyOverviewCard extends SnCard {
           return `<div class="hr ${h.k}"><span class="hi">${esc(icon)}</span>
             <div class="ht"><div>${esc(text)}</div>${h.title && !text.includes(h.title) ? `<div class="hd">${esc(h.title)}</div>` : ""}</div>
             ${h.href ? `<a class="ha" href="${esc(h.href)}"${h.nav ? ' data-nav="1"' : ' target="_blank" rel="noopener"'}>${esc(T.h_open)}</a>`
-              : h.go && snCardOn(h.go[0]) ? `<button class="ha hgo" data-go="${goes.push(h.go) - 1}">${esc(T.go_open)} ›</button>` : ""}</div>`;
+              : h.go && snCardReach(h.go[0]) ? `<button class="ha hgo" data-go="${goes.push(h.go) - 1}">${esc(T.go_open)} ›</button>` : ""}</div>`;
         };
         html = `<div class="hb ${lvl}"><span class="hbi">${lvl === "ok" ? "✔" : "⚠"}</span>
             <div><div class="hbt">${esc(head)}</div>${sub ? `<div class="hbs">${esc(sub)}</div>` : ""}</div></div>`
@@ -3562,14 +3621,14 @@ class SupernotifyOverviewCard extends SnCard {
       const o = this._occ;
       occEl.innerHTML = o ? snIconify(`<div style="display:flex;flex-wrap:wrap;align-items:flex-start">`
         + `<span class="badge ${o.home.length ? "b-ok" : "b-off"}" style="padding:7px 12px;margin:0 6px 6px 0">${esc(T["occ_" + o.state] || o.state)}</span>`
-        + o.home.map((n) => `<span class="chip${snCardOn("recipients") ? " go" : ""}" data-gor="1">🏠 ${esc(n)}</span>`).join("")
-        + o.away.map((n) => `<span class="chip${snCardOn("recipients") ? " go" : ""}" data-gor="1" style="color:${p.muted}">🚶 ${esc(n)}</span>`).join("") + `</div>`, this && this._config) : "—";
-      if (o && snCardOn("recipients")) occEl.querySelectorAll("[data-gor]").forEach((c) => { c.onclick = () => snGo("recipients", { persons: o.ids }); });
+        + o.home.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1">🏠 ${esc(n)}</span>`).join("")
+        + o.away.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1" style="color:${p.muted}">🚶 ${esc(n)}</span>`).join("") + `</div>`, this && this._config) : "—";
+      if (o && snCardReach("recipients")) occEl.querySelectorAll("[data-gor]").forEach((c) => { c.onclick = () => snGo("recipients", { persons: o.ids }); });
     }
     this.shadowRoot.getElementById("scen").innerHTML = snIconify(act && act.length
-      ? act.map((s) => `<span class="chip${snCardOn("scenarios") ? " go" : ""}" data-gos="${esc(snScenarioKey(s))}">🎬 ${esc(this._scenLabel(s))}</span>`).join("")
+      ? act.map((s) => `<span class="chip${snCardReach("scenarios") ? " go" : ""}" data-gos="${esc(snScenarioKey(s))}">🎬 ${esc(this._scenLabel(s))}</span>`).join("")
       : `<span class="badge b-off">${T.none}</span>`, this && this._config);
-    if (snCardOn("scenarios")) this.shadowRoot.getElementById("scen").querySelectorAll("[data-gos]").forEach((c) => {
+    if (snCardReach("scenarios")) this.shadowRoot.getElementById("scen").querySelectorAll("[data-gos]").forEach((c) => {
       c.onclick = () => snGo("scenarios", { names: [c.dataset.gos] });
     });
   }

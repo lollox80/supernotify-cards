@@ -43,6 +43,6 @@ tracker counts as home).
 **SuperNotify's repairs** (admin users) join the health list with their title and an Open link to
 Settings › Repairs. Ignored repairs are left out.
 
-**Links to the other cards** (0.65.0), when they are on the same page: *transports with errors* and
+**Links to the other cards** (0.65.0), when they are on the same page or, from 0.67.0, on another view of the same dashboard (that view opens): *transports with errors* and
 *channels off* get **Show ›**, which opens that card on those rows; a pause opens the control card's
 pause panel; a person opens the recipients card, an active scenario the scenarios card.
