@@ -84,11 +84,11 @@ assert.ok(rows.find((r) => r.textContent.includes("alexa_announce")).textContent
 mp.querySelector(".sw input").checked = false; mp.querySelector(".sw input").dispatchEvent(new dom.window.Event("change"));
 const tts = rows.find((r) => r.textContent.includes("tts"));
 tts.querySelector(".sw input").checked = true; tts.querySelector(".sw input").dispatchEvent(new dom.window.Event("change"));
-dc.shadowRoot.querySelector(".rstb").click();
+// 0.65.0: "undo the changes made by hand" only in the tools card
+assert.ok(!dc.shadowRoot.querySelector(".rstb"), "niente pulsante di ripristino nei canali");
 assert.deepStrictEqual(calls.splice(0), [
   ["svc", "switch", "turn_off", "switch.supernotify_delivery_mobile_push"],
   ["api", "POST", "states/binary_sensor.supernotify_delivery_tts", "on"],
-  ["svc", "button", "press", "button.supernotify_ripristina_override"],
 ]);
 
 // ---- transports ----
@@ -97,7 +97,7 @@ rows = [...tc.shadowRoot.querySelectorAll(".row")];
 assert.strictEqual(rows.length, 1);
 rows[0].querySelector(".sw input").checked = false; rows[0].querySelector(".sw input").dispatchEvent(new dom.window.Event("change"));
 assert.deepStrictEqual(calls.splice(0), [["svc", "switch", "turn_off", "switch.supernotify_transport_mobile_push"]]);
-assert.ok(tc.shadowRoot.querySelector(".rstb"));
+assert.ok(!tc.shadowRoot.querySelector(".rstb"), "0.65.0: ripristino solo nella card Strumenti");
 
 // ---- why card + recipients ----
 const wc = mount("supernotify-why-card");

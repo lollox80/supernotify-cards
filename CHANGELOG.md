@@ -3,6 +3,29 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.65.0] - 2026-10-04
+
+The cards are linked to each other, and things are no longer repeated.
+
+### Added
+- **Links between cards** on the same page. Overview: *transports with errors* and *channels off*
+  open those cards on the right rows, a pause opens the control card's pause panel, a person the
+  recipients card, an active scenario the scenarios card. Control card: *Home* and *Active scenarios*
+  in the status bar do the same.
+- simulator-card: **SuperNotify's own answer** (2.12+): the same dry run as the composer's *Try
+  without sending*, with the scenarios you pick and a priority. `dry_run: false` keeps the estimate.
+
+### Changed
+- overview-card: the last notification is left out when a control card on the page already shows
+  it. `last_notification: true` or `false` decides instead.
+- "Undo the changes made by hand" only in the tools card: the button left the transports and
+  channels cards.
+
+### Fixed
+- control-card: the last notification is read as soon as the card loads, not only at the next
+  notification.
+- docs: the overview page now describes *Who is home* and SuperNotify's repairs (added in 0.63.0).
+
 ## [0.64.0] - 2026-10-04
 
 Code cleanup: nothing changes on screen (the README screenshots match pixel for pixel, apart from the clock).

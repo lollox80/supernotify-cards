@@ -100,3 +100,7 @@ SuperNotify's own voice commands (`conversation/process` with "pause my notifica
 minutes", "silence my notifications until I say", "resume my notifications"). Those pause only the
 person linked to the user. They work when the voice commands are on in SuperNotify's options;
 otherwise the card says so.
+
+**Links to the other cards** (0.65.0): in the status bar, *Home* opens the recipients card and
+*Active scenarios* the scenarios card, when they are on the same page. The overview's pause row opens
+this card's pause panel.

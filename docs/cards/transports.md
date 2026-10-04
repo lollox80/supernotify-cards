@@ -15,3 +15,6 @@ targets, priorities, options in plain words) and **All attributes ›** for Home
 ```yaml
 type: custom:supernotify-transports-card
 ```
+
+To undo the changes made by hand (all, or only channels, transports…) use the
+[tools card](tools.md) (0.65.0: the button left this card).

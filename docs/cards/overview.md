@@ -21,7 +21,7 @@ type: custom:supernotify-overview-card
 poll_seconds: 60        # refresh interval for enquire_* data
 health: true            # health sentence + list on top (false = hide, chips = the pre-0.52 chips)
 stats: full             # all five numbers (default: sent, failures, channels)
-last_notification: false   # hide the last notification (the control card already shows it)
+last_notification: true    # show it even with a control card on the page (false = never)
 occupancy: false       # hide "Who is home"
 repairs: false         # leave SuperNotify's repairs out of the health list
 update_entity: update.supernotify_update   # HACS update entity for the version chip
@@ -32,4 +32,17 @@ style: theme            # follow the HA theme instead of the SuperNotify look
 
 The **last notification** block reads like the control card's: title, message, priority, how long ago,
 then "2 delivered · 1 missed · 2 skipped" (hover for the channel names) and **Why ›** when a why card
-is on the dashboard. If you use both cards on the same view, set `last_notification: false` here.
+is on the dashboard. With a control card on the same view that shows it, the overview leaves it out
+(0.65.0); `last_notification: true` or `false` decides instead.
+
+**Who is home** comes from SuperNotify (`enquire_occupancy`): the people at home and away, and the
+occupancy its conditions see (everyone home, only one home, some at home, everyone away). It is
+what decides `occupancy:` in your channels, which can differ from the `person.*` states (an unknown
+tracker counts as home).
+
+**SuperNotify's repairs** (admin users) join the health list with their title and an Open link to
+Settings › Repairs. Ignored repairs are left out.
+
+**Links to the other cards** (0.65.0), when they are on the same page: *transports with errors* and
+*channels off* get **Show ›**, which opens that card on those rows; a pause opens the control card's
+pause panel; a person opens the recipients card, an active scenario the scenarios card.

@@ -25,3 +25,6 @@ title: Canali           # header text (default "Channels" / "Canali")
 group: false            # one flat list instead of the groups (default: grouped)
 style: theme
 ```
+
+To undo the changes made by hand (all, or only channels, transports…) use the
+[tools card](tools.md) (0.65.0: the button left this card).
