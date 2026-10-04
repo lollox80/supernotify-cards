@@ -3,6 +3,12 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.76.2] - 2026-10-05
+
+### Added
+- why-card: a channel that went out as the fallback of another (SuperNotify 2.13.0, delivery
+  `fallback:`) reads "fallback for <channel>" instead of the raw `fallback:<name>`.
+
 ## [0.76.1] - 2026-10-05
 
 ### Fixed

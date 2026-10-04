@@ -8,6 +8,8 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-05 - v0.76.2. why: a channel that went out as the fallback of another (SuperNotify 2.13.0,
+ *   delivery `fallback:`) reads "fallback for <channel>" instead of the raw "fallback:<name>".
  * 2026-10-05 - v0.76.1. Cards stuck on "loading" (overview without last notification, who is home
  *   or active scenarios, stats and archive "reading") on a page opened straight on a view: a
  *   request sent while the page was still connecting could stay unanswered, and the card waited for
@@ -564,7 +566,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.76.1"; // bundle / HACS release
+const VERSION = "0.76.2"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -588,7 +590,7 @@ const SN_CARD_VERSIONS = {
   stats: "0.32.2",
   archive: "0.38.2",
   tools: "0.2.2",
-  why: "0.14.3",
+  why: "0.14.4",
 };
 
 /**
@@ -8292,6 +8294,8 @@ class SupernotifyWhyCard extends SnCard {
     if (kind === "call") return T.src_call;
     if (kind === "scenario") return `${T.src_scen} ${this._scenarioLabel(name)}`;
     if (kind === "recipient") return `${T.src_recipient} ${name}`;
+    // 0.76.2: SuperNotify 2.13.0 per-delivery fallback
+    if (kind === "fallback" && T.src_fallback) return T.src_fallback.replace("{x}", snDeliveryAlias(this._hass, name) || name);
     return String(src);
   }
 
@@ -8566,7 +8570,7 @@ const SN_WHY_STRINGS = {
     channels: "Channels", no_channels: "no channel was selected",
     st_ok: "delivered", st_err: "failed", st_skip: "skipped", st_supp: "suppressed", calls: "calls", calls_1: "call",
     target_required: "target required:", started_by: "selected by", scen_would_off: "switched off by (overruled)",
-    src_default: "always on (default)", src_scen: "scenario", src_call: "the call itself",
+    src_default: "always on (default)", src_fallback: "fallback for {x}", src_scen: "scenario", src_call: "the call itself",
     src_recipient: "recipient", r_off_by: "switched off by",
     call_targets: "targets in the call",
     cats: { entity_id: "entities", mobile_app_id: "devices", person_id: "people", email: "email", phone: "phone", device_id: "devices" },
@@ -8613,7 +8617,7 @@ const SN_WHY_STRINGS = {
     channels: "Canali", no_channels: "nessun canale selezionato",
     st_ok: "consegnata", st_err: "fallita", st_skip: "saltata", st_supp: "scartata", calls: "chiamate", calls_1: "chiamata",
     target_required: "target richiesto:", started_by: "scelto da", scen_would_off: "spento da (ma ha perso)",
-    src_default: "sempre attivo (default)", src_scen: "scenario", src_call: "la chiamata stessa",
+    src_default: "sempre attivo (default)", src_fallback: "riserva di {x}", src_scen: "scenario", src_call: "la chiamata stessa",
     src_recipient: "destinatario", r_off_by: "spento da",
     call_targets: "target nella chiamata",
     cats: { entity_id: "entità", mobile_app_id: "dispositivi", person_id: "persone", email: "email", phone: "telefono", device_id: "dispositivi" },
