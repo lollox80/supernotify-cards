@@ -15,11 +15,14 @@ scenario groups) are edited in the code editor; the form keeps them.
 |---|---|
 | `style: theme` | Follow the Home Assistant theme instead of the SuperNotify colours |
 | `intro: <text>` | An info banner at the top of the card (HTML allowed) |
-| `language: it` / `en` | Pin the language; by default the card follows Home Assistant |
+| `language: de` | Pin the language (`en`, `it`, `de`, `es`, `fr`, `nl`, `pl`, `pt`, `ja`, `zh`, `hi`); by default the card follows Home Assistant |
 | `show_version: true` | Show the card's version at the bottom (hidden since 0.49.0) |
 | `icons: emoji` | Keep the emoji the cards used before 0.50.0 instead of Home Assistant icons |
 
-Italian and English are built in; any other language falls back to English.
+Eleven languages are built in, the same as SuperNotify's own: English, Italian, German, Spanish, French, Dutch,
+Polish, Portuguese, Japanese, Simplified Chinese and Hindi. Any other language falls back to English. Where the
+cards and SuperNotify talk about the same thing (priority, scenario, transport, recipient, outcomes), they use
+the words of SuperNotify's own translation. Corrections are welcome as issues or pull requests.
 
 ## Which SuperNotify version each feature needs
 

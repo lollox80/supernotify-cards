@@ -3,6 +3,23 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.73.0] - 2026-10-04
+
+Eleven languages, the same as SuperNotify's own.
+
+### Added
+- **German, Spanish, French, Dutch, Polish, Portuguese, Japanese, Simplified Chinese and Hindi**,
+  besides English and Italian. They cover every card, the visual editor, the status badge, the tile
+  features and the dashboard strategy. The language follows Home Assistant's, or `language:` in a
+  card.
+- Words the cards share with SuperNotify (priority, scenario, transport, recipient, outcomes, dry
+  run) follow SuperNotify's own translation of each language.
+- A string still missing in a language shows in English. The voice commands used for pauses by
+  users who are not admins stay English/Italian, the only languages SuperNotify's sentences have.
+
+### Changed
+- The download is larger (about 740 KB, about 200 KB compressed, as Home Assistant serves it).
+
 ## [0.72.0] - 2026-10-04
 
 SuperNotify in Home Assistant's own cards.
