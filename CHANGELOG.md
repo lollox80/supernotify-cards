@@ -3,6 +3,14 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.63.1] - 2026-10-04
+
+### Added
+- control-card: `snooze_announce: true` says a pause out loud on the announce channel
+  (`announce_delivery`, e.g. Alexa): "Non-critical notifications paused for 30 minutes", "Pause over",
+  "Notifications back on". Before pausing (the pause would stop its own announcement) and after
+  resuming. Off by default; a switch in the visual editor turns it on and off.
+
 ## [0.63.0] - 2026-10-04
 
 Who is home, SuperNotify's repairs, the detail of channels and transports, and the rest of the composer.

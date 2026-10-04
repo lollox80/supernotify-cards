@@ -8,6 +8,9 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.63.1. control 0.33.1: `snooze_announce: true` (off by default, also in the visual
+ *   editor) says a pause out loud on the announce channel (`announce_delivery`): before pausing,
+ *   since the pause would stop its own announcement, and after resuming one or all.
  * 2026-10-04 - v0.63.0. (1) control 0.33.0 / overview 0.31.0: who is home for SuperNotify
  *   (enquire_occupancy) - names and the occupancy its conditions see; `occupancy: false` hides it.
  *   (2) overview: SuperNotify's own repairs (repairs/list_issues, admin) in the health list, with
@@ -431,7 +434,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.63.0"; // bundle / HACS release
+const VERSION = "0.63.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -442,7 +445,7 @@ const VERSION = "0.63.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.33.0",
+  control: "0.33.1",
   overview: "0.31.0",
   bands: "0.20.1",
   deliveries: "0.27.0",
@@ -563,6 +566,11 @@ const SN_STRINGS = {
     snz_voice_info: "Your pauses go through SuperNotify's voice commands: they are yours only.",
     snz_voice_off: "SuperNotify's voice commands are off: turn them on in the integration options.",
     snz_resume_mine: "Resume mine",
+    sa_snooze: "{what} paused for {len}.", sa_silence: "{what} silenced until further notice.",
+    sa_resume: "{what} back on.", sa_resume_one: "Pause over: {x}.", sa_resume_all: "Notifications back on.",
+    sa_w_nc: "Non-critical notifications", sa_w_all: "All notifications", sa_w_ch: "Channel {x}",
+    sa_w_pr: "{x} priority notifications", sa_w_mine: "Your notifications", sa_for: "for {x}",
+    sa_min: "{n} minutes", sa_hour: "one hour", sa_hours: "{n} hours",
     occ_title: "Who is home", occ_home_l: "Home", occ_ALL_HOME: "Everyone home", occ_ALL_AWAY: "Everyone away",
     occ_LONE_HOME: "Only one home", occ_MULTI_HOME: "Some at home", occ_UNDEFINED_OCCUPANTS: "No one tracked",
     h_repairs: "SuperNotify repairs", h_repairs_1: "SuperNotify repair",
@@ -676,6 +684,11 @@ const SN_STRINGS = {
     snz_voice_info: "Le tue pause passano dai comandi vocali di SuperNotify: valgono solo per te.",
     snz_voice_off: "I comandi vocali di SuperNotify sono spenti: accendili nelle opzioni dell'integrazione.",
     snz_resume_mine: "Riprendi le mie",
+    sa_snooze: "{what} in pausa per {len}.", sa_silence: "{what} in silenzio fino a nuovo ordine.",
+    sa_resume: "{what} di nuovo attive.", sa_resume_one: "Pausa finita: {x}.", sa_resume_all: "Notifiche di nuovo attive.",
+    sa_w_nc: "Le notifiche non critiche", sa_w_all: "Tutte le notifiche", sa_w_ch: "Il canale {x}",
+    sa_w_pr: "Le notifiche a priorità {x}", sa_w_mine: "Le tue notifiche", sa_for: "per {x}",
+    sa_min: "{n} minuti", sa_hour: "un'ora", sa_hours: "{n} ore",
     occ_title: "Chi è in casa", occ_home_l: "In casa", occ_ALL_HOME: "Tutti in casa", occ_ALL_AWAY: "Tutti fuori",
     occ_LONE_HOME: "Uno solo in casa", occ_MULTI_HOME: "Alcuni in casa", occ_UNDEFINED_OCCUPANTS: "Nessuno da seguire",
     h_repairs: "riparazioni di SuperNotify", h_repairs_1: "riparazione di SuperNotify",
@@ -1113,7 +1126,7 @@ const SN_FORM_LABELS = {
     quiet_entity: "Computed quiet state (optional)", presence_entity: "Person for the status bar",
     archive_days: "Archive cleanup: older than (days)", media_days: "Picture cleanup: older than (days)",
     occupancy: "Who is home (from SuperNotify)", repairs: "SuperNotify repairs in the health list",
-    snooze_via: "Pauses go through", o_event: "the push buttons event (admin)", o_voice: "the voice commands",
+    snooze_announce: "Say pauses out loud (announce channel)", snooze_via: "Pauses go through", o_event: "the push buttons event (admin)", o_voice: "the voice commands",
     snooze_minutes: "Snooze length (minutes)", snooze_panel: "Snooze tile opens the pause panel", announce_delivery: "Channel for announcements",
     last_notification: "Show the last notification", last_channels: "One chip per channel in the last notification",
     repeat_entity: "Repeat-last button (optional)", tile_layout: "Tiles", tile_columns: "Tile columns (empty = automatic)",
@@ -1135,7 +1148,7 @@ const SN_FORM_LABELS = {
     quiet_entity: "Stato silenzioso calcolato (facoltativo)", presence_entity: "Persona nella barra di stato",
     archive_days: "Pulizia archivio: piu' vecchie di (giorni)", media_days: "Pulizia foto: piu' vecchie di (giorni)",
     occupancy: "Chi è in casa (da SuperNotify)", repairs: "Riparazioni di SuperNotify nella salute",
-    snooze_via: "Le pause passano da", o_event: "l'evento dei pulsanti push (admin)", o_voice: "i comandi vocali",
+    snooze_announce: "Annuncia le pause a voce (canale annunci)", snooze_via: "Le pause passano da", o_event: "l'evento dei pulsanti push (admin)", o_voice: "i comandi vocali",
     snooze_minutes: "Durata dello snooze (minuti)", snooze_panel: "Il riquadro pausa apre il pannello delle pause", announce_delivery: "Canale per gli annunci",
     last_notification: "Mostra l'ultima notifica", last_channels: "Un chip per canale nell'ultima notifica",
     repeat_entity: "Pulsante ripeti ultima (facoltativo)", tile_layout: "Tile", tile_columns: "Colonne delle tile (vuoto = automatico)",
@@ -1171,7 +1184,7 @@ function snForm(kind) {
   const S = {
     control: [ent("dnd_entity", ["input_boolean", "switch"]), ent("quiet_entity", ["binary_sensor", "input_boolean"]),
       ent("presence_entity", "person"), bool("occupancy", true), num("snooze_minutes", 5, 240, 5), bool("snooze_panel", true),
-      sel("snooze_via", [["", "o_auto"], ["event", "o_event"], ["voice", "o_voice"]]), txt("announce_delivery"),
+      sel("snooze_via", [["", "o_auto"], ["event", "o_event"], ["voice", "o_voice"]]), bool("snooze_announce", false), txt("announce_delivery"),
       bool("last_notification"), bool("last_channels"), ent("repeat_entity", ["input_button", "button", "script"]),
       sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6)],
     overview: [ent("update_entity", "update"), ent("sent_today_entity", "sensor"),
@@ -2236,6 +2249,7 @@ class SupernotifyControlCard extends HTMLElement {
           service_data: {}, return_response: true,
         });
         this._toast(T.cleared);
+        this._snzSpeak(this._snzText("resume_all"));
       } catch (e) {
         this._toast(`✖ ${(e && e.message) || e}`);
       }
@@ -2243,6 +2257,7 @@ class SupernotifyControlCard extends HTMLElement {
       const minutes = this._config.snooze_minutes || 30;
       const action =
         this._config.snooze_action || `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_${minutes}`;
+      await this._snzSpeak(this._snzText("snooze", { what: /_EVERYTHING_/.test(action) ? "EVERYTHING" : "NONCRITICAL", min: minutes }));
       this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
       this._toast(`${T.snoozed_for} ${minutes} ${T.min}`);
     }
@@ -2653,19 +2668,27 @@ class SupernotifyControlCard extends HTMLElement {
     const sel = el.querySelector("#snzT");
     if (sel) sel.onchange = () => { st.target = sel.value; };
     el.querySelector("#snzX").onclick = () => { this._snzOpen = false; this._renderSnz(); };
-    el.querySelector("#snzGo").onclick = () => voice ? this._snzSay(+st.min > 0 ? "snooze" : "silence", +st.min) : this._snzFire(this._snzAction(st), T.snz_done);
+    el.querySelector("#snzGo").onclick = async () => {
+      const kind = +st.min > 0 ? "snooze" : "silence";
+      await this._snzSpeak(this._snzText(kind, voice ? { ...st, mine: true } : st));
+      if (voice) this._snzSay(kind, +st.min); else this._snzFire(this._snzAction(st), T.snz_done);
+    };
     const mine = el.querySelector("#snzMine");
-    if (mine) mine.onclick = () => this._snzSay("resume");
+    if (mine) mine.onclick = async () => { await this._snzSay("resume"); this._snzSpeak(this._snzText("resume", { mine: true })); };
     el.querySelectorAll(".sb[data-r]").forEach((b) => {
       const s0 = live[+b.dataset.r];
-      b.onclick = () => this._snzFire(this._snzAction({ resume: true, what: String(s0.target_type || "").toUpperCase(),
-        target: Array.isArray(s0.target) ? s0.target.join("_") : (s0.target || ""), who: String(s0.recipient_type || "EVERYONE").toUpperCase() }), T.snz_resumed);
+      b.onclick = async () => {
+        await this._snzFire(this._snzAction({ resume: true, what: String(s0.target_type || "").toUpperCase(),
+          target: Array.isArray(s0.target) ? s0.target.join("_") : (s0.target || ""), who: String(s0.recipient_type || "EVERYONE").toUpperCase() }), T.snz_resumed);
+        this._snzSpeak(this._snzText("resume_one", { label: snSnoozeLabel(this._hass, s0, T) }));
+      };
     });
     const all = el.querySelector("#snzAll");
     if (all) all.onclick = async () => {
       try {
         await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
         this._toast(T.cleared);
+        this._snzSpeak(this._snzText("resume_all"));
       } catch (e) { this._toast(`✖ ${(e && e.message) || e}`); }
       snEnquireBust(800);
     };
@@ -2681,6 +2704,44 @@ class SupernotifyControlCard extends HTMLElement {
     if (v === "voice") return true;
     if (v === "event") return false;
     return !!(this._hass && this._hass.user && this._hass.user.is_admin === false);
+  }
+
+  /**
+   * 0.63.1: `snooze_announce: true` says the pause out loud on the announce channel
+   * (`announce_delivery`). Before pausing - the pause would stop its own announcement - and
+   * after resuming. Off by default.
+   */
+  async _snzSpeak(text) {
+    if (!this._config.snooze_announce || !text || !this._hass) return;
+    const delivery = {};
+    delivery[this._config.announce_delivery || "alexa_announce"] = {};
+    try {
+      await this._hass.callService("notify", "supernotify", { message: text, data: { delivery_selection: "fixed", delivery } });
+    } catch (e) { /* the pause goes on anyway */ }
+  }
+
+  /** The sentence for a pause: kind snooze | silence | resume | resume_one | resume_all. */
+  _snzText(kind, st) {
+    const T = snT(this._config, this._hass);
+    st = st || {};
+    if (kind === "resume_all") return T.sa_resume_all;
+    if (kind === "resume_one") return T.sa_resume_one.replace("{x}", st.label || "");
+    let what;
+    if (st.mine) what = T.sa_w_mine;
+    else if (st.what === "EVERYTHING") what = T.sa_w_all;
+    else if (st.what === "DELIVERY") what = T.sa_w_ch.replace("{x}", snDeliveryAlias(this._hass, st.target) || st.target || "");
+    else if (st.what === "PRIORITY") what = T.sa_w_pr.replace("{x}", String(T["prio_" + st.target] || st.target || "").toLowerCase());
+    else what = T.sa_w_nc;
+    if (!st.mine && st.who === "USER") {
+      const me = this._myPerson && this._myPerson();
+      const nm = me && this._hass.states[me] && this._hass.states[me].attributes.friendly_name;
+      if (nm) what += " " + T.sa_for.replace("{x}", nm);
+    }
+    if (kind === "resume") return T.sa_resume.replace("{what}", what);
+    if (kind === "silence") return T.sa_silence.replace("{what}", what);
+    const m = +st.min || 0;
+    const len = m < 60 ? T.sa_min.replace("{n}", m) : m === 60 ? T.sa_hour : T.sa_hours.replace("{n}", Math.round(m / 6) / 10);
+    return T.sa_snooze.replace("{what}", what).replace("{len}", len);
   }
 
   async _snzSay(cmd, min) {
