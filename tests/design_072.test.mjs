@@ -67,6 +67,19 @@ ok(b2.shadowRoot.querySelector("ha-icon").getAttribute("icon") === "mdi:bell-ale
 b2.shadowRoot.querySelector(".b").click();
 ok(window.location.pathname === "/supernotify-auto/home", "tap: navigation_path");
 
+// 0.73.1: ignore e channels_off; canali spenti da soli in grigio
+await wait(2700); snoozes = [];
+const offOnly = { ...healthy, "switch.supernotify_delivery_sms": S("off", { name: "sms" }), "switch.supernotify_delivery_tts": S("off", { name: "tts" }) };
+const b3 = document.createElement("supernotify-status-badge");
+b3.setConfig({}); document.body.appendChild(b3); b3.hass = mk(offOnly); await wait(30);
+ok(/2 canali spenti/.test(b3.shadowRoot.querySelector(".c").textContent) && /secondary-text-color/.test(b3.shadowRoot.innerHTML), "canali spenti: grigio, non avviso");
+const b4 = document.createElement("supernotify-status-badge");
+b4.setConfig({ ignore: ["sms", "TTS"] }); document.body.appendChild(b4); b4.hass = mk(offOnly); await wait(30);
+ok(b4.shadowRoot.querySelector(".c").textContent === "Tutto ok", "ignore: canali spenti apposta non contano");
+const b5 = document.createElement("supernotify-status-badge");
+b5.setConfig({ channels_off: false }); document.body.appendChild(b5); b5.hass = mk(offOnly); await wait(30);
+ok(b5.shadowRoot.querySelector(".c").textContent === "Tutto ok", "channels_off: false");
+
 // feature pausa
 snoozes = [];
 await wait(2700);

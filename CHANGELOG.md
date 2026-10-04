@@ -3,6 +3,16 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.73.1] - 2026-10-04
+
+### Changed
+- Status badge: when the only thing to report is channels off, it shows in grey, not as a warning.
+  A fallback channel switched off in the YAML is often meant to be off.
+
+### Added
+- Status badge: `ignore: [channel, ...]` leaves channels out of the count. `channels_off: false`
+  leaves the count out altogether.
+
 ## [0.73.0] - 2026-10-04
 
 Eleven languages, the same as SuperNotify's own.

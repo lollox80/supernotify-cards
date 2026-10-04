@@ -8,6 +8,11 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.73.1. Status badge: channels off that are meant to be off no longer keep it amber.
+ *   `ignore: [channel, ...]` leaves channels out of the count (e.g. fallbacks switched off in the
+ *   YAML); `channels_off: false` leaves the count out altogether. Channels off alone now show in
+ *   grey (bell-off), no longer as a warning: amber stays for nothing, red for transports with errors,
+ *   blue for pauses.
  * 2026-10-04 - v0.73.0. Eleven languages, the same as SuperNotify's own: German, Spanish, French,
  *   Dutch, Polish, Portuguese, Japanese, Simplified Chinese and Hindi besides English and Italian.
  *   Every card, the visual editor, the badge, the tile features and the dashboard strategy follow
@@ -511,7 +516,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.73.0"; // bundle / HACS release
+const VERSION = "0.73.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -1286,7 +1291,9 @@ function snFeatureSupports(test) {
   };
 }
 /** SuperNotify's health: [{k: crit|off|pause, n, text, title}] worst first, [] = all good. */
-function snNativeHealth(hass, snoozes) {
+function snNativeHealth(hass, snoozes, opts) {
+  opts = opts || {};
+  const ignore = new Set((opts.ignore || []).map((x) => String(x).toLowerCase()));
   const T = snNativeT(hass);
   const out = [];
   const tr = snEntityRows(hass, "transport").filter((t) => {
@@ -1295,7 +1302,8 @@ function snNativeHealth(hass, snoozes) {
   });
   if (tr.length) out.push({ k: "crit", n: tr.length, text: `${tr.length} ${T.err}`,
     title: tr.map((t) => (t.a.last_error_message ? `${t.name}: ${t.a.last_error_message}` : t.name)).join(" · ") });
-  const off = snEntityRows(hass, "delivery").filter((d) => !d.on && !/^default_/i.test(d.name));
+  const off = opts.channels_off === false ? [] : snEntityRows(hass, "delivery")
+    .filter((d) => !d.on && !/^default_/i.test(d.name) && !ignore.has(String(d.name).toLowerCase()));
   if (off.length) out.push({ k: "off", n: off.length, text: `${off.length} ${T.off}`,
     title: off.map((d) => snDeliveryAlias(hass, d.name) || d.name).join(", ") });
   const live = snLiveSnoozes(snoozes || []);
@@ -1355,11 +1363,11 @@ class SupernotifyStatusBadge extends HTMLElement {
     if (!this._hass) return;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const T = snNativeT(this._hass);
-    const h = snNativeHealth(this._hass, this._snz);
+    const h = snNativeHealth(this._hass, this._snz, this._config);
     const top = h[0];
     const icon = !top ? "mdi:bell-check" : top.k === "crit" ? "mdi:bell-alert" : top.k === "off" ? "mdi:bell-off" : "mdi:bell-sleep";
     const color = !top ? "var(--success-color, #43a047)" : top.k === "crit" ? "var(--error-color, #db4437)"
-      : top.k === "off" ? "var(--warning-color, #ffa600)" : "var(--info-color, #039be5)";
+      : top.k === "off" ? "var(--secondary-text-color, #727272)" : "var(--info-color, #039be5)";
     const text = !top ? T.all_good : top.text + (h.length > 1 ? ` +${h.length - 1}` : "");
     const title = h.length ? h.map((x) => `${x.text}${x.title ? ": " + x.title : ""}`).join("\n") : T.all_good;
     const key = icon + text + title;

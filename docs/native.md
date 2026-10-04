@@ -9,7 +9,8 @@ card**. They come with the same download as the cards.
 
 SuperNotify's health in one badge, on top of any view (sections dashboards): transports with errors,
 channels off, pauses in force, otherwise *All good*. The colour and icon follow the worst of them, and
-the badge's tooltip lists them all. **Edit dashboard → Add badge → SuperNotify status**, or:
+the badge's tooltip lists them all. Channels off alone show in grey, not as a warning: a
+fallback channel switched off in the YAML is often meant to be off (leave it out with `ignore`). **Edit dashboard → Add badge → SuperNotify status**, or:
 
 ```yaml
 badges:
@@ -18,6 +19,8 @@ badges:
     name: Notifiche                       # label above the state (default SuperNotify)
     show_name: false                      # state only
     navigation_path: /supernotify-auto/home   # on tap; default: the counter's dialog
+    ignore: [sms_fallback, backup_mail]  # channels meant to be off: not counted
+    channels_off: false                   # do not count channels off at all
 ```
 
 The dashboard built by `strategy: custom:supernotify` already has it on top of *Home*
