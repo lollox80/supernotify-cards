@@ -36,7 +36,7 @@ the words of SuperNotify's own translation. Corrections are welcome as issues or
 | Notification without text (composer) | 2.11.1 |
 | "Try without sending" (dry run) | 2.12 |
 | Stats from the archive, no helpers; dry run with its own duplicate check | 2.12.1 |
-| Pauses by any user with the full panel (`supernotify.snooze`); "channels off" = only switched off by hand (`overridden`); stats in one call (`enquire_archive` daily) | the release after 2.12.1-beta2 |
+| Pauses by any user with the full panel (`supernotify.snooze`); "channels off" = only switched off by hand, and "changed by hand" on the rows (`overridden`); stats in one call (`enquire_archive` daily) | the release after 2.12.1-beta2 |
 
 The automations card works with any version but needs its manifest generator
 (`tools/genera_vista_automazioni.py`), see [its page](cards/automations.md).

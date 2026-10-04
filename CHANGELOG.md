@@ -3,6 +3,17 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.75.0] - 2026-10-05
+
+### Added
+- "Changed by hand" on the rows of the channels, transports, recipients and scenarios cards, for
+  whatever was switched at runtime and so differs from the configuration (the switches'
+  `overridden` attribute, SuperNotify after 2.12.1-beta2). The tooltip says that "Undo the changes
+  made by hand" in the tools card puts it back.
+- channels card: a channel that is off reads "off in the configuration" or "switched off by hand".
+
+With SuperNotify versions without the attribute nothing changes.
+
 ## [0.74.1] - 2026-10-04
 
 ### Fixed

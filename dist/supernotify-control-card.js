@@ -8,6 +8,11 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-05 - v0.75.0. "Changed by hand" on the rows, from the switches' `overridden` attribute
+ *   (SuperNotify after 2.12.1-beta2; nothing changes before it). Channels, transports, recipients
+ *   and scenarios switched at runtime, on or off, show "changed by hand" with a tooltip that says
+ *   "Undo the changes made by hand" (tools card) puts them back. Channels: a channel off in the
+ *   configuration now reads "off in the configuration", one switched off "switched off by hand".
  * 2026-10-04 - v0.74.1. Archive and why: opened straight on their view, the list could stay on
  *   "reading the archive" although the archive had been read (the redraw was missed). The card
  *   now redraws on the next update whenever it still shows "reading" and the archive is there,
@@ -540,7 +545,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.74.1"; // bundle / HACS release
+const VERSION = "0.75.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -554,10 +559,10 @@ const SN_CARD_VERSIONS = {
   control: "0.37.0",
   overview: "0.36.0",
   bands: "0.21.0",
-  deliveries: "0.30.0",
-  transports: "0.26.0",
-  recipients: "0.29.0",
-  scenarios: "0.29.0",
+  deliveries: "0.31.0",
+  transports: "0.27.0",
+  recipients: "0.30.0",
+  scenarios: "0.30.0",
   simulator: "0.17.0",
   composer: "0.25.0",
   automations: "0.21.2",
@@ -596,7 +601,9 @@ const SN_STRINGS = {
     inc_req: "only when asked for", inc_scen: "only with a scenario",
     grp_auto: "Start on their own", grp_named: "Only when named in the call", grp_scen: "Only with a scenario",
     grp_fallback: "Backup, when the others fail", ch_title: "Channels", ch_count: "{on} of {tot} on",
-    off_manual: "switched off", paused_by: "paused now by", on_by: "on now through",
+    off_manual: "switched off", off_config: "off in the configuration", hand: "changed by hand",
+    hand_tip: "Switched at runtime, so it differs from the configuration. \"Undo the changes made by hand\" (tools) puts it back.",
+    paused_by: "paused now by", on_by: "on now through",
     fixed_targets: "fixed targets", no_deliveries: "no delivery entities found",
     home: "home", away: "away", devices: "devices", devices_1: "device", rc_test: "Send a test", rc_test_confirm: "Tap again to send",
     rc_test_sent: "Test sent", rc_test_title: "SuperNotify test", rc_test_msg: "Test message from the dashboard,", overrides: "delivery overrides", overrides_1: "delivery override",
@@ -726,7 +733,9 @@ const SN_STRINGS = {
     inc_req: "solo se richiesti", inc_scen: "solo con uno scenario",
     grp_auto: "Partono da soli", grp_named: "Solo se chiamati per nome", grp_scen: "Solo con uno scenario",
     grp_fallback: "Di riserva, se gli altri falliscono", ch_title: "Canali", ch_count: "{on} di {tot} accesi",
-    off_manual: "spento a mano", paused_by: "in pausa ora:", on_by: "acceso ora da",
+    off_manual: "spento a mano", off_config: "spento da configurazione", hand: "modificato a mano",
+    hand_tip: "Cambiato con l'interruttore, quindi diverso dalla configurazione. «Annulla le modifiche fatte a mano» (Strumenti) lo rimette com'era.",
+    paused_by: "in pausa ora:", on_by: "acceso ora da",
     fixed_targets: "target fissi", no_deliveries: "nessuna entità delivery trovata",
     home: "in casa", away: "fuori", devices: "dispositivi", devices_1: "dispositivo", rc_test: "Manda una prova", rc_test_confirm: "Tocca ancora per inviare",
     rc_test_sent: "Prova inviata", rc_test_title: "Prova SuperNotify", rc_test_msg: "Messaggio di prova dalla dashboard, ore", overrides: "override delivery",
@@ -1342,6 +1351,15 @@ function snChannelsOff(hass, rows, ignore) {
     return off && !/^default_/i.test(d.name) && !ign.has(String(d.name).toLowerCase())
       && (!known || attrs(d).overridden === true);
   });
+}
+/** 0.75.0: the switch's `overridden` attribute - true/false, or null before SuperNotify had it. */
+function snOverridden(a) {
+  return a && typeof a.overridden === "boolean" ? a.overridden : null;
+}
+/** 0.75.0: the "changed by hand" tag for a row, or "" (raw: an HTML span, else plain text). */
+function snHandTag(a, T, raw) {
+  if (snOverridden(a) !== true) return "";
+  return raw ? `<span class="tag" style="border-style:dashed;font-weight:600" title="${snEsc(T.hand_tip)}">✏️ ${snEsc(T.hand)}</span>` : `✏️ ${T.hand}`;
 }
 /** SuperNotify's health: [{k: crit|off|pause, n, text, title}] worst first, [] = all good. */
 function snNativeHealth(hass, snoozes, opts) {
@@ -4798,7 +4816,7 @@ class SupernotifyDeliveriesCard extends SnCard {
       const tech = alias && alias.toLowerCase() !== d.name.toLowerCase() ? d.name : "";
       // the one line that says what is going on with this channel right now
       let state = "", cls = "";
-      if (!d.on) { state = T.off_manual; }
+      if (!d.on) { state = snOverridden(d.a) === false ? T.off_config : T.off_manual; }
       else if (d.a.transport_enabled === false) { state = `⛔ ${T.transport_off}`; cls = "crit"; }
       else {
         const fx = this._scenarioEffect(d.name);
@@ -4806,6 +4824,7 @@ class SupernotifyDeliveriesCard extends SnCard {
         else if (fx.on.length && this._group(d) === "scen") { state = `${T.on_by} ${fx.on.join(", ")}`; cls = "ok"; }
       }
       const tags = [];
+      if (snOverridden(d.a) && d.on) tags.push(snHandTag(d.a, T)); // 0.75.0: switched on by hand
       if (d.a.action) tags.push(`⚙️ ${d.a.action}`);
       const tgt = d.a.target;
       const nTgt = Array.isArray(tgt) ? tgt.length : tgt && typeof tgt === "object" ? Object.keys(tgt).length : tgt ? 1 : 0;
@@ -4982,6 +5001,7 @@ class SupernotifyTransportsCard extends SnCard {
     rows.innerHTML = snIconify(trs.map((t, i) => {
       const em = SN_TRANSPORT_ICONS[t.name] || "🔌";
       const tags = [];
+      if (snHandTag(t.a, T, true)) tags.push(snHandTag(t.a, T, true)); // 0.75.0
       const errCount = +t.a.error_count || 0;
       if (errCount > 0) tags.push(`<span class="tag err">⚠️ ${errCount}${t.a.last_error_at ? ` · ${esc(snWhen(t.a.last_error_at))}` : ""} · ${esc(t.a.last_error_message || "")}</span>`);
       let alias = snCleanName(t.a.friendly_name, t.name);
@@ -5158,6 +5178,7 @@ class SupernotifyRecipientsCard extends SnCard {
       const pState = personId ? (this._hass.states[personId] || {}).state : undefined;
       const home = pState === "home";
       const tags = [];
+      const hand = snHandTag(r.a, T, true); // 0.75.0
       if (r.a.email) tags.push(`✉️ ${r.a.email}`);
       if (r.a.phone_number) tags.push(`💬 ${r.a.phone_number}`);
       const nDev = Array.isArray(r.a.mobile_devices) ? r.a.mobile_devices.length : 0;
@@ -5165,6 +5186,7 @@ class SupernotifyRecipientsCard extends SnCard {
       const nOvr = r.a.delivery && typeof r.a.delivery === "object" ? Object.keys(r.a.delivery).length : 0;
       if (nOvr) tags.push(`🔗 ${snPl(T, "overrides", nOvr)}`);
       if (!tags.length) tags.push(`<span class="tag warn">⚠️ ${T.no_contact}</span>`);
+      if (hand) tags.unshift(hand);
       const alias = snCleanName(r.a.friendly_name, r.name);
       const last = this._lastNotified(r.name);
       const lastHtml = last
@@ -5534,6 +5556,7 @@ class SupernotifyScenariosCard extends SnCard {
     if (ags.length) tags.push(`<span class="tag">🔘 ${esc(ags.join(", "))}</span>`);
     if (s.a.media) tags.push(`<span class="tag">📷 ${T.media}</span>`);
     if (s.manual) tags.unshift(`<span class="tag">✋ ${T.manual}</span>`);
+    if (snHandTag(s.a, T, true)) tags.unshift(snHandTag(s.a, T, true)); // 0.75.0
     const alias = snCleanName(s.a.friendly_name, s.name);
     const p = this._palette();
     // SuperNotify >= 2.7.0: live switch; older versions: read-only badge.
