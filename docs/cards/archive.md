@@ -61,3 +61,7 @@ Once you are on SuperNotify 2.10+, the sensor, the automation, the shell command
 can all be removed: the cards stop reading them as soon as the action is there.
 
 With a `supernotify-why-card` on the same view, an expanded row gets a **🔎 Why?** link.
+
+What a **voice channel said** (Alexa, TTS…) shows under the message when it differs from the text,
+named after that channel. SuperNotify keeps the spoken text only for voice transports, so any voice
+channel is recognised, whatever its name.

@@ -57,6 +57,8 @@ bands:
 | Option | Required | Description |
 |---|---|---|
 | `presence_entity` | no | `person.*` shown in the status bar |
+| `occupancy` | no | without `presence_entity`, the status bar shows who is home for SuperNotify (`enquire_occupancy`, what its conditions see). `false` hides it |
+| `snooze_via` | no | how the pause panel pauses: `event` (the push buttons event, needs an admin), `voice` (SuperNotify's voice commands, the user's own pauses). Default: `event` for admins, `voice` for everyone else |
 | `dnd_entity` | no | `input_boolean` used by the DND tile and status bar |
 | `announce_delivery` | no | SuperNotify delivery used by Announce (default `alexa_announce`) |
 | `snooze_minutes` | no | minutes for the snooze tile (default 30) |
@@ -88,3 +90,12 @@ From SuperNotify 2.7.0 a scenario also has a `switch.supernotify_scenario_*`
 
 The Announce tile calls `notify.supernotify` with
 `data: {delivery_selection: fixed, delivery: {<announce_delivery>: {}}}`.
+
+**Pauses in force** show why they were set: *by hand* (the panel or a push button), *by voice* or
+*by the assistant*.
+
+**Users who are not admin** can't fire the push buttons event, so for them the panel pauses through
+SuperNotify's own voice commands (`conversation/process` with "pause my notifications for 30
+minutes", "silence my notifications until I say", "resume my notifications"). Those pause only the
+person linked to the user. They work when the voice commands are on in SuperNotify's options;
+otherwise the card says so.

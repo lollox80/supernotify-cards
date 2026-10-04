@@ -11,8 +11,9 @@ scenario turns it off, "on now through <scenario>" for a scenario-only channel. 
 area/floor/label" tag marks deliveries whose transport resolves an
 area/floor/label target natively (`notify_entity`, `alexa_devices`, `html5`,
 `ntfy`, `kodi`, `media_player`, `tts`, `chime`) — see the composer card's
-target selector note below for why this matters. Tap a row for the full
-delivery attributes.
+target selector note below for why this matters. **Tap a row** for its detail: transport, action,
+fixed targets, when it is used, options in plain words and data, with **All attributes ›**
+for Home Assistant's dialog.
 
 <img src="../images/deliveries.png" alt="supernotify-deliveries-card" width="420">
 

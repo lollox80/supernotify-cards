@@ -50,6 +50,14 @@ of the same content carries `force_resend` instead.
 - **Snapshot URL** — a picture by address instead of a camera (`snapshot_url`).
 - **Debug** — SuperNotify keeps extra detail on this notification (`debug: true`),
   visible in the why and archive cards.
+- **Text for email (HTML)** — `message_html`, for the channels that send HTML.
+- **Video clip** — a clip by address (`clip_url`).
+- **Buttons** — buttons on the notification, each with its action id and text (`actions`),
+  and button groups from your configuration (`action_groups`).
+- **Channel settings** — pick a channel and write `key: value` lines: they go to that channel
+  for this notification only (`delivery_control: {channel: {data: …}}`), e.g. `ttl: 0`.
+
+<img src="../images/composer_adv.png" alt="composer advanced options" width="420">
 
 ```yaml
 type: custom:supernotify-composer-card

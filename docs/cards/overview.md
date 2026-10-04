@@ -22,6 +22,8 @@ poll_seconds: 60        # refresh interval for enquire_* data
 health: true            # health sentence + list on top (false = hide, chips = the pre-0.52 chips)
 stats: full             # all five numbers (default: sent, failures, channels)
 last_notification: false   # hide the last notification (the control card already shows it)
+occupancy: false       # hide "Who is home"
+repairs: false         # leave SuperNotify's repairs out of the health list
 update_entity: update.supernotify_update   # HACS update entity for the version chip
 quiet_entity: binary_sensor.notifier_dnd   # your DND sensor, for the 🌙 chip
 sent_today_entity: sensor.supernotify_sent_today   # daily utility_meter for "sent today"

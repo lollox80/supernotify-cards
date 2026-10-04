@@ -46,7 +46,9 @@ const del = (name, fn, transport, inclusion, on = true, extra = {}) =>
     friendly_name: "SuperNotify Delivery " + fn + " enabled", ...extra });
 const S = {
   "switch.supernotify_delivery_mobile_push": del("mobile_push", "Phone notification", "mobile_push", ["default"]),
-  "switch.supernotify_delivery_alexa_announce": del("alexa_announce", "Alexa announcement", "alexa_media_player", ["default"]),
+  "switch.supernotify_delivery_alexa_announce": del("alexa_announce", "Alexa announcement", "alexa_media_player", ["default"], true,
+    { action: "notify.alexa_media", target: { entity_id: ["media_player.kitchen", "media_player.living_room"] }, target_required: "always",
+      options: { simplify_text: true, strip_urls: true, media_auto_pause: true }, data: { type: "announce" } }),
   "switch.supernotify_delivery_persistent": del("persistent", "Dashboard alert", "persistent", ["default"]),
   "switch.supernotify_delivery_tts": del("tts", "Kitchen speaker", "tts", ["default"]),
   "switch.supernotify_delivery_email": del("email", "Email", "email", ["default"]),
@@ -55,7 +57,10 @@ const S = {
   "switch.supernotify_delivery_sms_fallback": del("sms_fallback", "SMS fallback", "sms", ["fallback"], false),
   "switch.supernotify_transport_mobile_push": st("on", { name: "mobile_push", friendly_name: "SuperNotify Transport mobile_push enabled", error_count: 0 }),
   "switch.supernotify_transport_alexa_media_player": st("on", { name: "alexa_media_player", friendly_name: "SuperNotify Transport alexa_media_player enabled", error_count: 0 }),
-  "switch.supernotify_transport_telegram": st("on", { name: "telegram", friendly_name: "SuperNotify Transport telegram enabled", error_count: 2, last_error_message: "chat not found" }),
+  "switch.supernotify_transport_telegram": st("on", { name: "telegram", friendly_name: "SuperNotify Transport telegram enabled", error_count: 2, last_error_message: "chat not found",
+    last_error_at: new Date(Date.now() - 38 * 60000).toISOString(), last_error_in: "deliver",
+    delivery_defaults: { action: "telegram_bot.send_message", target_required: "always", priority: ["medium", "high", "critical"],
+      options: { strip_urls: false, target_categories: ["telegram"] } } }),
   "switch.supernotify_transport_tts": st("on", { name: "tts", friendly_name: "SuperNotify Transport tts enabled", error_count: 0 }),
   "switch.supernotify_transport_email": st("on", { name: "email", friendly_name: "SuperNotify Transport email enabled", error_count: 0 }),
   "switch.supernotify_transport_chime": st("on", { name: "chime", friendly_name: "SuperNotify Transport chime enabled", error_count: 0 }),
@@ -210,8 +215,8 @@ const ARCH = { source: "sensor", entity: "sensor.supernotify_archive" };
 const SHOTS = {
   control: [460, [["control", CONTROL]]],
   overview: [460, [["overview", OVERVIEW]]],
-  deliveries: [460, [["deliveries", {}]]],
-  transports: [460, [["transports", {}]]],
+  deliveries: [460, [["deliveries", {}]], 1, false, "open"],
+  transports: [460, [["transports", {}]], 1, false, "open"],
   recipients: [460, [["recipients", {}]]],
   scenarios: [460, [["scenarios", { groups: [{ name: "Priority", scenarios: ["critical_panic"] }, { name: "Time of day", scenarios: ["morning", "night"] }] }]]],
   bands: [460, [["bands", { bands: BANDS }]]],
@@ -222,6 +227,7 @@ const SHOTS = {
   stats: [700, [["stats", { sent_today_entity: "sensor.supernotify_sent_today" }]]],
   tools: [460, [["tools", {}]], 1, false, "tools"],
   composer: [700, [["composer", {}]], 1, false, "composer"],
+  composer_adv: [460, [["composer", {}]], 1, false, "adv"],
   hero: [920, [["control", CONTROL], ["overview", OVERVIEW], ["composer", {}]], 2, false, "composer"],
   dark: [1200, [["control", CONTROL], ["overview", OVERVIEW], ["deliveries", {}]], 3, true],
 };
@@ -263,6 +269,33 @@ for (const [name, [width, cards, cols = 1, dark = false, before]] of Object.entr
       sr.getElementById("dry").click();
     });
     await page.waitForTimeout(900);
+  }
+  if (before === "adv") {
+    await page.evaluate(() => {
+      const sr = document.querySelector("supernotify-composer-card").shadowRoot;
+      sr.getElementById("adv").open = true;
+      sr.getElementById("spk").value = "Someone is at the front door";
+      sr.getElementById("actAdd").click();
+      const a = sr.querySelector("#acts .actr");
+      a.querySelector(".aid").value = "OPEN_GATE"; a.querySelector(".atl").value = "Open the gate";
+      sr.getElementById("dcAdd").click();
+      const d = sr.querySelector("#dcs .dcr");
+      d.querySelector(".dcn").value = "mobile_push"; d.querySelector(".dcv").value = "ttl: 0\npriority: high";
+      sr.getElementById("dbg").checked = true;
+    });
+    await page.waitForTimeout(200);
+  }
+  if (before === "open") {
+    await page.evaluate(() => {
+      for (const tag of ["supernotify-transports-card", "supernotify-deliveries-card"]) {
+        const c = document.querySelector(tag);
+        const rows = c ? [...c.shadowRoot.querySelectorAll(".row")] : [];
+        const want = tag.includes("transports") ? /Telegram/ : /Alexa/;
+        const r = rows.find((x) => want.test(x.textContent)) || rows[0];
+        if (r) r.querySelector(".mid b").click();
+      }
+    });
+    await page.waitForTimeout(150);
   }
   if (before === "tools") {
     await page.evaluate(() => { const c = document.querySelector("supernotify-tools-card"); c.shadowRoot.querySelector('.q[data-q="enquire_occupancy"]').click(); });

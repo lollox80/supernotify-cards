@@ -8,6 +8,10 @@ every channel that uses it.
 
 <img src="../images/transports.png" alt="supernotify-transports-card" width="420">
 
+An error shows how many, when the last one happened and its message. **Tap a row** for the detail:
+the last error (when and in which step), the transport's defaults for its channels (action,
+targets, priorities, options in plain words) and **All attributes ›** for Home Assistant's dialog.
+
 ```yaml
 type: custom:supernotify-transports-card
 ```

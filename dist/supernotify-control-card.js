@@ -8,6 +8,18 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.63.0. (1) control 0.33.0 / overview 0.31.0: who is home for SuperNotify
+ *   (enquire_occupancy) - names and the occupancy its conditions see; `occupancy: false` hides it.
+ *   (2) overview: SuperNotify's own repairs (repairs/list_issues, admin) in the health list, with
+ *   their title, opening Settings > Repairs. (3) transports 0.24.0: when the last error happened,
+ *   in which step, and the transport's defaults (action, targets, options) under a tap.
+ *   (4) deliveries 0.27.0: options, data and targets of each channel under a tap; "All
+ *   attributes" opens HA's dialog. (5) archive 0.37.0: what a voice channel said is read from the
+ *   envelopes that carry `spoken_message`, and named after that channel. (6) why a pause was set
+ *   (by hand, by voice, by the assistant) in the pause list and the health detail. (7) composer
+ *   0.21.0: text for email (message_html), clip URL, buttons (actions, action_groups) and
+ *   per-channel settings (delivery_control). (8) control: users who are not admin pause through
+ *   SuperNotify's voice commands (conversation/process, their own pauses); `snooze_via` forces one way.
  * 2026-10-04 - v0.62.0. (1) New supernotify-tools-card 0.1.0: maintenance with the result on the
  *   spot (refresh entities, resume every pause, archive / picture cleanup older than N days,
  *   reset hand-made changes by kind with the list of what went back) and every enquire_* shown
@@ -419,7 +431,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.62.0"; // bundle / HACS release
+const VERSION = "0.63.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -430,18 +442,18 @@ const VERSION = "0.62.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.32.0",
-  overview: "0.30.1",
+  control: "0.33.0",
+  overview: "0.31.0",
   bands: "0.20.1",
-  deliveries: "0.26.1",
-  transports: "0.23.2",
+  deliveries: "0.27.0",
+  transports: "0.24.0",
   recipients: "0.27.0",
   scenarios: "0.26.1",
   simulator: "0.15.3",
-  composer: "0.20.0",
+  composer: "0.21.0",
   automations: "0.20.2",
   stats: "0.28.2",
-  archive: "0.36.4",
+  archive: "0.37.0",
   tools: "0.1.0",
   why: "0.13.1",
 };
@@ -547,6 +559,20 @@ const SN_STRINGS = {
     snz_choose: "choose what and how long", snz_title: "Pause notifications", snz_what: "What", snz_nc_l: "Non-critical",
     snz_all_l: "Everything", snz_ch: "A channel", snz_pr: "A priority", snz_who: "For whom", snz_everyone: "Everyone",
     snz_me: "Only me", snz_len: "How long", snz_forever: "Until I resume", snz_go: "Pause", snz_close: "Close",
+    rs_hand: "by hand", rs_voice: "by voice", rs_assist: "by the assistant",
+    snz_voice_info: "Your pauses go through SuperNotify's voice commands: they are yours only.",
+    snz_voice_off: "SuperNotify's voice commands are off: turn them on in the integration options.",
+    snz_resume_mine: "Resume mine",
+    occ_title: "Who is home", occ_home_l: "Home", occ_ALL_HOME: "Everyone home", occ_ALL_AWAY: "Everyone away",
+    occ_LONE_HOME: "Only one home", occ_MULTI_HOME: "Some at home", occ_UNDEFINED_OCCUPANTS: "No one tracked",
+    h_repairs: "SuperNotify repairs", h_repairs_1: "SuperNotify repair",
+    det_more: "All attributes", det_yes: "yes", det_no: "no", det_action: "Action", det_target: "Fixed targets",
+    det_target_req: "Needs a target", det_target_use: "Targets use", det_inclusion: "Used when", det_prio: "Priorities",
+    det_occ: "Who must be home", det_transport: "Transport", det_data: "Data", det_debug: "Debug",
+    det_err_last: "Last error", det_err_in: "In", det_err_n: "Errors since start", det_select: "Selection",
+    adv_html: "Text for email (HTML)", adv_clip: "Video clip from a URL", adv_actions: "Buttons on the notification",
+    adv_act_id: "action id", adv_act_title: "button text", adv_act_add: "+ button", adv_groups: "Button groups (comma)",
+    adv_dc: "Channel settings for this notification", adv_dc_ph: "key: value, one per line", adv_dc_add: "+ channel",
     snz_active: "Paused now", snz_resume: "Resume", snz_resume_all: "Resume everything", snz_until_resumed: "until resumed",
     snz_done: "Paused", snz_resumed: "Resumed",
     no_notif: "no notification yet",
@@ -646,6 +672,20 @@ const SN_STRINGS = {
     snz_choose: "scegli cosa e per quanto", snz_title: "Metti in pausa le notifiche", snz_what: "Cosa", snz_nc_l: "Non critiche",
     snz_all_l: "Tutto", snz_ch: "Un canale", snz_pr: "Una priorità", snz_who: "Per chi", snz_everyone: "Tutti",
     snz_me: "Solo io", snz_len: "Per quanto", snz_forever: "Finché non riprendo", snz_go: "Metti in pausa", snz_close: "Chiudi",
+    rs_hand: "a mano", rs_voice: "a voce", rs_assist: "dall'assistente",
+    snz_voice_info: "Le tue pause passano dai comandi vocali di SuperNotify: valgono solo per te.",
+    snz_voice_off: "I comandi vocali di SuperNotify sono spenti: accendili nelle opzioni dell'integrazione.",
+    snz_resume_mine: "Riprendi le mie",
+    occ_title: "Chi è in casa", occ_home_l: "In casa", occ_ALL_HOME: "Tutti in casa", occ_ALL_AWAY: "Tutti fuori",
+    occ_LONE_HOME: "Uno solo in casa", occ_MULTI_HOME: "Alcuni in casa", occ_UNDEFINED_OCCUPANTS: "Nessuno da seguire",
+    h_repairs: "riparazioni di SuperNotify", h_repairs_1: "riparazione di SuperNotify",
+    det_more: "Tutti gli attributi", det_yes: "sì", det_no: "no", det_action: "Azione", det_target: "Destinatari fissi",
+    det_target_req: "Serve un destinatario", det_target_use: "Uso dei destinatari", det_inclusion: "Si usa", det_prio: "Priorità",
+    det_occ: "Chi deve essere in casa", det_transport: "Transport", det_data: "Dati", det_debug: "Debug",
+    det_err_last: "Ultimo errore", det_err_in: "In", det_err_n: "Errori dall'avvio", det_select: "Selezione",
+    adv_html: "Testo per l'email (HTML)", adv_clip: "Video da un indirizzo", adv_actions: "Pulsanti sulla notifica",
+    adv_act_id: "id azione", adv_act_title: "testo del pulsante", adv_act_add: "+ pulsante", adv_groups: "Gruppi di pulsanti (virgola)",
+    adv_dc: "Impostazioni di un canale per questa notifica", adv_dc_ph: "chiave: valore, uno per riga", adv_dc_add: "+ canale",
     snz_active: "In pausa adesso", snz_resume: "Riprendi", snz_resume_all: "Riprendi tutto", snz_until_resumed: "finché non riprendi",
     snz_done: "In pausa", snz_resumed: "Ripreso",
     no_notif: "nessuna notifica ancora",
@@ -725,6 +765,124 @@ function snLiveSnoozes(list, now) {
     if (end > now) out.push({ ...s, _end: end });
   }
   return out;
+}
+
+/* ── 0.63.0 shared helpers ── */
+/** Who paused it, readable: SuperNotify writes "User command", "Voice command" or "Assistant". */
+function snSnoozeReason(s, T) {
+  const r = String((s && s.reason) || "").trim();
+  if (!r) return "";
+  return { "user command": T.rs_hand, "voice command": T.rs_voice, "assistant": T.rs_assist }[r.toLowerCase()] || r;
+}
+
+/** enquire_occupancy -> names at home / away and the occupancy SuperNotify's conditions see. */
+function snOccupancy(hass, resp) {
+  const sc = (resp && (resp.scenarios || resp)) || {};
+  if (!Array.isArray(sc.home) && !Array.isArray(sc.not_home)) return null;
+  const nm = (r) => {
+    const id = r && (r.person || r.entity_id);
+    const st = id && hass && hass.states[id];
+    return (r && r.alias) || (st && st.attributes && st.attributes.friendly_name) || String(id || "?").replace(/^person\./, "");
+  };
+  const on = (r) => r && r.enabled !== false;
+  const home = (sc.home || []).filter(on).map(nm), away = (sc.not_home || []).filter(on).map(nm);
+  const state = !home.length && !away.length ? "UNDEFINED_OCCUPANTS" : !away.length ? "ALL_HOME"
+    : !home.length ? "ALL_AWAY" : home.length === 1 ? "LONE_HOME" : "MULTI_HOME";
+  return { home, away, state };
+}
+
+/**
+ * SuperNotify's own repairs (WS repairs/list_issues, admin only), with their translated title.
+ * One read a minute for the whole page.
+ */
+const snRepairs = { t: 0, p: null };
+function snRepairsFetch(hass) {
+  if (!hass || !hass.user || hass.user.is_admin === false || !hass.callWS) return Promise.resolve([]);
+  const now = Date.now();
+  if (snRepairs.p && now - snRepairs.t < 60000) return snRepairs.p;
+  snRepairs.t = now;
+  snRepairs.p = (async () => {
+    const r = await hass.callWS({ type: "repairs/list_issues" });
+    const mine = ((r && r.issues) || []).filter((i) => i && i.domain === "supernotify" && !i.ignored && !i.dismissed_version);
+    if (mine.length && hass.loadBackendTranslation) { try { await hass.loadBackendTranslation("issues", "supernotify"); } catch (e) { /* titles stay technical */ } }
+    return mine.map((i) => {
+      let title = "";
+      try {
+        if (hass.localize && i.translation_key) title = hass.localize(`component.supernotify.issues.${i.translation_key}.title`, i.translation_placeholders || {});
+      } catch (e) { title = ""; }
+      return { id: i.issue_id, title: title || String(i.translation_key || i.issue_id || "?").replace(/_/g, " "), sev: i.severity };
+    });
+  })().catch(() => []);
+  return snRepairs.p;
+}
+
+/** Go to a Home Assistant page without reloading it. */
+function snNavigate(path) {
+  window.history.pushState(null, "", path);
+  window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+}
+
+/** "14:05" today, "03/10 14:05" otherwise. */
+function snWhen(v) {
+  const d = v ? new Date(v) : null;
+  if (!d || isNaN(d)) return "";
+  const p2 = (n) => String(n).padStart(2, "0");
+  const hm = `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  return d.toDateString() === new Date().toDateString() ? hm : `${p2(d.getDate())}/${p2(d.getMonth() + 1)} ${hm}`;
+}
+
+const SN_OPT_LABELS = {
+  en: { message_usage: "Message used", simplify_text: "Simplify the text", strip_urls: "Remove links",
+    target_select: "Targets accepted", target_categories: "Kinds of target", media_auto_pause: "Pause the music",
+    language: "Language", tts_entity_id: "Voice", device_discovery: "Find devices by itself", device_domain: "Devices from",
+    device_manufacturer_select: "Makers", device_model_select: "Models", title_only: "Title only", timestamp: "Time stamp",
+    chime_aliases: "Sounds", data_keys_select: "Data passed on", unique_targets: "Each target once" },
+  it: { message_usage: "Messaggio usato", simplify_text: "Semplifica il testo", strip_urls: "Togli i link",
+    target_select: "Destinatari accettati", target_categories: "Tipi di destinatario", media_auto_pause: "Mette in pausa la musica",
+    language: "Lingua", tts_entity_id: "Voce", device_discovery: "Trova i dispositivi da solo", device_domain: "Dispositivi da",
+    device_manufacturer_select: "Marche", device_model_select: "Modelli", title_only: "Solo titolo", timestamp: "Ora nel testo",
+    chime_aliases: "Suoni", data_keys_select: "Dati passati", unique_targets: "Ogni destinatario una volta" },
+};
+
+/** A value of an entity attribute, readable (no JSON braces). */
+function snValText(v, T) {
+  if (v === true) return T.det_yes;
+  if (v === false) return T.det_no;
+  if (v == null || v === "") return "—";
+  if (Array.isArray(v)) return v.length ? v.map((x) => snValText(x, T)).join(", ") : "—";
+  if (typeof v === "object") {
+    const e = Object.entries(v).filter(([, x]) => x != null && !(Array.isArray(x) && !x.length));
+    return e.length ? e.map(([k, x]) => `${k}: ${snValText(x, T)}`).join("; ") : "—";
+  }
+  return String(v);
+}
+
+/** The expanded detail of a channel or transport row: label / value lines, then the attributes link. */
+function snDetailHtml(rows, T, config, hass) {
+  const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  const lang = (config && config.language) || (hass && hass.language) || "en";
+  const L = SN_OPT_LABELS[String(lang).slice(0, 2)] || SN_OPT_LABELS.en;
+  const lines = rows.filter((r) => r && r[1] !== undefined && r[1] !== null && r[1] !== "").map(([k, v, opt, cls]) =>
+    `<div class="dr${cls ? " " + cls : ""}"><span class="dk">${esc(opt ? (L[k] || k.replace(/_/g, " ")) : k)}</span><span class="dv">${esc(snValText(v, T))}</span></div>`);
+  return `<div class="det">${lines.join("")}<button class="dmore">${esc(T.det_more)} ›</button></div>`;
+}
+
+/** Targets as one list: {entity_id: [...], email: [...]} -> [...] */
+function snTargetList(t) {
+  if (!t) return undefined;
+  const out = Array.isArray(t) ? t : typeof t === "object" ? Object.values(t).flat() : [t];
+  return out.length ? out : undefined;
+}
+
+function snDetailCss(p) {
+  return `.det { margin: 8px 0 2px; padding: 8px 10px; border-radius: 9px; background: ${p.soft}; font-size: 12.5px; cursor: default; }
+    .dr { display: flex; gap: 10px; padding: 3px 0; }
+    .dk { flex: 0 0 38%; color: ${p.muted}; }
+    .dv { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .dr.err .dv { color: ${p.crit}; }
+    .dmore { margin-top: 6px; border: 0; background: none; color: ${p.brandD}; font: inherit; font-weight: 650; cursor: pointer; padding: 4px 0; }
+    .row[aria-expanded="true"] { align-items: flex-start; }
+    .chev { color: ${p.muted}; font-size: 12px; flex: none; align-self: flex-start; padding-top: 4px; }`;
 }
 
 function snT(config, hass) {
@@ -954,6 +1112,8 @@ const SN_FORM_LABELS = {
     intro: "Intro text on top", title: "Title", dnd_entity: "Do-not-disturb switch",
     quiet_entity: "Computed quiet state (optional)", presence_entity: "Person for the status bar",
     archive_days: "Archive cleanup: older than (days)", media_days: "Picture cleanup: older than (days)",
+    occupancy: "Who is home (from SuperNotify)", repairs: "SuperNotify repairs in the health list",
+    snooze_via: "Pauses go through", o_event: "the push buttons event (admin)", o_voice: "the voice commands",
     snooze_minutes: "Snooze length (minutes)", snooze_panel: "Snooze tile opens the pause panel", announce_delivery: "Channel for announcements",
     last_notification: "Show the last notification", last_channels: "One chip per channel in the last notification",
     repeat_entity: "Repeat-last button (optional)", tile_layout: "Tiles", tile_columns: "Tile columns (empty = automatic)",
@@ -974,6 +1134,8 @@ const SN_FORM_LABELS = {
     intro: "Testo introduttivo in alto", title: "Titolo", dnd_entity: "Interruttore non disturbare",
     quiet_entity: "Stato silenzioso calcolato (facoltativo)", presence_entity: "Persona nella barra di stato",
     archive_days: "Pulizia archivio: piu' vecchie di (giorni)", media_days: "Pulizia foto: piu' vecchie di (giorni)",
+    occupancy: "Chi è in casa (da SuperNotify)", repairs: "Riparazioni di SuperNotify nella salute",
+    snooze_via: "Le pause passano da", o_event: "l'evento dei pulsanti push (admin)", o_voice: "i comandi vocali",
     snooze_minutes: "Durata dello snooze (minuti)", snooze_panel: "Il riquadro pausa apre il pannello delle pause", announce_delivery: "Canale per gli annunci",
     last_notification: "Mostra l'ultima notifica", last_channels: "Un chip per canale nell'ultima notifica",
     repeat_entity: "Pulsante ripeti ultima (facoltativo)", tile_layout: "Tile", tile_columns: "Colonne delle tile (vuoto = automatico)",
@@ -1008,12 +1170,14 @@ function snForm(kind) {
     ent("entity", "sensor"), ent("trigger_entity", "sensor")];
   const S = {
     control: [ent("dnd_entity", ["input_boolean", "switch"]), ent("quiet_entity", ["binary_sensor", "input_boolean"]),
-      ent("presence_entity", "person"), num("snooze_minutes", 5, 240, 5), bool("snooze_panel", true), txt("announce_delivery"),
+      ent("presence_entity", "person"), bool("occupancy", true), num("snooze_minutes", 5, 240, 5), bool("snooze_panel", true),
+      sel("snooze_via", [["", "o_auto"], ["event", "o_event"], ["voice", "o_voice"]]), txt("announce_delivery"),
       bool("last_notification"), bool("last_channels"), ent("repeat_entity", ["input_button", "button", "script"]),
       sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6)],
     overview: [ent("update_entity", "update"), ent("sent_today_entity", "sensor"),
       ent("quiet_entity", ["binary_sensor", "input_boolean"]), bool("health", true),
-      sel("stats", [["", "o_three"], ["full", "o_full"]]), bool("last_notification", true), num("poll_seconds", 10, 600, 10)],
+      sel("stats", [["", "o_three"], ["full", "o_full"]]), bool("last_notification", true), bool("occupancy", true),
+      bool("repairs", true), num("poll_seconds", 10, 600, 10)],
     deliveries: [txt("title"), bool("group", true), bool("hide_defaults", true)],
     transports: [], recipients: [], simulator: [], bands: [],
     scenarios: [num("poll_seconds", 10, 600, 10)],
@@ -1326,24 +1490,35 @@ function snArchiveChannels(doc, chan) {
   return out;
 }
 
-/** What Alexa or TTS actually said, from the call's action data. */
-function snArchiveSpoken(doc) {
+/**
+ * What a voice channel actually said, and which channel. 0.63.0: SuperNotify keeps
+ * `spoken_message` only in the envelopes of the voice transports (envelope.contents, minimal),
+ * so that key - not the channel's name - says which channel spoke; the name is the fallback for
+ * older archives.
+ */
+function snArchiveSpokenBy(doc) {
   for (const [name, res] of Object.entries((doc && doc.deliveries) || {})) {
-    if (!snIsObj(res) || (!name.includes("alexa") && !name.includes("tts"))) continue;
+    if (!snIsObj(res)) continue;
     for (const call of res.success || []) {
       if (!snIsObj(call)) continue;
-      let said = null;
-      for (const c of call.calls || []) {
-        if (snIsObj(c)) {
-          said = ((c.action_data || {}).message) || said;
-          if (said) break;
+      const voice = Object.prototype.hasOwnProperty.call(call, "spoken_message") || name.includes("alexa") || name.includes("tts");
+      if (!voice) continue;
+      let said = call.spoken_message || null;
+      if (!said) {
+        for (const c of call.calls || []) {
+          if (snIsObj(c) && (c.action_data || {}).message) { said = c.action_data.message; break; }
         }
       }
       said = said || call.message;
-      if (said) return snCut(String(said).split(/\s+/).filter(Boolean).join(" "), SN_ARCHIVE_SPOKEN_CHARS);
+      if (said) return { text: snCut(String(said).split(/\s+/).filter(Boolean).join(" "), SN_ARCHIVE_SPOKEN_CHARS), name };
     }
   }
   return null;
+}
+
+function snArchiveSpoken(doc) {
+  const r = snArchiveSpokenBy(doc);
+  return r ? r.text : null;
 }
 
 function snArchiveWhispered(doc) {
@@ -1382,13 +1557,14 @@ function snArchiveItem(doc, chan, scen) {
   const ms = (doc.stats || {}).total_duration_ms;
   if (typeof ms === "number" && ms) item.ms = Math.round(ms * 10) / 10;
   if (snArchiveWhispered(doc)) item.w = true;
-  const said = snArchiveSpoken(doc);
+  const spk = snArchiveSpokenBy(doc);
+  const said = spk && spk.text;
   if (said) {
     const flat = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
     const fs = flat(said);
     const same = [flat(message), flat(body), flat(title)].filter(Boolean)
       .some((f) => fs.startsWith(snCut(f, snLen(fs))) || f.startsWith(fs));
-    if (fs && !same) item.sp = said;
+    if (fs && !same) { item.sp = said; item.spn = spk.name; }
   }
   return item;
 }
@@ -1912,7 +2088,7 @@ class SupernotifyControlCard extends HTMLElement {
   }
 
   connectedCallback() {
-    this._pollTimer = setInterval(() => { this._refreshSnoozes(); this._refreshLast(); }, 60000);
+    this._pollTimer = setInterval(() => { this._refreshSnoozes(); this._refreshLast(); this._refreshOcc(); }, 60000);
     // 30 s tick: snooze countdown + relative time of the last notification
     this._tickTimer = setInterval(() => {
       if (!this._rendered) return;
@@ -1921,7 +2097,8 @@ class SupernotifyControlCard extends HTMLElement {
     }, 30000);
     this._refreshSnoozes();
     this._refreshLast();
-    this._onRefresh = this._onRefresh || (() => { this._refreshSnoozes(); this._refreshLast(); });
+    this._refreshOcc();
+    this._onRefresh = this._onRefresh || (() => { this._refreshSnoozes(); this._refreshLast(); this._refreshOcc(); });
     window.addEventListener("supernotify-refresh", this._onRefresh);
   }
 
@@ -1941,6 +2118,22 @@ class SupernotifyControlCard extends HTMLElement {
         this._lastRaw = raw;
         this._last = n;
         if (this._rendered) this._renderLast();
+      }
+    } catch (e) {
+      // supernotify may still be loading; retry on next poll
+    }
+  }
+
+  async _refreshOcc() {
+    if (!this._hass || this._config.presence_entity || this._config.occupancy === false) return;
+    try {
+      const r = await snEnquire(this._hass, "enquire_occupancy");
+      const o = snOccupancy(this._hass, r && r.response);
+      const raw = JSON.stringify(o);
+      if (raw !== this._occRaw) {
+        this._occRaw = raw;
+        this._occ = o;
+        if (this._rendered) this._renderStatus();
       }
     } catch (e) {
       // supernotify may still be loading; retry on next poll
@@ -2306,6 +2499,11 @@ class SupernotifyControlCard extends HTMLElement {
       const st = this._st(c.presence_entity);
       segs.push(seg("🏠 " + T.presence, this._friendly(c.presence_entity, "") + " · " + (st === "home" ? T.home : st || "—"),
         st === "home" ? p.ok : undefined));
+    } else if (c.occupancy !== false && this._occ) {
+      // 0.63.0: who is home for SuperNotify (enquire_occupancy) - what its conditions see
+      const o = this._occ;
+      segs.push(seg("🏠 " + T.occ_home_l, o.home.length ? o.home.join(", ") : T["occ_" + o.state],
+        o.home.length ? p.ok : undefined));
     }
     const band = this._activeBand();
     if (band) {
@@ -2432,14 +2630,15 @@ class SupernotifyControlCard extends HTMLElement {
     const canResume = (s) => String(s.recipient_type || "").toUpperCase() !== "USER" ||
       (s.recipient && this._hass.states[s.recipient] && (this._hass.states[s.recipient].attributes || {}).user_id === myUser);
     const pad = (n) => String(n).padStart(2, "0");
+    const voice = this._snzVoice();
     const rows = live.map((s, i) => `<div class="sr"><span class="sl">${esc(snSnoozeLabel(this._hass, s, T))}</span>
-        <span class="su">${s._end ? `${esc(T.until)} ${pad(s._end.getHours())}:${pad(s._end.getMinutes())}` : esc(T.snz_until_resumed)}</span>
-        ${canResume(s) ? `<button class="sb" data-r="${i}">${esc(T.snz_resume)}</button>` : ""}</div>`).join("");
+        <span class="su">${s._end ? `${esc(T.until)} ${pad(s._end.getHours())}:${pad(s._end.getMinutes())}` : esc(T.snz_until_resumed)}${snSnoozeReason(s, T) ? ` · ${esc(snSnoozeReason(s, T))}` : ""}</span>
+        ${canResume(s) && !voice ? `<button class="sb" data-r="${i}">${esc(T.snz_resume)}</button>` : ""}</div>`).join("");
     el.innerHTML = snIconify(`<div class="sh"><b>${esc(T.snz_title)}</b><button class="sx" id="snzX" aria-label="${esc(T.snz_close)}">✕</button></div>
-      <div class="sk">${esc(T.snz_what)}</div><div class="srow">${whatRow}</div>${sub ? `<div class="srow">${sub}</div>` : ""}
-      <div class="sk">${esc(T.snz_who)}</div><div class="srow">${whoRow}</div>
+      ${voice ? `<div class="sk">${esc(T.snz_voice_info)}</div>` : `<div class="sk">${esc(T.snz_what)}</div><div class="srow">${whatRow}</div>${sub ? `<div class="srow">${sub}</div>` : ""}
+      <div class="sk">${esc(T.snz_who)}</div><div class="srow">${whoRow}</div>`}
       <div class="sk">${esc(T.snz_len)}</div><div class="srow">${lenRow}</div>
-      <div class="sgo"><button class="sp" id="snzGo">😴 ${esc(T.snz_go)}</button></div>
+      <div class="sgo"><button class="sp" id="snzGo">😴 ${esc(T.snz_go)}</button>${voice ? `<button class="sb" id="snzMine">${esc(T.snz_resume_mine)}</button>` : ""}</div>
       ${live.length ? `<div class="sk">${esc(T.snz_active)}</div><div class="slist">${rows}</div>
         <div class="sgo"><button class="sb" id="snzAll">${esc(T.snz_resume_all)}</button></div>` : ""}`, this._config);
     el.querySelectorAll(".sc").forEach((b) => {
@@ -2454,7 +2653,9 @@ class SupernotifyControlCard extends HTMLElement {
     const sel = el.querySelector("#snzT");
     if (sel) sel.onchange = () => { st.target = sel.value; };
     el.querySelector("#snzX").onclick = () => { this._snzOpen = false; this._renderSnz(); };
-    el.querySelector("#snzGo").onclick = () => this._snzFire(this._snzAction(st), T.snz_done);
+    el.querySelector("#snzGo").onclick = () => voice ? this._snzSay(+st.min > 0 ? "snooze" : "silence", +st.min) : this._snzFire(this._snzAction(st), T.snz_done);
+    const mine = el.querySelector("#snzMine");
+    if (mine) mine.onclick = () => this._snzSay("resume");
     el.querySelectorAll(".sb[data-r]").forEach((b) => {
       const s0 = live[+b.dataset.r];
       b.onclick = () => this._snzFire(this._snzAction({ resume: true, what: String(s0.target_type || "").toUpperCase(),
@@ -2468,6 +2669,35 @@ class SupernotifyControlCard extends HTMLElement {
       } catch (e) { this._toast(`✖ ${(e && e.message) || e}`); }
       snEnquireBust(800);
     };
+  }
+
+  /**
+   * 0.63.0: the mobile_app_notification_action event needs an admin. Anyone else pauses through
+   * SuperNotify's own voice commands (conversation/process), which pause the person of the user
+   * who asks. `snooze_via: event | voice` forces one way.
+   */
+  _snzVoice() {
+    const v = this._config.snooze_via;
+    if (v === "voice") return true;
+    if (v === "event") return false;
+    return !!(this._hass && this._hass.user && this._hass.user.is_admin === false);
+  }
+
+  async _snzSay(cmd, min) {
+    const T = snT(this._config, this._hass);
+    const it = String((this._config.language || this._hass.language || "en")).startsWith("it");
+    const text = cmd === "resume" ? (it ? "riattiva le mie notifiche" : "resume my notifications")
+      : cmd === "silence" ? (it ? "silenzia le mie notifiche fino a nuovo ordine" : "silence my notifications until I say")
+      : (it ? `metti in pausa le mie notifiche per ${min} minuti` : `pause my notifications for ${min} minutes`);
+    try {
+      const r = await this._hass.callWS({ type: "conversation/process", text, language: it ? "it" : "en" });
+      const res = (r && r.response) || {};
+      const said = (((res.speech || {}).plain || {}).speech) || "";
+      this._toast(res.response_type === "error" ? T.snz_voice_off : said || T.snz_done);
+    } catch (e) {
+      this._toast(`✖ ${(e && e.message) || e}`);
+    }
+    snEnquireBust(800);
   }
 
   /** The SUPERNOTIFY_... action name for a pause (or, with `resume`, for resuming it). */
@@ -2653,9 +2883,14 @@ class SupernotifyOverviewCard extends HTMLElement {
     if (delsOff.length) chips.push({ k: "off", t: `🔕 ${snPl(T, "h_channels_off", delsOff.length)}`, title: delsOff.map((d) => snDeliveryAlias(this._hass, d.name) || d.name).join(", ") });
     if (c.quiet_entity && this._st(c.quiet_entity) === "on") chips.push({ k: "warn", t: `🌙 ${T.dnd} ${T.active}` });
     const snz = snLiveSnoozes(this._snoozes);
+    const snzL = (x) => snSnoozeLabel(this._hass, x, T) + (snSnoozeReason(x, T) ? ` (${snSnoozeReason(x, T)})` : "");
     if (snz.length) chips.push({ k: "warn",
       t: snz.length === 1 ? `😴 ${T.snoozed}: ${snSnoozeLabel(this._hass, snz[0], T)}` : `😴 ${snz.length} ${T.snoozed.toLowerCase()}`,
-      title: snz.map((x) => snSnoozeLabel(this._hass, x, T)).join(", ") });
+      title: snz.map(snzL).join(", ") });
+    // 0.63.0: SuperNotify's own repairs (admin only), opened in Settings > Repairs
+    const reps = this._repairs || [];
+    if (reps.length) chips.push({ k: reps.some((r) => r.sev === "error" || r.sev === "critical") ? "crit" : "warn",
+      t: `🛠 ${snPl(T, "h_repairs", reps.length)}`, title: reps.map((r) => r.title).join(" · "), href: "/config/repairs", nav: true });
     if (!chips.some((x) => x.k !== "ok" && x.k !== "off")) chips.unshift({ k: "ok", t: `✔ ${T.h_all_good}` });
     return chips;
   }
@@ -2709,14 +2944,18 @@ class SupernotifyOverviewCard extends HTMLElement {
   async _refresh() {
     if (!this._hass) return;
     try {
-      const [act, last, snz] = await Promise.all([
+      const [act, last, snz, occ, rep] = await Promise.all([
         this._ws("enquire_active_scenarios"),
         this._config.last_notification === false ? {} : this._ws("enquire_last_notification"),
         this._ws("enquire_snoozes"),
+        this._config.occupancy === false ? {} : this._ws("enquire_occupancy").catch(() => ({})),
+        this._config.repairs === false ? [] : snRepairsFetch(this._hass),
       ]);
       this._active = act.scenarios || [];
       this._last = last && Object.keys(last).length ? last : null;
       this._snoozes = snz.snoozes || [];
+      this._occ = snOccupancy(this._hass, occ);
+      this._repairs = rep || [];
     } catch (e) {
       this._active = this._active || null;
       this._last = this._last || null;
@@ -2830,6 +3069,7 @@ class SupernotifyOverviewCard extends HTMLElement {
         ${snIntro(this._config, this._dark)}<div class="health" id="health"></div><div class="stats" id="stats"></div>
         ${this._config.last_notification === false ? "" : `<div class="sec">${snT(this._config, this._hass).last_notif}</div>
         <div class="lastmsg" id="last">—</div>`}
+        ${this._config.occupancy === false ? "" : `<div class="sec">${snT(this._config, this._hass).occ_title}</div><div id="occ">—</div>`}
         <div class="sec">${snT(this._config, this._hass).act_scen}</div>
         <div id="scen">—</div>
         ${this._config && this._config.show_version ? `<div class="ver">supernotify-overview-card v${SN_CARD_VERSIONS.overview}</div>` : ""}
@@ -2871,6 +3111,7 @@ class SupernotifyOverviewCard extends HTMLElement {
         html = this._health().map((h) => h.href
           ? `<a class="hc ${h.k}" href="${esc(h.href)}" target="_blank" rel="noopener">${esc(h.t)}</a>`
           : `<span class="hc ${h.k}"${h.title ? ` title="${esc(h.title)}"` : ""}>${esc(h.t)}</span>`).join("");
+        html = html.replace(/ href="\/config\/repairs" target="_blank" rel="noopener"/g, ' href="/config/repairs" data-nav="1"');
       } else if (this._config.health) {
         // 0.52.0: one sentence on top, then what to look at, each with its detail and action
         const all = this._health();
@@ -2887,13 +3128,16 @@ class SupernotifyOverviewCard extends HTMLElement {
           const icon = m ? m[1] : "", text = m ? m[2] : h.t;
           return `<div class="hr ${h.k}"><span class="hi">${esc(icon)}</span>
             <div class="ht"><div>${esc(text)}</div>${h.title && !text.includes(h.title) ? `<div class="hd">${esc(h.title)}</div>` : ""}</div>
-            ${h.href ? `<a class="ha" href="${esc(h.href)}" target="_blank" rel="noopener">${esc(T.h_open)}</a>` : ""}</div>`;
+            ${h.href ? `<a class="ha" href="${esc(h.href)}"${h.nav ? ' data-nav="1"' : ' target="_blank" rel="noopener"'}>${esc(T.h_open)}</a>` : ""}</div>`;
         };
         html = `<div class="hb ${lvl}"><span class="hbi">${lvl === "ok" ? "✔" : "⚠"}</span>
             <div><div class="hbt">${esc(head)}</div>${sub ? `<div class="hbs">${esc(sub)}</div>` : ""}</div></div>`
           + (todo.length || fine.length ? `<div class="hl">${todo.map(row).join("")}${fine.map(row).join("")}</div>` : "");
       }
       healthEl.innerHTML = snIconify(html, this && this._config);
+      healthEl.querySelectorAll("a[data-nav]").forEach((a) => {
+        a.onclick = (e) => { e.preventDefault(); snNavigate(a.getAttribute("href")); };
+      });
     }
     const statsEl = this.shadowRoot.getElementById("stats");
     statsEl.innerHTML =
@@ -2942,6 +3186,14 @@ class SupernotifyOverviewCard extends HTMLElement {
       lastEl.textContent = "—";
     }
 
+    const occEl = this.shadowRoot.getElementById("occ");
+    if (occEl) {
+      const o = this._occ;
+      occEl.innerHTML = o ? snIconify(`<div style="display:flex;flex-wrap:wrap;align-items:flex-start">`
+        + `<span class="badge ${o.home.length ? "b-ok" : "b-off"}" style="padding:7px 12px;margin:0 6px 6px 0">${esc(T["occ_" + o.state] || o.state)}</span>`
+        + o.home.map((n) => `<span class="chip">🏠 ${esc(n)}</span>`).join("")
+        + o.away.map((n) => `<span class="chip" style="color:${p.muted}">🚶 ${esc(n)}</span>`).join("") + `</div>`, this && this._config) : "—";
+    }
     this.shadowRoot.getElementById("scen").innerHTML = snIconify(act && act.length
       ? act.map((s) => `<span class="chip">🎬 ${esc(this._scenLabel(s))}</span>`).join("")
       : `<span class="badge b-off">${T.none}</span>`, this && this._config);
@@ -3396,6 +3648,7 @@ class SupernotifyDeliveriesCard extends HTMLElement {
                   text-transform: uppercase; color: ${p.muted}; }
         .grp .row:last-child { border-bottom: 0; }
         .row.dim .em, .row.dim .mid b { opacity: .6; }
+        ${snDetailCss(p)}
         .mid .tr { margin-top: 2px; }
         .st.warn { color: ${p.warn}; font-weight: 600; } .st.crit { color: ${p.crit}; font-weight: 600; }
         .st.ok { color: ${p.ok}; font-weight: 600; }
@@ -3479,12 +3732,26 @@ class SupernotifyDeliveriesCard extends HTMLElement {
       if (SN_NATIVE_TARGET_TRANSPORTS.includes(tr)) tags.push(T.native_target_tag);
       const meta = [state ? `<span class="st ${cls}">${esc(state)}</span>` : "",
         snTech(tech, alias || d.name), tr && !snSame(tr, d.name) && !snSame(tr, alias) ? snTech(tr, "") : ""].filter(Boolean).join(" · ");
-      return `<div class="row${d.on ? "" : " dim"}" data-i="${i}">
+      const open = this._open && this._open.has(d.id);
+      const det = open ? snDetailHtml([
+        [T.det_transport, tr || undefined],
+        [T.det_action, d.a.action || undefined],
+        [T.det_target, snTargetList(d.a.target)],
+        [T.det_target_req, d.a.target_required || undefined],
+        [T.det_target_use, d.a.target_usage || undefined],
+        [T.det_inclusion, d.a.inclusion || undefined],
+        [T.det_select, d.a.selection_rank || undefined],
+        ...Object.entries(d.a.options || {}).map(([k, v]) => [k, v, true]),
+        [T.det_data, d.a.data && Object.keys(d.a.data).length ? d.a.data : undefined],
+        [T.det_debug, d.a.debug ? true : undefined],
+      ], T, this._config, this._hass) : "";
+      return `<div class="row${d.on ? "" : " dim"}" data-i="${i}" aria-expanded="${open ? "true" : "false"}">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(alias || d.name)}</b>
           <div class="tr">${meta}</div>
           ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
-        </div>
+          ${det}
+        </div><span class="chev" aria-hidden="true">${open ? "▴" : "▾"}</span>
         <label class="sw" data-id="${esc(d.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
           <input type="checkbox" ${d.on ? "checked" : ""} aria-label="${esc(alias || d.name)}">
           <span class="sl"></span>
@@ -3503,10 +3770,16 @@ class SupernotifyDeliveriesCard extends HTMLElement {
     }
     const foot = resetBtn ? `<button class="rstb">↺ ${esc(T.reset_overrides)}</button>` : "";
     rows.innerHTML = snIconify(head + body + foot, this && this._config);
+    // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
         if (e.target.closest(".sw")) return;
-        this._moreInfo(dels[+node.dataset.i].id);
+        const id = dels[+node.dataset.i].id;
+        if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
+        if (e.target.closest(".det")) return;
+        this._open = this._open || new Set();
+        if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
+        this._update();
       };
     });
     rows.querySelectorAll(".sw").forEach((label) => {
@@ -3628,6 +3901,8 @@ class SupernotifyTransportsCard extends HTMLElement {
         .rst { text-align: right; margin: 0 0 8px; }
         .rstb { font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; border-radius: 8px;
                 border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; padding: 4px 10px; }
+        ${snDetailCss(p)}
+        .det { background: ${p.panel}; border: 1px solid ${p.line}; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
@@ -3653,28 +3928,51 @@ class SupernotifyTransportsCard extends HTMLElement {
       const em = SN_TRANSPORT_ICONS[t.name] || "🔌";
       const tags = [];
       const errCount = +t.a.error_count || 0;
-      if (errCount > 0) tags.push(`<span class="tag err">⚠️ ${errCount} · ${esc(t.a.last_error_message || "")}</span>`);
+      if (errCount > 0) tags.push(`<span class="tag err">⚠️ ${errCount}${t.a.last_error_at ? ` · ${esc(snWhen(t.a.last_error_at))}` : ""} · ${esc(t.a.last_error_message || "")}</span>`);
       let alias = snCleanName(t.a.friendly_name, t.name);
       if (/Transport Adaptor$/i.test(alias)) alias = "";
       const label = alias || SN_TRANSPORT_LABELS[t.name] || t.name;
       const used = snEntityRows(this._hass, "delivery").filter((d) => d.a && d.a.transport === t.name).length;
       const use = used ? `${T.tr_used} ${snPl(T, "channels", used)}` : T.tr_unused;
-      return `<div class="row" data-i="${i}">
+      const open = this._open && this._open.has(t.id);
+      const dd = t.a.delivery_defaults || {};
+      const det = open ? snDetailHtml([
+        [T.det_err_last, t.a.last_error_at ? snWhen(t.a.last_error_at) : undefined, false, "err"],
+        [T.det_err_in, t.a.last_error_in || undefined, false, "err"],
+        [T.det_err_n, errCount || undefined, false, "err"],
+        [T.det_action, dd.action || undefined],
+        [T.det_target, snTargetList(dd.target)],
+        [T.det_target_req, dd.target_required || undefined],
+        [T.det_target_use, dd.target_usage || undefined],
+        [T.det_inclusion, dd.inclusion || undefined],
+        [T.det_prio, dd.priority || undefined],
+        [T.det_occ, dd.occupancy && dd.occupancy !== "all" ? dd.occupancy : undefined],
+        ...Object.entries(dd.options || {}).map(([k, v]) => [k, v, true]),
+        [T.det_data, dd.data && Object.keys(dd.data).length ? dd.data : undefined],
+      ], T, this._config, this._hass) : "";
+      return `<div class="row" data-i="${i}" aria-expanded="${open ? "true" : "false"}">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(label)}</b>
           <div class="sub">${[snTech(t.name, label), esc(use)].filter(Boolean).join(" · ")}</div>
           ${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}
-        </div>
+          ${det}
+        </div><span class="chev" aria-hidden="true">${open ? "▴" : "▾"}</span>
         <label class="sw" data-id="${esc(t.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
           <input type="checkbox" ${t.on ? "checked" : ""} aria-label="${esc(t.name)}">
           <span class="sl"></span>
         </label>
       </div>`;
     }).join(""), this && this._config);
+    // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
         if (e.target.closest(".sw")) return;
-        this._moreInfo(trs[+node.dataset.i].id);
+        const id = trs[+node.dataset.i].id;
+        if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
+        if (e.target.closest(".det")) return;
+        this._open = this._open || new Set();
+        if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
+        this._update();
       };
     });
     rows.querySelectorAll(".sw").forEach((label) => {
@@ -4560,6 +4858,11 @@ class SupernotifyComposerCard extends HTMLElement {
         details.adv summary { cursor: pointer; font-weight: 700; color: ${p.brandD}; }
         details.adv textarea { width: 100%; box-sizing: border-box; }
         .achips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .actr, .dcr { display: flex; gap: 6px; align-items: flex-start; margin-bottom: 6px; }
+        .actr input, .dcr select, .dcr textarea { flex: 1; min-width: 0; }
+        .rmx { flex: none; border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.muted}; border-radius: 8px;
+               padding: 7px 10px; cursor: pointer; font: inherit; }
+        .addb { background: ${p.soft}; color: ${p.brandD}; }
         label.chk { display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 600; margin-top: 10px; }
         .send { border: 0; border-radius: 10px; background: ${p.brand}; color: ${p.onBrand};
                 font-weight: 750; padding: 11px 20px; cursor: pointer; font-size: 13.5px;
@@ -4627,8 +4930,19 @@ class SupernotifyComposerCard extends HTMLElement {
               ${this._scenNames().length ? [["apply_scenarios", T.adv_apply], ["require_scenarios", T.adv_require], ["constrain_scenarios", T.adv_constrain]].map(([k, l]) =>
                 `<label>${l}</label><div class="chips achips" data-k="${k}">${this._scenNames().map((n) =>
                   `<button class="chip" data-s="${esc(n)}">${esc(snScenarioName(this._hass, n))}</button>`).join("")}</div>`).join("") : ""}
+              <label>${T.adv_html}</label>
+              <textarea id="mhtml" rows="2" placeholder="&lt;b&gt;…&lt;/b&gt;"></textarea>
               <label>${T.adv_snapshot}</label>
-              <input id="snapUrl" placeholder="https://…/snapshot.jpg">
+              <input type="text" id="snapUrl" placeholder="https://…/snapshot.jpg">
+              <label>${T.adv_clip}</label>
+              <input type="text" id="clipUrl" placeholder="https://…/clip.mp4">
+              <label>${T.adv_actions}</label>
+              <div id="acts"></div>
+              <button class="chip addb" id="actAdd" type="button">${T.adv_act_add}</button>
+              <input type="text" id="actGroups" placeholder="${T.adv_groups}" style="margin-top:6px">
+              <label>${T.adv_dc}</label>
+              <div id="dcs"></div>
+              <button class="chip addb" id="dcAdd" type="button">${T.adv_dc_add}</button>
               <label class="chk"><input type="checkbox" id="dbg"> ${T.adv_debug}</label>
             </details>
             <button class="send" id="send">🚀 ${T.send}</button><button class="send dry" id="dry" style="display:none">🔍 ${T.dry_btn}</button>
@@ -4669,6 +4983,22 @@ class SupernotifyComposerCard extends HTMLElement {
     sr.getElementById("p").addEventListener("change", upd);
     sr.getElementById("cam").addEventListener("change", upd);
     this._adv = { apply_scenarios: new Set(), require_scenarios: new Set(), constrain_scenarios: new Set() };
+    // 0.63.0: rows for the buttons and the per-channel settings
+    const escA = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const addRow = (box, html) => {
+      const div = document.createElement("div");
+      div.innerHTML = html;
+      const row = div.firstElementChild;
+      row.querySelector(".rmx").onclick = () => row.remove();
+      sr.getElementById(box).appendChild(row);
+    };
+    const actAdd = sr.getElementById("actAdd");
+    if (actAdd) actAdd.onclick = () => addRow("acts", `<div class="actr"><input type="text" class="aid" placeholder="${escA(T.adv_act_id)}">`
+      + `<input type="text" class="atl" placeholder="${escA(T.adv_act_title)}"><button type="button" class="rmx" aria-label="✕">✕</button></div>`);
+    const dcAdd = sr.getElementById("dcAdd");
+    if (dcAdd) dcAdd.onclick = () => addRow("dcs", `<div class="dcr"><select class="dcn">${this._deliveries().map((d) =>
+      `<option value="${escA(d.name)}">${escA(snDeliveryAlias(this._hass, d.name) || d.name)}</option>`).join("")}</select>`
+      + `<textarea class="dcv" rows="2" placeholder="${escA(T.adv_dc_ph)}"></textarea><button type="button" class="rmx" aria-label="✕">✕</button></div>`);
     sr.querySelectorAll(".achips .chip").forEach((b) => {
       b.onclick = () => {
         const set = this._adv[b.parentElement.dataset.k];
@@ -4820,6 +5150,30 @@ class SupernotifyComposerCard extends HTMLElement {
     }
     const snap = ((sr.getElementById("snapUrl") || {}).value || "").trim();
     if (snap) payload.snapshot_url = snap;
+    // 0.63.0: the rest of supernotify.notify
+    const mh = ((sr.getElementById("mhtml") || {}).value || "").trim();
+    if (mh) payload.message_html = mh;
+    const clip = ((sr.getElementById("clipUrl") || {}).value || "").trim();
+    if (clip) payload.clip_url = clip;
+    const acts = [...sr.querySelectorAll("#acts .actr")].map((r) => ({
+      action: (r.querySelector(".aid").value || "").trim(), title: (r.querySelector(".atl").value || "").trim(),
+    })).filter((a) => a.action).map((a) => (a.title ? a : { action: a.action }));
+    if (acts.length) payload.actions = acts;
+    const groups = ((sr.getElementById("actGroups") || {}).value || "").split(",").map((x) => x.trim()).filter(Boolean);
+    if (groups.length) payload.action_groups = groups;
+    const dc = {};
+    for (const r of sr.querySelectorAll("#dcs .dcr")) {
+      const name = r.querySelector(".dcn").value;
+      const data = {};
+      for (const line of String(r.querySelector(".dcv").value || "").split("\n")) {
+        const m = line.match(/^\s*([^:]+?)\s*:\s*(.*?)\s*$/);
+        if (!m) continue;
+        const v = m[2];
+        data[m[1]] = v === "true" ? true : v === "false" ? false : v !== "" && !isNaN(+v) ? +v : v;
+      }
+      if (name && Object.keys(data).length) dc[name] = { ...(dc[name] || {}), data: { ...((dc[name] || {}).data || {}), ...data } };
+    }
+    if (Object.keys(dc).length) payload.delivery_control = dc;
     if ((sr.getElementById("dbg") || {}).checked) payload.debug = true;
     const cam = sr.getElementById("cam").value;
     if (cam) {
@@ -6136,7 +6490,7 @@ class SupernotifyArchiveCard extends HTMLElement {
            ${r.m ? `<div class="msg">${esc(r.m)}${r.mt ? "…" : ""}</div>` : ""}
            <div class="tags">${chans}</div>
            <div class="det">
-             ${r.sp ? `<div class="said">\u{1F50A} <b>${T.said}:</b> \u00ab${esc(r.sp)}\u00bb</div>` : ""}
+             ${r.sp ? `<div class="said">\u{1F50A} <b>${r.spn && !/alexa/i.test(r.spn) ? esc(T.said_by.replace("{ch}", snDeliveryAlias(this._hass, r.spn) || r.spn)) : T.said}:</b> \u00ab${esc(r.sp)}\u00bb</div>` : ""}
              ${scen ? `<div><b>${T.scenarios}:</b> ${scen}</div>` : ""}
              <div>${r.d ? `<b>${r.d}</b> ${snW(T, "delivered", r.d)} ` : ""}${r.f ? `· <b>${r.f}</b> ${snW(T, "failed", r.f)} ` : ""}${r.s ? `· <b>${r.s}</b> ${snW(T, "skipped", r.s)} ` : ""}${r.mi ? `· ⚠ <b>${r.mi}</b> ${snW(T, "missed", r.mi)} ` : ""}
              ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""}${r.mt ? ` · ${T.truncated}` : ""}</div>
@@ -6172,7 +6526,7 @@ const SN_ARCH_STRINGS = {
   en: {
     title: "Notification history", search: "Search title or message…",
     f_all: "All", f_problems: "Problems only", f_today: "Today",
-    f_whisper: "Whispered", wh: "whispered", said: "Alexa said",
+    f_whisper: "Whispered", wh: "whispered", said: "Alexa said", said_by: "{ch} said",
     none: "no notification matches", no_sensor: "sensor not found",
     no_sensor_hint: "Update SuperNotify to 2.10 or later, which has the supernotify.enquire_archive action, or add the command_line sensor that indexes the archive (see README).",
     loading: "reading the archive…", recent: "latest notifications", read_at: "read at",
@@ -6190,7 +6544,7 @@ const SN_ARCH_STRINGS = {
   it: {
     title: "Storico notifiche", search: "Cerca nel titolo o nel messaggio…",
     f_all: "Tutte", f_problems: "Solo con problemi", f_today: "Oggi",
-    f_whisper: "Sussurrate", wh: "sussurrata", said: "Alexa ha detto",
+    f_whisper: "Sussurrate", wh: "sussurrata", said: "Alexa ha detto", said_by: "{ch} ha detto",
     none: "nessuna notifica corrisponde", no_sensor: "sensore non trovato",
     no_sensor_hint: "Aggiorna SuperNotify alla 2.10 o successiva, che ha l'azione supernotify.enquire_archive, oppure aggiungi il sensore command_line che indicizza l'archivio (vedi README).",
     loading: "lettura dell'archivio…", recent: "notifiche più recenti", read_at: "lette alle",

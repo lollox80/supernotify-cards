@@ -3,6 +3,33 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.63.0] - 2026-10-04
+
+Who is home, SuperNotify's repairs, the detail of channels and transports, and the rest of the composer.
+
+### Added
+- overview-card / control-card: **who is home for SuperNotify** (`enquire_occupancy`), the people and
+  the occupancy its conditions see. `occupancy: false` hides it.
+- overview-card: **SuperNotify's repairs** in the health list (admin users), with their title and a
+  link to Settings › Repairs. `repairs: false` leaves them out.
+- transports-card: when the last error happened and in which step; **tap a row** for the defaults
+  (action, targets, priorities, options in plain words).
+- deliveries-card: **tap a row** for transport, action, targets, options and data; **All attributes ›**
+  opens Home Assistant's dialog.
+- control-card: pauses show **why they were set** (by hand, by voice, by the assistant); users who
+  are **not admin** pause through SuperNotify's voice commands (their own pauses). `snooze_via`
+  forces one way.
+- composer-card: text for email (`message_html`), video clip URL, **buttons** (`actions`,
+  `action_groups`) and **per-channel settings** (`delivery_control`).
+
+### Changed
+- archive-card: what a voice channel said is recognised from SuperNotify's data, not from the
+  channel's name, and named after that channel.
+- deliveries-card / transports-card: a tap opens the detail instead of the attributes dialog.
+
+### Fixed
+- composer-card: the picture URL field had no input style.
+
 ## [0.62.0] - 2026-10-04
 
 A tools card, a test button for each person, and the composer's advanced options.
