@@ -3,6 +3,15 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.76.1] - 2026-10-05
+
+### Fixed
+- Cards stuck on "loading" on a page opened straight on a view (overview without last
+  notification, who is home or active scenarios; stats and archive "reading"). A request sent while
+  the page was still connecting could stay unanswered, and the card waited for it for ever. Every
+  read the cards make now gives up after a time (10 s for SuperNotify's enquire actions, 20 s for
+  the others, 60-90 s for the archive counts), so the next update asks again.
+
 ## [0.76.0] - 2026-10-05
 
 ### Added

@@ -8,6 +8,12 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-05 - v0.76.1. Cards stuck on "loading" (overview without last notification, who is home
+ *   or active scenarios, stats and archive "reading") on a page opened straight on a view: a
+ *   request sent while the page was still connecting could stay unanswered, and the card waited for
+ *   it for ever. Every read the cards make (SuperNotify's enquire_* actions, the archive, history,
+ *   statistics, repairs, the dashboard configuration) now gives up after a time (10 s for the
+ *   enquire_* actions, 20 s for the others, 60-90 s for the archive counts) so the next update asks again.
  * 2026-10-05 - v0.76.0. control: "while you were paused". When no pause is in force, the control
  *   card with the snooze tile asks SuperNotify's archive (enquire_archive, summary) for what a
  *   pause held back since the last time you saw it (at most the last 24 h): notifications
@@ -558,7 +564,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.76.0"; // bundle / HACS release
+const VERSION = "0.76.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -569,8 +575,8 @@ const VERSION = "0.76.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.38.0",
-  overview: "0.36.0",
+  control: "0.38.1",
+  overview: "0.36.1",
   bands: "0.21.0",
   deliveries: "0.31.0",
   transports: "0.27.0",
@@ -578,11 +584,11 @@ const SN_CARD_VERSIONS = {
   scenarios: "0.30.0",
   simulator: "0.17.0",
   composer: "0.25.0",
-  automations: "0.21.3",
-  stats: "0.32.1",
+  automations: "0.21.4",
+  stats: "0.32.2",
   archive: "0.38.2",
-  tools: "0.2.1",
-  why: "0.14.2",
+  tools: "0.2.2",
+  why: "0.14.3",
 };
 
 /**
@@ -1162,7 +1168,7 @@ function snDashEnsure(hass) {
   snDash.busy = true;
   snDash.key = key;
   const uid = hass.user && hass.user.id;
-  Promise.resolve(hass.callWS({ type: "lovelace/config", url_path: key === "lovelace" ? null : key })).then((cfg) => {
+  snWS(hass, { type: "lovelace/config", url_path: key === "lovelace" ? null : key }).then((cfg) => {
     // 0.71.0: a strategy dashboard stores only {strategy: ...}; build its views the same way HA does
     const strat = cfg && !cfg.views && cfg.strategy;
     const m0 = strat && typeof strat.type === "string" && strat.type.match(/^custom:(.+)$/);
@@ -1811,7 +1817,7 @@ function snRepairsFetch(hass) {
   if (snRepairs.p && now - snRepairs.t < 60000) return snRepairs.p;
   snRepairs.t = now;
   snRepairs.p = (async () => {
-    const r = await hass.callWS({ type: "repairs/list_issues" });
+    const r = await snWS(hass, { type: "repairs/list_issues" });
     const mine = ((r && r.issues) || []).filter((i) => i && i.domain === "supernotify" && !i.ignored && !i.dismissed_version);
     if (mine.length && hass.loadBackendTranslation) { try { await hass.loadBackendTranslation("issues", "supernotify"); } catch (e) { /* titles stay technical */ } }
     return mine.map((i) => {
@@ -2785,7 +2791,7 @@ function snDailyCounts(hass, id, days, force) {
   if (hit && !force && Date.now() - hit.t < 300000) return hit.p;
   const start = new Date(Date.now() - days * 86400000);
   start.setHours(0, 0, 0, 0);
-  const p = Promise.resolve(hass.callWS({
+  const p = Promise.resolve(snWS(hass, {
     type: "recorder/statistics_during_period",
     start_time: start.toISOString(), end_time: new Date().toISOString(),
     statistic_ids: [id], period: "day", types: ["change", "state"],
@@ -2812,6 +2818,17 @@ function snDailyCounts(hass, id, days, force) {
   return p;
 }
 
+/**
+ * 0.76.1: hass.callWS with a time limit. A read sent while the page was still connecting could stay
+ * unanswered, and a card waiting on it never asked again; now it fails after `ms` and the next
+ * update retries.
+ */
+function snWS(hass, msg, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms || 20000);
+    Promise.resolve(hass.callWS(msg)).then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
+  });
+}
 const SN_ENQ = new Map();
 const SN_ENQ_TTL = 2500;
 const snEnqStats = { calls: 0, shared: 0 };
@@ -2823,10 +2840,10 @@ function snEnquire(hass, service, data) {
   if (hit && now - hit.t < SN_ENQ_TTL) snEnqStats.shared++;
   else {
     snEnqStats.calls++;
-    const p = hass.callWS({
+    const p = snWS(hass, {
       type: "call_service", domain: "supernotify", service,
       service_data: data || {}, return_response: true,
-    });
+    }, 10000);
     hit = { t: now, p };
     SN_ENQ.set(key, hit);
     p.catch(() => { if (SN_ENQ.get(key) === hit) SN_ENQ.delete(key); });
@@ -2886,7 +2903,7 @@ const snArchiveStore = {
   },
 
   async _call(hass, data) {
-    const r = await hass.callWS({
+    const r = await snWS(hass, {
       type: "call_service", domain: "supernotify", service: "enquire_archive",
       service_data: data, return_response: true,
     });
@@ -3234,7 +3251,7 @@ class SupernotifyControlCard extends SnCard {
     try { ack = +(window.localStorage.getItem(SN_CU_KEY) || 0); } catch (e) { /* private mode */ }
     const since = Math.max(ack, Date.now() - 86400000);
     try {
-      const r = await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "enquire_archive",
+      const r = await snWS(this._hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
         service_data: { verbosity: "summary", after: new Date(since).toISOString(), limit: 500 }, return_response: true });
       const ns = ((r && r.response && r.response.notifications) || []).filter(snIsObj);
       const held = [];
@@ -6787,8 +6804,8 @@ const snStatsArchive = {
   async _ask(hass, after, before) {
     const data = { verbosity: "summary", after: new Date(after).toISOString(), limit: 5000 };
     if (before) data.before = new Date(before).toISOString();
-    const r = await hass.callWS({ type: "call_service", domain: "supernotify", service: "enquire_archive",
-      service_data: data, return_response: true });
+    const r = await snWS(hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
+      service_data: data, return_response: true }, 60000);
     return ((r && r.response && r.response.notifications) || []).filter(snIsObj);
   },
 
@@ -6868,8 +6885,8 @@ const snStatsDaily = {
   },
 
   async _ask(hass, afterMs) {
-    const r = await hass.callWS({ type: "call_service", domain: "supernotify", service: "enquire_archive",
-      service_data: { verbosity: "daily", after: new Date(afterMs).toISOString() }, return_response: true });
+    const r = await snWS(hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
+      service_data: { verbosity: "daily", after: new Date(afterMs).toISOString() }, return_response: true }, 90000);
     const days = r && r.response && r.response.days;
     if (!Array.isArray(days)) throw new Error("no days");
     return days.filter(snIsObj);
@@ -7121,13 +7138,13 @@ class SupernotifyStatsCard extends SnCard {
     let stats = {};
     try {
       [hist, stats] = await Promise.all([
-        this._hass.callWS({
+        snWS(this._hass, {
           type: "history/history_during_period",
           start_time: start.toISOString(), end_time: now.toISOString(),
           entity_ids: ids, minimal_response: true, no_attributes: true, significant_changes_only: false,
         }),
         c.sent_today_entity
-          ? this._hass.callWS({
+          ? snWS(this._hass, {
               type: "recorder/statistics_during_period",
               start_time: start.toISOString(), end_time: now.toISOString(),
               statistic_ids: [c.sent_today_entity], period: "day", types: ["change"],
@@ -8222,7 +8239,7 @@ class SupernotifyWhyCard extends SnCard {
     const svc = this._hass.services && this._hass.services[domain];
     if (!svc || !svc[service]) return { ok: false, error: "no_service" };
     try {
-      const r = await this._hass.callWS({
+      const r = await snWS(this._hass, {
         type: "call_service", domain, service, service_data: { id }, return_response: true,
       });
       const out = r && r.response && r.response.stdout;
