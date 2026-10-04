@@ -12,6 +12,16 @@ showing installed vs. latest version of SuperNotify and of these cards
 
 <img src="../images/stats.png" alt="supernotify-stats-card" width="800">
 
+**From SuperNotify 2.12.1** (0.70.0) every figure comes from SuperNotify's own archive
+(`supernotify.enquire_archive` with `verbosity: summary`): no helper, no automation, no utility
+meter. Duplicates are left out (nothing was sent). Each notification is kept as a small row in the
+browser (a few hundred KB for a month), so only the new days are read after the first opening; the first
+opening reads one day per call and shows its progress (about half a second per day). The band of the
+day is the applied scenario named like a band (`period_scenarios`). The figures go back as far as the
+archive does (SuperNotify's archive retention).
+
+The sources below are used **before 2.12.1** or with `source: history`.
+
 Data sources:
 
 - **Per-day series** — long-term statistics of a daily `utility_meter` on
@@ -29,6 +39,9 @@ type: custom:supernotify-stats-card
 # optional (defaults shown):
 days: 14
 periods: [7, 14, 30]    # window switch in the header; the choice is remembered per browser
+source: ""              # 0.70.0: "" automatic (archive on SuperNotify 2.12.1+), archive, history
+period_scenarios: [early_morning, morning, afternoon, evening, night, late_night]   # archive: scenarios that name the band of the day
+# the entities below are read only from the history (before 2.12.1)
 time_entity: input_datetime.supernotify_last_time
 priority_entity: input_text.supernotify_last_priority
 channels_entity: input_text.supernotify_last_channels
@@ -42,7 +55,7 @@ top_channels: 8
 grid_options: { columns: full }   # recommended inside a column_span: 2 section
 ```
 
-Minimal helpers + automations the card expects (adapt names to yours):
+Before SuperNotify 2.12.1 (or with `source: history`), the card expects these helpers + automations (adapt names to yours):
 
 ```yaml
 input_text:

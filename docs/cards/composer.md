@@ -35,11 +35,15 @@ run (2.12 or later, [issue #218](https://github.com/rhizomatics/supernotify/issu
 `supernotify.notify` with `dry_run: simulate`. The button shows when
 `update.supernotify_update` says 2.12 or later; `dry_run: true` shows it anyway.
 
-By default the dry run skips the duplicate check (`force_resend`): on
-2.12.0-beta1 a simulated notification is remembered as sent, so the real Send
-right after, with the same text, would be dropped as a duplicate. With
-`dry_run_dupe_check: true` the dry run does check duplicates, and the next Send
-of the same content carries `force_resend` instead.
+**SuperNotify 2.12.1 or later** (0.70.0): the dry run checks duplicates the way a real
+send would ("duplicate" in the answer means the real one would be dropped too), and
+the Send after a try is never held back, because SuperNotify keeps simulations in a
+cache of their own. `dry_run_dupe_check: false` skips the check.
+
+**2.12.0:** by default the dry run skips the duplicate check (`force_resend`), because a
+simulated notification is remembered as sent and the real Send right after, with the same
+text, would be dropped as a duplicate. With `dry_run_dupe_check: true` the dry run does
+check duplicates, and the next Send of the same content carries `force_resend` instead.
 
 **Advanced** (closed by default):
 

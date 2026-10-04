@@ -8,6 +8,14 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.70.0. SuperNotify 2.12.1. (1) stats: on 2.12.1 or later the figures come from
+ *   SuperNotify's own archive (enquire_archive, verbosity summary): hour, weekday, priority,
+ *   channels sent and failed, band of the day (the applied scenario named like a band,
+ *   `period_scenarios`). No helper, automation or daily meter is needed any more. Each
+ *   notification is kept as a small row in the browser, so only new days are read after the
+ *   first opening (one call per day, with progress). `source: archive|history` forces one.
+ *   (2) composer: "Try without sending" checks duplicates like a real send would (2.12.1 keeps
+ *   simulations in their own cache), and Send after a try is never held back - no force_resend.
  * 2026-10-04 - v0.69.0. Daily counts from SuperNotify's own counter: sensor.supernotify_notifications
  *   is a total_increasing RestoreSensor, so Home Assistant keeps its long-term statistics with no
  *   helper. (1) stats 0.30.0: `count_entity` (default sensor.supernotify_notifications) fills the
@@ -476,7 +484,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.69.0"; // bundle / HACS release
+const VERSION = "0.70.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -495,9 +503,9 @@ const SN_CARD_VERSIONS = {
   recipients: "0.29.0",
   scenarios: "0.29.0",
   simulator: "0.17.0",
-  composer: "0.23.0",
-  automations: "0.21.0",
-  stats: "0.30.0",
+  composer: "0.24.0",
+  automations: "0.21.1",
+  stats: "0.31.0",
   archive: "0.38.0",
   tools: "0.2.0",
   why: "0.14.0",
@@ -1639,6 +1647,7 @@ const SN_FORM_LABELS = {
     o_supernotify: "SuperNotify", o_theme: "Home Assistant theme", o_mdi: "Home Assistant icons", o_emoji: "Emoji",
     o_row: "Icon on the left", o_stacked: "Tall, icon on top", o_three: "Sent, failures, channels", o_full: "All five",
     o_auto: "Automatic", o_sensor: "Sensor bridge (before SuperNotify 2.10)",
+    o_archive: "SuperNotify archive (2.12.1+)", o_history: "History of the helpers",
   },
   it: {
     _common: "Aspetto e testi", style: "Colori", icons: "Icone", show_version: "Mostra la versione della card",
@@ -1661,6 +1670,7 @@ const SN_FORM_LABELS = {
     o_supernotify: "SuperNotify", o_theme: "Tema di Home Assistant", o_mdi: "Icone di Home Assistant", o_emoji: "Emoji",
     o_row: "Icona a sinistra", o_stacked: "Alte, icona sopra", o_three: "Inviate, fallimenti, canali", o_full: "Tutti e cinque",
     o_auto: "Automatica", o_sensor: "Ponte con sensore (prima di SuperNotify 2.10)",
+    o_archive: "Archivio di SuperNotify (2.12.1+)", o_history: "Cronologia degli helper",
   },
 };
 
@@ -1694,7 +1704,7 @@ function snForm(kind) {
     scenarios: [num("poll_seconds", 10, 600, 10)],
     composer: [ent("update_entity", "update"), bool("dry_run"), bool("dry_run_dupe_check")],
     automations: [txt("manifest_url")],
-    stats: [num("days", 2, 90), ent("sent_today_entity", "sensor"), ent("count_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update")],
+    stats: [num("days", 2, 90), sel("source", [["", "o_auto"], ["archive", "o_archive"], ["history", "o_history"]]), ent("sent_today_entity", "sensor"), ent("count_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update")],
     archive, why: [...archive, bool("expand"), txt("max_height")],
     tools: [num("archive_days", 1, 365), num("media_days", 1, 365)],
   };
@@ -5774,7 +5784,10 @@ class SupernotifyComposerCard extends SnCard {
     const box = this.shadowRoot.getElementById("dryBox");
     if (!this._dryAvailable()) return;
     const payload = this._payload();
-    const dupeCheck = !!this._config.dry_run_dupe_check;
+    // 0.70.0: SuperNotify 2.12.1 keeps simulations in their own duplicate cache - the dry run
+    // checks duplicates like a real send would, and the real Send after it is not held back
+    const sep = snSupernotifyAtLeast(this._hass, "2.12.1", this._config.update_entity) === true;
+    const dupeCheck = this._config.dry_run_dupe_check != null ? !!this._config.dry_run_dupe_check : sep;
     const data = { ...payload, dry_run: "simulate" };
     if (!dupeCheck) data.force_resend = true;
     box.style.display = "";
@@ -5784,7 +5797,7 @@ class SupernotifyComposerCard extends SnCard {
         type: "call_service", domain: "supernotify", service: "notify",
         service_data: data, return_response: true,
       });
-      if (dupeCheck) this._dryKey = { key: JSON.stringify(payload), at: Date.now() };
+      if (dupeCheck && !sep) this._dryKey = { key: JSON.stringify(payload), at: Date.now() };
       this._renderDry((res && res.response) || {}, !dupeCheck);
     } catch (e) {
       const msg = String((e && (e.message || e.code)) || e);
@@ -6098,6 +6111,114 @@ window.customCards.push({
 });
 
 
+/**
+ * 0.70.0: the stats card reads SuperNotify's own archive (2.12.1+: enquire_archive with
+ * verbosity summary) instead of the "last notification" helpers and the automations that
+ * wrote them. A month of archive is a few MB and takes seconds to read, so each notification
+ * is kept as a small row in this browser (localStorage) and only the days not yet seen are
+ * asked for, one day per call: the first opening reads the window once, the next ones only
+ * what came after. Row: [time ms, priority, outcome, day band, [channels sent], [channels
+ * failed], id]. The day band is the first applied scenario named like a band of the day
+ * (`period_scenarios`, default the bands card's keys).
+ */
+const SN_STATS_KEY = "supernotify-stats-archive";
+const SN_STATS_KEEP = 92;  // days kept in the browser
+const SN_BAND_KEYS = ["early_morning", "morning", "afternoon", "evening", "night", "late_night"];
+const snStatsArchive = {
+  rows: null, from: 0, upto: 0, sig: "", busy: null, error: null,
+
+  _open(sig) {
+    if (this.rows && this.sig === sig) return;
+    this.rows = []; this.from = 0; this.upto = 0; this.sig = sig;
+    try {
+      const c = JSON.parse(window.localStorage.getItem(SN_STATS_KEY) || "null");
+      if (c && c.v === 1 && c.sig === sig && Array.isArray(c.rows)) {
+        this.rows = c.rows; this.from = +c.from || 0; this.upto = +c.upto || 0;
+      }
+    } catch (e) { /* private mode or a broken cache: read again */ }
+  },
+
+  _save() {
+    try {
+      window.localStorage.setItem(SN_STATS_KEY, JSON.stringify({ v: 1, sig: this.sig, from: this.from, upto: this.upto, rows: this.rows }));
+    } catch (e) { /* full or private: the rows stay in memory for this page */ }
+  },
+
+  row(n, bands) {
+    const ok = [], ko = [];
+    for (const [name, r] of Object.entries((n && n.deliveries) || {})) {
+      if (!r || typeof r !== "object") continue;
+      if (+r.success > 0) ok.push(name);
+      if (+r.failed > 0 || +r.error > 0 || +r.errors > 0) ko.push(name);
+    }
+    // older archive files keep scenarios as an object keyed by name (seen on 2.12.1-beta1)
+    const sc = n && n.scenarios;
+    const names = Array.isArray(sc) ? sc : sc && typeof sc === "object" ? Object.keys(sc) : sc ? [String(sc)] : [];
+    const band = names.find((x) => bands.includes(x)) || "";
+    return [Date.parse(n.created) || 0, String(n.priority || "").toLowerCase(), String(n.outcome || "").toLowerCase(), band, ok, ko, String(n.id || "").slice(0, 8)];
+  },
+
+  async _ask(hass, after, before) {
+    const data = { verbosity: "summary", after: new Date(after).toISOString(), limit: 5000 };
+    if (before) data.before = new Date(before).toISOString();
+    const r = await hass.callWS({ type: "call_service", domain: "supernotify", service: "enquire_archive",
+      service_data: data, return_response: true });
+    return ((r && r.response && r.response.notifications) || []).filter(snIsObj);
+  },
+
+  /** Rows from startMs to now; progress(done, total) while whole days are read. */
+  ensure(hass, startMs, bands, progress) {
+    if (this.busy) return this.busy;
+    this._open(bands.join(","));
+    this.busy = (async () => {
+      this.error = null;
+      const now = Date.now();
+      const seen = new Set(this.rows.map((r) => r[6]));
+      const add = (list) => {
+        for (const n of list) {
+          let r;
+          try { r = this.row(n, bands); } catch (e) { continue; } // one odd file never stops the rest
+          if (!r[0] || seen.has(r[6])) continue;
+          seen.add(r[6]); this.rows.push(r);
+        }
+      };
+      try {
+        // days before what this browser already has (all of them the first time)
+        const end = this.from && this.from <= now ? this.from : now;
+        if (!this.from || startMs < this.from) {
+          const days = [];
+          for (let t = end; t > startMs; ) {
+            const d = new Date(t - 1); d.setHours(0, 0, 0, 0);
+            const a = Math.max(startMs, d.getTime());
+            days.push([a, t]); t = a;
+          }
+          let done = 0;
+          for (const [a, b] of days) {
+            add(await this._ask(hass, a, b));
+            this.from = a;
+            if (!this.upto) this.upto = end;
+            if (progress) progress(++done, days.length);
+          }
+          if (!this.upto) this.upto = end;
+        }
+        // what came after the last reading
+        if (this.upto < now) {
+          add(await this._ask(hass, this.upto - 120000));
+          this.upto = now;
+        }
+      } catch (e) {
+        this.error = (e && e.message) || String(e);
+      }
+      const keep = now - SN_STATS_KEEP * 86400000;
+      this.rows = this.rows.filter((r) => r[0] >= keep).sort((x, y) => x[0] - y[0]);
+      if (this.from < keep) this.from = keep;
+      this._save();
+      return this.rows;
+    })().finally(() => { this.busy = null; });
+    return this.busy;
+  },
+};
+
 /* ════════════════════════════════════════════════════════════════════════
  * supernotify-stats-card — usage analytics (NEW, 2026-09-10)
  * Everything is derived from entities that already exist, no extra sensor:
@@ -6132,6 +6253,8 @@ const SN_STATS_STRINGS = {
     st_unknown: "unknown", st_loading: "loading…", st_versions: "Versions",
     st_installed: "installed", st_latest: "latest", st_uptodate: "up to date", st_update: "update available",
     st_restart: "restart required", st_cards: "cards", st_logged: "logged",
+    st_reading: "reading the archive: day {n} of {of}…", st_from_archive: "from SuperNotify's archive",
+    st_archive_err: "archive partly read",
     st_wd: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
     st_i_share: "{p}% of all channel sends go through {c}.",
     st_i_peak: "Busiest hour is {h}:00 ({n} notifications in {d} days).",
@@ -6154,6 +6277,8 @@ const SN_STATS_STRINGS = {
     st_unknown: "sconosciuto", st_loading: "caricamento…", st_versions: "Versioni",
     st_installed: "installata", st_latest: "ultima", st_uptodate: "aggiornato", st_update: "aggiornamento disponibile",
     st_restart: "riavvio richiesto", st_cards: "card", st_logged: "registrate",
+    st_reading: "lettura dell'archivio: giorno {n} di {of}…", st_from_archive: "dall'archivio di SuperNotify",
+    st_archive_err: "archivio letto in parte",
     st_wd: ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
     st_i_share: "{c} assorbe il {p}% degli invii per canale.",
     st_i_peak: "Ora più carica: le {h}:00 ({n} notifiche in {d} giorni).",
@@ -6197,6 +6322,8 @@ class SupernotifyStatsCard extends SnCard {
       refresh_minutes: 10,
       top_channels: 8,
       periods: [7, 14, 30],
+      source: "",                 // 0.70.0: "" automatic, "archive" or "history"
+      period_scenarios: SN_BAND_KEYS,
       ...(config || {}),
     };
     // the window picked in the header wins over `days`, and is remembered per browser
@@ -6270,6 +6397,20 @@ class SupernotifyStatsCard extends SnCard {
     const now = new Date();
     const start = new Date(now.getTime() - days * 86400000);
     start.setHours(0, 0, 0, 0);
+    if (this._fromArchive()) {
+      const bands = (Array.isArray(c.period_scenarios) ? c.period_scenarios : SN_BAND_KEYS).map(String);
+      const rows = await snStatsArchive.ensure(this._hass, start.getTime(), bands, (n, of) => {
+        const w = this.shadowRoot && this.shadowRoot.getElementById("win");
+        if (w && !this._data) w.textContent = this._t("st_reading", { n, of });
+      });
+      if (seq !== this._seq) return;
+      this._error = snStatsArchive.error;
+      this._data = this._compute({}, {}, start, now, days, this._archiveEvents(rows, start.getTime()));
+      this._data.archive = true;
+      this._loading = false;
+      if (this._rendered) this._draw();
+      return;
+    }
     const ids = [c.time_entity, c.priority_entity, c.channels_entity, c.period_entity].filter(Boolean);
     let hist = {};
     let stats = {};
@@ -6299,6 +6440,44 @@ class SupernotifyStatsCard extends SnCard {
     if (this._rendered) this._draw();
   }
 
+  /** 0.70.0: archive (SuperNotify 2.12.1+) or the helpers' history. */
+  _fromArchive() {
+    const c = this._config;
+    if (c.source === "archive") return true;
+    if (c.source === "history") return false;
+    const svc = this._hass && this._hass.services && this._hass.services.supernotify;
+    return !!(svc && svc.enquire_archive) && snSupernotifyAtLeast(this._hass, "2.12.1", c.update_entity) === true;
+  }
+
+  /** Archive rows as the events _compute counts; duplicates left out (nothing was sent). */
+  _archiveEvents(rows, startMs) {
+    return rows.filter((r) => r[0] >= startMs && r[2] !== "dupe").map((r) => ({
+      t: r[0], p: r[1], dp: r[3] || null, ch: r[4].length || r[5].length ? { ok: r[4], ko: r[5] } : null,
+    }));
+  }
+
+  /** The helpers' history as events: one change of time_entity = one notification. */
+  _historyEvents(hist, startMs) {
+    const c = this._config;
+    const spine = this._rows(hist, c.time_entity).filter((r) => r.t >= startMs && r.s && r.s !== "unknown");
+    const prio = this._rows(hist, c.priority_entity);
+    const chan = this._rows(hist, c.channels_entity);
+    const per = this._rows(hist, c.period_entity);
+    return spine.map((ev, i) => {
+      // channels: value written for THIS notification — the last change before
+      // the next notification (the post-delivery automation writes it a moment
+      // after the spine), else the carried-over value (unchanged string).
+      const next = i + 1 < spine.length ? spine[i + 1].t : Infinity;
+      let cv = null;
+      for (const r of chan) {
+        if (r.t <= ev.t + 2000) { cv = r.s; continue; }
+        if (r.t < next) { cv = r.s; continue; }
+        break;
+      }
+      return { t: ev.t, p: (this._valueAt(prio, ev.t, 2000) || "").toLowerCase(), dp: this._valueAt(per, ev.t, 2000), ch: this._parseChannels(cv) };
+    });
+  }
+
   // history rows: {s: state, lu: seconds}. The first row is the state at
   // start_time (its lu is older than start) — used only as the carry-in value.
   _rows(hist, id) {
@@ -6315,13 +6494,10 @@ class SupernotifyStatsCard extends SnCard {
     return v;
   }
 
-  _compute(hist, stats, start, now, days) {
+  _compute(hist, stats, start, now, days, events) {
     const c = this._config;
     const startMs = start.getTime();
-    const spine = this._rows(hist, c.time_entity).filter((r) => r.t >= startMs && r.s && r.s !== "unknown");
-    const prio = this._rows(hist, c.priority_entity);
-    const chan = this._rows(hist, c.channels_entity);
-    const per = this._rows(hist, c.period_entity);
+    const spine = events || this._historyEvents(hist, startMs);
 
     const perHour = new Array(24).fill(0);
     const perWd = new Array(7).fill(0);
@@ -6334,28 +6510,18 @@ class SupernotifyStatsCard extends SnCard {
     let chanUnknown = 0;
     let night = 0;
 
-    spine.forEach((ev, i) => {
+    spine.forEach((ev) => {
       const d = new Date(ev.t);
       perHour[d.getHours()]++;
       perWd[(d.getDay() + 6) % 7]++;
       const key = this._dayKey(d);
       perDayHist[key] = (perDayHist[key] || 0) + 1;
       if (d.getHours() >= 23 || d.getHours() < 7) night++;
-      const p = (this._valueAt(prio, ev.t, 2000) || "").toLowerCase();
+      const p = ev.p;
       if (p) prioCount[p] = (prioCount[p] || 0) + 1;
-      const dp = this._valueAt(per, ev.t, 2000);
+      const dp = ev.dp;
       if (dp) periodCount[dp] = (periodCount[dp] || 0) + 1;
-      // channels: value written for THIS notification — the last change before
-      // the next notification (the post-delivery automation writes it a moment
-      // after the spine), else the carried-over value (unchanged string).
-      const next = i + 1 < spine.length ? spine[i + 1].t : Infinity;
-      let cv = null;
-      for (const r of chan) {
-        if (r.t <= ev.t + 2000) { cv = r.s; continue; }
-        if (r.t < next) { cv = r.s; continue; }
-        break;
-      }
-      const parsed = this._parseChannels(cv);
+      const parsed = ev.ch;
       if (!parsed) { chanUnknown++; return; }
       chanKnown++;
       parsed.ok.forEach((n) => { chanOk[n] = (chanOk[n] || 0) + 1; });
@@ -6372,7 +6538,7 @@ class SupernotifyStatsCard extends SnCard {
     statRows.forEach((r) => { statByKey[this._dayKey(new Date(r.start))] = Math.round(+r.change || 0); });
     // today: long-term statistics are compiled hourly, so prefer the live
     // state of the daily meter (it resets at midnight = today's count).
-    const liveToday = c.sent_today_entity && this._hass.states[c.sent_today_entity];
+    const liveToday = !events && c.sent_today_entity && this._hass.states[c.sent_today_entity];
     const liveVal = liveToday && !["unknown", "unavailable"].includes(liveToday.state) ? Math.round(+liveToday.state) : null;
     const nativeByKey = (this._native && this._native.byDay) || {};
     while (dayCursor <= now) {
@@ -6531,9 +6697,11 @@ class SupernotifyStatsCard extends SnCard {
     // daily series = long-term statistics (whole window); hours / channels /
     // priorities = recorder history, which may keep fewer days than the window
     const completeDays = Math.max(1, d.days);
-    sr.getElementById("win").textContent = d.histDays && d.histDays < completeDays
-      ? this._t("st_hist_note", { n: d.histDays })
-      : "";
+    sr.getElementById("win").textContent = d.archive
+      ? (this._error ? `${T.st_archive_err}: ${this._error}` : T.st_from_archive)
+      : d.histDays && d.histDays < completeDays
+        ? this._t("st_hist_note", { n: d.histDays })
+        : "";
     const body = sr.getElementById("body");
     if (!d.total && !d.spineCount) {
       body.innerHTML = snIconify(`<div class="empty">${T.st_no_data}${this._error ? ` <small>(${esc(this._error)})</small>` : ""}</div>`, this && this._config);

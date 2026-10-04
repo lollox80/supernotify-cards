@@ -3,6 +3,31 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.70.0] - 2026-10-04
+
+SuperNotify 2.12.1: statistics from the archive, dry runs without workarounds.
+
+### Added
+- stats-card: on **SuperNotify 2.12.1 or later** the figures come from SuperNotify's own archive
+  (`enquire_archive` with `verbosity: summary`): notifications per day, hour and weekday, priority,
+  channels sent and failed, band of the day. The "last notification" helpers, the two logging
+  automations and the utility meter are no longer needed. Duplicates are left out (nothing was sent).
+  - Each notification is kept as a small row in the browser (a few hundred KB for a month), so only the new
+    days are read after the first opening. The first opening reads one day per call and shows its
+    progress (about half a second per day).
+  - The band of the day is the applied scenario named like a band (`period_scenarios`, default
+    `early_morning`, `morning`, `afternoon`, `evening`, `night`, `late_night`).
+  - `source: archive` or `source: history` forces one source (also in the visual editor).
+
+### Changed
+- composer-card on SuperNotify 2.12.1+: "Try without sending" checks duplicates the way a real send
+  would (SuperNotify keeps simulations in a cache of their own), and Send after a try is never held
+  back, so the `force_resend` workaround is gone. `dry_run_dupe_check: false` still skips the check.
+
+### Fixed
+- stats-card: an older archive file with `scenarios` as an object (seen on 2.12.1-beta1) no longer
+  stops the reading.
+
 ## [0.69.0] - 2026-10-04
 
 Daily counts without a utility meter.

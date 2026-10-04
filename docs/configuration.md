@@ -32,6 +32,7 @@ Italian and English are built in; any other language falls back to English.
 | Archive and Why? without the command_line bridge (`enquire_archive`) | 2.10 |
 | Notification without text (composer) | 2.11.1 |
 | "Try without sending" (dry run) | 2.12 |
+| Stats from the archive, no helpers; dry run with its own duplicate check | 2.12.1 |
 
 The automations card works with any version but needs its manifest generator
 (`tools/genera_vista_automazioni.py`), see [its page](cards/automations.md).

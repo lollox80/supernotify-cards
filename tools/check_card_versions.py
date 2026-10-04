@@ -11,11 +11,15 @@ commit) and exits 1 when the code of a card changed but its version did not.
 Shared helpers (everything before the first card class) are reported as
 "shared" for information only: a change there is not attributed to any card.
 
+CHANGELOG
+2026-10-04 - cards extending SnCard are recognised again (0.70.0).
+
 usage: python3 tools/check_card_versions.py [--base <git-ref>] [--file dist/supernotify-control-card.js]
 """
 import argparse, hashlib, re, subprocess, sys
 
-CLASS_RE = re.compile(r"^class Supernotify(\w+)Card extends HTMLElement", re.M)
+# 0.70.0: since 0.64.0 the cards extend SnCard - without it every change looked "shared"
+CLASS_RE = re.compile(r"^class Supernotify(\w+)Card extends (?:HTMLElement|SnCard)", re.M)
 VER_RE = re.compile(r"const SN_CARD_VERSIONS = \{(.*?)\};", re.S)
 
 
