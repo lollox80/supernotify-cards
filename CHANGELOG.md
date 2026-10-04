@@ -3,6 +3,13 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.63.2] - 2026-10-04
+
+### Fixed
+- control-card: with `snooze_announce`, a new pause made while another pause for everyone was in
+  force was not announced, because SuperNotify held back the announcement too. Then the card calls
+  the announce channel's own action (e.g. `notify.alexa_media`) with its targets and data.
+
 ## [0.63.1] - 2026-10-04
 
 ### Added

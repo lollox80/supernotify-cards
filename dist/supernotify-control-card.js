@@ -8,6 +8,9 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-04 - v0.63.2. control 0.33.2: with a pause for everyone already in force, SuperNotify held
+ *   back the announcement of the next pause too (is_global_snooze, seen on the real archive at
+ *   09:29). Then the card calls the announce channel's own action with its targets and data.
  * 2026-10-04 - v0.63.1. control 0.33.1: `snooze_announce: true` (off by default, also in the visual
  *   editor) says a pause out loud on the announce channel (`announce_delivery`): before pausing,
  *   since the pause would stop its own announcement, and after resuming one or all.
@@ -434,7 +437,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.63.1"; // bundle / HACS release
+const VERSION = "0.63.2"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -445,7 +448,7 @@ const VERSION = "0.63.1"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.33.1",
+  control: "0.33.2",
   overview: "0.31.0",
   bands: "0.20.1",
   deliveries: "0.27.0",
@@ -2713,10 +2716,31 @@ class SupernotifyControlCard extends HTMLElement {
    */
   async _snzSpeak(text) {
     if (!this._config.snooze_announce || !text || !this._hass) return;
-    const delivery = {};
-    delivery[this._config.announce_delivery || "alexa_announce"] = {};
+    const name = this._config.announce_delivery || "alexa_announce";
+    // 0.63.2: with a pause for everyone already in force (non-critical or everything) SuperNotify
+    // would hold this announcement back too (is_global_snooze). Then the card calls the channel's
+    // own action, with its targets and data, as SuperNotify would.
+    const held = snLiveSnoozes(this._snoozes).some((x) => String(x.recipient_type || "").toUpperCase() === "EVERYONE"
+      && ["EVERYTHING", "NONCRITICAL"].includes(String(x.target_type || "").toUpperCase()));
+    const row = snEntityRows(this._hass, "delivery").find((d) => d.name === name);
+    const a = (row && this._hass.states[row.id] && this._hass.states[row.id].attributes) || {};
+    const m = String(a.action || "").match(/^([a-z0-9_]+)\.([a-z0-9_]+)$/);
     try {
-      await this._hass.callService("notify", "supernotify", { message: text, data: { delivery_selection: "fixed", delivery } });
+      if (held && m) {
+        const tl = snTargetList(a.target) || [];
+        const payload = { message: text };
+        if (m[1] === "notify") {
+          if (tl.length) payload.target = tl;
+          if (a.data && Object.keys(a.data).length) payload.data = a.data;
+        } else if (tl.length) {
+          payload.entity_id = tl;
+        }
+        await this._hass.callService(m[1], m[2], payload);
+      } else {
+        const delivery = {};
+        delivery[name] = {};
+        await this._hass.callService("notify", "supernotify", { message: text, data: { delivery_selection: "fixed", delivery } });
+      }
     } catch (e) { /* the pause goes on anyway */ }
   }
 

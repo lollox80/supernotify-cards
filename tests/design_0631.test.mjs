@@ -54,6 +54,23 @@ c.shadowRoot.querySelector(".sb[data-r]").click(); await wait(20);
 ok(log[0] && log[0][0] === "event" && /NORMAL/.test(log[0][1]) && log[1] && /^Pausa finita: /.test(log[1][1]), "riprendi una: annuncio dopo");
 log.length = 0;
 
+// 0.63.2: a pause for everyone already in force -> the channel's own action, not SuperNotify
+c.shadowRoot.querySelector(".sc[data-g=\"min\"][data-v=\"30\"]") ;
+{
+  const h = mk(true);
+  h.states["switch.supernotify_delivery_alexa_announce"].attributes = { name: "alexa_announce", action: "notify.alexa_media",
+    target: { entity_id: ["media_player.sala", "media_player.bagno"] }, data: { type: "announce", method: "speak" } };
+  const calls = [];
+  h.callService = async (d, s2, data) => { calls.push([d, s2, data]); };
+  const c2 = mount({ snooze_announce: true }, h); await wait(30);
+  const p2 = await open(c2);
+  p2.querySelector("#snzGo").click(); await wait(20);
+  const x = calls[0];
+  ok(x && x[0] === "notify" && x[1] === "alexa_media" && x[2].target.join() === "media_player.sala,media_player.bagno" && x[2].data.type === "announce",
+    `pausa già in corso: annuncio diretto sul canale (${JSON.stringify(x)})`);
+}
+log.length = 0;
+
 // non admin, by voice
 c = mount({ snooze_announce: true }, mk(false)); await wait(30);
 p = await open(c);
