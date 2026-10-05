@@ -77,6 +77,11 @@ ok(!/la spegne/.test(mo), "scenario non attivo: nessun avviso");
 const cv = row("casa_vuota");
 ok(/\[close\] Alexa/.test(cv) && /Casa vuota è on/.test(cv), "casa_vuota: spegne Alexa, condizione di stato");
 
+// annidate: "almeno una vera: (tutte vere: A, B) o C"
+hass.states["switch.supernotify_scenario_ufficio"] = S("on", { name: "ufficio", delivery: {} });
+TRACE[1].push({ name: "ufficio", conditions: [{ condition: "or", conditions: [
+  { condition: "and", conditions: [{ condition: "state", entity_id: ["binary_sensor.casa_vuota"], state: "on" }, { condition: "time", after: "08:00:00" }] },
+  { condition: "state", entity_id: ["binary_sensor.casa_vuota"], state: "off" }] }], trace: { trace: TR("condition/conditions/condition/0", false) } });
 const ov = mount("supernotify-overview-card");
 await wait(150); ov.hass = { ...hass }; await wait(100);
 const t = ov.shadowRoot.getElementById("scen").innerHTML;
@@ -84,6 +89,10 @@ const tx = ic(t);
 ok(/Late Night · \[volume-off\] Alexa, \[volume-off\] Voce/.test(tx), "overview: il chip dice cosa abbassa - " + tx);
 ok(/title="Quando: ✓ orario dopo le 23:00/.test(t), "overview: condizioni nel tooltip");
 ok(/Casa vuota · \[close\] Alexa, \[close\] Voce/.test(tx), "overview: casa_vuota spegne");
+const sc2 = document.createElement("supernotify-scenarios-card"); sc2.setConfig({}); document.body.appendChild(sc2);
+await wait(31000); sc2.hass = { ...hass }; await wait(150);
+const uf = ic(sc2.shadowRoot.querySelector('.row[data-name="ufficio"]').innerHTML);
+ok(/almeno una vera: \(tutte vere: Casa vuota è on, orario dopo le 08:00\) o Casa vuota è off/.test(uf), "condizioni annidate spiegate - " + uf);
 if (fail) { console.log(`FAIL ${fail}`); process.exit(1); }
 console.log("all ok");
 process.exit(0);

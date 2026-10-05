@@ -1891,11 +1891,16 @@ function snScenarioCondLine(hass, T, sc) {
   const res = (p) => { const v = tr[p]; const last = Array.isArray(v) && v.length ? v[v.length - 1] : null; return last && last.result ? last.result.result : undefined; };
   const conds = Array.isArray(sc.conditions) ? sc.conditions : sc.conditions ? [sc.conditions] : [];
   if (!conds.length) return { text: T.sc_no_cond, parts: [] };
+  // and/or/not spelled out, nested ones in brackets ("at least one of these: A or (all of these: B, C)")
+  const full = (c, depth) => {
+    const t = snCondText(hass, c, T);
+    if (!(c && Array.isArray(c.conditions) && ["and", "or", "not"].includes(c.condition))) return t;
+    const sub = c.conditions.map((cc) => full(cc, depth + 1)).join(c.condition === "or" ? T.c_or_join : ", ");
+    return depth ? `(${t}: ${sub})` : `${t}: ${sub}`;
+  };
   const parts = conds.map((c, i) => {
     const r = res(`condition/conditions/condition/${i}`);
-    let t = snCondText(hass, c, T);
-    if (c && Array.isArray(c.conditions) && ["and", "or", "not"].includes(c.condition))
-      t += ": " + c.conditions.map((cc) => snCondText(hass, cc, T)).join(c.condition === "or" ? T.c_or_join : ", ");
+    const t = full(c, 0);
     return { ok: r === true ? true : r === false ? false : null, t };
   });
   return { parts, text: parts.map((p) => `${p.ok === true ? "✓" : p.ok === false ? "✕" : "·"} ${p.t}`).join(" · ") };
