@@ -44,3 +44,8 @@ Under the title the card says which automation or script sent the notification (
 notification carries) or, for a call made from the dashboard, which person. It also shows how long the delivery took, the
 slowest channel and the share of channels that succeeded. Targets of the call that no channel took (for example a
 `media_player` no selected channel accepts) and channel or scenario names that do not exist get their own warning box.
+
+**Duplicates** (0.79.0): a notification SuperNotify dropped because the same text went out less than
+two minutes before shows, on top, when the original went out and a link to open it. When both came
+from the same run of an automation or script, the card names it: that run calls SuperNotify twice
+with the same text - one call is enough, SuperNotify picks the channels and speakers itself.

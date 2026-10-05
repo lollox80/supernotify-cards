@@ -8,6 +8,14 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-05 - v0.79.0. why 0.15.0, for a notification dropped as a duplicate: (1) a box on top says
+ *   when the same text went out before and how many seconds earlier, with a link that opens the
+ *   original; when both came from the same run of an automation or script (same context) it says
+ *   so - that run calls SuperNotify twice with the same text (two branches, Alexa + Google, are the
+ *   usual cause) - and names it. (2) "duplicate" once in the header (it was there twice), the spoken
+ *   text only when it differs from the message, (3) the folded group says why the channels were
+ *   skipped ("3 skipped · duplicate 2, channel condition 1") instead of "skipped by a rule: normal",
+ *   (4) "target required: always" only next to a missing target, where it means something.
  * 2026-10-05 - v0.78.0. Why a scenario is on and what it does, without opening anything.
  *   scenarios 0.31.0: (1) the channel chips say what the scenario changes, not only on/off - the
  *   volume it sets ("🔇 Alexa · muted", "🔉 TTS · vol 20%"), with templates rendered now by Home
@@ -580,7 +588,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.78.0"; // bundle / HACS release
+const VERSION = "0.79.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -604,7 +612,7 @@ const SN_CARD_VERSIONS = {
   stats: "0.32.2",
   archive: "0.38.2",
   tools: "0.2.2",
-  why: "0.14.4",
+  why: "0.15.0",
 };
 
 /**
@@ -8560,12 +8568,14 @@ class SupernotifyWhyCard extends SnCard {
     const d = new Date((n.t || 0) * 1000);
     const when = d.toLocaleString(this._loc(), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
     const prioTxt = snT(this._config, this._hass)["prio_" + (n.p || "medium")] || n.p || "medium";
-    out.push(`<div class="hd"><div class="meta">${esc(when)} · ${T.priority} ${esc(prioTxt)} · ${esc(T.outcomes[n.o] || n.o || "—")}${n.dupe ? ` · ♻ ${T.dupe}` : ""}</div>
+    out.push(`<div class="hd"><div class="meta">${esc(when)} · ${T.priority} ${esc(prioTxt)} · ${esc(T.outcomes[n.o] || n.o || "—")}${n.dupe && n.o !== "dupe" ? ` · ♻ ${T.dupe}` : ""}</div>
       <b class="ttl">${esc(n.ti || "—")}</b>
       ${n.m && n.m !== n.ti ? `<div class="msg">${esc(snPlainMsg(n.m))}</div>` : ""}
-      ${n.sp ? `<div class="note">🔊 ${esc(n.sp)}</div>` : ""}
+      ${n.sp && ![snPlainMsg(n.m || ""), n.m, n.ti].map((x) => String(x || "").trim()).includes(String(n.sp).trim()) ? `<div class="note">🔊 ${esc(n.sp)}</div>` : ""}
       ${n.ctx && n.ctx.id ? `<div class="note sentby" id="sentBy" title="context ${esc(n.ctx.id)}">…</div>` : ""}
       ${n.stt ? `<div class="note">⏱ ${esc(T.st_time)} ${esc(n.stt.ms)} ms${n.stt.slow ? ` · ${esc(T.st_slow)} ${esc(snDeliveryAlias(this._hass, n.stt.slow) || n.stt.slow)}` : ""}${n.stt.rate != null ? ` · ${Math.round(+n.stt.rate * 100)}% ${esc(T.st_rate)}` : ""}</div>` : ""}</div>`);
+    // 0.79.0: a duplicate - when the original went out, and whether the same run sent both
+    if (n.dupe || n.o === "dupe") out.push(`<div class="pb warn" id="dupeOf"><div class="pbt">♻ ${esc(T.dupe_no_orig)}</div></div>`);
     // 0.61.0: targets of the call that no channel took (e.g. a media_player no delivery accepts)
     if (n.ua && n.ua.length) out.push(`<div class="pb warn"><div class="pbt">⚠ ${esc(T.ua_title)}</div><div class="pbw">${esc(n.ua.join(", "))}</div><div class="pbf">${esc(T.ua_hint)}</div></div>`);
     if (n.un && n.un.length) out.push(`<div class="pb warn"><div class="pbt">⚠ ${esc(T.un_title)}</div><div class="pbw">${esc(n.un.join(" · "))}</div></div>`);
@@ -8626,7 +8636,7 @@ class SupernotifyWhyCard extends SnCard {
       let why = "";
       if (ch.r === "ok") why = T.st_ok + (ch.calls ? ` (${snPl(T, "calls", ch.calls)})` : "");
       else if (ch.r === "err") why = `${T.st_err}${ch.err ? ": " + esc(ch.err.join(" / ")) : ""}`;
-      else why = `${esc(this._reasonText(ch.why, T))}${ch.tr ? ` (${T.target_required} ${esc(ch.tr)})` : ""}`;
+      else why = `${esc(this._reasonText(ch.why, T))}${ch.tr && String(ch.why || "").toUpperCase() === "NO_TARGET" ? ` (${T.target_required} ${esc(ch.tr)})` : ""}`;
       const tg = ch.tg ? tgText(ch.tg) : "";
       const meta = [by.length ? `${T.started_by}: ${esc(by.join(" · "))}` : "",
         src.off.length ? `${T.scen_would_off}: ${esc(src.off.map((x) => this._scenarioLabel(x)).join(", "))}` : "",
@@ -8645,7 +8655,7 @@ class SupernotifyWhyCard extends SnCard {
       const code = failed ? "ERROR" : String(ch.why || "").toUpperCase();
       const fix = (T.fix || {})[code];
       out.push(`<div class="pb ${failed ? "crit" : "warn"}"><div class="pbt">${failed ? "✖" : "⚠"} ${esc(nameOf(ch.n))}: ${failed ? T.pb_failed : T.pb_missed}</div>
-        <div class="pbw">${failed ? esc((ch.err || []).join(" / ") || T.st_err) : esc(this._reasonText(ch.why, T))}${ch.tr ? ` (${T.target_required} ${esc(ch.tr)})` : ""}</div>
+        <div class="pbw">${failed ? esc((ch.err || []).join(" / ") || T.st_err) : esc(this._reasonText(ch.why, T))}${ch.tr && code === "NO_TARGET" ? ` (${T.target_required} ${esc(ch.tr)})` : ""}</div>
         ${fix ? `<div class="pbf">${esc(fix).replace(/`([^`]+)`/g, "<code>$1</code>")}</div>` : ""}</div>`);
     }
 
@@ -8655,7 +8665,10 @@ class SupernotifyWhyCard extends SnCard {
 
     // routine skips and channels never involved, folded
     if (skipped.length) {
-      out.push(`<details class="fold"${det(false)}><summary>${snPl(T, "grp_skipped", skipped.length)}</summary>${skipped.map((ch) => chRow(ch, "quiet")).join("")}</details>`);
+      const whyCount = {};
+      for (const ch of skipped) { const w = this._reasonText(ch.why, T) || T.st_skip; whyCount[w] = (whyCount[w] || 0) + 1; }
+      const whySum = Object.entries(whyCount).sort((a, b) => b[1] - a[1]).map(([w, c]) => skipped.length > 1 && Object.keys(whyCount).length > 1 ? `${w} ${c}` : w).join(", ");
+      out.push(`<details class="fold"${det(false)}><summary>${snPl(T, "grp_skipped", skipped.length)} · ${esc(whySum)}</summary>${skipped.map((ch) => chRow(ch, "quiet")).join("")}</details>`);
     }
     if (notStarted.length) {
       out.push(`<details class="fold"${det(false)}><summary>${snPl(T, "grp_not", notStarted.length)}</summary>${notStarted.map((k) => {
@@ -8684,8 +8697,45 @@ class SupernotifyWhyCard extends SnCard {
     }
     el.innerHTML = snIconify(out.join(""), this && this._config);
     if (n.ctx && n.ctx.id) this._sentBy(n);
+    if (n.dupe || n.o === "dupe") this._dupeOf(n);
   }
 }
+
+/**
+ * 0.79.0: the notification a duplicate repeats - the newest one before it in the list with the
+ * same title and text, sent within the two minutes SuperNotify keeps texts for. Same context id
+ * = the same automation/script run called SuperNotify twice.
+ */
+SupernotifyWhyCard.prototype._dupeOf = async function (n) {
+  const T = this._T();
+  const esc = snEsc;
+  const idx = this._index();
+  const items = (idx && idx.items) || [];
+  const norm = (x) => String(x || "").trim();
+  const self = (r) => r.fid === n.id || r.id === n.id || String(n.id || "").startsWith(String(r.id)); // the index keeps 8 characters
+  const orig = items.filter((r) => !self(r) && r.o !== "dupe" && r.t <= n.t && n.t - r.t <= 130
+    && norm(r.ti) === norm(n.ti) && (!r.m || !n.m || norm(snPlainMsg(r.m)).slice(0, 60) === norm(snPlainMsg(n.m)).slice(0, 60)))
+    .sort((a, b) => b.t - a.t)[0];
+  const put = (html) => { const el = this.shadowRoot && this.shadowRoot.getElementById("dupeOf"); if (el && this._sel && String(n.id || "").startsWith(String(this._sel))) el.innerHTML = snIconify(html, this._config); };
+  if (!orig) return;
+  const at = new Date(orig.t * 1000).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: snH12(this._hass) });
+  const head = `<div class="pbt">♻ ${esc(T.dupe_of.replace("{s}", Math.max(0, Math.round(n.t - orig.t))).replace("{t}", at))}</div>`;
+  const link = `<div class="pbf"><a href="#" id="dupeLink">${esc(T.dupe_open)} ›</a></div>`;
+  put(head + link);
+  const wire = () => { const a = this.shadowRoot && this.shadowRoot.getElementById("dupeLink"); if (a) a.onclick = (e) => { e.preventDefault(); this._select(orig.id); }; };
+  wire();
+  // same run? compare the contexts (the original's detail is read once and kept)
+  if (!(n.ctx && n.ctx.id)) return;
+  if (!this._cache.has(orig.id)) this._cache.set(orig.id, await this._fetch(orig.id));
+  const o = (this._cache.get(orig.id) || {}).n || {};
+  if (!(o.ctx && o.ctx.id === n.ctx.id)) return;
+  let who = "";
+  await this._sentBy(n).catch(() => {});
+  const res = this._sentCache && this._sentCache.get(n.id);
+  if (res && res.kind !== "person") who = `${res.kind === "automation" ? T.sent_auto : T.sent_script} «${res.name}»`;
+  put(head + `<div class="pbw">${esc(who ? T.dupe_same_run.replace("{a}", who) : T.dupe_same_run_anon)}</div>` + link);
+  wire();
+};
 
 SupernotifyWhyCard.prototype._sentBy = async function (n) {
   // 0.61.0: who sent it - the automation or script whose run carries the notification's context
@@ -8742,7 +8792,7 @@ const SN_WHY_STRINGS = {
     call_auto: "no channel named: normal routing", call_named: "named in the call:", call_debug: "with debug",
     nobody: "nobody home", ch_sent: "sent", ch_problems: "to look at", ch_skipped: "skipped",
     pb_failed: "failed", pb_missed: "asked for but not sent",
-    grp_skipped: "skipped by a rule: normal", grp_not: "not involved", trace_title: "Full selection trace",
+    grp_skipped: "skipped", grp_not: "not involved", trace_title: "Full selection trace",
     fix: { NO_TARGET: "No recipient has an address for this channel: add one to a recipient, give the channel fixed targets, or leave it out of this call.",
       ERROR: "The integration behind this channel answered with an error: check its own log entry.",
       NO_ACTION: "The channel has no action to call: set `action:` on the delivery.",
@@ -8767,10 +8817,14 @@ const SN_WHY_STRINGS = {
     from_trace: "Reasons come from the selection trace archived with the notification.",
     st_time: "took", st_slow: "slowest", st_rate: "of the channels succeeded",
     ua_title: "Targets no channel took", ua_hint: "They were in the call, but no selected channel accepts this kind of target.",
+    dupe_of: "Duplicate: the same text went out {s} s earlier, at {t}. SuperNotify drops an identical text for two minutes.",
+    dupe_open: "Open the original", dupe_same_run: "Both come from the same run of {a}: it calls SuperNotify twice with the same text. One call is enough - SuperNotify picks the speakers itself.",
+    dupe_same_run_anon: "Both come from the same run (same context): whatever sent it calls SuperNotify twice with the same text.",
+    dupe_no_orig: "Duplicate of a notification sent shortly before (not in the list).",
     un_title: "Names that do not exist", sent_by: "Sent by", sent_auto: "automation", sent_script: "script",
     sent_person: "", sent_unknown: "sender not known (no automation or person in its context)",
     trace: "Selection trace", no_trace: "The full selection trace is only recorded when the notify call has debug: true, and archived when the archive diagnostics include it.",
-    reasons: { NO_TARGET: "no usable target", DUPE: "duplicate of a recent notification", PRIORITY: "not for this priority",
+    reasons: { NO_TARGET: "no usable target", DUPE: "duplicate", PRIORITY: "not for this priority",
       SNOOZE: "snoozed", SNOOZED: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule", ERROR: "error",
       DELIVERY_DISABLED: "switched off", SCENARIO: "scenario", TRANSPORT_DISABLED: "its transport is off",
       NO_SCENARIO: "a required scenario is not in force", NO_ACTION: "no action to call",
@@ -8789,7 +8843,7 @@ const SN_WHY_STRINGS = {
     call_auto: "nessun canale scelto: instradamento normale", call_named: "canali chiesti:", call_debug: "con debug",
     nobody: "nessuno in casa", ch_sent: "partiti", ch_sent_1: "partito", ch_problems: "da guardare", ch_skipped: "saltati", ch_skipped_1: "saltato",
     pb_failed: "fallito", pb_missed: "chiesto ma non partito",
-    grp_skipped: "saltati per regola: normale", grp_skipped_1: "saltato per regola: normale", grp_not: "non coinvolti", grp_not_1: "non coinvolto", trace_title: "Trace di selezione completo",
+    grp_skipped: "saltati", grp_skipped_1: "saltato", grp_not: "non coinvolti", grp_not_1: "non coinvolto", trace_title: "Trace di selezione completo",
     fix: { NO_TARGET: "Nessun destinatario ha un indirizzo per questo canale: aggiungilo a un destinatario, dai al canale dei target fissi, oppure toglilo da questa chiamata.",
       ERROR: "L'integrazione dietro questo canale ha risposto con un errore: guarda la sua voce nel log.",
       NO_ACTION: "Il canale non ha un'azione da chiamare: imposta `action:` nella delivery.",
@@ -8814,10 +8868,14 @@ const SN_WHY_STRINGS = {
     from_trace: "I motivi vengono dal trace di selezione archiviato con la notifica.",
     st_time: "durata", st_slow: "più lento", st_rate: "dei canali riusciti",
     ua_title: "Destinatari che nessun canale ha preso", ua_hint: "Erano nella chiamata, ma nessun canale scelto accetta questo tipo di destinatario.",
+    dupe_of: "Doppione: lo stesso testo è partito {s} s prima, alle {t}. SuperNotify scarta un testo uguale per due minuti.",
+    dupe_open: "Apri l'originale", dupe_same_run: "Arrivano tutte e due dalla stessa esecuzione di {a}: chiama SuperNotify due volte con lo stesso testo. Basta una chiamata: gli altoparlanti li sceglie SuperNotify.",
+    dupe_same_run_anon: "Arrivano tutte e due dalla stessa esecuzione (stesso contesto): chi l'ha inviata chiama SuperNotify due volte con lo stesso testo.",
+    dupe_no_orig: "Doppione di una notifica partita poco prima (non è nell'elenco).",
     un_title: "Nomi che non esistono", sent_by: "Inviata da", sent_auto: "automazione", sent_script: "script",
     sent_person: "", sent_unknown: "mittente non noto (nessuna automazione o persona nel suo contesto)",
     trace: "Trace di selezione", no_trace: "Il trace completo viene registrato solo se la chiamata ha debug: true, e archiviato se la diagnostica dell'archivio lo include.",
-    reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione di una notifica recente", PRIORITY: "non per questa priorità",
+    reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione", PRIORITY: "non per questa priorità",
       SNOOZE: "in pausa", SNOOZED: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza", ERROR: "errore",
       DELIVERY_DISABLED: "spento", SCENARIO: "scenario", TRANSPORT_DISABLED: "il suo transport è spento",
       NO_SCENARIO: "manca uno scenario richiesto", NO_ACTION: "nessuna azione da chiamare",

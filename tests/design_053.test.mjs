@@ -1,4 +1,5 @@
 // v0.53.0: why-card - percorso in 4 passi, problemi in cima con cosa fare, il resto ripiegato.
+// 2026-10-05 v0.79.0: il gruppo dei saltati dice il motivo («1 saltato · in pausa») invece di «per regola: normale».
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -58,7 +59,7 @@ ok(em && em.classList.contains("warn") && /chiesto ma non partito/.test(em.textC
 const tg = pbs.find((x) => /Telegram famiglia/.test(x.textContent));
 ok(tg && tg.classList.contains("crit") && /fallito/.test(tg.textContent) && /chat not found/.test(tg.textContent), "telegram: fallito in rosso con l'errore");
 const folds = [...det.querySelectorAll("details.fold")];
-ok(folds.some((f) => /1 saltato per regola: normale/.test(f.querySelector("summary").textContent) && /Voce \(TTS\)/.test(f.textContent) && !f.open), "snooze: ripiegato tra i saltati per regola");
+ok(folds.some((f) => /1 saltato · in pausa/.test(f.querySelector("summary").textContent) && /Voce \(TTS\)/.test(f.textContent) && !f.open), "snooze: ripiegato tra i saltati, col motivo");
 ok(folds.some((f) => /1 non coinvolto/.test(f.querySelector("summary").textContent) && /sirena/.test(f.textContent)), "canali non coinvolti ripiegati");
 ok(/Alta/.test(det.querySelector(".hd .meta").textContent), "priorità tradotta");
 const det2 = await mk({ expand: true });

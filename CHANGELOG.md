@@ -3,6 +3,19 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.79.0] - 2026-10-05
+
+### Added
+- why-card: a notification dropped as a duplicate gets a box on top - when the same text went out
+  and how many seconds earlier, with a link to the original. When both came from the same run of an
+  automation or script (same context), it says so and names it: that run calls SuperNotify twice
+  with the same text (an Alexa branch and a Google branch are the usual cause).
+
+### Changed
+- why-card: "duplicate" once in the header; the spoken text only when it differs from the message;
+  the folded group says why the channels were skipped ("3 skipped · duplicate 2, channel condition
+  false 1") instead of "skipped by a rule: normal"; "target required" only next to a missing target.
+
 ## [0.78.0] - 2026-10-05
 
 ### Added

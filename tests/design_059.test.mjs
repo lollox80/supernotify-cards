@@ -1,4 +1,5 @@
 // v0.59.0: revisione grafica parte 2 - rifiniture (A5, C1-C9).
+// 2026-10-05 v0.79.0: 5 punti col formato orario del profilo (in più l'ora dell'originale di un doppione).
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -43,7 +44,7 @@ ok(trow.some((t) => /^SMS nessun canale lo usa/.test(t)), `transport: SMS, nome 
 
 // C5, A5, C1, C2, C7, C8, C9 (source level)
 ok(/left = `\$\{T\.snoozed\} · \$\{mins\} \$\{T\.min\}`/.test(SRC), "control: «In pausa · 25 min»");
-ok((SRC.match(/hour12: snH12\(this\._hass\)/g) || []).length === 4, "archivio e perché: formato orario del profilo HA");
+ok((SRC.match(/hour12: snH12\(this\._hass\)/g) || []).length === 5, "archivio e perché: formato orario del profilo HA");
 ok(/h % 6 === 0/.test(SRC) && /\.bars text \{ font-size: 10\.5px/.test(SRC) && /opt\.half && cw > 640/.test(SRC), "statistiche: grafici a metà larghezza disegnati alla loro misura");
 ok(/snBandName\(T, String\(k\)/.test(SRC), "statistiche: fasce del giorno col nome");
 ok(/\.map\(\(x\) => `<div>\$\{x\}<\/div>`\)/.test(SRC), "perché: passo 4 in pila");
