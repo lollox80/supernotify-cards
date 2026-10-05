@@ -8,6 +8,9 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-05 - v0.77.0. channels: a channel with a `fallback:` list (the switch's `fallback` attribute,
+ *   SuperNotify PR #260) shows "fallback: <channels>", and a channel named in another's list shows
+ *   "fallback for <channel>". Nothing changes without the attribute.
  * 2026-10-05 - v0.76.2. why: a channel that went out as the fallback of another (SuperNotify 2.13.0,
  *   delivery `fallback:`) reads "fallback for <channel>" instead of the raw "fallback:<name>".
  * 2026-10-05 - v0.76.1. Cards stuck on "loading" (overview without last notification, who is home
@@ -566,7 +569,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.76.2"; // bundle / HACS release
+const VERSION = "0.77.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -580,7 +583,7 @@ const SN_CARD_VERSIONS = {
   control: "0.38.1",
   overview: "0.36.1",
   bands: "0.21.0",
-  deliveries: "0.31.0",
+  deliveries: "0.32.0",
   transports: "0.27.0",
   recipients: "0.30.0",
   scenarios: "0.30.0",
@@ -622,7 +625,7 @@ const SN_STRINGS = {
     inc_req: "only when asked for", inc_scen: "only with a scenario",
     grp_auto: "Start on their own", grp_named: "Only when named in the call", grp_scen: "Only with a scenario",
     grp_fallback: "Backup, when the others fail", ch_title: "Channels", ch_count: "{on} of {tot} on",
-    off_manual: "switched off", off_config: "off in the configuration", hand: "changed by hand",
+    off_manual: "switched off", off_config: "off in the configuration", fb_list: "fallback:", fb_for: "fallback for", hand: "changed by hand",
     hand_tip: "Switched at runtime, so it differs from the configuration. \"Undo the changes made by hand\" (tools) puts it back.",
     paused_by: "paused now by", on_by: "on now through",
     fixed_targets: "fixed targets", no_deliveries: "no delivery entities found",
@@ -754,7 +757,7 @@ const SN_STRINGS = {
     inc_req: "solo se richiesti", inc_scen: "solo con uno scenario",
     grp_auto: "Partono da soli", grp_named: "Solo se chiamati per nome", grp_scen: "Solo con uno scenario",
     grp_fallback: "Di riserva, se gli altri falliscono", ch_title: "Canali", ch_count: "{on} di {tot} accesi",
-    off_manual: "spento a mano", off_config: "spento da configurazione", hand: "modificato a mano",
+    off_manual: "spento a mano", off_config: "spento da configurazione", fb_list: "riserva:", fb_for: "riserva di", hand: "modificato a mano",
     hand_tip: "Cambiato con l'interruttore, quindi diverso dalla configurazione. «Annulla le modifiche fatte a mano» (Strumenti) lo rimette com'era.",
     paused_by: "in pausa ora:", on_by: "acceso ora da",
     fixed_targets: "target fissi", no_deliveries: "nessuna entità delivery trovata",
@@ -4932,6 +4935,11 @@ class SupernotifyDeliveriesCard extends SnCard {
       }
       const tags = [];
       if (snOverridden(d.a) && d.on) tags.push(snHandTag(d.a, T)); // 0.75.0: switched on by hand
+      // 0.77.0: per-delivery fallback (SuperNotify `fallback:` list on the switch)
+      const fbName = (n) => snDeliveryAlias(this._hass, n) || n;
+      if (Array.isArray(d.a.fallback) && d.a.fallback.length) tags.push(`🛟 ${T.fb_list} ${d.a.fallback.map(fbName).join(", ")}`);
+      const fbOf = dels.filter((o) => Array.isArray(o.a.fallback) && o.a.fallback.includes(d.name)).map((o) => fbName(o.name));
+      if (fbOf.length) tags.push(`🛟 ${T.fb_for} ${fbOf.join(", ")}`);
       if (d.a.action) tags.push(`⚙️ ${d.a.action}`);
       const tgt = d.a.target;
       const nTgt = Array.isArray(tgt) ? tgt.length : tgt && typeof tgt === "object" ? Object.keys(tgt).length : tgt ? 1 : 0;

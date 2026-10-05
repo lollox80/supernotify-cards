@@ -3,6 +3,13 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.77.0] - 2026-10-05
+
+### Added
+- deliveries-card: a channel with a `fallback:` list shows "fallback: <channels>", and a channel
+  named in another's list shows "fallback for <channel>". It reads the switch's `fallback`
+  attribute (SuperNotify PR #260); nothing changes without it.
+
 ## [0.76.2] - 2026-10-05
 
 ### Added
