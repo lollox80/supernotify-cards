@@ -8,6 +8,16 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-05 - v0.78.0. Why a scenario is on and what it does, without opening anything.
+ *   scenarios 0.31.0: (1) the channel chips say what the scenario changes, not only on/off - the
+ *   volume it sets ("🔇 Alexa · muted", "🔉 TTS · vol 20%"), with templates rendered now by Home
+ *   Assistant (render_template, refreshed every minute), ⚙ when it changes other options, 🎯 when it
+ *   sends to other targets; before, late_night with volume 0 showed a green "✓ Alexa". (2) Under the
+ *   name, the conditions with their result now (from enquire_active_scenarios trace: true, one read
+ *   every 30 s shared by the cards), no tap needed. (3) When an active scenario turns on a channel
+ *   that another active scenario turns off (the "off" wins in SuperNotify) or that is switched off,
+ *   the chip is marked ⚠ and a line says by whom. overview 0.37.0: each active scenario chip adds
+ *   what it silences or turns down ("· 🔇 Alexa, TTS") and its conditions as tooltip.
  * 2026-10-05 - v0.77.0. channels: a channel with a `fallback:` list (the switch's `fallback` attribute,
  *   SuperNotify PR #260) shows "fallback: <channels>", and a channel named in another's list shows
  *   "fallback for <channel>". Nothing changes without the attribute.
@@ -569,7 +579,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.77.0"; // bundle / HACS release
+const VERSION = "0.78.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -581,12 +591,12 @@ const VERSION = "0.77.0"; // bundle / HACS release
  */
 const SN_CARD_VERSIONS = {
   control: "0.38.1",
-  overview: "0.36.1",
+  overview: "0.37.0",
   bands: "0.21.0",
   deliveries: "0.32.0",
   transports: "0.27.0",
   recipients: "0.30.0",
-  scenarios: "0.30.0",
+  scenarios: "0.31.0",
   simulator: "0.17.0",
   composer: "0.25.0",
   automations: "0.21.4",
@@ -713,7 +723,9 @@ const SN_STRINGS = {
     sc_diff_add: "would also send", sc_diff_rem: "would no longer send", sc_diff_none: "no difference",
     c_state: "{e} is {s}", c_template: "template condition", c_time: "time", c_after: "after", c_before: "before",
     c_numeric: "{e}", c_above: "above", c_below: "below", c_and: "all of these", c_or: "at least one of these", c_not: "none of these",
-    c_or_join: " or ", sim_hint_dry: "SuperNotify's own answer (dry run, nothing is sent): a notification now, with the priority and only the scenarios picked above.",
+    c_or_join: " or ", sc_muted: "muted", sc_vol: "vol", sc_opts: "other options: {k}", sc_tgt: "other targets",
+    sc_by: "{d}: turned off by {s} (turning off wins)", sc_chan_off: "{d}: the channel is switched off",
+    sc_eff_off: "turns off {d}", sc_eff_on: "uses {d}", sc_when: "When", sim_hint_dry: "SuperNotify's own answer (dry run, nothing is sent): a notification now, with the priority and only the scenarios picked above.",
     sim_msg: "Simulator test", sim_prio: "Priority",
     sa_snooze: "{what} paused for {len}.", sa_silence: "{what} silenced until further notice.",
     sa_resume: "{what} back on.", sa_resume_one: "Pause over: {x}.", sa_resume_all: "Notifications back on.",
@@ -844,7 +856,9 @@ const SN_STRINGS = {
     sc_diff_add: "partirebbe anche", sc_diff_rem: "non partirebbe più", sc_diff_none: "nessuna differenza",
     c_state: "{e} è {s}", c_template: "condizione con modello", c_time: "orario", c_after: "dopo le", c_before: "prima delle",
     c_numeric: "{e}", c_above: "sopra", c_below: "sotto", c_and: "tutte vere", c_or: "almeno una vera", c_not: "nessuna vera",
-    c_or_join: " o ", sim_hint_dry: "Risposta vera di SuperNotify (prova senza inviare, non parte niente): una notifica adesso, con la priorità e solo gli scenari scelti sopra.",
+    c_or_join: " o ", sc_muted: "muto", sc_vol: "vol", sc_opts: "altre opzioni: {k}", sc_tgt: "altri destinatari",
+    sc_by: "{d}: la spegne {s} (vince lo spegnimento)", sc_chan_off: "{d}: il canale è spento",
+    sc_eff_off: "spegne {d}", sc_eff_on: "usa {d}", sc_when: "Quando", sim_hint_dry: "Risposta vera di SuperNotify (prova senza inviare, non parte niente): una notifica adesso, con la priorità e solo gli scenari scelti sopra.",
     sim_msg: "Prova dal simulatore", sim_prio: "Priorità",
     sa_snooze: "{what} in pausa per {len}.", sa_silence: "{what} in silenzio fino a nuovo ordine.",
     sa_resume: "{what} di nuovo attive.", sa_resume_one: "Pausa finita: {x}.", sa_resume_all: "Notifiche di nuovo attive.",
@@ -1751,6 +1765,140 @@ function snCondText(hass, c, T) {
   if (t === "template") return T.c_template;
   if (t === "and" || t === "or" || t === "not") return T["c_" + t];
   return String(t || "?");
+}
+
+/* ── 0.78.0: what a scenario does and why, without a tap ── */
+
+/**
+ * A template rendered by Home Assistant (WS render_template, first result, then unsubscribed).
+ * Returns the last value (undefined until the first answer) and asks again at most once a minute;
+ * onDone runs when a new value arrives so the card can redraw.
+ */
+const snTplCache = new Map();
+function snTpl(hass, tpl, onDone) {
+  const k = String(tpl);
+  let e = snTplCache.get(k);
+  if (!e) { e = { v: undefined, t: 0, busy: false }; snTplCache.set(k, e); }
+  const conn = hass && hass.connection;
+  if (!e.busy && Date.now() - e.t > 60000 && conn && conn.subscribeMessage) {
+    e.busy = true; e.t = Date.now();
+    let unsub = null, done = false;
+    const finish = (v) => {
+      if (done) return;
+      done = true; e.busy = false;
+      if (unsub) { try { unsub(); } catch (x) { /* already gone */ } }
+      if (v !== undefined && v !== e.v) { e.v = v; if (onDone) onDone(); }
+    };
+    try {
+      conn.subscribeMessage((m) => finish(m ? m.result : undefined), { type: "render_template", template: k, strict: false })
+        .then((u) => { if (done) { try { u(); } catch (x) { /* gone */ } } else unsub = u; })
+        .catch(() => finish(undefined));
+    } catch (x) { finish(undefined); }
+    setTimeout(() => finish(undefined), 10000);
+  }
+  return e.v;
+}
+
+/** enquire_active_scenarios with trace: true, shared by the cards: one read every 30 s. */
+const snTrace = { map: null, t: 0, busy: false, v: 0 };
+function snTraceEnsure(hass, onDone) {
+  if (!hass || !hass.callWS || snTrace.busy || Date.now() - snTrace.t < 30000) return snTrace.map;
+  const svc = hass.services && hass.services.supernotify;
+  if (svc && !svc.enquire_active_scenarios) return snTrace.map;
+  snTrace.busy = true; snTrace.t = Date.now();
+  snEnquire(hass, "enquire_active_scenarios", { trace: true }).then((r) => {
+    const t = (r && r.response && r.response.trace) || [];
+    const map = {};
+    for (const list of [t[0] || [], t[1] || []]) for (const sc of list) if (sc && sc.name) map[sc.name] = sc;
+    snTrace.map = map; snTrace.v++;
+    if (onDone) onDone();
+  }).catch(() => { snTrace.map = snTrace.map || {}; }).finally(() => { snTrace.busy = false; });
+  return snTrace.map;
+}
+
+/**
+ * What a scenario does to each channel it names: off, the volume it sets (templates rendered now),
+ * other options, other targets. For an active scenario also who undoes it: another active scenario
+ * turning the same channel off (in SuperNotify the "off" wins) or the channel's own switch off.
+ */
+function snScenarioEffects(hass, a, name, activeNames, onDone) {
+  const out = [];
+  const dels = a && a.delivery && typeof a.delivery === "object" ? Object.entries(a.delivery) : [];
+  for (const [d, dc0] of dels) {
+    const c = dc0 || {};
+    const e = { d, alias: snDeliveryAlias(hass, d) || d, off: c.enabled === false, vol: null, volTpl: false,
+      extra: [], target: !!(c.target && [].concat(c.target).length), by: [], chanOff: false };
+    const data = c.data && typeof c.data === "object" ? c.data : {};
+    for (const [k, v] of Object.entries(data)) {
+      if (/^volume(_level)?$/.test(k)) {
+        let x = v;
+        if (typeof v === "string" && v.includes("{")) { e.volTpl = true; x = snTpl(hass, v, onDone); }
+        const n = typeof x === "number" ? x : parseFloat(x);
+        if (Number.isFinite(n)) e.vol = Math.round(n <= 1 ? n * 100 : n);
+      } else e.extra.push(k);
+    }
+    if (!e.off && activeNames && activeNames.includes(name)) {
+      const sw = hass.states[`switch.supernotify_delivery_${d}`];
+      if (sw && sw.state === "off") e.chanOff = true;
+      for (const o of activeNames) {
+        if (o === name) continue;
+        const st = hass.states[`switch.supernotify_scenario_${o}`] || hass.states[`binary_sensor.supernotify_scenario_${o}`];
+        const od = st && st.attributes && st.attributes.delivery && st.attributes.delivery[d];
+        if (od && od.enabled === false) e.by.push(o);
+      }
+    }
+    out.push(e);
+  }
+  return out;
+}
+
+/** One channel chip of a scenario (scenarios card). */
+function snEffectChip(hass, e, T) {
+  const esc = snEsc;
+  const warn = e.by.length || e.chanOff;
+  const why = [];
+  let cls = "on", txt;
+  if (e.off) { cls = "off"; txt = `✕ ${esc(e.alias)}`; why.push(T.sc_eff_off.replace("{d}", e.alias)); }
+  else {
+    if (e.vol === 0) { cls = "mod"; txt = `🔇 ${esc(e.alias)} · ${esc(T.sc_muted)}`; }
+    else if (e.vol !== null) { cls = "mod"; txt = `🔉 ${esc(e.alias)} · ${esc(T.sc_vol)} ${e.vol}%`; }
+    else if (e.volTpl) { cls = "mod"; txt = `🔉 ${esc(e.alias)} · ${esc(T.sc_vol)} …`; }
+    else txt = `✓ ${esc(e.alias)}`;
+    why.push(T.sc_eff_on.replace("{d}", e.alias));
+    if (e.extra.length) { txt += " · ⚙"; why.push(T.sc_opts.replace("{k}", e.extra.join(", "))); }
+    if (e.target) { txt += " · 🎯"; why.push(T.sc_tgt); }
+  }
+  if (e.by.length) why.push(T.sc_by.replace("{d}", e.alias).replace("{s}", e.by.map((x) => snScenarioName(hass, x)).join(", ")));
+  if (e.chanOff) why.push(T.sc_chan_off.replace("{d}", e.alias));
+  return `<span class="tag ${warn ? "warn" : cls}" title="${esc(e.d + " — " + why.join("; "))}">${warn ? "⚠ " : ""}${txt}</span>`;
+}
+
+/** Short summary of what an active scenario silences or turns down, for a chip. */
+function snEffectShort(effects) {
+  const bits = [];
+  for (const e of effects) {
+    if (e.off) bits.push(`✕ ${e.alias}`);
+    else if (e.vol === 0) bits.push(`🔇 ${e.alias}`);
+    else if (e.vol !== null) bits.push(`🔉 ${e.alias} ${e.vol}%`);
+  }
+  return bits.length > 3 ? bits.slice(0, 3).join(", ") + ` +${bits.length - 3}` : bits.join(", ");
+}
+
+/** The conditions of a scenario with their result now, on one line (null until the trace is read). */
+function snScenarioCondLine(hass, T, sc) {
+  if (!sc) return null;
+  const tr = (sc.trace && sc.trace.trace) || {};
+  const res = (p) => { const v = tr[p]; const last = Array.isArray(v) && v.length ? v[v.length - 1] : null; return last && last.result ? last.result.result : undefined; };
+  const conds = Array.isArray(sc.conditions) ? sc.conditions : sc.conditions ? [sc.conditions] : [];
+  if (!conds.length) return { text: T.sc_no_cond, parts: [] };
+  const parts = conds.map((c, i) => {
+    const r = res(`condition/conditions/condition/${i}`);
+    let t = snCondText(hass, c, T);
+    if (c && Array.isArray(c.conditions) && ["and", "or", "not"].includes(c.condition))
+      t += ": " + c.conditions.map((cc) => snCondText(hass, cc, T)).join(c.condition === "or" ? T.c_or_join : ", ");
+    return { ok: r === true ? true : r === false ? false : null, t };
+  });
+  return { parts, text: parts.map((p) => `${p.ok === true ? "✓" : p.ok === false ? "✕" : "·"} ${p.t}`).join(" · ") };
 }
 
 /**
@@ -4426,7 +4574,7 @@ class SupernotifyOverviewCard extends SnCard {
       if (o && snCardReach("recipients")) occEl.querySelectorAll("[data-gor]").forEach((c) => { c.onclick = () => snGo("recipients", { persons: o.ids }); });
     }
     this.shadowRoot.getElementById("scen").innerHTML = snIconify(act && act.length
-      ? act.map((s) => `<span class="chip${snCardReach("scenarios") ? " go" : ""}" data-gos="${esc(snScenarioKey(s))}">🎬 ${esc(this._scenLabel(s))}</span>`).join("")
+      ? act.map((s) => this._scenChip(s)).join("")
       : `<span class="badge b-off">${T.none}</span>`, this && this._config);
     if (snCardReach("scenarios")) this.shadowRoot.getElementById("scen").querySelectorAll("[data-gos]").forEach((c) => {
       c.onclick = () => snGo("scenarios", { names: [c.dataset.gos] });
@@ -4445,6 +4593,25 @@ class SupernotifyOverviewCard extends SnCard {
 
   /** A link from this card: show it in the card of that kind (0.65.0). */
   _focus() { /* nothing to show in the overview */ }
+
+  /**
+   * 0.78.0: an active scenario chip says what it silences or turns down, and its conditions as
+   * tooltip (enquire_active_scenarios trace, shared with the scenarios card).
+   */
+  _scenChip(s) {
+    const esc = snEsc;
+    const T = snT(this._config, this._hass);
+    const key = snScenarioKey(s);
+    const st = this._hass.states[`switch.supernotify_scenario_${key}`] || this._hass.states[`binary_sensor.supernotify_scenario_${key}`];
+    const redraw = () => { if (this.shadowRoot) this._update(); };
+    const actNames = [...(snActive.names || [key])];
+    const eff = st ? snEffectShort(snScenarioEffects(this._hass, st.attributes || {}, key, actNames, redraw)) : "";
+    const tr = snTraceEnsure(this._hass, redraw);
+    const cl = snScenarioCondLine(this._hass, T, tr && tr[key]);
+    const tip = [cl ? `${T.sc_when}: ${cl.text}` : "", eff].filter(Boolean).join("\n");
+    const p = this._palette();
+    return `<span class="chip${snCardReach("scenarios") ? " go" : ""}" data-gos="${esc(key)}"${tip ? ` title="${esc(tip)}"` : ""}>🎬 ${esc(this._scenLabel(s))}${eff ? `<span style="color:${p.muted};font-weight:500"> · ${esc(eff)}</span>` : ""}</span>`;
+  }
 
   /** Scenario name for a chip: entity ids (reactive path) become the translated alias. */
   _scenLabel(s) {
@@ -5494,6 +5661,7 @@ class SupernotifyScenariosCard extends SnCard {
       const r = await snEnquire(this._hass, "enquire_active_scenarios");
       this._active = (r && r.response && r.response.scenarios) || [];
     } catch (e) { /* retry on next poll */ }
+    this._loadTrace();
     if (this._rendered) this._update();
   }
 
@@ -5538,19 +5706,9 @@ class SupernotifyScenariosCard extends SnCard {
   }
 
   /** enquire_active_scenarios with trace: true, read when a row opens (at most every 30 s). */
-  async _loadTrace() {
-    if (this._traceBusy || (this._traceAt && Date.now() - this._traceAt < 30000)) return;
-    this._traceBusy = true;
-    try {
-      const r = await snEnquire(this._hass, "enquire_active_scenarios", { trace: true });
-      const t = (r && r.response && r.response.trace) || [];
-      const map = {};
-      for (const list of [t[0] || [], t[1] || []]) for (const sc of list) if (sc && sc.name) map[sc.name] = sc;
-      this._trace = map;
-      this._traceAt = Date.now();
-    } catch (e) { this._trace = this._trace || {}; }
-    this._traceBusy = false;
-    if (this._rendered) this._update();
+  _loadTrace() {
+    // 0.78.0: shared by the cards (snTraceEnsure) and read at every refresh, not only on a tap
+    this._trace = snTraceEnsure(this._hass, () => { this._trace = snTrace.map; if (this._rendered) this._update(); }) || this._trace;
   }
 
   /** What a scenario changes: two dry runs, with and without it, compared channel by channel. */
@@ -5627,6 +5785,11 @@ class SupernotifyScenariosCard extends SnCard {
                white-space: nowrap; }
         .tag.on { color: ${p.ok}; }
         .tag.off { color: ${p.crit}; }
+        .tag.mod { color: ${p.brandD}; }
+        .tag.warn { color: ${p.warn || "#b26a00"}; border-color: ${p.warn || "#b26a00"}; }
+        .cond { margin-top: 2px; font-size: 11.5px; color: ${p.muted}; line-height: 1.4; }
+        .cond .y { color: ${p.ok}; } .cond .n { color: ${p.crit}; }
+        .cwarn { margin-top: 3px; font-size: 11.5px; font-weight: 650; color: ${p.warn || "#b26a00"}; }
         .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750;
                  flex-shrink: 0; }
         .b-act { background: rgba(46,158,91,.16); color: ${p.ok}; }
@@ -5661,12 +5824,15 @@ class SupernotifyScenariosCard extends SnCard {
     const isAct = active.includes(s.name);
     const em = SN_SCENARIO_ICONS[s.name] || "🎬";
     const tags = [];
-    const dels = s.a.delivery && typeof s.a.delivery === "object" ? Object.entries(s.a.delivery) : [];
-    for (const [dn, dc] of dels.slice(0, 6)) {
-      const on = !dc || dc.enabled !== false;
-      tags.push(`<span class="tag ${on ? "on" : "off"}" title="${esc(dn)}">${on ? "✓" : "✕"} ${esc(snDeliveryAlias(this._hass, dn) || dn)}</span>`);
-    }
-    if (dels.length > 6) tags.push(`<span class="tag">+${dels.length - 6}</span>`);
+    // 0.78.0: what the scenario does to each channel (volume, options, who undoes it)
+    const redraw = () => { if (this._rendered) this._update(); };
+    const effs = snScenarioEffects(this._hass, s.a, s.name, active, redraw);
+    for (const e of effs.slice(0, 6)) tags.push(snEffectChip(this._hass, e, T));
+    if (effs.length > 6) tags.push(`<span class="tag">+${effs.length - 6}</span>`);
+    const warns = effs.filter((e) => e.by.length || e.chanOff).map((e) => e.by.length
+      ? T.sc_by.replace("{d}", e.alias).replace("{s}", e.by.map((x) => snScenarioName(this._hass, x)).join(", "))
+      : T.sc_chan_off.replace("{d}", e.alias));
+    const cl = s.manual ? null : snScenarioCondLine(this._hass, T, this._trace && this._trace[s.name]);
     const ags = Array.isArray(s.a.action_groups) ? s.a.action_groups : [];
     if (ags.length) tags.push(`<span class="tag">🔘 ${esc(ags.join(", "))}</span>`);
     if (s.a.media) tags.push(`<span class="tag">📷 ${T.media}</span>`);
@@ -5689,7 +5855,9 @@ class SupernotifyScenariosCard extends SnCard {
       <span class="em">${em}</span>
       <div class="mid"><b>${esc(alias || s.name)}</b>
         ${alias && !snSame(alias, s.name) ? `<span style="color:${p.muted}"> · ${snTech(s.name, alias)}</span>` : ""}
+        ${cl ? `<div class="cond" title="${esc(T.sc_when + ": " + cl.text)}">⏱ ${cl.parts.length ? cl.parts.map((p) => `<span class="${p.ok === true ? "y" : p.ok === false ? "n" : "q"}">${p.ok === true ? "✓" : p.ok === false ? "✕" : "·"} ${esc(p.t)}</span>`).join(" · ") : esc(cl.text)}</div>` : ""}
         <div class="tags">${tags.join("")}</div>
+        ${warns.map((w) => `<div class="cwarn">⚠ ${esc(w)}</div>`).join("")}
         ${this._open && this._open.has(s.name) ? this._detailHtml(s, isAct) : ""}
       </div>
       ${isAct ? `<span class="badge b-act">${T.active_now}</span>` : ""}

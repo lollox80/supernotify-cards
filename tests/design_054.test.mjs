@@ -1,4 +1,5 @@
 // v0.54.0: singolare/plurale, nomi leggibili in simulatore e scenari, fasce tradotte e dalla mattina.
+// 2026-10-05 v0.78.0: il tooltip del tag scenario ora inizia col nome tecnico e prosegue con cosa fa lo scenario.
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -46,7 +47,7 @@ ok(/1 dispositivo\b/.test(rc.textContent), "recipients: '1 dispositivo'");
 const sim = await mk("supernotify-simulator-card", {});
 ok(/Voce spenta \(ospiti\)/.test(sim.textContent) && /Notifica sul telefono/.test(sim.textContent), "simulatore: scenario e canale con il nome leggibile");
 const sc = await mk("supernotify-scenarios-card", {});
-ok([...sc.querySelectorAll(".tag")].some((t) => /Notifica sul telefono/.test(t.textContent) && t.title === "mobile_push"), "scenari: tag del canale con alias, tecnico nel tooltip");
+ok([...sc.querySelectorAll(".tag")].some((t) => /Notifica sul telefono/.test(t.textContent) && t.title.startsWith("mobile_push")), "scenari: tag del canale con alias, tecnico nel tooltip");
 const bands = Object.fromEntries(["early_morning", "morning", "evening", "late_night"].map((b) => [b, { start: "input_datetime.s_" + b, volume: "input_number.v_" + b }]));
 const bd = await mk("supernotify-bands-card", { bands }, "en");
 const names = [...bd.querySelectorAll(".row .who b")].map((n) => n.textContent.trim());

@@ -28,4 +28,13 @@ applies** (or **without it**, for an active one) runs two dry runs, without and 
 the channels that would be added or dropped for a medium notification now (SuperNotify 2.12+).
 **All attributes ›** opens Home Assistant's dialog.
 
+**What it does and why, at a glance** (0.78.0): every row shows, without a tap,
+
+- its conditions with their result now (⏱ ✔ *time after 23:00 before 06:30*);
+- what it changes on each channel, not only on/off: the volume it sets (🔇 *muted*, 🔉 *vol 20%*) with
+  templates rendered now by Home Assistant (`render_template`, refreshed every minute), ⚙ when it changes
+  other options, 🎯 when it sends to other targets - the tooltip lists them;
+- ⚠ when an active scenario uses a channel that another active scenario turns off (the "off" wins in
+  SuperNotify) or whose switch is off, with a line saying by whom.
+
 <img src="../images/scenarios_why.png" alt="scenario detail: why and what changes" width="420">

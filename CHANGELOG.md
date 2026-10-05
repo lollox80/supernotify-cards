@@ -3,6 +3,17 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.78.0] - 2026-10-05
+
+### Added
+- scenarios-card: each row says what the scenario does and why, without a tap. The channel chips
+  show the volume it sets (🔇 muted, 🔉 vol 20%) with templates rendered now by Home Assistant,
+  ⚙ for other options and 🎯 for other targets; the conditions with their result sit under the
+  name; ⚠ marks a channel that another active scenario turns off (the "off" wins) or that is
+  switched off. Before, a scenario setting volume 0 showed a green "✓ Alexa".
+- overview-card: each active scenario chip adds what it silences or turns down, with its
+  conditions as tooltip.
+
 ## [0.77.0] - 2026-10-05
 
 ### Added
