@@ -17,7 +17,8 @@
  *   every 30 s shared by the cards), no tap needed. (3) When an active scenario turns on a channel
  *   that another active scenario turns off (the "off" wins in SuperNotify) or that is switched off,
  *   the chip is marked ⚠ and a line says by whom. overview 0.37.0: each active scenario chip adds
- *   what it silences or turns down ("· 🔇 Alexa, TTS") and its conditions as tooltip.
+ *   what it silences or turns down ("· 🔇 Alexa, TTS") and its conditions as tooltip. A time
+ *   condition bound to an input_datetime shows its name instead of the entity id (also in why).
  * 2026-10-05 - v0.77.0. channels: a channel with a `fallback:` list (the switch's `fallback` attribute,
  *   SuperNotify PR #260) shows "fallback: <channels>", and a channel named in another's list shows
  *   "fallback for <channel>". Nothing changes without the attribute.
@@ -1760,7 +1761,8 @@ function snCondText(hass, c, T) {
   const t = c.condition;
   if (t === "state") return T.c_state.replace("{e}", ents).replace("{s}", [].concat(c.state).join(T.c_or_join));
   if (t === "numeric_state") return [T.c_numeric.replace("{e}", ents), c.above != null ? `${T.c_above} ${c.above}` : "", c.below != null ? `${T.c_below} ${c.below}` : ""].filter(Boolean).join(" ");
-  const hm = (v) => String(v).replace(/^(\d{1,2}:\d{2}):00$/, "$1");
+  // 0.78.0: after/before can be an input_datetime or a time sensor - its name, not the entity id
+  const hm = (v) => (/^(input_datetime|sensor)\./.test(String(v)) ? name(v) : String(v).replace(/^(\d{1,2}:\d{2}):00$/, "$1"));
   if (t === "time") return [T.c_time, c.after ? `${T.c_after} ${hm(c.after)}` : "", c.before ? `${T.c_before} ${hm(c.before)}` : "", c.weekday ? [].concat(c.weekday).join(", ") : ""].filter(Boolean).join(" ");
   if (t === "template") return T.c_template;
   if (t === "and" || t === "or" || t === "not") return T["c_" + t];

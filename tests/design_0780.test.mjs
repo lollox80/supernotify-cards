@@ -82,6 +82,8 @@ hass.states["switch.supernotify_scenario_ufficio"] = S("on", { name: "ufficio", 
 TRACE[1].push({ name: "ufficio", conditions: [{ condition: "or", conditions: [
   { condition: "and", conditions: [{ condition: "state", entity_id: ["binary_sensor.casa_vuota"], state: "on" }, { condition: "time", after: "08:00:00" }] },
   { condition: "state", entity_id: ["binary_sensor.casa_vuota"], state: "off" }] }], trace: { trace: TR("condition/conditions/condition/0", false) } });
+TRACE[1][0].conditions.push({ condition: "time", after: "input_datetime.start_wd" });
+hass.states["input_datetime.start_wd"] = S("08:00:00", { friendly_name: "Inizio feriali" });
 const ov = mount("supernotify-overview-card");
 await wait(150); ov.hass = { ...hass }; await wait(100);
 const t = ov.shadowRoot.getElementById("scen").innerHTML;
@@ -93,6 +95,7 @@ const sc2 = document.createElement("supernotify-scenarios-card"); sc2.setConfig(
 await wait(31000); sc2.hass = { ...hass }; await wait(150);
 const uf = ic(sc2.shadowRoot.querySelector('.row[data-name="ufficio"]').innerHTML);
 ok(/almeno una vera: \(tutte vere: Casa vuota è on, orario dopo le 08:00\) o Casa vuota è off/.test(uf), "condizioni annidate spiegate - " + uf);
+ok(/orario dopo le Inizio feriali/.test(ic(sc2.shadowRoot.querySelector('.row[data-name="morning"]').innerHTML)), "orario legato a input_datetime: nome leggibile");
 if (fail) { console.log(`FAIL ${fail}`); process.exit(1); }
 console.log("all ok");
 process.exit(0);
