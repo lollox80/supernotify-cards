@@ -8,6 +8,13 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-07 - v0.81.0. archive 0.40.0: with `pause_sender: true` the pause bar also offers the
+ *   automation or script that sent the notification (from the logbook, as the why card finds it),
+ *   so almost every notification can be paused, not only those with entity_id in their data.
+ *   It needs a SuperNotify whose tag snooze matches the sender (PR #270): off by default until a
+ *   release has it - with an older SuperNotify the pause would be accepted and match nothing.
+ *   The entity, when there is one, stays first: it is narrower than the whole automation.
+ *   Fix: a pause made while the pauses were being read could show as not made until the next read.
  * 2026-10-07 - v0.80.0. archive 0.39.0: pause one notification. An open row gets a pause bar:
  *   30 min, 1 h, 4 h or 24 h, for everyone (default) or only for me. It is SuperNotify's tag
  *   snooze (supernotify.snooze, scope tag) on the entity the notification is about - entity_id in
@@ -600,7 +607,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.80.0"; // bundle / HACS release
+const VERSION = "0.81.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -622,7 +629,7 @@ const SN_CARD_VERSIONS = {
   composer: "0.25.0",
   automations: "0.21.4",
   stats: "0.32.2",
-  archive: "0.39.0",
+  archive: "0.40.0",
   tools: "0.2.2",
   why: "0.15.0",
 };
@@ -1418,6 +1425,23 @@ function snPauseSubjects(doc) {
   const cam = snIsObj(doc.media) ? doc.media.camera_entity_id : null;
   if (cam) ids.push(String(cam));
   return [...new Set(ids.map((x) => x.trim()).filter((x) => /^[a-z0-9_]+\.[a-z0-9_]+$/i.test(x)))];
+}
+/**
+ * 0.81.0: the automations and scripts that sent an archived notification - the logbook entries in
+ * its context, as the why card reads them. Cached per notification; [] when unknown.
+ */
+const SN_SENDERS = new Map();
+function snSenders(hass, doc) {
+  const ctx = (doc && snIsObj(doc.original_context)) ? doc.original_context : {};
+  if (!hass || !hass.callWS || !ctx.id) return Promise.resolve([]);
+  if (SN_SENDERS.has(doc.id)) return SN_SENDERS.get(doc.id);
+  const t = Date.parse(doc.created || "") || Date.now();
+  const p = hass.callWS({ type: "logbook/get_events", start_time: new Date(t - 120000).toISOString(),
+    end_time: new Date(t + 5000).toISOString(), context_id: ctx.id })
+    .then((ev) => [...new Set((ev || []).map((e) => e.entity_id || "").filter((id) => /^(automation|script)\./.test(id)))])
+    .catch(() => []);
+  SN_SENDERS.set(doc.id, p);
+  return p;
 }
 /** A name as SuperNotify's spoken_name() has it: case, underscores and extra spaces ignored. */
 function snSpoken(name) {
@@ -7914,6 +7938,7 @@ class SupernotifyArchiveCard extends SnCard {
     this._open = new Set();
     this._rendered = false;
     this._pz = {};        // 0.80.0: per row - { who: "all"|"me", subj, msg, busy }
+    this._senders = {};   // 0.81.0: per notification id - [automation/script ids], null while asked
     this._snz = null;     // active pauses (enquire_snoozes)
     this._snzAt = 0;
   }
@@ -7963,7 +7988,8 @@ class SupernotifyArchiveCard extends SnCard {
 
   /** The active pauses, read at most every 30 s while a row is open. */
   _loadSnz(force) {
-    if (!this._canPause() || this._snzBusy) return;
+    if (!this._canPause()) return;
+    if (this._snzBusy) { if (force) this._snzAgain = true; return; }
     if (!force && this._snz && Date.now() - this._snzAt < 30000) return;
     this._snzBusy = true;
     snEnquire(this._hass, "enquire_snoozes").then((r) => {
@@ -7971,6 +7997,7 @@ class SupernotifyArchiveCard extends SnCard {
       this._snzAt = Date.now();
     }).catch(() => { this._snz = this._snz || []; }).finally(() => {
       this._snzBusy = false;
+      if (this._snzAgain) { this._snzAgain = false; this._loadSnz(true); return; }
       this._renderPauses();
     });
   }
@@ -7986,14 +8013,27 @@ class SupernotifyArchiveCard extends SnCard {
     const doc = snArchiveStore.docs.find((d) => d.id === (r.fid || r.id))
       || snArchiveStore.docs.find((d) => String(d.id || "").startsWith(r.id));
     if (!doc) return "";
-    const subs = snPauseSubjects(doc);
-    if (!subs.length) return `<div class="pzn">⏸ ${esc(t("pz_none"))}</div>`;
+    // 0.81.0: the sender too, once the logbook has answered (then the bar is drawn again)
+    let senders = [];
+    if (this._config.pause_sender) {
+      senders = this._senders[doc.id];
+      if (senders === undefined) {
+        this._senders[doc.id] = null;
+        snSenders(this._hass, doc).then((s) => { this._senders[doc.id] = s; this._renderPauses(); });
+      }
+      if (!senders) return `<div class="pzn">⏸ …</div>`;
+    }
+    const subs = [...snPauseSubjects(doc), ...senders.filter((s) => !snPauseSubjects(doc).includes(s))];
+    if (!subs.length) return `<div class="pzn">⏸ ${esc(t(this._config.pause_sender ? "pz_none_any" : "pz_none"))}</div>`;
     const st = this._pz[r.id] || (this._pz[r.id] = { who: "all", subj: subs[0] });
     if (!subs.includes(st.subj)) st.subj = subs[0];
-    const fname = (id) => ((this._hass.states[id] || {}).attributes || {}).friendly_name || id;
+    const fname0 = (id) => ((this._hass.states[id] || {}).attributes || {}).friendly_name || id;
+    // 0.81.0: a sender reads "automation: name" / "script: name"
+    const fname = (id) => /^automation\./.test(id) ? `${t("pz_auto")}: ${fname0(id)}`
+      : /^script\./.test(id) ? `${t("pz_script")}: ${fname0(id)}` : fname0(id);
     const pad = (n) => String(n).padStart(2, "0");
     const live = this._snz ? snPausesOn(this._snz, st.subj) : [];
-    const subjRow = subs.length > 1 ? `<div class="pzr">${subs.map((s) =>
+    const subjRow = subs.length > 1 ? `<div class="pzr"><span class="pzk">${esc(t("pz_what"))}</span>${subs.map((s) =>
       `<button class="pzc${s === st.subj ? " on" : ""}" data-subj="${esc(s)}">${esc(fname(s))}</button>`).join("")}</div>` : "";
     const msg = st.msg ? `<div class="pzm">${esc(st.msg)}</div>` : "";
     if (live.length) {
@@ -8194,6 +8234,7 @@ class SupernotifyArchiveCard extends SnCard {
         .pzb:focus-visible, .pzc:focus-visible { outline: 2px solid ${p.brand}; outline-offset: 2px; }
         .pzm { font-size: 11.5px; color: ${p.muted}; margin-top: 4px; }
         .pzn { margin-top: 6px; font-size: 11.5px; color: ${p.muted}; }
+        .pzk { font-size: 11px; color: ${p.muted}; }
         ${SN_FLOW_CSS}
       </style>
       <ha-card>
@@ -8350,6 +8391,8 @@ const SN_ARCH_STRINGS = {
     pz_done: "Paused.", pz_resumed: "Resumed.",
     pz_none: "This one can't be paused on its own: the call doesn't say which entity it is about. Add entity_id to the call's data.",
     pz_critical: "Critical notifications can't be paused from here.",
+    pz_auto: "automation", pz_script: "script", pz_what: "pause:",
+    pz_none_any: "This one can't be paused: it names no entity and no automation or script sent it (sent by hand?).",
   },
   it: {
     title: "Storico notifiche", search: "Cerca nel titolo o nel messaggio…",
@@ -8372,6 +8415,8 @@ const SN_ARCH_STRINGS = {
     pz_done: "In pausa.", pz_resumed: "Ripresa.",
     pz_none: "Questa notifica non si può mettere in pausa da sola: la chiamata non dice di quale entità parla. Aggiungi entity_id ai data della chiamata.",
     pz_critical: "Le notifiche critiche non si mettono in pausa da qui.",
+    pz_auto: "automazione", pz_script: "script", pz_what: "pausa su:",
+    pz_none_any: "Questa notifica non si può mettere in pausa: non nomina un'entità e non l'ha mandata un'automazione o uno script (inviata a mano?).",
   },
 };
 

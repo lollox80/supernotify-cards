@@ -19,6 +19,7 @@ type: custom:supernotify-archive-card
 | `intro` | no | info banner at the top of the card |
 | `style` | no | `supernotify` (default) or `theme` |
 | `pause` | no | `false` hides the pause bar in an open row (default shown when SuperNotify has `supernotify.snooze`) |
+| `pause_sender` | no | `true` also offers the automation or script that sent the notification - needs a SuperNotify whose tag snooze matches the sender ([#270](https://github.com/rhizomatics/supernotify/pull/270)) |
 
 **Pause one notification (0.80.0).** Open a row: the bar pauses notifications about the entity
 it is about - 30 min, 1 h, 4 h or 24 h, for everyone or only for you - through SuperNotify's tag

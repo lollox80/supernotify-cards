@@ -3,6 +3,19 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.81.0] - 2026-10-08
+
+### Added
+- archive-card: `pause_sender: true` also offers the automation or script that sent the
+  notification (found in the logbook, as the why card does), so almost every notification can be
+  paused, not only the ones with `entity_id` in their data. The entity stays first when there is
+  one: it is narrower than the whole automation. Needs a SuperNotify whose tag snooze matches the
+  sender (rhizomatics/supernotify#270): off by default, because with an older SuperNotify the pause
+  would be accepted and match nothing.
+
+### Fixed
+- archive-card: a pause made while the pauses were being read could show as not made until the next read.
+
 ## [0.80.0] - 2026-10-07
 
 ### Added
