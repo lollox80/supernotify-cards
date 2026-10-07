@@ -18,6 +18,23 @@ type: custom:supernotify-archive-card
 | `entity` | no | bridge only: sensor holding the archive index (default `sensor.supernotify_archivio`) |
 | `intro` | no | info banner at the top of the card |
 | `style` | no | `supernotify` (default) or `theme` |
+| `pause` | no | `false` hides the pause bar in an open row (default shown when SuperNotify has `supernotify.snooze`) |
+
+**Pause one notification (0.80.0).** Open a row: the bar pauses notifications about the entity
+it is about - 30 min, 1 h, 4 h or 24 h, for everyone or only for you - through SuperNotify's tag
+snooze. The entity is `entity_id` in the call's `data` (or its camera), so add it to the calls you
+want to be able to pause:
+
+```yaml
+action: notify.supernotify
+data:
+  message: "The bathroom thermostat is offline"
+  data:
+    entity_id: climate.bathroom_thermostat
+```
+
+Critical notifications are never paused from here. "Only for me" removes you from the people the
+notification goes to; channels with fixed targets (speakers, the dashboard) still play.
 
 **SuperNotify 2.10.0 or later: nothing to set up.** The card reads the archive through the
 `supernotify.enquire_archive` action (the file archive must be on in SuperNotify's options). It

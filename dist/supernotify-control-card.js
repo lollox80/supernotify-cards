@@ -8,6 +8,18 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-07 - v0.80.0. archive 0.39.0: pause one notification. An open row gets a pause bar:
+ *   30 min, 1 h, 4 h or 24 h, for everyone (default) or only for me. It is SuperNotify's tag
+ *   snooze (supernotify.snooze, scope tag) on the entity the notification is about - entity_id in
+ *   its data, or its camera - so it holds back every notification about that entity, the "offline"
+ *   and the "back online" alike, until the pause ends. A row whose entity is already paused says
+ *   until when, with Resume. Not offered for critical notifications (a tag snooze would hold back a
+ *   critical too) nor when the call names no entity: the bar then says to add entity_id to the
+ *   call's data. "Only for me" takes you off the people the notification goes to; channels with
+ *   fixed targets (speakers, the dashboard) still play. Needs SuperNotify with supernotify.snooze
+ *   and the archive read through enquire_archive. Pause labels: a tag that is an entity shows its name.
+ *   Fix: a pause made a moment ago read as already over when Home Assistant's clock is a few
+ *   seconds ahead of the browser's (snoozed_at "in the future" was taken as yesterday).
  * 2026-10-05 - v0.79.0. why 0.15.0, for a notification dropped as a duplicate: (1) a box on top says
  *   when the same text went out before and how many seconds earlier, with a link that opens the
  *   original; when both came from the same run of an automation or script (same context) it says
@@ -588,7 +600,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.79.0"; // bundle / HACS release
+const VERSION = "0.80.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -610,7 +622,7 @@ const SN_CARD_VERSIONS = {
   composer: "0.25.0",
   automations: "0.21.4",
   stats: "0.32.2",
-  archive: "0.38.2",
+  archive: "0.39.0",
   tools: "0.2.2",
   why: "0.15.0",
 };
@@ -914,7 +926,7 @@ function snSnoozeLabel(hass, s, T) {
   else if (tt === "NONCRITICAL") what = T.snz_nc;
   else if (tt === "DELIVERY") what = snDeliveryAlias(hass, tg) || tg;
   else if (tt === "CAMERA") what = "📷 " + (fname(tg) || tg.replace(/^camera\./, ""));
-  else if (tt === "TAG") what = "🏷️ " + tg;
+  else if (tt === "TAG") what = "🏷️ " + (fname(tg) || tg); // 0.80.0: a paused entity by name
   else if (tt === "PRIORITY") what = `${T.snz_prio} ${tg}`;
   else if (tt === "TRANSPORT") what = `${T.snz_transport} ${tg}`;
   else what = tg || tt.toLowerCase();
@@ -954,7 +966,7 @@ function snLiveSnoozes(list, now) {
       const start = new Date(now);
       if (a) {
         start.setHours(a[0], a[1], a[2], 0);
-        if (start > now) start.setDate(start.getDate() - 1);
+        if (start - now > 300000) start.setDate(start.getDate() - 1); // 0.80.0: clock skew
       }
       end = new Date(start);
       end.setHours(u[0], u[1], u[2], 0);
@@ -1392,6 +1404,37 @@ async function snSnoozeCall(hass, data) {
     if (service !== "snooze") delete d.minutes;
   }
   return hass.callWS({ type: "call_service", domain: "supernotify", service, service_data: d, return_response: true });
+}
+/**
+ * 0.80.0: what "pause this notification" can name an archived notification by - the entities
+ * in its data (`entity_id`) and its camera. SuperNotify's tag snooze matches a notification on
+ * these (Notification.snooze_tags), so a pause on the entity holds back every notification about it.
+ */
+function snPauseSubjects(doc) {
+  if (!doc) return [];
+  const ed = snIsObj(doc.extra_data) ? doc.extra_data : {};
+  const raw = ed.entity_id;
+  const ids = (Array.isArray(raw) ? raw : raw ? [raw] : []).map(String);
+  const cam = snIsObj(doc.media) ? doc.media.camera_entity_id : null;
+  if (cam) ids.push(String(cam));
+  return [...new Set(ids.map((x) => x.trim()).filter((x) => /^[a-z0-9_]+\.[a-z0-9_]+$/i.test(x)))];
+}
+/** A name as SuperNotify's spoken_name() has it: case, underscores and extra spaces ignored. */
+function snSpoken(name) {
+  return String(name || "").replace(/_/g, " ").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+}
+/** The active tag pauses on this entity (from enquire_snoozes, see snLiveSnoozes). */
+function snPausesOn(snoozes, entityId) {
+  const want = snSpoken(entityId);
+  return snLiveSnoozes(snoozes || []).filter((s) => String(s.target_type || "").toUpperCase() === "TAG"
+    && typeof s.target === "string" && snSpoken(s.target) === want);
+}
+/** person.* linked to the logged-in user, or null. */
+function snMyPerson(hass) {
+  const uid = hass && hass.user && hass.user.id;
+  if (!uid) return null;
+  return Object.keys(hass.states).find((e) => e.startsWith("person.") &&
+    (hass.states[e].attributes || {}).user_id === uid) || null;
 }
 /**
  * 0.74.0: delivery rows that count as "channels off". Once SuperNotify gives its switches the
@@ -7870,6 +7913,9 @@ class SupernotifyArchiveCard extends SnCard {
     this._filter = "all";
     this._open = new Set();
     this._rendered = false;
+    this._pz = {};        // 0.80.0: per row - { who: "all"|"me", subj, msg, busy }
+    this._snz = null;     // active pauses (enquire_snoozes)
+    this._snzAt = 0;
   }
 
   static snTracked = false;
@@ -7899,10 +7945,129 @@ class SupernotifyArchiveCard extends SnCard {
     };
     window.addEventListener("supernotify-archive", this._onArchive);
     this._onArchive();   // catch up with a fetch that finished before the card was in the page
+    // 0.80.0: a pause made here or elsewhere - read the pauses again
+    this._onRefresh = () => { this._snzAt = 0; if (this._rendered && this._open.size) this._loadSnz(); };
+    window.addEventListener("supernotify-refresh", this._onRefresh);
   }
 
   disconnectedCallback() {
     window.removeEventListener("supernotify-archive", this._onArchive);
+    window.removeEventListener("supernotify-refresh", this._onRefresh);
+  }
+
+  /** 0.80.0: can a row be paused from here - supernotify.snooze and the archive's own documents. */
+  _canPause() {
+    return !!(this._hass && snHasSnoozeAction(this._hass) && snArchiveNative(this._hass, this._config)
+      && this._config.pause !== false);
+  }
+
+  /** The active pauses, read at most every 30 s while a row is open. */
+  _loadSnz(force) {
+    if (!this._canPause() || this._snzBusy) return;
+    if (!force && this._snz && Date.now() - this._snzAt < 30000) return;
+    this._snzBusy = true;
+    snEnquire(this._hass, "enquire_snoozes").then((r) => {
+      this._snz = ((r && r.response) || {}).snoozes || [];
+      this._snzAt = Date.now();
+    }).catch(() => { this._snz = this._snz || []; }).finally(() => {
+      this._snzBusy = false;
+      this._renderPauses();
+    });
+  }
+
+  /** The pause bar of one open row (0.80.0), see snPauseSubjects. */
+  _pauseHtml(r) {
+    const T = this._T();
+    const E = SN_ARCH_STRINGS.en;
+    const t = (k) => T[k] || E[k] || k;
+    const esc = snEsc;
+    if (r.p === "critical") return `<div class="pzn">${esc(t("pz_critical"))}</div>`;
+    // the index keeps 8 characters in `id` and the full one in `fid`
+    const doc = snArchiveStore.docs.find((d) => d.id === (r.fid || r.id))
+      || snArchiveStore.docs.find((d) => String(d.id || "").startsWith(r.id));
+    if (!doc) return "";
+    const subs = snPauseSubjects(doc);
+    if (!subs.length) return `<div class="pzn">⏸ ${esc(t("pz_none"))}</div>`;
+    const st = this._pz[r.id] || (this._pz[r.id] = { who: "all", subj: subs[0] });
+    if (!subs.includes(st.subj)) st.subj = subs[0];
+    const fname = (id) => ((this._hass.states[id] || {}).attributes || {}).friendly_name || id;
+    const pad = (n) => String(n).padStart(2, "0");
+    const live = this._snz ? snPausesOn(this._snz, st.subj) : [];
+    const subjRow = subs.length > 1 ? `<div class="pzr">${subs.map((s) =>
+      `<button class="pzc${s === st.subj ? " on" : ""}" data-subj="${esc(s)}">${esc(fname(s))}</button>`).join("")}</div>` : "";
+    const msg = st.msg ? `<div class="pzm">${esc(st.msg)}</div>` : "";
+    if (live.length) {
+      const rows = live.map((s, i) => {
+        const user = String(s.recipient_type || "").toUpperCase() === "USER";
+        const who = user ? ` (${esc(t("pz_only"))} ${esc(fname(s.recipient || ""))})` : ` (${esc(t("pz_all"))})`;
+        const until = s._end ? `${esc(t("pz_until"))} ${pad(s._end.getHours())}:${pad(s._end.getMinutes())}` : esc(t("pz_until_resumed"));
+        return `<div class="pzr"><span class="pzl">⏸ <b>${esc(fname(st.subj))}</b> ${esc(t("pz_paused"))} ${until}${who}</span>
+          <button class="pzb" data-resume="${i}"${st.busy ? " disabled" : ""}>▶ ${esc(t("pz_resume"))}</button></div>`;
+      }).join("");
+      return `<div class="pz">${subjRow}${rows}${msg}</div>`;
+    }
+    const me = snMyPerson(this._hass);
+    const lens = [[30, "30 min"], [60, "1 h"], [240, "4 h"], [1440, "24 h"]];
+    return `<div class="pz">${subjRow}
+      <div class="pzr"><span class="pzl">⏸ ${esc(t("pz_title").replace("{x}", fname(st.subj)))}</span></div>
+      <div class="pzr">${lens.map(([m, l]) => `<button class="pzb" data-min="${m}"${st.busy ? " disabled" : ""}>${l}</button>`).join("")}
+        <span class="pzw">
+          <button class="pzc${st.who === "all" ? " on" : ""}" data-who="all" title="${esc(t("pz_all_tip"))}">${esc(t("pz_all"))}</button>${me
+            ? `<button class="pzc${st.who === "me" ? " on" : ""}" data-who="me" title="${esc(t("pz_me_tip"))}">${esc(t("pz_me"))}</button>` : ""}
+        </span></div>${msg}</div>`;
+  }
+
+  /** Redraw the pause bars of the open rows only - the list stays as it is. */
+  _renderPauses() {
+    const el = this.shadowRoot && this.shadowRoot.getElementById("list");
+    if (!el || !this._canPause()) return;
+    const idx = this._index();
+    el.querySelectorAll(".row.open .pzh").forEach((h) => {
+      const r = idx && (idx.items || []).find((x) => x.id === h.dataset.id);
+      h.innerHTML = r ? snIconify(this._pauseHtml(r), this._config) : "";
+      if (r) this._bindPause(h, r);
+    });
+  }
+
+  _bindPause(h, r) {
+    const st = this._pz[r.id];
+    h.onclick = (e) => e.stopPropagation(); // the row opens and closes on its own clicks only
+    if (!st) return;
+    const T = this._T();
+    const t = (k) => T[k] || SN_ARCH_STRINGS.en[k] || k;
+    const run = async (data, done) => {
+      st.busy = true; st.msg = ""; this._renderPauses();
+      try {
+        await snSnoozeCall(this._hass, data);
+        st.msg = done;
+      } catch (e) {
+        st.msg = `✖ ${(e && e.message) || e}`;
+      }
+      st.busy = false;
+      snEnquireBust(400);
+      this._loadSnz(true);
+    };
+    h.querySelectorAll("[data-subj]").forEach((b) => { b.onclick = (e) => { e.stopPropagation(); st.subj = b.dataset.subj; st.msg = ""; this._renderPauses(); }; });
+    h.querySelectorAll("[data-who]").forEach((b) => { b.onclick = (e) => { e.stopPropagation(); st.who = b.dataset.who; this._renderPauses(); }; });
+    h.querySelectorAll("[data-min]").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const data = { command: "snooze", scope: "tag", name: st.subj, minutes: +b.dataset.min, reason: "Dashboard: archive" };
+        if (st.who === "me") { const me = snMyPerson(this._hass); if (me) data.person = me; }
+        run(data, t("pz_done"));
+      };
+    });
+    const live = this._snz ? snPausesOn(this._snz, st.subj) : [];
+    h.querySelectorAll("[data-resume]").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const s = live[+b.dataset.resume];
+        if (!s) return;
+        const data = { command: "resume", scope: "tag", name: s.target };
+        if (String(s.recipient_type || "").toUpperCase() === "USER" && s.recipient) data.person = s.recipient;
+        run(data, t("pz_resumed"));
+      };
+    });
   }
 
   // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
@@ -8015,6 +8180,20 @@ class SupernotifyArchiveCard extends SnCard {
         .empty { text-align: center; color: ${p.muted}; font-size: 13px; padding: 22px 0; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 10px; }
         .why { color: ${p.brandD}; font-weight: 650; cursor: pointer; text-decoration: underline; }
+        .pz { margin-top: 8px; padding: 8px 10px; border: 1px solid ${p.line}; border-radius: 10px; cursor: default; }
+        .pzr { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 3px 0; }
+        .pzl { font-size: 12px; color: ${p.ink}; flex: 1 1 auto; }
+        .pzb { border: 1.5px solid ${p.brand}; color: ${p.brandD}; background: ${p.panel}; border-radius: 999px;
+               padding: 6px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 32px; }
+        .pzb:hover:not([disabled]) { background: ${p.soft}; }
+        .pzb[disabled] { opacity: .5; cursor: progress; }
+        .pzw { display: inline-flex; gap: 4px; margin-left: auto; }
+        .pzc { border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.muted}; border-radius: 999px;
+               padding: 5px 10px; font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; min-height: 30px; }
+        .pzc.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
+        .pzb:focus-visible, .pzc:focus-visible { outline: 2px solid ${p.brand}; outline-offset: 2px; }
+        .pzm { font-size: 11.5px; color: ${p.muted}; margin-top: 4px; }
+        .pzn { margin-top: 6px; font-size: 11.5px; color: ${p.muted}; }
         ${SN_FLOW_CSS}
       </style>
       <ha-card>
@@ -8117,6 +8296,7 @@ class SupernotifyArchiveCard extends SnCard {
              <div>${r.d ? `<b>${r.d}</b> ${snW(T, "delivered", r.d)} ` : ""}${r.f ? `· <b>${r.f}</b> ${snW(T, "failed", r.f)} ` : ""}${r.s ? `· <b>${r.s}</b> ${snW(T, "skipped", r.s)} ` : ""}${r.mi ? `· ⚠ <b>${r.mi}</b> ${snW(T, "missed", r.mi)} ` : ""}
              ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""}${r.mt ? ` · ${T.truncated}` : ""}</div>
              ${window.__snWhyCards ? `<div><a class="why" data-why="${esc(r.id)}">🔎 ${T.why}</a></div>` : ""}
+             ${this._canPause() ? `<div class="pzh" data-id="${esc(r.id)}">${open ? this._pauseHtml(r) : ""}</div>` : ""}
            </div>
          </div>`);
     });
@@ -8128,9 +8308,10 @@ class SupernotifyArchiveCard extends SnCard {
       node.onclick = () => {
         const id = node.dataset.id;
         if (this._open.has(id)) { this._open.delete(id); node.classList.remove("open"); }
-        else { this._open.add(id); node.classList.add("open"); }
+        else { this._open.add(id); node.classList.add("open"); this._renderPauses(); this._loadSnz(); }
       };
     });
+    if (this._open.size && this._canPause()) { this._renderPauses(); this._loadSnz(); }
   }
 }
 
@@ -8162,6 +8343,13 @@ const SN_ARCH_STRINGS = {
       sconosciuto: "unknown" },
     scenarios: "Scenarios in force", truncated: "message truncated in the index",
     dur: "took", id: "id", why: "Why? - full detail",
+    pz_title: "Pause notifications about {x}", pz_all: "for everyone", pz_me: "only for me", pz_only: "only for",
+    pz_all_tip: "Nobody gets notifications about this entity until the pause ends",
+    pz_me_tip: "You stop getting them; channels with fixed targets (speakers, dashboard) still play",
+    pz_paused: "paused", pz_until: "until", pz_until_resumed: "until resumed", pz_resume: "Resume",
+    pz_done: "Paused.", pz_resumed: "Resumed.",
+    pz_none: "This one can't be paused on its own: the call doesn't say which entity it is about. Add entity_id to the call's data.",
+    pz_critical: "Critical notifications can't be paused from here.",
   },
   it: {
     title: "Storico notifiche", search: "Cerca nel titolo o nel messaggio…",
@@ -8177,6 +8365,13 @@ const SN_ARCH_STRINGS = {
     prio: { critical: "Critica", high: "Alta", low: "Bassa", minimum: "Minima", medium: "Media" },
     scenarios: "Scenari in vigore", truncated: "messaggio troncato nell'indice",
     dur: "in", id: "id", why: "Perché? - dettaglio completo",
+    pz_title: "Metti in pausa le notifiche su {x}", pz_all: "per tutti", pz_me: "solo per me", pz_only: "solo per",
+    pz_all_tip: "Nessuno riceve notifiche su questa entità finché la pausa non finisce",
+    pz_me_tip: "Smetti di riceverle tu; i canali con destinazione fissa (altoparlanti, dashboard) suonano comunque",
+    pz_paused: "in pausa", pz_until: "fino alle", pz_until_resumed: "fino a quando la riprendi", pz_resume: "Riprendi",
+    pz_done: "In pausa.", pz_resumed: "Ripresa.",
+    pz_none: "Questa notifica non si può mettere in pausa da sola: la chiamata non dice di quale entità parla. Aggiungi entity_id ai data della chiamata.",
+    pz_critical: "Le notifiche critiche non si mettono in pausa da qui.",
   },
 };
 

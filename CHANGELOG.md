@@ -3,6 +3,24 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.80.0] - 2026-10-07
+
+### Added
+- archive-card: pause one notification. An open row gets a pause bar - 30 min, 1 h, 4 h or 24 h,
+  for everyone (default) or only for me. It is SuperNotify's tag snooze (`supernotify.snooze`,
+  `scope: tag`) on the entity the notification is about: `entity_id` in its data, or its camera.
+  Every notification about that entity is held back until the pause ends - the "offline" and the
+  "back online" alike. A row whose entity is already paused says until when, with Resume.
+  Not offered for critical notifications (a tag snooze would hold back a critical too), nor when
+  the call names no entity: the bar then says to add `entity_id` to the call's data.
+  "Only for me" takes you off the people the notification goes to; channels with fixed targets
+  (speakers, the dashboard) still play. Needs a SuperNotify with `supernotify.snooze`. `pause: false` hides it.
+- Pause labels: a tag snooze on an entity shows the entity's name.
+
+### Fixed
+- A pause made a moment ago could read as already over when Home Assistant's clock is a few
+  seconds ahead of the browser's (`snoozed_at` slightly "in the future" was taken as yesterday).
+
 ## [0.79.0] - 2026-10-05
 
 ### Added
