@@ -3,6 +3,28 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.83.0] - 2026-10-08
+
+Visual pass on every card, checked on a real dashboard at desktop and phone width.
+
+### Changed
+- Pause reason: pauses made from the cards read "from the dashboard" / "from the archive" instead
+  of the raw "Dashboard: archive".
+- "Paused until" uses the latest end and shows the weekday when it is not today, everywhere:
+  status badge, pause tile feature, overview tile (0.37.2), archive pause bar (0.40.1).
+- Notification titles in archive, why (0.15.1), control (0.39.1), overview and the last-notification
+  feature: Telegram-style `*bold*` / `_italic_` marks are dropped and an emoji that both opens and
+  closes the title ("⚠️ Battery low ⚠️") is shown once.
+- stats-card (0.32.3): channel errors on their own small line under the total, so totals line up.
+
+### Fixed
+- deliveries-card (0.32.1) / transports-card (0.27.1): the expand arrow was a 12px glyph stuck at
+  the top of the row; now readable and centred while the row is closed.
+- scenarios-card (0.31.1): a condition with no result showed "· · condition" (the unknown mark was
+  the same dot as the separator).
+- bands-card (0.21.1): the "no voice" badge broke over two lines as an empty pill next to "now".
+- recipients-card (0.30.1): "at home" / "away" no longer split over two lines.
+
 ## [0.82.0] - 2026-10-08
 
 ### Changed
