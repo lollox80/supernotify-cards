@@ -8,6 +8,13 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-08 - v0.82.0. control 0.39.0: the pause tile and the "paused now" list read better.
+ *   A tag pause on an automation or script shows its name with 🤖/📜 (the tag comes back from
+ *   SuperNotify with spaces instead of underscores, so the friendly name was never found and the
+ *   raw "automation.xxx yyy" was shown). Tile: duration in h ("24 h", not "1440 min"), one subject
+ *   plus "+N", end time first (weekday when it is not today), subject below, text clamped to 3
+ *   lines. Panel rows: name and details stacked, wrapped, button aligned - the name no longer runs
+ *   over the details (a global .sl had white-space: nowrap). overview 0.37.1: same names in the chip.
  * 2026-10-07 - v0.81.0. archive 0.40.0: with `pause_sender: true` the pause bar also offers the
  *   automation or script that sent the notification (from the logbook, as the why card finds it),
  *   so almost every notification can be paused, not only those with entity_id in their data.
@@ -607,7 +614,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.81.0"; // bundle / HACS release
+const VERSION = "0.82.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -618,8 +625,8 @@ const VERSION = "0.81.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.38.1",
-  overview: "0.37.0",
+  control: "0.39.0",
+  overview: "0.37.1",
   bands: "0.21.0",
   deliveries: "0.32.0",
   transports: "0.27.0",
@@ -933,7 +940,14 @@ function snSnoozeLabel(hass, s, T) {
   else if (tt === "NONCRITICAL") what = T.snz_nc;
   else if (tt === "DELIVERY") what = snDeliveryAlias(hass, tg) || tg;
   else if (tt === "CAMERA") what = "📷 " + (fname(tg) || tg.replace(/^camera\./, ""));
-  else if (tt === "TAG") what = "🏷️ " + (fname(tg) || tg); // 0.80.0: a paused entity by name
+  else if (tt === "TAG") { // 0.80.0: a paused entity by name; 0.82.0: automation/script too
+    const us = tg.trim().replace(/\s+/g, "_");
+    const id = st[tg] ? tg : (st[us] ? us : tg);
+    const dom = id.split(".")[0];
+    const nice = fname(id) || (/^(automation|script)\./.test(us)
+      ? us.replace(/^[a-z_]+\./, "").replace(/_/g, " ").replace(/^./, (ch) => ch.toUpperCase()) : tg);
+    what = (dom === "automation" ? "🤖 " : dom === "script" ? "📜 " : "🏷️ ") + nice;
+  }
   else if (tt === "PRIORITY") what = `${T.snz_prio} ${tg}`;
   else if (tt === "TRANSPORT") what = `${T.snz_transport} ${tg}`;
   else what = tg || tt.toLowerCase();
@@ -942,6 +956,25 @@ function snSnoozeLabel(hass, s, T) {
     what += ` (${T.snz_for} ${who})`;
   }
   return what || "?";
+}
+
+/** 0.82.0: end of a pause, "00:50" today, "00:50 (gio)" on another day. */
+function snSnzUntil(end, hass) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const hm = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
+  if (end.toDateString() === new Date().toDateString()) return hm;
+  let day;
+  try { day = end.toLocaleDateString((hass && hass.language) || undefined, { weekday: "short" }); }
+  catch (e) { day = `${pad(end.getDate())}/${pad(end.getMonth() + 1)}`; }
+  return `${hm} (${day})`;
+}
+
+/** 0.82.0: minutes left, "25 min", "1 h 30 min", "24 h". */
+function snSnzDur(mins, T) {
+  if (mins < 60) return `${mins} ${T.min}`;
+  if (mins >= 180) return `${Math.round(mins / 60)} h`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m ? `${h} h ${m} ${T.min}` : `${h} h`;
 }
 
 /** Labels of active snoozes, at most `max` and "+N" for the rest. */
@@ -3677,8 +3710,9 @@ class SupernotifyControlCard extends SnCard {
         .ctile:active { transform: scale(.97); }
         .ctile .ti { --mdc-icon-size: 26px; font-size: 24px; line-height: 1.1; flex: none; color: ${p.muted}; }
         .stacked .ctile .ti { --mdc-icon-size: 30px; font-size: 30px; }
-        .ctile b { font-size: 14px; line-height: 1.25; }
-        .ctile .ts { font-size: 11px; color: ${p.muted}; line-height: 1.25; }
+        .ctile b { font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
+        .ctile .ts { font-size: 11px; color: ${p.muted}; line-height: 1.3; overflow-wrap: anywhere;
+                     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
         .ctile.on { background: ${p.soft}; border-color: ${p.brand}; color: ${p.ink}; }
         .ctile.on .ti { color: ${p.brand}; }
         .ctile.warn { background: ${p.warnSoft}; border-color: ${p.warnLine}; color: ${p.warnInk}; }
@@ -3756,10 +3790,13 @@ class SupernotifyControlCard extends SnCard {
                     font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 38px; }
         .snzp .sb { border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
                     padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 30px; }
-        .snzp .sr { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid ${p.line}; }
+        .snzp .sr { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid ${p.line}; }
         .snzp .sr:first-child { border-top: 0; }
-        .snzp .sl { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; }
-        .snzp .su { font-size: 12px; color: ${p.muted}; }
+        .snzp .sm { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .snzp .sl { font-size: 13.5px; font-weight: 650; color: ${p.ink}; white-space: normal;
+                    overflow-wrap: anywhere; line-height: 1.3; }
+        .snzp .su { font-size: 12px; color: ${p.muted}; line-height: 1.3; }
+        .snzp .sr .sb { flex: none; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}<div class="statusbar" id="statusbar"></div>
@@ -3915,14 +3952,13 @@ class SupernotifyControlCard extends SnCard {
         let until = "";
         let left = "";
         if (end) {
-          const pad = (n) => String(n).padStart(2, "0");
-          until = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
+          until = snSnzUntil(end, this._hass);
           const mins = Math.max(1, Math.ceil((end - new Date()) / 60000));
-          left = `${T.snoozed} · ${mins} ${T.min}`;
+          left = `${T.snoozed} · ${snSnzDur(mins, T)}`;
         }
-        const what = snSnoozeLabels(this._hass, act, T);
+        const what = snEsc(snSnoozeLabels(this._hass, act, T, 1));
         return { cls: "warn", icon: "😴", name: left || T.snoozed,
-          sub: what ? what + (until ? ` · ${T.until} ${until}` : "") : (until ? T.until + " " + until + " · " : "") + (c.snooze_panel === false ? T.tap_clear : T.snz_choose),
+          sub: what ? (until ? `${T.until} ${until}<br>` : "") + what : (until ? T.until + " " + until + " · " : "") + (c.snooze_panel === false ? T.tap_clear : T.snz_choose),
           act: () => this._snooze() };
       }
       return { cls: "", icon: "😴", name: `${T.snooze} ${c.snooze_minutes || 30} ${T.min}`,
@@ -3996,8 +4032,8 @@ class SupernotifyControlCard extends SnCard {
       (s.recipient && this._hass.states[s.recipient] && (this._hass.states[s.recipient].attributes || {}).user_id === myUser);
     const pad = (n) => String(n).padStart(2, "0");
     const voice = this._snzVoice();
-    const rows = live.map((s, i) => `<div class="sr"><span class="sl">${esc(snSnoozeLabel(this._hass, s, T))}</span>
-        <span class="su">${s._end ? `${esc(T.until)} ${pad(s._end.getHours())}:${pad(s._end.getMinutes())}` : esc(T.snz_until_resumed)}${snSnoozeReason(s, T) ? ` · ${esc(snSnoozeReason(s, T))}` : ""}</span>
+    const rows = live.map((s, i) => `<div class="sr"><div class="sm"><span class="sl">${esc(snSnoozeLabel(this._hass, s, T))}</span>
+        <span class="su">${s._end ? `${esc(T.until)} ${esc(snSnzUntil(s._end, this._hass))}` : esc(T.snz_until_resumed)}${snSnoozeReason(s, T) ? ` · ${esc(snSnoozeReason(s, T))}` : ""}</span></div>
         ${canResume(s) && !voice ? `<button class="sb" data-r="${i}">${esc(T.snz_resume)}</button>` : ""}</div>`).join("");
     el.innerHTML = snIconify(`<div class="sh"><b>${esc(T.snz_title)}</b><button class="sx" id="snzX" aria-label="${esc(T.snz_close)}">✕</button></div>
       ${voice ? `<div class="sk">${esc(T.snz_voice_info)}</div>` : `<div class="sk">${esc(T.snz_what)}</div><div class="srow">${whatRow}</div>${sub ? `<div class="srow">${sub}</div>` : ""}

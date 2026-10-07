@@ -3,6 +3,21 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.82.0] - 2026-10-08
+
+### Changed
+- control-card (0.39.0): the pause tile and the "Paused now" list read better.
+  - Tile: time left in hours ("24 h", not "1440 min"), end time first with the weekday when it is
+    not today ("until 00:50 (Fri)"), then one subject plus "+N"; text clamped to 3 lines.
+  - Panel rows: name and details stacked and wrapped, Resume button aligned.
+
+### Fixed
+- control-card: in the "Paused now" list the name ran over the details (a shared `.sl` style had
+  `white-space: nowrap`).
+- control-card / overview-card (0.37.1): a tag pause on an automation or script showed the raw
+  id ("automation.controllo dispositivi ..."): SuperNotify returns the tag with spaces instead of
+  underscores, so the friendly name was never found. Now the name is shown, with 🤖 / 📜.
+
 ## [0.81.0] - 2026-10-08
 
 ### Added
