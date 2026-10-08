@@ -8,6 +8,23 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-08 - v0.85.0. archive 0.41.0: the history and its "why" in ONE card.
+ *   - List on the left (on top when the card is narrow): a status mark (✔ arrived, ! failed or
+ *     worth a look, ⊘ went out on no channel), the title, one line that says how it went (the
+ *     failed channel in red, else where it went) instead of one pill per channel. Priority shown
+ *     only when it is not medium. The same notification several times in a row is one "×N" line
+ *     (tap ×N to see each one; "Group repeats" switches it off; `group_repeats: false`).
+ *   - On top: today in one line (how many, arrived, to look at), search, "?" for how to read it;
+ *     the filters show how many they hold.
+ *   - Detail on the right (below when narrow) = the why card's: a verdict on top ("Arrived on 3
+ *     channels of 4 · Telegram failed"), the four steps, problems first, every channel, the folded
+ *     groups and the trace; the pause bar of the notification at the bottom. The latest
+ *     notification opens by itself (`auto_select: false` to wait for a tap).
+ *   - With the sensor index and no shell_command sn_archive_detail, the detail is what the index
+ *     row knows (channels with outcome and reason, scenarios, counts), as the expanded row was.
+ *   - supernotify-why-card (0.16.0) is now an alias of this card: dashboards that have it keep
+ *     working. snWhyOpen() from other cards opens the notification here. The strategy no longer
+ *     adds a separate why card to Send.
  * 2026-10-08 - v0.84.0. strategy: view tabs show an icon AND the name again (`show_icon_and_title`,
  *   Home Assistant 2026.2 and later; older versions keep the name only, never an icon alone).
  *   New option `tabs: icons | emoji | text` (default icons) and `icons: {view: mdi:xxx | emoji}` to
@@ -631,7 +648,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.84.0"; // bundle / HACS release
+const VERSION = "0.85.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -653,9 +670,9 @@ const SN_CARD_VERSIONS = {
   composer: "0.25.0",
   automations: "0.21.4",
   stats: "0.32.3",
-  archive: "0.40.1",
+  archive: "0.41.0",
   tools: "0.2.2",
-  why: "0.15.1",
+  why: "0.16.0",
 };
 
 /**
@@ -1363,7 +1380,7 @@ function snFlash(card, selector) {
  */
 const SN_STRATEGY_VIEWS = {
   home: { icon: "mdi:bell", cols: 2, sections: [["control"], ["overview", "archive"]] },
-  send: { icon: "mdi:send", cols: 2, sections: [["composer"], ["why", "simulator"]] },
+  send: { icon: "mdi:send", cols: 2, sections: [["composer"], ["simulator"]] }, // 0.85.0: why is in archive
   setup: { icon: "mdi:tune-variant", cols: 3,
     sections: [["deliveries", "transports"], ["scenarios", "recipients"], ["bands", "automations"]] },
   stats: { icon: "mdi:chart-bar", cols: 1, sections: [["stats"]] },
@@ -2476,6 +2493,7 @@ const SN_FORM_LABELS = {
     poll_seconds: "Refresh every (seconds)", group: "Group by how a channel starts",
     hide_defaults: "Hide automatic DEFAULT_ channels", limit: "Notifications in the list",
     expand: "Open the folded parts", max_height: "Maximum height (CSS, e.g. 70vh)",
+    group_repeats: "Group repeats of the same notification", auto_select: "Open the latest notification",
     source: "Archive source", entity: "Archive sensor (bridge only)", trigger_entity: "Refresh when this changes",
     dry_run: "Show \"Try without sending\"", dry_run_dupe_check: "Simulate the duplicate check too",
     days: "Days shown by default", manifest_url: "Automations manifest URL",
@@ -2500,6 +2518,7 @@ const SN_FORM_LABELS = {
     poll_seconds: "Aggiorna ogni (secondi)", group: "Raggruppa per come parte il canale",
     hide_defaults: "Nascondi i canali automatici DEFAULT_", limit: "Notifiche nell'elenco",
     expand: "Apri le parti chiuse", max_height: "Altezza massima (CSS, es. 70vh)",
+    group_repeats: "Raggruppa le notifiche ripetute", auto_select: "Apri l'ultima notifica",
     source: "Sorgente dell'archivio", entity: "Sensore archivio (solo ponte)", trigger_entity: "Aggiorna quando cambia",
     dry_run: "Mostra \"Prova senza inviare\"", dry_run_dupe_check: "Simula anche il controllo doppioni",
     days: "Giorni mostrati di default", manifest_url: "URL del manifest delle automazioni",
@@ -2541,7 +2560,8 @@ function snForm(kind) {
     composer: [ent("update_entity", "update"), bool("dry_run"), bool("dry_run_dupe_check"), bool("show_off")],
     automations: [txt("manifest_url")],
     stats: [num("days", 2, 90), sel("source", [["", "o_auto"], ["archive", "o_archive"], ["history", "o_history"]]), ent("sent_today_entity", "sensor"), ent("count_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update"), bool("daily", true)],
-    archive, why: [...archive, bool("expand"), txt("max_height")],
+    archive: [...archive, bool("group_repeats", true), bool("auto_select", true), bool("expand"), txt("max_height")],
+    why: [...archive, bool("group_repeats", true), bool("auto_select", true), bool("expand"), txt("max_height")],
     tools: [num("archive_days", 1, 365), num("media_days", 1, 365)],
   };
   return {
@@ -8018,6 +8038,15 @@ window.customCards.push({
 
 console.info(`%c SUPERNOTIFY-CARDS %c v${VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "");
 class SupernotifyArchiveCard extends SnCard {
+  /*
+   * 0.41.0 (bundle 0.85.0): ONE card for the notification history and its "why". On the left
+   * (on top when narrow) the list: a status mark, the title, one line that says how it went;
+   * repeats of the same notification in a row folded into one "×N" line. On the right (below
+   * when narrow) the full detail of the selected notification - the "why" that used to be a
+   * separate supernotify-why-card (SnWhyEngine, mixed in below) - with a verdict on top and the
+   * pause bar at the bottom. supernotify-why-card is now an alias of this card, so dashboards
+   * that have both keep working.
+   */
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("archive");
@@ -8031,12 +8060,15 @@ class SupernotifyArchiveCard extends SnCard {
   setConfig(config) {
     this._config = {
       entity: "sensor.supernotify_archivio",
+      service: "shell_command.sn_archive_detail", // detail with the sensor index (before 2.10)
       style: "supernotify",
-      ...config,
+      ...(config || {}),
     };
     this._q = "";
     this._filter = "all";
-    this._open = new Set();
+    this._groups = this._config.group_repeats !== false;
+    this._openGroups = new Set();
+    this._cache = this._cache || new Map();
     this._rendered = false;
     this._pz = {};        // 0.80.0: per row - { who: "all"|"me", subj, msg, busy }
     this._senders = {};   // 0.81.0: per notification id - [automation/script ids], null while asked
@@ -8051,7 +8083,7 @@ class SupernotifyArchiveCard extends SnCard {
       // the store redraws this card through the "supernotify-archive" event
       snArchiveStore.ensure(hass, this._config.limit, this._config.trigger_entity);
       if (fresh) this._render();
-      else if (this._storeVer !== snArchiveStore.version || (this._waitStore && snArchiveStore.fetched)) { this._renderChips(); this._renderList(); }
+      else if (this._storeVer !== snArchiveStore.version || (this._waitStore && snArchiveStore.fetched)) this._renderList();
       this._storeVer = snArchiveStore.version;
       return;
     }
@@ -8066,19 +8098,34 @@ class SupernotifyArchiveCard extends SnCard {
     this._onArchive = () => {
       if (!this._rendered) return;
       this._storeVer = snArchiveStore.version;
-      this._renderChips();
       this._renderList();
     };
     window.addEventListener("supernotify-archive", this._onArchive);
     this._onArchive();   // catch up with a fetch that finished before the card was in the page
     // 0.80.0: a pause made here or elsewhere - read the pauses again
-    this._onRefresh = () => { this._snzAt = 0; if (this._rendered && this._open.size) this._loadSnz(); };
+    this._onRefresh = () => { this._snzAt = 0; if (this._rendered && this._sel) this._loadSnz(); };
     window.addEventListener("supernotify-refresh", this._onRefresh);
+    // other cards open a notification here with snWhyOpen(id) (it was the why card's job)
+    window.__snWhyCards = (window.__snWhyCards || 0) + 1;
+    this._onWhy = (e) => {
+      const id = e.detail && e.detail.id;
+      if (!id) return;
+      this._select(String(id).slice(0, 8), true);
+      if (this.scrollIntoView) this.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    window.addEventListener("supernotify-why", this._onWhy);
   }
 
   disconnectedCallback() {
     window.removeEventListener("supernotify-archive", this._onArchive);
     window.removeEventListener("supernotify-refresh", this._onRefresh);
+    window.removeEventListener("supernotify-why", this._onWhy);
+    window.__snWhyCards = Math.max(0, (window.__snWhyCards || 1) - 1);
+  }
+
+  /** snGo() from another card: show that notification. */
+  _focus(d) {
+    if (d && d.id) this._select(String(d.id).slice(0, 8), true);
   }
 
   /** 0.80.0: can a row be paused from here - supernotify.snooze and the archive's own documents. */
@@ -8105,7 +8152,7 @@ class SupernotifyArchiveCard extends SnCard {
 
   /** The pause bar of one open row (0.80.0), see snPauseSubjects. */
   _pauseHtml(r) {
-    const T = this._T();
+    const T = this._TA();
     const E = SN_ARCH_STRINGS.en;
     const t = (k) => T[k] || E[k] || k;
     const esc = snEsc;
@@ -8158,23 +8205,21 @@ class SupernotifyArchiveCard extends SnCard {
         </span></div>${msg}</div>`;
   }
 
-  /** Redraw the pause bars of the open rows only - the list stays as it is. */
+  /** Draw the pause bar of the selected notification, under its detail. */
   _renderPauses() {
-    const el = this.shadowRoot && this.shadowRoot.getElementById("list");
-    if (!el || !this._canPause()) return;
-    const idx = this._index();
-    el.querySelectorAll(".row.open .pzh").forEach((h) => {
-      const r = idx && (idx.items || []).find((x) => x.id === h.dataset.id);
-      h.innerHTML = r ? snIconify(this._pauseHtml(r), this._config) : "";
-      if (r) this._bindPause(h, r);
-    });
+    const h = this.shadowRoot && this.shadowRoot.getElementById("pzh");
+    if (!h) return;
+    const r = this._row(this._sel);
+    if (!r || !this._canPause() || this._loading === this._sel) { h.innerHTML = ""; return; }
+    h.innerHTML = snIconify(this._pauseHtml(r), this._config);
+    this._bindPause(h, r);
   }
 
   _bindPause(h, r) {
     const st = this._pz[r.id];
     h.onclick = (e) => e.stopPropagation(); // the row opens and closes on its own clicks only
     if (!st) return;
-    const T = this._T();
+    const T = this._TA();
     const t = (k) => T[k] || SN_ARCH_STRINGS.en[k] || k;
     const run = async (data, done) => {
       st.busy = true; st.msg = ""; this._renderPauses();
@@ -8221,7 +8266,16 @@ class SupernotifyArchiveCard extends SnCard {
 
   _loc() { return (this._config.language || (this._hass && this._hass.language) || undefined); }
 
-  _T() { return SN_ARCH_STRINGS[((this._config.language || (this._hass && this._hass.language) || "en").split("-")[0])] || SN_ARCH_STRINGS.en; }
+  _lang() { return ((this._config.language || (this._hass && this._hass.language) || "en").split("-")[0]); }
+
+  /** The detail (SnWhyEngine) reads the why strings. */
+  _T() { return SN_WHY_STRINGS[this._lang()] || SN_WHY_STRINGS.en; }
+
+  /** The list and the pause bar read the archive strings. */
+  _TA() { return SN_ARCH_STRINGS[this._lang()] || SN_ARCH_STRINGS.en; }
+
+  /** One archive string, English when the language does not have it yet. */
+  _ta(k) { const T = this._TA(); return T[k] != null ? T[k] : SN_ARCH_STRINGS.en[k] != null ? SN_ARCH_STRINGS.en[k] : k; }
 
   /**
    * L'indice pubblicato negli attributi di sensor.supernotify_archivio dal
@@ -8233,8 +8287,6 @@ class SupernotifyArchiveCard extends SnCard {
    *             d/f/s (consegnati/falliti/saltati, assenti se 0),
    *             c: [indice | [indice,"e"] | [indice,"s",motivo]],
    *             sc: [indici scenario], ms (durata) }]
-   * Le tabelle condivise e i default omessi sono cio' che tiene l'indice sotto
-   * i ~16 KB oltre i quali gli attributi di stato diventano un peso per HA.
    * With SuperNotify 2.10+ the same index is built in the card from
    * supernotify.enquire_archive (snArchiveStore), and the sensor is not needed.
    */
@@ -8247,13 +8299,21 @@ class SupernotifyArchiveCard extends SnCard {
       total: a.total_files, oldest: a.oldest, generated: a.generated, error: a.error };
   }
 
+  /** The index row of a notification (the index keeps 8 characters of the id). */
+  _row(id) {
+    if (!id) return null;
+    const idx = this._index();
+    const items = (idx && idx.items) || [];
+    return items.find((r) => r.id === id) || items.find((r) => String(r.fid || "").startsWith(id) || String(id).startsWith(r.id)) || null;
+  }
+
   /** Canali di una riga, nel formato dell'indice, espansi in oggetti leggibili. */
   _channels(row, idx) {
     return (row.c || []).map((c) => {
       if (typeof c === "number") return { name: idx.chan[c] || "?", state: "ok" };
       const [i, e, r] = c;
       // the index keeps short Italian reasons (tools/sn_archive_index.py): shown in the UI language
-      const T = this._T();
+      const T = this._TA();
       return { name: idx.chan[i] || "?", state: e === "e" ? "err" : "skip", reason: (r && T.reasons && T.reasons[r]) || r };
     });
   }
@@ -8267,135 +8327,288 @@ class SupernotifyArchiveCard extends SnCard {
     return day.toLocaleDateString(this._loc(), { weekday: "long", day: "numeric", month: "long" });
   }
 
+  /** ok | err | warn | none: how a notification went, from its index row. */
+  _status(r) {
+    const c = r.c || [];
+    if (r.f || c.some((x) => Array.isArray(x) && x[1] === "e")) return "err";
+    const sent = r.d || c.some((x) => typeof x === "number");
+    // nothing went out and every channel was held back by a routine rule (a pause, nobody home,
+    // the priority): that is not a problem, it is a quiet notification
+    if (!sent && !r.mi && c.length && c.every((x) => Array.isArray(x) && x[1] === "s" && SN_ARCHIVE_ROUTINE.has(x[2] || ""))) return "none";
+    if (snArchiveProblem(r)) return "warn";
+    if (!sent) return "none";
+    return "ok";
+  }
+
+  /** The one line under the title: what went wrong, else where it went. */
+  _sub(r, idx) {
+    const esc = snEsc;
+    const name = (n) => snDeliveryAlias(this._hass, n) || n;
+    const chans = this._channels(r, idx);
+    const okN = chans.filter((c) => c.state === "ok").map((c) => name(c.name));
+    const list = (a) => a.length > 3 ? `${a.slice(0, 3).join(", ")} +${a.length - 3}` : a.join(", ");
+    const st = this._status(r);
+    if (st === "err") {
+      const bad = chans.filter((c) => c.state === "err").map((c) => name(c.name));
+      return `<span class="bad">${esc((bad.length ? list(bad) : this._ta("v_some")) + " " + snW(this._TA(), "failed", bad.length || 1))}</span>`
+        + (okN.length ? ` · ${esc(list(okN))}` : "");
+    }
+    if (st === "warn") {
+      if (r.mi) return `<span class="wrn">${r.mi} ${esc(snW(this._TA(), "missed", r.mi))}</span>${okN.length ? ` · ${esc(list(okN))}` : ""}`;
+      const odd = chans.find((c) => c.state === "skip" && c.reason);
+      return `<span class="wrn">${esc(odd ? `${name(odd.name)}: ${odd.reason}` : this._ta("v_check"))}</span>${okN.length ? ` · ${esc(list(okN))}` : ""}`;
+    }
+    if (st === "none") {
+      const why = [...new Set(chans.filter((c) => c.reason).map((c) => c.reason))];
+      return esc(this._ta("v_none_short") + (why.length ? ` · ${why.slice(0, 2).join(", ")}` : ""));
+    }
+    return esc(list(okN));
+  }
+
+  _dayKey(t) { const d = new Date(t * 1000); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
+
   _render() {
     if (!this._hass) return;
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
-    const T = this._T();
+    const mh = this._config.max_height ? String(this._config.max_height).replace(/[<>";{}]/g, "") : "";
+    const dk = this._dark;
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-        .srch { flex: 1; min-width: 180px; border: 1.5px solid ${p.line}; border-radius: 10px;
-                padding: 9px 12px; font-size: 13px; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 0; background: ${p.panel}; color: ${p.ink}; font-size: 13px; overflow: hidden; }
+        .wrap { container-type: inline-size; }
+        .top { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 12px 14px;
+               border-bottom: 1px solid ${p.line}; }
+        .sum { display: flex; gap: 14px; font-size: 12.5px; color: ${p.muted}; flex-wrap: wrap; flex: 1 1 100%; }
+        .sum b { color: ${p.ink}; } .sum .g b { color: ${p.ok}; } .sum .r b { color: ${p.crit}; }
+        .srch { flex: 1 1 200px; min-width: 0; border: 1.5px solid ${p.line}; border-radius: 10px;
+                padding: 9px 12px; font: inherit; font-size: 13px; background: ${p.panel}; color: ${p.ink}; }
         .srch:focus { outline: none; border-color: ${p.brand}; box-shadow: 0 0 0 3px rgba(3,169,244,.14); }
-        .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-        .chip { border: 1.5px solid ${p.line}; background: ${p.panel}; border-radius: 999px;
-                padding: 7px 13px; font-size: 12.5px; font-weight: 650; cursor: pointer; user-select: none; }
-        .chip:hover { border-color: ${p.brand}; }
-        .chip.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
-        .meta { font-size: 11px; color: ${p.muted}; margin-bottom: 10px; }
-        .day { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800;
-               color: ${p.muted}; margin: 14px 0 6px; position: sticky; top: 0; background: ${p.panel}; padding: 4px 0; }
-        .row { border: 1px solid ${p.line}; border-radius: 12px; padding: 9px 12px; margin-bottom: 6px;
-               cursor: pointer; }
-        .row:hover { border-color: ${p.brand}; }
-        .r1 { display: flex; gap: 9px; align-items: baseline; }
-        .hm { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 12.5px; color: ${p.muted}; flex: none; }
-        .ti { font-weight: 700; font-size: 13.5px; flex: 1; min-width: 0; overflow: hidden;
-              text-overflow: ellipsis; white-space: nowrap; }
-        .msg { font-size: 12.5px; color: ${p.muted}; margin: 3px 0 0 46px; line-height: 1.4;
-               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .row.open .msg { white-space: normal; }
-        .tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 0 46px; }
-        .tg { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px;
-              padding: 2px 8px; font-size: 10.5px; font-weight: 700; background: ${p.soft}; color: ${p.muted}; }
-        .tg.ok { color: ${p.ok}; background: rgba(46,158,91,.12); }
-        .tg.err { color: ${p.crit}; background: rgba(226,60,60,.12); }
-        .tg.skip { color: ${p.muted}; background: transparent; border: 1px dashed ${p.line}; }
-        /* 0.58.0: the same priority scale as the stats card (critical red, high orange, medium blue, low grey) */
-        .tg.pr { color: ${p.warn}; background: ${p.warnSoft}; }
-        .tg.pr.critical { color: ${p.crit}; background: ${this._dark ? "rgba(239,83,80,.16)" : "#fbe3e3"}; }
-        .tg.pr.medium { color: ${p.brandD}; background: ${p.soft}; }
-        .tg.pr.low, .tg.pr.minimum { color: ${p.muted}; background: ${p.soft}; }
-        .tg.wh { color: ${p.brandD}; background: ${p.soft}; }
-        .said { margin-top: 4px; padding: 6px 9px; border-radius: 9px;
-                background: ${p.soft}; border-left: 3px solid ${p.brand};
-                font-size: 12px; line-height: 1.45; }
-        .said b { color: ${p.brandD}; }
-        .det { margin: 8px 0 2px 46px; font-size: 11.5px; color: ${p.muted}; display: none; }
-        .row.open .det { display: block; }
-        .det b { color: ${p.ink}; font-weight: 650; }
-        .empty { text-align: center; color: ${p.muted}; font-size: 13px; padding: 22px 0; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 10px; }
-        .why { color: ${p.brandD}; font-weight: 650; cursor: pointer; text-decoration: underline; }
-        .pz { margin-top: 8px; padding: 8px 10px; border: 1px solid ${p.line}; border-radius: 10px; cursor: default; }
+        .help { width: 38px; height: 38px; flex: none; border-radius: 10px; border: 1.5px solid ${p.line};
+                background: ${p.panel}; color: ${p.muted}; font: inherit; font-weight: 700; cursor: pointer; }
+        .help.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
+        .legend { padding: 10px 14px; font-size: 12.5px; line-height: 1.55; color: ${p.ink};
+                  background: ${p.soft}; border-bottom: 1px solid ${p.line}; }
+        .legend b { color: ${p.brandD}; }
+        .split { display: grid; grid-template-columns: minmax(0, 1fr); }
+        .lp { display: flex; flex-direction: column; min-width: 0; border-bottom: 1px solid ${p.line}; }
+        .fl { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid ${p.line}; }
+        .fl .chip { border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.ink}; border-radius: 999px;
+                    padding: 6px 12px; font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; min-height: 34px; }
+        .fl .chip:hover { border-color: ${p.brand}; }
+        .fl .chip.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
+        .fl .chip .n { opacity: .65; font-weight: 600; margin-left: 2px; }
+        .fl .chip .n.r { color: ${p.crit}; opacity: 1; }
+        .fl .grp { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+        .tgl { width: 26px; height: 16px; border-radius: 99px; background: ${p.dot}; position: relative; flex: none; }
+        .tgl::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+        .grp.on .tgl { background: ${p.brand}; } .grp.on .tgl::after { left: 12px; }
+        #list { overflow-y: auto; padding: 0 6px 6px; max-height: ${mh ? `min(${mh}, 320px)` : "320px"}; }
+        .day { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted};
+               padding: 12px 8px 4px; position: sticky; top: 0; background: ${p.panel}; z-index: 1; }
+        .it { display: flex; gap: 10px; align-items: flex-start; padding: 9px 10px; border-radius: 10px; cursor: pointer; }
+        .it:hover { background: ${p.soft}; }
+        .it.sel { background: ${p.soft}; box-shadow: inset 3px 0 0 ${p.brand}; }
+        .it.sub { margin-left: 22px; padding-top: 6px; padding-bottom: 6px; }
+        .ic { flex: none; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center;
+              justify-content: center; margin-top: 1px; }
+        .ic.ok { background: ${p.okSoft}; color: ${p.ok}; }
+        .ic.err { background: ${dk ? "rgba(255,154,154,.16)" : "#fde4e4"}; color: ${p.crit}; }
+        .ic.warn { background: ${p.warnSoft}; color: ${p.warn}; }
+        .ic.none { background: ${p.soft}; color: ${p.muted}; }
+        .it .bd { flex: 1; min-width: 0; }
+        .it .l1 { display: flex; gap: 6px; align-items: center; min-width: 0; }
+        .it .ti { font-weight: 650; font-size: 13.5px; flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .it.quiet .ti { font-weight: 550; color: ${p.muted}; }
+        .it .l2 { font-size: 12px; color: ${p.muted}; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .it .l2 .bad { color: ${p.crit}; font-weight: 650; } .it .l2 .wrn { color: ${p.warn}; font-weight: 650; }
+        .it .hm { flex: none; font-variant-numeric: tabular-nums; font-size: 12px; color: ${p.muted}; margin-top: 2px; }
+        .bdg { flex: none; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 6px; background: ${p.soft}; color: ${p.brandD}; }
+        button.bdg { border: 0; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+        .bdg.pr.high { color: ${p.warn}; background: ${p.warnSoft}; }
+        .bdg.pr.critical { color: ${p.crit}; background: ${dk ? "rgba(239,83,80,.16)" : "#fbe3e3"}; }
+        .bdg.pr.low, .bdg.pr.minimum { color: ${p.muted}; }
+        .tg.wh { font-size: 11px; font-weight: 650; color: ${p.brandD}; display: inline-flex; align-items: center; gap: 3px; }
+        .meta { font-size: 11px; color: ${p.muted}; padding: 8px 14px; border-top: 1px solid ${p.line}; margin-top: auto; }
+        .rp { min-width: 0; padding: 16px 18px; }
+        .vd { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; margin: 12px 0 4px;
+              border: 1px solid ${p.line}; }
+        .vd .ic { width: 28px; height: 28px; background: ${p.panel}; }
+        .vd b { display: block; font-size: 14.5px; }
+        .vd span.vs { display: block; font-size: 12.5px; color: ${p.muted}; margin-top: 2px; }
+        .vd.ok { background: ${p.okSoft}; border-color: transparent; }
+        .vd.err { background: ${dk ? "rgba(255,154,154,.10)" : "#fdf0f0"}; border-color: ${dk ? "rgba(255,154,154,.35)" : "#f3c9c9"}; }
+        .vd.warn { background: ${p.warnSoft}; border-color: ${p.warnLine}; }
+        #det .said { color: ${p.ink}; font-size: 12.5px; margin-top: 8px; padding: 6px 10px; border-radius: 9px; background: ${p.soft}; }
+        #det .said b { color: ${p.brandD}; }
+        .pzh:empty { display: none; }
+        .pzh { margin-top: 12px; }
+        @container (min-width: 720px) {
+          .sum { flex: 0 1 auto; }
+          .split { grid-template-columns: minmax(280px, 38%) minmax(0, 1fr); }
+          .lp { border-bottom: 0; border-right: 1px solid ${p.line}; }
+          #list { max-height: ${mh || "680px"}; }
+          .rp { max-height: ${mh || "none"}; overflow-y: auto; }
+        }
+        /* the detail - the why card's own look */
+        #det .hd .meta { color: ${p.muted}; font-size: 12.5px; padding: 0; border: 0; }
+        #det .hd .ttl { display: block; font-size: 21px; margin-top: 4px; line-height: 1.25; }
+        #det { container-type: inline-size; }
+        @container (min-width: 560px) { #det .path { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; } }
+        #det .path { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px;
+                background: ${p.line}; border: 1px solid ${p.line}; border-radius: 12px; overflow: hidden; margin: 12px 0; }
+        #det .step { background: ${p.panel}; padding: 10px 12px; }
+        #det .step .sk { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: ${p.muted}; }
+        #det .step .sb { margin-top: 4px; line-height: 1.4; font-weight: 600; } #det .step .sm { margin-top: 3px; font-size: 11.5px; color: ${p.muted}; }
+        .c-ok { color: ${p.ok}; } .c-pb { color: ${p.warn}; }
+        #det .pb { border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+        #det .pb.warn { background: ${p.warnSoft}; color: ${p.warnInk}; border: 1px solid ${p.warnLine}; }
+        #det .pb.crit { background: rgba(226,60,60,.08); color: ${p.ink}; border: 1px solid rgba(198,40,40,.35); }
+        #det .pb.crit .pbt { color: ${p.crit}; }
+        #det .pbt { font-size: 15px; font-weight: 700; } #det .pbw { margin-top: 4px; line-height: 1.45; }
+        #det .pbf { margin-top: 6px; line-height: 1.45; font-size: 12.5px; opacity: .9; }
+        #det details.fold { border: 1px dashed ${p.line}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+        #det details.fold summary { cursor: pointer; font-weight: 600; color: ${p.muted}; }
+        #det details.fold[open] summary { margin-bottom: 8px; }
+        #det .msg { margin-top: 6px; line-height: 1.45; font-size: 13.5px; }
+        #det .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        #det .chip { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; border-radius: 7px;
+                padding: 2px 8px; font-size: 11.5px; font-weight: 650; }
+        #det .chip.strong { border-color: ${p.brand}; }
+        #det .chip.off { color: ${p.crit}; }
+        #det .ch { border: 1px solid ${p.line}; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
+        #det .ch .r1 { display: flex; gap: 8px; align-items: baseline; }
+        #det .ch .st { flex-shrink: 0; font-weight: 800; }
+        .st.ok { color: ${p.ok}; } .st.skip, .st.supp { color: ${p.muted}; } .st.err { color: ${p.crit}; }
+        #det .ch .nm { font-weight: 700; } #det .ch .al { color: ${p.muted}; font-size: 12px; }
+        .tech { font-family: ui-monospace, 'Roboto Mono', monospace; font-size: 11px; }
+        #det .ch .why { margin-top: 3px; } #det .ch .src { margin-top: 3px; color: ${p.muted}; font-size: 12px; }
+        #det .ch .tg { margin-top: 4px; font-size: 12px; color: ${p.muted}; word-break: break-word; }
+        #det .ch.not { border-style: dashed; }
+        #det .note { color: ${p.muted}; font-size: 11.5px; margin-top: 4px; line-height: 1.45; }
+        #det .trace { font-size: 12px; } #det .trace code { font-size: 11px; }
+        #det .trace .stg { display: flex; gap: 6px; padding: 2px 0; }
+        #det .trace .stg span:first-child { color: ${p.muted}; min-width: 190px; font-family: monospace; font-size: 11px; }
+        /* sensor index without the detail service: the row's own channels */
+        #det .tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 6px; }
+        #det .tg { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px;
+              padding: 2px 8px; font-size: 11px; font-weight: 700; background: ${p.soft}; color: ${p.muted}; }
+        #det .tg.ok { color: ${p.ok}; background: ${p.okSoft}; }
+        #det .tg.err { color: ${p.crit}; background: rgba(226,60,60,.12); }
+        #det .tg.skip { color: ${p.muted}; background: transparent; border: 1px dashed ${p.line}; }
+        .empty { color: ${p.muted}; padding: 22px 10px; text-align: center; font-size: 13px; }
+        .err { color: ${p.crit}; }
+        code { background: ${p.soft}; padding: 1px 4px; border-radius: 4px; }
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; padding: 0 14px 8px; }
+        .pz { padding: 10px 12px; border: 1px solid ${p.line}; border-radius: 12px; cursor: default; background: ${p.soft}; }
         .pzr { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 3px 0; }
-        .pzl { font-size: 12px; color: ${p.ink}; flex: 1 1 auto; }
+        .pzl { font-size: 12.5px; color: ${p.ink}; flex: 1 1 auto; }
         .pzb { border: 1.5px solid ${p.brand}; color: ${p.brandD}; background: ${p.panel}; border-radius: 999px;
-               padding: 6px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 32px; }
+               padding: 6px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 34px; }
         .pzb:hover:not([disabled]) { background: ${p.soft}; }
         .pzb[disabled] { opacity: .5; cursor: progress; }
         .pzw { display: inline-flex; gap: 4px; margin-left: auto; }
         .pzc { border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.muted}; border-radius: 999px;
-               padding: 5px 10px; font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; min-height: 30px; }
-        .pzc.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
+               padding: 5px 10px; font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; min-height: 32px; }
+        .pzc.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.panel}; }
         .pzb:focus-visible, .pzc:focus-visible { outline: 2px solid ${p.brand}; outline-offset: 2px; }
         .pzm { font-size: 11.5px; color: ${p.muted}; margin-top: 4px; }
-        .pzn { margin-top: 6px; font-size: 11.5px; color: ${p.muted}; }
+        .pzn { font-size: 12px; color: ${p.muted}; }
         .pzk { font-size: 11px; color: ${p.muted}; }
-        ${SN_FLOW_CSS}
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}
-        <div class="head">
-          <input class="srch" id="q" placeholder="${T.search}">
-          <div class="chips" id="chips"></div>
+        <div class="wrap">
+          <div class="top">
+            <div class="sum" id="sum"></div>
+            <input class="srch" id="q" placeholder="${snEsc(this._ta("search"))}" aria-label="${snEsc(this._ta("search"))}">
+            <button class="help" id="help" title="${snEsc(this._ta("help_t"))}" aria-label="${snEsc(this._ta("help_t"))}" aria-expanded="false">?</button>
+          </div>
+          <div class="legend" id="legend" hidden>${this._ta("help")}</div>
+          <div class="split">
+            <div class="lp">
+              <div class="fl" id="chips"></div>
+              <div id="list"></div>
+              <div class="meta" id="meta"></div>
+            </div>
+            <div class="rp" id="rp">
+              <div id="det" class="det"><div class="empty">${snEsc(this._T().pick)}</div></div>
+              <div class="pzh" id="pzh"></div>
+            </div>
+          </div>
         </div>
-        <div class="meta" id="meta"></div>
-        <div id="list" class="flow"${this._config.max_height ? ` style="max-height:${String(this._config.max_height).replace(/[<>"]/g, "")};overflow-y:auto;padding-right:4px"` : ""}></div>
-        ${snVer(this._config, "archive", p)}
+        ${snVer(this._config, this._snKind || "archive", p)}
       </ha-card>`, this && this._config);
     const q = this.shadowRoot.getElementById("q");
     q.addEventListener("input", () => { this._q = q.value.toLowerCase(); this._renderList(); });
-    this._renderChips();
+    const help = this.shadowRoot.getElementById("help");
+    help.onclick = () => {
+      const lg = this.shadowRoot.getElementById("legend");
+      lg.hidden = !lg.hidden;
+      help.classList.toggle("on", !lg.hidden);
+      help.setAttribute("aria-expanded", String(!lg.hidden));
+    };
     this._renderList();
+    if (this._sel) this._showDetail();
   }
 
-  _renderChips() {
-    const T = this._T();
-    const defs = [["all", T.f_all], ["problems", T.f_problems], ["today", T.f_today]];
-    // Il filtro del sussurro compare solo se l'archivio ne contiene: a
-    // sussurro spento e' rumore, se qualcuno lo riaccende si nota.
-    const withIdx = this._index();
-    if (withIdx && (withIdx.items || []).some((r) => r.w)) defs.push(["whisper", T.f_whisper]);
-    const el = this.shadowRoot.getElementById("chips");
-    el.innerHTML = snIconify(defs.map(([k, label]) =>
-      `<span class="chip ${this._filter === k ? "on" : ""}" data-k="${k}">${label}</span>`).join(""), this && this._config);
-    el.querySelectorAll(".chip").forEach((n) => {
-      n.onclick = () => { this._filter = n.dataset.k; this._renderChips(); this._renderList(); };
-    });
-  }
+  /** Kept for callers of the old card: the filter chips are drawn with the list. */
+  _renderChips() { this._renderList(); }
 
   _renderList() {
     const el = this.shadowRoot && this.shadowRoot.getElementById("list");
     if (!el) return;
-    const T = this._T();
-    const p = this._palette();
     const esc = snEsc;
+    const ta = (k) => this._ta(k);
     const idx = this._index();
     const meta = this.shadowRoot.getElementById("meta");
+    const sum = this.shadowRoot.getElementById("sum");
+    const chipsEl = this.shadowRoot.getElementById("chips");
     if (!idx) {
-      meta.textContent = "";
-      el.innerHTML = snIconify(`<div class="empty"><b>${T.no_sensor}</b> — <code>${esc(this._config.entity)}</code><br>${T.no_sensor_hint}</div>`, this && this._config);
+      meta.textContent = ""; sum.innerHTML = ""; chipsEl.innerHTML = "";
+      el.innerHTML = snIconify(`<div class="empty"><b>${esc(ta("no_sensor"))}</b> — <code>${esc(this._config.entity)}</code><br>${esc(ta("no_sensor_hint"))}</div>`, this._config);
       return;
     }
     if (idx.error) {
-      el.innerHTML = snIconify(`<div class="empty">⚠️ ${esc(idx.error)}</div>`, this && this._config);
+      el.innerHTML = snIconify(`<div class="empty">⚠️ ${esc(idx.error)}</div>`, this._config);
       return;
     }
     this._waitStore = !!idx.loading; // 0.74.1: redrawn on the next update once the archive is there
     if (idx.loading) {
       meta.textContent = "";
-      el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this && this._config);
+      el.innerHTML = snIconify(`<div class="empty">${esc(ta("loading"))}</div>`, this._config);
       return;
     }
+    const all = idx.items || [];
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-    const rows = idx.items.filter((r) => {
-      if (this._filter === "today" && r.t * 1000 < todayStart.getTime()) return false;
-      if (this._filter === "problems" && !snArchiveProblem(r)) return false;
+    const isToday = (r) => r.t * 1000 >= todayStart.getTime();
+    // the day in one line: how many, how many arrived, how many to look at
+    const today = all.filter(isToday);
+    const tPb = today.filter((r) => ["err", "warn"].includes(this._status(r))).length;
+    const tOk = today.filter((r) => this._status(r) === "ok").length;
+    sum.innerHTML = `<span><b>${today.length}</b> ${esc(ta("sm_today"))}</span><span class="g"><b>${tOk}</b> ${esc(ta("sm_ok"))}</span>`
+      + (tPb ? `<span class="r"><b>${tPb}</b> ${esc(ta("sm_pb"))}</span>` : "");
+    // filters, each with how many it would show
+    const isPb = (r) => ["err", "warn"].includes(this._status(r));
+    const nPb = all.filter(isPb).length;
+    const defs = [["all", ta("f_all"), all.length], ["problems", ta("f_problems_s"), nPb], ["today", ta("f_today"), today.length]];
+    // Il filtro del sussurro compare solo se l'archivio ne contiene: a
+    // sussurro spento e' rumore, se qualcuno lo riaccende si nota.
+    const nW = all.filter((r) => r.w).length;
+    if (nW) defs.push(["whisper", ta("f_whisper"), nW]);
+    chipsEl.innerHTML = defs.map(([k, label, n]) =>
+      `<button class="chip${this._filter === k ? " on" : ""}" data-k="${k}" aria-pressed="${this._filter === k}">${esc(label)}<span class="n${k === "problems" && n ? " r" : ""}">${n}</span></button>`).join("")
+      + `<button class="chip grp${this._groups ? " on" : ""}" id="grp" aria-pressed="${this._groups}"><span class="tgl"></span>${esc(ta("group"))}</button>`;
+    chipsEl.querySelectorAll(".chip[data-k]").forEach((n) => {
+      n.onclick = () => { this._filter = n.dataset.k; this._renderList(); };
+    });
+    chipsEl.querySelector("#grp").onclick = () => { this._groups = !this._groups; this._renderList(); };
+
+    const rows = all.filter((r) => {
+      if (this._filter === "today" && !isToday(r)) return false;
+      if (this._filter === "problems" && !isPb(r)) return false;
       if (this._filter === "whisper" && !r.w) return false;
       if (this._q) {
         const hay = ((r.ti || "") + " " + (r.m || "")).toLowerCase();
@@ -8403,69 +8616,221 @@ class SupernotifyArchiveCard extends SnCard {
       }
       return true;
     });
-    const parts = [];
     const gen = idx.generated ? new Date(idx.generated).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) }) : "";
     const old = idx.oldest ? new Date(idx.oldest).toLocaleDateString(this._loc()) : "";
+    const T = this._TA();
     meta.innerHTML = snIconify(idx.native
-      ? `${idx.items.length} ${T.recent}` + (gen ? ` · ${T.read_at} ${gen}` : "")
-      : (idx.total ? `${idx.items.length} ${T.of} ${idx.total} ${T.in_archive}` : `${idx.items.length} ${T.in_archive}`) +
-        (old ? ` · ${T.since}: ${old}` : "") + (gen ? ` · ${T.updated} ${gen}` : ""), this && this._config);
+      ? `${all.length} ${T.recent}` + (gen ? ` · ${T.read_at} ${gen}` : "")
+      : (idx.total ? `${all.length} ${T.of} ${idx.total} ${T.in_archive}` : `${all.length} ${T.in_archive}`) +
+        (old ? ` · ${T.since}: ${old}` : "") + (gen ? ` · ${T.updated} ${gen}` : ""), this._config);
     if (!rows.length) {
-      el.innerHTML = snIconify(`<div class="empty">${T.none}</div>`, this && this._config);
+      el.innerHTML = snIconify(`<div class="empty">${esc(ta("none"))}</div>`, this._config);
+      this._renderDetailIfNone();
       return;
     }
+    // repeats in a row: the same title with the same outcome, the same day
+    const groups = [];
+    for (const r of rows) {
+      const key = `${snTitleShow(r.ti || r.m || "")}|${this._status(r)}|${this._dayKey(r.t)}`;
+      const g = groups[groups.length - 1];
+      if (this._groups && g && g.key === key) g.items.push(r);
+      else groups.push({ key, items: [r] });
+    }
+    const hm = (t) => new Date(t * 1000).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
+    const icon = (st) => st === "ok"
+      ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L19 7"/></svg>`
+      : st === "none"
+        ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M7 17 17 7"/></svg>`
+        : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 7v6M12 17h.01"/></svg>`;
+    const stTip = { ok: ta("st_ok"), err: ta("st_err"), warn: ta("st_warn"), none: ta("st_none") };
+    const line = (r, g, sub) => {
+      const st = this._status(r);
+      const n = g ? g.items.length : 1;
+      const open = g && this._openGroups.has(r.id);
+      const prio = r.p && r.p !== "medium" ? `<span class="bdg pr ${esc(r.p)}">${esc((T.prio && T.prio[r.p]) || r.p)}</span>` : "";
+      const many = n > 1 ? `<button class="bdg rep" data-g="${esc(r.id)}" aria-expanded="${!!open}" title="${esc(ta(open ? "rep_close" : "rep_open"))}">×${n}</button>` : "";
+      const wh = r.w ? ` · <span class="tg wh">\u{1F92B} ${esc(T.wh)}</span>` : "";
+      const span = n > 1 ? `${hm(g.items[n - 1].t)} – ${hm(r.t)} · ` : "";
+      return `<div class="it row${sub ? " sub" : ""}${st === "none" ? " quiet" : ""}${this._sel === r.id ? " sel" : ""}" data-id="${esc(r.id)}" title="${esc(stTip[st])}">
+        <span class="ic ${st}">${icon(st)}</span>
+        <div class="bd"><div class="l1"><span class="ti">${esc(snTitleShow(r.ti || r.m || "—"))}</span>${many}${prio}</div>
+          <div class="l2">${sub ? "" : span}${this._sub(r, idx)}${wh}</div></div>
+        <span class="hm">${hm(r.t)}</span></div>`;
+    };
+    const parts = [];
     let lastDay = "";
-    rows.forEach((r, i) => {
-      const d = new Date(r.t * 1000);
-      const day = this._dayLabel(d, T);
+    for (const g of groups) {
+      const r = g.items[0];
+      const day = this._dayLabel(new Date(r.t * 1000), T);
       if (day !== lastDay) { parts.push(`<div class="day">${esc(day)}</div>`); lastDay = day; }
-      const hm = d.toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
-      const chans = this._channels(r, idx).map((c) =>
-        `<span class="tg ${c.state}" title="${esc(c.name)}">${c.state === "ok" ? "✔" : c.state === "err" ? "✖" : "⊘"} ${esc(snDeliveryAlias(this._hass, c.name) || c.name)}` +
-        `${c.reason ? " · " + esc(c.reason) : ""}</span>`).join("");
-      const prio = r.p ? `<span class="tg pr ${esc(r.p)}">● ${esc((T.prio && T.prio[r.p]) || r.p)}</span>` : "";
-      const wh = r.w ? `<span class="tg wh">\u{1F92B} ${T.wh}</span>` : "";
-      const scen = (r.sc || []).map((s) => esc(idx.scen[s] ? snScenarioName(this._hass, idx.scen[s]) : "?")).join(", ");
-      const open = this._open.has(r.id) ? " open" : "";
-      parts.push(
-        `<div class="row${open}" data-id="${esc(r.id)}" title="id ${esc(r.id)}">
-           <div class="r1"><span class="hm">${hm}</span><span class="ti">${esc(snTitleShow(r.ti) || "—")}</span>${prio}${wh}</div>
-           ${r.m ? `<div class="msg">${esc(snPlainMsg(r.m))}${r.mt ? "…" : ""}</div>` : ""}
-           <div class="tags">${chans}</div>
-           <div class="det">
-             ${r.sp ? `<div class="said">\u{1F50A} <b>${r.spn && !/alexa/i.test(r.spn) ? esc(T.said_by.replace("{ch}", snDeliveryAlias(this._hass, r.spn) || r.spn)) : T.said}:</b> \u00ab${esc(r.sp)}\u00bb</div>` : ""}
-             ${scen ? `<div><b>${T.scenarios}:</b> ${scen}</div>` : ""}
-             <div>${r.d ? `<b>${r.d}</b> ${snW(T, "delivered", r.d)} ` : ""}${r.f ? `· <b>${r.f}</b> ${snW(T, "failed", r.f)} ` : ""}${r.s ? `· <b>${r.s}</b> ${snW(T, "skipped", r.s)} ` : ""}${r.mi ? `· ⚠ <b>${r.mi}</b> ${snW(T, "missed", r.mi)} ` : ""}
-             ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""}${r.mt ? ` · ${T.truncated}` : ""}</div>
-             ${window.__snWhyCards ? `<div><a class="why" data-why="${esc(r.id)}">🔎 ${T.why}</a></div>` : ""}
-             ${this._canPause() ? `<div class="pzh" data-id="${esc(r.id)}">${open ? this._pauseHtml(r) : ""}</div>` : ""}
-           </div>
-         </div>`);
+      parts.push(line(r, g.items.length > 1 ? g : null, false));
+      if (g.items.length > 1 && this._openGroups.has(r.id)) g.items.slice(1).forEach((x) => parts.push(line(x, null, true)));
+    }
+    el.innerHTML = snIconify(parts.join(""), this._config);
+    el.querySelectorAll(".it").forEach((node) => {
+      node.onclick = () => this._select(node.dataset.id, true);
     });
-    el.innerHTML = snIconify(parts.join(""), this && this._config);
-    el.querySelectorAll(".why").forEach((a) => {
-      a.onclick = (e) => { e.stopPropagation(); snWhyOpen(a.dataset.why); };
-    });
-    el.querySelectorAll(".row").forEach((node) => {
-      node.onclick = () => {
-        const id = node.dataset.id;
-        if (this._open.has(id)) { this._open.delete(id); node.classList.remove("open"); }
-        else { this._open.add(id); node.classList.add("open"); this._renderPauses(); this._loadSnz(); }
+    el.querySelectorAll(".rep").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const id = b.dataset.g;
+        if (this._openGroups.has(id)) this._openGroups.delete(id); else this._openGroups.add(id);
+        this._renderList();
       };
     });
-    if (this._open.size && this._canPause()) { this._renderPauses(); this._loadSnz(); }
+    // open the latest notification by itself, once, so the detail is never an empty box
+    if (!this._sel && !this._autoDone && this._config.auto_select !== false) {
+      this._autoDone = true;
+      this._select(rows[0].id);
+    }
+  }
+
+  _renderDetailIfNone() {
+    if (this._sel) return;
+    const det = this.shadowRoot && this.shadowRoot.getElementById("det");
+    if (det) det.innerHTML = `<div class="empty">${snEsc(this._T().pick)}</div>`;
+  }
+
+  /** Select a notification: highlight it in the list, read its detail, show it. */
+  async _select(id, byUser) {
+    if (!id) return;
+    this._sel = id;
+    // a sensor index without the detail service: nothing to wait for, draw now
+    if (!this._cache.has(id) && this._hass && !snArchiveNative(this._hass, this._config)) {
+      const [dom, svc] = String(this._config.service || "").split(".");
+      const ss = this._hass.services && this._hass.services[dom];
+      if (!ss || !ss[svc]) this._cache.set(id, { ok: false, error: "no_service" });
+    }
+    if (this.shadowRoot) {
+      this.shadowRoot.querySelectorAll("#list .it").forEach((n) => n.classList.toggle("sel", n.dataset.id === id));
+    }
+    if (byUser) this._scrollToDetail();
+    if (!this._cache.has(id)) {
+      this._loading = id;
+      this._showDetail();
+      const res = await this._fetch(id);
+      this._cache.set(id, res);
+      this._loading = null;
+    }
+    if (this._sel === id) this._showDetail();
+    this._loadSnz();
+  }
+
+  /** On a narrow card the detail is under the list: bring it into view after a tap. */
+  _scrollToDetail() {
+    const sp = this.shadowRoot && this.shadowRoot.querySelector(".split");
+    const rp = this.shadowRoot && this.shadowRoot.getElementById("rp");
+    if (!sp || !rp || !rp.scrollIntoView) return;
+    if ((sp.clientWidth || 0) >= 720 || !sp.clientWidth) return;
+    setTimeout(() => rp.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+
+  /** The why engine's detail, a verdict on top, the pause bar under it. */
+  _showDetail() {
+    const det = this.shadowRoot && this.shadowRoot.getElementById("det");
+    if (!det) return;
+    const res = this._cache.get(this._sel);
+    if (this._loading !== this._sel && res && !res.ok && res.error === "no_service") {
+      // a sensor index without the detail service: what the index row knows
+      det.innerHTML = snIconify(this._rowDetail(this._row(this._sel)), this._config);
+    } else {
+      this._renderDetail();
+      if (this._loading !== this._sel && res && res.ok) { this._verdict(det, res.n || {}); this._said(det); }
+    }
+    this._renderPauses();
+  }
+
+  /** The spoken text says which speaker said it (the index row knows the channel). */
+  _said(det) {
+    const r = this._row(this._sel);
+    if (!r || !r.sp) return;
+    let el = det.querySelector(".said");
+    // the detail read from enquire_archive has no spoken text: the index row has it
+    if (!el) {
+      const hd = det.querySelector(".hd");
+      if (!hd) return;
+      el = document.createElement("div");
+      el.className = "note said";
+      hd.appendChild(el);
+    }
+    el.innerHTML = snIconify(this._saidHtml(r), this._config);
+  }
+
+  _saidHtml(r) {
+    const T = this._TA();
+    const who = r.spn && !/alexa/i.test(r.spn) ? T.said_by.replace("{ch}", snDeliveryAlias(this._hass, r.spn) || r.spn) : T.said;
+    return `\u{1F50A} <b>${snEsc(who)}:</b> \u00ab${snEsc(r.sp)}\u00bb`;
+  }
+
+  /** One line on top of the detail: did it arrive, what to look at. */
+  _verdict(det, n) {
+    const esc = snEsc;
+    const ta = (k) => this._ta(k);
+    const dl = n.dl || [];
+    const ok = dl.filter((c) => c.r === "ok");
+    const bad = dl.filter((c) => c.r === "err");
+    const skip = dl.filter((c) => c.r === "skip" || c.r === "supp");
+    const name = (c) => snDeliveryAlias(this._hass, c.n) || c.n;
+    const r = this._row(this._sel) || {};
+    let st, head, sub = "";
+    if ((n.dupe || n.o === "dupe") && !ok.length && !bad.length) {
+      // the box under it says when the same text went out before
+      st = "warn";
+      head = ta("v_dupe");
+    } else if (bad.length) {
+      st = "err";
+      head = ok.length ? ta("v_partial").replace("{n}", ok.length).replace("{of}", ok.length + bad.length) : ta("v_failed");
+      sub = `${bad.map(name).join(", ")} ${snW(this._TA(), "failed", bad.length)}`;
+    } else if ((r.id ? this._status(r) === "warn" : false) || +n.mi > 0) {
+      st = "warn";
+      head = ok.length ? ta(ok.length === 1 ? "v_ok1" : "v_ok").replace("{n}", ok.length) : ta("v_none");
+      sub = ta("v_check");
+    } else if (!ok.length) {
+      st = "none";
+      head = ta("v_none");
+      const why = [...new Set(skip.map((c) => this._reasonText(c.why, this._T())).filter(Boolean))];
+      sub = why.join(", ");
+    } else {
+      st = "ok";
+      head = ta(ok.length === 1 ? "v_ok1" : "v_ok").replace("{n}", ok.length);
+      sub = ok.map(name).join(", ") + (skip.length ? ` · ${skip.length} ${ta("v_skipped")}` : "");
+    }
+    if (r.w) sub += `${sub ? " · " : ""}\u{1F92B} ${this._TA().wh}`;
+    const icon = st === "ok"
+      ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L19 7"/></svg>`
+      : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 7v6M12 17h.01"/></svg>`;
+    const box = document.createElement("div");
+    box.className = `vd ${st}`;
+    box.innerHTML = snIconify(`<span class="ic ${st}">${icon}</span><div><b>${esc(head)}</b>${sub ? `<span class="vs">${esc(sub)}</span>` : ""}</div>`, this._config);
+    const hd = det.querySelector(".hd");
+    if (hd && hd.nextSibling) det.insertBefore(box, hd.nextSibling); else det.appendChild(box);
+  }
+
+  /** Detail from the index row alone (sensor index, no detail service): channels, scenarios, counts. */
+  _rowDetail(r) {
+    if (!r) return `<div class="empty">${snEsc(this._T().pick)}</div>`;
+    const T = this._TA();
+    const esc = snEsc;
+    const idx = this._index() || { chan: [], scen: [] };
+    const d = new Date(r.t * 1000);
+    const when = d.toLocaleString(this._loc(), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
+    const chans = this._channels(r, idx).map((c) =>
+      `<span class="tg ${c.state}" title="${esc(c.name)}">${c.state === "ok" ? "✔" : c.state === "err" ? "✖" : "⊘"} ${esc(snDeliveryAlias(this._hass, c.name) || c.name)}` +
+      `${c.reason ? " · " + esc(c.reason) : ""}</span>`).join("");
+    const scen = (r.sc || []).map((s) => esc(idx.scen && idx.scen[s] ? snScenarioName(this._hass, idx.scen[s]) : "?")).join(", ");
+    const prio = (T.prio && T.prio[r.p || "medium"]) || r.p || "";
+    return `<div class="hd"><div class="meta">${esc(when)}${prio ? ` · ${esc(prio)}` : ""}</div>
+        <b class="ttl">${esc(snTitleShow(r.ti || "—"))}</b>
+        ${r.m ? `<div class="msg">${esc(snPlainMsg(r.m))}${r.mt ? "…" : ""}</div>` : ""}</div>
+      ${r.sp ? `<div class="note said">${this._saidHtml(r)}</div>` : ""}
+      <div class="tags">${chans}</div>
+      ${scen ? `<div class="note"><b>${esc(T.scenarios)}:</b> ${scen}</div>` : ""}
+      <div class="note">${r.d ? `<b>${r.d}</b> ${snW(T, "delivered", r.d)} ` : ""}${r.f ? `· <b>${r.f}</b> ${snW(T, "failed", r.f)} ` : ""}${r.s ? `· <b>${r.s}</b> ${snW(T, "skipped", r.s)} ` : ""}${r.mi ? `· ⚠ <b>${r.mi}</b> ${snW(T, "missed", r.mi)} ` : ""}
+        ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""}${r.mt ? ` · ${T.truncated}` : ""}</div>
+      <div class="note">ℹ️ ${esc(this._ta("no_detail"))}</div>`;
   }
 }
 
-customElements.define("supernotify-archive-card", SupernotifyArchiveCard);
-
-window.customCards.push({
-  type: "supernotify-archive-card",
-  preview: true,
-  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/archive.md",
-  name: "SuperNotify Archive Card",
-  description: "Notification history from the SuperNotify archive: search, filters, per-channel outcome.",
-});
 
 const SN_ARCH_STRINGS = {
   en: {
@@ -8494,6 +8859,15 @@ const SN_ARCH_STRINGS = {
     pz_critical: "Critical notifications can't be paused from here.",
     pz_auto: "automation", pz_script: "script", pz_what: "pause:",
     pz_none_any: "This one can't be paused: it names no entity and no automation or script sent it (sent by hand?).",
+    sm_today: "today", sm_ok: "arrived", sm_pb: "to look at", f_problems_s: "Problems", group: "Group repeats",
+    rep_open: "Show each one", rep_close: "Fold them again",
+    st_ok: "Arrived", st_err: "A channel failed", st_warn: "Worth a look", st_none: "Went out on no channel",
+    v_some: "a channel", v_check: "something to look at below", v_none_short: "no channel",
+    v_none: "It went out on no channel", v_ok: "Arrived on {n} channels", v_ok1: "Arrived on 1 channel",
+    v_partial: "Arrived on {n} channels of {of}", v_failed: "It did not arrive", v_skipped: "skipped by a rule", v_dupe: "Dropped: the same text had just gone out",
+    no_detail: "The full detail needs SuperNotify 2.10 or later (enquire_archive) or the shell_command sn_archive_detail.",
+    help_t: "How to read it",
+    help: "<b>Left</b>: one line per notification - ✔ arrived, <b>!</b> a channel failed or something to look at, ⊘ it went out on no channel (a pause, nobody home, a rule). <b>×N</b> = the same notification N times in a row: tap it to see each one. <b>Right</b>: the notification you tap - the scenarios in force, who was home, every channel with why it went out or not, and the pause.",
   },
   it: {
     title: "Storico notifiche", search: "Cerca nel titolo o nel messaggio…",
@@ -8518,6 +8892,15 @@ const SN_ARCH_STRINGS = {
     pz_critical: "Le notifiche critiche non si mettono in pausa da qui.",
     pz_auto: "automazione", pz_script: "script", pz_what: "pausa su:",
     pz_none_any: "Questa notifica non si può mettere in pausa: non nomina un'entità e non l'ha mandata un'automazione o uno script (inviata a mano?).",
+    sm_today: "oggi", sm_ok: "arrivate", sm_pb: "da guardare", f_problems_s: "Problemi", group: "Raggruppa ripetute",
+    rep_open: "Mostrale una per una", rep_close: "Richiudi",
+    st_ok: "Arrivata", st_err: "Un canale ha fallito", st_warn: "Da guardare", st_none: "Non è partita su nessun canale",
+    v_some: "un canale", v_check: "c'è qualcosa da guardare qui sotto", v_none_short: "nessun canale",
+    v_none: "Non è partita su nessun canale", v_ok: "Arrivata su {n} canali", v_ok1: "Arrivata su 1 canale",
+    v_partial: "Arrivata su {n} canali su {of}", v_failed: "Non è arrivata", v_skipped: "saltati per una regola", v_dupe: "Scartata: lo stesso testo era appena partito",
+    no_detail: "Il dettaglio completo richiede SuperNotify 2.10 o successivo (enquire_archive) o lo shell_command sn_archive_detail.",
+    help_t: "Come si legge",
+    help: "<b>A sinistra</b>: una riga per notifica - ✔ arrivata, <b>!</b> un canale ha fallito o c'è qualcosa da guardare, ⊘ non è partita su nessun canale (una pausa, nessuno in casa, una regola). <b>×N</b> = la stessa notifica N volte di fila: toccala per vederle una per una. <b>A destra</b>: la notifica che tocchi - gli scenari in vigore, chi era in casa, ogni canale col perché è partito o no, e la pausa.",
   },
 };
 
@@ -8545,7 +8928,9 @@ const SN_ARCH_STRINGS = {
  * Other cards open a notification here with snWhyOpen(id).
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyWhyCard extends SnCard {
+/* 0.85.0: the why card's code is now the detail engine of supernotify-archive-card (mixed in
+ * below); supernotify-why-card is an alias of the archive card. */
+class SnWhyEngine extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("why");
@@ -8912,7 +9297,7 @@ class SupernotifyWhyCard extends SnCard {
     out.push(`<div class="hd"><div class="meta">${esc(when)} · ${T.priority} ${esc(prioTxt)} · ${esc(T.outcomes[n.o] || n.o || "—")}${n.dupe && n.o !== "dupe" ? ` · ♻ ${T.dupe}` : ""}</div>
       <b class="ttl">${esc(snTitleShow(n.ti) || "—")}</b>
       ${n.m && n.m !== n.ti ? `<div class="msg">${esc(snPlainMsg(n.m))}</div>` : ""}
-      ${n.sp && ![snPlainMsg(n.m || ""), n.m, n.ti].map((x) => String(x || "").trim()).includes(String(n.sp).trim()) ? `<div class="note">🔊 ${esc(n.sp)}</div>` : ""}
+      ${n.sp && ![snPlainMsg(n.m || ""), n.m, n.ti].map((x) => String(x || "").trim()).includes(String(n.sp).trim()) ? `<div class="note said">🔊 ${esc(n.sp)}</div>` : ""}
       ${n.ctx && n.ctx.id ? `<div class="note sentby" id="sentBy" title="context ${esc(n.ctx.id)}">…</div>` : ""}
       ${n.stt ? `<div class="note">⏱ ${esc(T.st_time)} ${esc(n.stt.ms)} ms${n.stt.slow ? ` · ${esc(T.st_slow)} ${esc(snDeliveryAlias(this._hass, n.stt.slow) || n.stt.slow)}` : ""}${n.stt.rate != null ? ` · ${Math.round(+n.stt.rate * 100)}% ${esc(T.st_rate)}` : ""}</div>` : ""}</div>`);
     // 0.79.0: a duplicate - when the original went out, and whether the same run sent both
@@ -9047,7 +9432,7 @@ class SupernotifyWhyCard extends SnCard {
  * same title and text, sent within the two minutes SuperNotify keeps texts for. Same context id
  * = the same automation/script run called SuperNotify twice.
  */
-SupernotifyWhyCard.prototype._dupeOf = async function (n) {
+SnWhyEngine.prototype._dupeOf = async function (n) {
   const T = this._T();
   const esc = snEsc;
   const idx = this._index();
@@ -9078,7 +9463,7 @@ SupernotifyWhyCard.prototype._dupeOf = async function (n) {
   wire();
 };
 
-SupernotifyWhyCard.prototype._sentBy = async function (n) {
+SnWhyEngine.prototype._sentBy = async function (n) {
   // 0.61.0: who sent it - the automation or script whose run carries the notification's context
   // (logbook), else the person of the user that made the call
   const T = this._T();
@@ -9109,14 +9494,32 @@ SupernotifyWhyCard.prototype._sentBy = async function (n) {
   if (a) a.onclick = (e) => { e.preventDefault(); this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: res.id }, bubbles: true, composed: true })); };
 };
 
-customElements.define("supernotify-why-card", SupernotifyWhyCard);
+// 0.85.0: the detail of the archive card is the why card's: every SnWhyEngine method the archive
+// card does not have itself (_renderDetail, _fetch, _whyNotStarted, _sentBy, _dupeOf, ...)
+for (const k of Object.getOwnPropertyNames(SnWhyEngine.prototype)) {
+  if (k === "constructor" || k in SupernotifyArchiveCard.prototype) continue;
+  Object.defineProperty(SupernotifyArchiveCard.prototype, k, Object.getOwnPropertyDescriptor(SnWhyEngine.prototype, k));
+}
+
+/**
+ * supernotify-why-card, kept as an alias (0.85.0): the same card as supernotify-archive-card,
+ * so a dashboard configured with the old card keeps working - in a narrow column it shows the
+ * list on top and the detail under it, as the why card did. Its editor keeps the why options.
+ */
+class SupernotifyWhyAliasCard extends SupernotifyArchiveCard {
+  static getConfigForm() { return snForm("why"); }
+  constructor() { super(); this._snKind = "why"; }
+}
+
+customElements.define("supernotify-archive-card", SupernotifyArchiveCard);
+customElements.define("supernotify-why-card", SupernotifyWhyAliasCard);
 
 window.customCards.push({
-  type: "supernotify-why-card",
+  type: "supernotify-archive-card",
   preview: true,
-  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/why.md",
-  name: "SuperNotify Why?",
-  description: "Why a notification went out, or not, on each channel: scenarios, presence, targets and the selection trace.",
+  documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/archive.md",
+  name: "SuperNotify Archive Card",
+  description: "Notification history and why each one went out, or not: list on the left, the full detail (scenarios, presence, every channel, pause) on the right. Replaces the Why? card, which stays as an alias.",
 });
 
 const SN_WHY_STRINGS = {

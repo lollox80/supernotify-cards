@@ -2,9 +2,22 @@
 
 [← SuperNotify Cards](../../README.md) · [Common options](../configuration.md)
 
-Notification history, read from the SuperNotify archive.
+Notification history, read from the SuperNotify archive, and **why** each one went where it went.
 
-<img src="../images/archive.png" alt="supernotify-archive-card" width="800">
+<img src="../images/archive.png" alt="supernotify-archive-card" width="900">
+
+**One card for the list and the detail (0.85.0).** On the left (on top when the card is narrow) one
+line per notification: a mark - ✔ arrived, **!** a channel failed or something to look at, ⊘ it
+went out on no channel (a pause, nobody home, a rule) - the title, and one line that says how it
+went: the failed channel in red, else where it arrived. The priority shows only when it is not
+medium. The same notification several times in a row is one line with **×N** (tap it to see each
+one). On top: today in one line, the search, and **?** for how to read the card.
+
+On the right (below when narrow) the notification you tap - the latest opens by itself: a verdict
+("Arrived on 3 channels of 4 · Telegram failed"), the call, the scenarios in force, who was home,
+then every channel with why it went out or not and to whom, the routine skips and the channels not
+involved folded, and the pause bar. This is what the separate
+[supernotify-why-card](why.md) showed; that card is now an alias of this one.
 
 ```yaml
 type: custom:supernotify-archive-card
@@ -18,10 +31,15 @@ type: custom:supernotify-archive-card
 | `entity` | no | bridge only: sensor holding the archive index (default `sensor.supernotify_archivio`) |
 | `intro` | no | info banner at the top of the card |
 | `style` | no | `supernotify` (default) or `theme` |
-| `pause` | no | `false` hides the pause bar in an open row (default shown when SuperNotify has `supernotify.snooze`) |
+| `pause` | no | `false` hides the pause bar under the detail (default shown when SuperNotify has `supernotify.snooze`) |
+| `group_repeats` | no | `false` lists every notification on its own line (default: repeats in a row are one "×N" line) |
+| `auto_select` | no | `false` waits for a tap instead of opening the latest notification |
+| `expand` | no | `true` opens the folded parts of the detail (routine skips, channels not involved, trace) |
+| `max_height` | no | any CSS length (e.g. `calc(100vh - 330px)`): list and detail scroll inside it |
+| `service` | no | bridge only: service returning the detail (default `shell_command.sn_archive_detail`, see the [why page](why.md)) |
 | `pause_sender` | no | `true` also offers the automation or script that sent the notification - needs a SuperNotify whose tag snooze matches the sender ([#270](https://github.com/rhizomatics/supernotify/pull/270)) |
 
-**Pause one notification (0.80.0).** Open a row: the bar pauses notifications about the entity
+**Pause one notification (0.80.0).** Open a notification: the bar under the detail pauses notifications about the entity
 it is about - 30 min, 1 h, 4 h or 24 h, for everyone or only for you - through SuperNotify's tag
 snooze. The entity is `entity_id` in the call's `data` (or its camera), so add it to the calls you
 want to be able to pause:
@@ -78,7 +96,8 @@ missing folder or a corrupt file shows up as an attribute instead of breaking th
 Once you are on SuperNotify 2.10+, the sensor, the automation, the shell command and the script
 can all be removed: the cards stop reading them as soon as the action is there.
 
-With a `supernotify-why-card` on the same view, an expanded row gets a **🔎 Why?** link.
+With the bridge and no `shell_command.sn_archive_detail`, the detail is what the index knows: every
+channel with its outcome and reason, the scenarios, the counts.
 
 What a **voice channel said** (Alexa, TTS…) shows under the message when it differs from the text,
 named after that channel. SuperNotify keeps the spoken text only for voice transports, so any voice

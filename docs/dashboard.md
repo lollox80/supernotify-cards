@@ -21,7 +21,7 @@ Where Home Assistant lists custom strategies in **Add dashboard**, *SuperNotify*
 | View | Cards |
 |---|---|
 | Home | status badge on top; control · overview, archive |
-| Send | composer · why, simulator |
+| Send | composer · simulator (the "why" is inside archive since 0.85) |
 | Setup | channels, transports · scenarios, recipients · time bands, automations |
 | Stats | stats |
 | Tools | tools - **administrators only** |

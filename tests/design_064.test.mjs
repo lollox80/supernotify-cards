@@ -20,7 +20,7 @@ ok((CARDS.match(/^  set hass\(hass\) \{/gm) || []).length === 1, "un solo setter
 ok((SRC.match(/^\s*const esc = \(\w+\) => String/gm) || []).length === 0, "nessuna copia locale di esc");
 ok((SRC.match(/const prioCol = \{ critical:/g) || []).length === 0, "colori priorità da snPrioColor");
 const tags = window.customCards.map((c) => c.type);
-ok(tags.length === 14 && tags.every((t) => customElements.get(t)), "14 card registrate");
+ok(tags.length === 13 && tags.every((t) => customElements.get(t)) && customElements.get("supernotify-why-card"), "13 card nel selettore + why come alias");
 // every card renders with the base setter
 const hass = { language: "it", themes: { darkMode: true }, entities: {}, user: { id: "u", is_admin: true }, services: { supernotify: {} },
   states: {}, callWS: async () => ({ response: {} }), callService: async () => {}, callApi: async () => ({}) };
@@ -31,6 +31,6 @@ for (const t of tags) {
   document.body.appendChild(el);
   try { el.hass = hass; if (el.shadowRoot && el.style.colorScheme === "dark") rendered++; } catch (e) { console.log(t, e.message); }
 }
-ok(rendered === 14, `tutte le card disegnate in tema scuro (${rendered}/14)`);
+ok(rendered === 13, `tutte le card disegnate in tema scuro (${rendered}/13)`);
 console.log(fail ? `\n${fail} FAIL` : "\nall ok");
 process.exit(fail ? 1 : 0);

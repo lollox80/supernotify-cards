@@ -3,6 +3,30 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.85.0] - 2026-10-08
+
+The notification history and its "why" in **one card** (archive 0.41.0).
+
+### Changed
+- **supernotify-archive-card**: list on the left, the detail of the notification you tap on the
+  right (one under the other when the card is narrow). The detail is the one of the why card:
+  call, scenarios, people, every channel with why it went out or not, problems first with what to
+  do, folded routine skips and channels not involved, the trace; plus a verdict on top ("Arrived
+  on 3 channels of 4 · Telegram failed") and the pause bar at the bottom.
+- List: one line per notification with a status mark (✔ arrived, ! failed or worth a look, ⊘ went
+  out on no channel) and one line saying how it went, instead of one pill per channel; priority
+  only when not medium; repeats of the same notification in a row folded into "×N" (tap to open,
+  `group_repeats: false` to turn off); filters with their counts; today's summary on top; "?" opens
+  how to read the card (the long intro is no longer needed).
+- **supernotify-why-card** (0.16.0) is now an alias of the archive card: existing dashboards keep
+  working. It is no longer offered in the card picker, and the dashboard strategy no longer adds it
+  to Send. `snWhyOpen()` (recipients, control, overview "Why ›") opens the notification in the
+  archive card.
+- With the sensor bridge and no detail service, the detail shows what the index row knows (channels
+  with outcome and reason, scenarios, counts).
+- `tools/showcase.mjs`: archive shot 1100 px wide, why shot in a 460 px column; `SN_CHROMIUM` to use a
+  local Chromium.
+
 ## [0.84.0] - 2026-10-08
 
 ### Changed

@@ -2,6 +2,8 @@
 //
 // CHANGELOG
 // 2026-10-03 - first version (v0.53.1): replaces the lost showcase.html harness of 0.48.4.
+// 2026-10-08 - v0.85.0: archive shot 1100 px wide (list + detail side by side), why shot = the
+//   alias in a 460 px column (list on top, detail below).
 //
 // Renders each card with invented data (English UI, no real names or addresses) in headless
 // Chromium at 2x and writes docs/images/*.png. <ha-icon> is stubbed with the real Material
@@ -232,8 +234,8 @@ const SHOTS = {
   bands: [460, [["bands", { bands: BANDS }]]],
   automations: [460, [["automations", {}]]],
   simulator: [700, [["simulator", {}]]],
-  archive: [700, [["archive", ARCH]]],
-  why: [700, [["why", ARCH]]],
+  archive: [1100, [["archive", ARCH]]],
+  why: [460, [["why", ARCH]]], // 0.85.0: the alias in a narrow column = list on top, detail below
   stats: [700, [["stats", { sent_today_entity: "sensor.supernotify_sent_today" }]]],
   tools: [460, [["tools", {}]], 1, false, "tools"],
   composer: [700, [["composer", {}]], 1, false, "composer"],
@@ -245,7 +247,7 @@ const SHOTS = {
 
 const stub = `const P=${JSON.stringify(icons)};customElements.define("ha-icon",class extends HTMLElement{static get observedAttributes(){return["icon"]}connectedCallback(){this.r()}attributeChangedCallback(){this.r()}r(){const d=P[this.getAttribute("icon")]||"";this.style.display="inline-flex";this.style.verticalAlign=this.style.verticalAlign||"middle";const z="var(--mdc-icon-size,24px)";this.innerHTML='<svg viewBox="0 0 24 24" style="width:'+z+';height:'+z+';fill:currentColor"><path d="'+d+'"/></svg>'}});customElements.define("ha-card",class extends HTMLElement{connectedCallback(){this.style.display="block";this.style.borderRadius="12px";this.style.border="1px solid var(--line,#e3e8ee)";this.style.overflow="hidden"}});`;
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(process.env.SN_CHROMIUM ? { executablePath: process.env.SN_CHROMIUM } : {}); // 0.85.0: SN_CHROMIUM = a local Chromium
 for (const [name, [width, cards, cols = 1, dark = false, before]] of Object.entries(SHOTS)) {
   if (only.size && !only.has(name)) continue;
   const page = await browser.newPage({ viewport: { width: width + 32, height: 900 }, deviceScaleFactor: 2 });

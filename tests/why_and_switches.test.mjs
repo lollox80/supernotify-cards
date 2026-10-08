@@ -130,12 +130,14 @@ assert.ok(det.includes("diagnostica"), "nota sul trace");
 last.click(); await flush();
 assert.deepStrictEqual(calls.splice(0), []);
 
-// ---- archive card: link Perché? ----
-const ac = mount("supernotify-archive-card");
-const firstRow = ac.shadowRoot.querySelector(".row");
-firstRow.click();
-const why = ac.shadowRoot.querySelector(".why");
-assert.ok(why, "link Perché? con la why-card presente");
+// ---- 0.85.0: archive card = list + the same detail ----
+const ac = mount("supernotify-archive-card", { auto_select: false });
+assert.ok(!ac.shadowRoot.querySelector(".why"), "niente link Perché?: il dettaglio è nella card");
+const secondRow = ac.shadowRoot.querySelectorAll(".row")[1];
+secondRow.click(); await flush();
+assert.ok(secondRow.classList.contains("sel"), "riga selezionata");
+assert.ok(ac.shadowRoot.getElementById("det").querySelector(".path"), "dettaglio nella stessa card");
+calls.splice(0);
 
 // ---- trace con delivery_provenance: vince sulla ricostruzione ----
 const withProv = JSON.parse(DET);
@@ -170,6 +172,8 @@ assert.ok(!det3.includes("Trace di selezione"), "nessuna sezione trace vuota");
 delete hass.services.shell_command;
 wc._cache.clear();
 await wc._select(IDX.items[1].id);
-assert.ok(wc.shadowRoot.getElementById("det").textContent.includes("Manca il servizio"));
+// 0.85.0: without the detail service the card shows what the index row knows, and says what is missing
+const det4 = wc.shadowRoot.getElementById("det").textContent;
+assert.ok(det4.includes("sn_archive_detail") && wc.shadowRoot.querySelector("#det .tags"), "senza servizio: canali dall'indice + cosa manca");
 console.log("why_and_switches: OK");
 process.exit(0);

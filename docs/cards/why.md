@@ -2,13 +2,18 @@
 
 [← SuperNotify Cards](../../README.md) · [Common options](../configuration.md)
 
+> **Since 0.85.0 this card is inside [supernotify-archive-card](archive.md)**: the archive shows the
+> list and, next to it, the detail described here. `type: custom:supernotify-why-card` still works -
+> it is now an alias of the archive card (in a narrow column: list on top, detail below), so a
+> dashboard that has it keeps working. On a view that already has the archive card you can remove it.
+
 "Why did this notification go where it went?" Pick a notification (or open it from the archive
 card or the recipients card) to see the scenarios in force, who was home, and for **every
 channel** whether it went out, why not, to which targets and what selected it — plus the channels
 that did not start at all, with the reason. When SuperNotify diagnostics are set to `ALL`, the
 full selection trace archived with the notification is shown too.
 
-<img src="../images/why.png" alt="supernotify-why-card" width="800">
+<img src="../images/why.png" alt="supernotify-why-card in a narrow column" width="420">
 
 ```yaml
 type: custom:supernotify-why-card
@@ -16,7 +21,7 @@ type: custom:supernotify-why-card
 
 | Option | Required | Description |
 |---|---|---|
-| `limit` | no | notifications in the list (default 15) |
+| `limit` | no | notifications read from the archive (default 40) |
 | `expand` | no | `true` opens the folded parts (routine skips, channels not involved, full trace) |
 | `source`, `trigger_entity` | no | as for supernotify-archive-card |
 | `entity` | no | bridge only: sensor holding the archive index |

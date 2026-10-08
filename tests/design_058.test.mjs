@@ -52,10 +52,10 @@ ok(!/\.stat \.k \{[^}]*nowrap/.test(SRC) && !/\.kpi \.k \{[^}]*nowrap/.test(SRC)
 // A4 + B1: archive
 const ac = mount("supernotify-archive-card", { source: "sensor", entity: "sensor.supernotify_archivio" });
 await flush();
-const pr = [...ac.shadowRoot.querySelectorAll(".tg.pr")].map((n) => n.className);
-ok(pr.includes("tg pr critical") && pr.includes("tg pr low") && pr.includes("tg pr high"), `archivio: classe per priorità (${pr})`);
+const pr = [...ac.shadowRoot.querySelectorAll(".bdg.pr")].map((n) => n.className);
+ok(pr.includes("bdg pr critical") && pr.includes("bdg pr low") && pr.includes("bdg pr high"), `archivio: classe per priorità (${pr})`);
 const acss = ac.shadowRoot.innerHTML;
-ok(/\.tg\.pr\.critical \{ color: #c62828/.test(acss), "archivio: critica in rosso");
+ok(/\.bdg\.pr\.critical \{ color: #c62828/.test(acss), "archivio: critica in rosso");
 const meta = ac.shadowRoot.textContent;
 ok(!/\?/.test(meta.match(/3 [^\n]*archivio/) ? meta.match(/3 [^\n]*archivio/)[0] : "?") && /3 nell'archivio/.test(meta), "archivio: «3 nell'archivio», niente «di ?»");
 // B2

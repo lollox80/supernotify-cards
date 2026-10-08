@@ -56,7 +56,7 @@ ok(/snEnquireBust\(800\)/.test(SRC) && /snEnquireBust\(1500\)/.test(SRC), "snooz
 
 // ── 3. card picker ──────────────────────────────────────────────────────
 const cc = window.customCards.filter((c) => c.type.startsWith("supernotify-"));
-ok(cc.length === 14 && cc.every((c) => c.preview === true), "14 card con anteprima nel selettore (0.62.0: + tools)");
+ok(cc.length === 13 && cc.every((c) => c.preview === true), "13 card con anteprima nel selettore (0.62.0: + tools; 0.85.0: why dentro archive)");
 ok(cc.every((c) => /docs\/cards\/[a-z]+\.md$/.test(c.documentationURL)), "card con link alla documentazione");
 const K = (t) => customElements.get(`supernotify-${t}-card`);
 const st = K("control").getStubConfig(hass);

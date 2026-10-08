@@ -48,12 +48,14 @@ ok(tags.length === 2, "due righe marcate come sussurrate");
 ok(/sussurrata/.test(tags[0].textContent), "etichetta in italiano");
 ok(tags[0].querySelector('ha-icon[icon="mdi:volume-low"]'), "icona presente (mdi:volume-low dalla 0.50)");
 
-const chips = [...a.shadowRoot.querySelectorAll(".chip")].map((c) => c.textContent.trim());
+// 0.85.0: a filter chip is its label plus a count in its own span
+const label = (c) => (c.firstChild && c.firstChild.nodeType === 3 ? c.firstChild.textContent : "").trim();
+const chips = [...a.shadowRoot.querySelectorAll(".chip")].map(label);
 console.log("filtri:", chips.join(" | "));
 ok(chips.includes("Sussurrate"), "il filtro 'Sussurrate' compare");
 
 // il filtro isola le sole sussurrate
-const chip = [...a.shadowRoot.querySelectorAll(".chip")].find((c) => c.textContent.trim() === "Sussurrate");
+const chip = [...a.shadowRoot.querySelectorAll(".chip")].find((c) => label(c) === "Sussurrate");
 chip.onclick();
 const righe = [...a.shadowRoot.querySelectorAll(".row")];
 console.log("righe dopo il filtro:", righe.length);
@@ -62,7 +64,7 @@ ok(righe.every((r) => r.querySelector(".tg.wh")), "ogni riga filtrata ha il tag"
 
 // --- senza sussurri (com'e' dopo scenarios.yaml v4.0) ---------------------
 const b = mk(index(false));
-const chips2 = [...b.shadowRoot.querySelectorAll(".chip")].map((c) => c.textContent.trim());
+const chips2 = [...b.shadowRoot.querySelectorAll(".chip")].map(label);
 console.log("filtri senza sussurri:", chips2.join(" | "));
 ok(!chips2.includes("Sussurrate"), "a sussurro spento il filtro NON compare");
 ok(b.shadowRoot.querySelectorAll(".tg.wh").length === 0, "nessun tag sussurro");
@@ -83,7 +85,7 @@ const parlato = {
 const c = mk(parlato);
 const dette = [...c.shadowRoot.querySelectorAll(".said")];
 console.log("blocchi 'ha detto':", dette.map((n) => n.textContent.trim()).join(" | "));
-ok(dette.length === 1, "solo la notifica con testo diverso mostra cosa è stato detto");
+ok(dette.length === 1, "il dettaglio della notifica con testo diverso mostra cosa è stato detto");
 ok(/Alexa ha detto/.test(dette[0].textContent), "etichetta in italiano");
 ok(dette[0].textContent.includes("Il garage è stato chiuso."), "riporta il testo pronunciato");
 ok(dette[0].closest(".det") !== null, "sta nel dettaglio, non nella riga chiusa");

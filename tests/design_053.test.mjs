@@ -53,7 +53,11 @@ ok(steps.length === 4, "quattro passi");
 ok(/instradamento normale/.test(steps[0]) && /Qualcuno in casa/.test(steps[1]) && /Lorenzo/.test(steps[2]) && /fuori: Jessica/.test(steps[2]), "chiamata, scenari, persone");
 ok(/1 partito\s*2 da guardare\s*1 saltato/.test(steps[3]), "conteggio canali (0.59.0: in pila)");
 const pbs = [...det.querySelectorAll(".pb")];
-ok(pbs.length === 2 && det.firstElementChild.nextElementSibling.classList.contains("path") && det.children[2].classList.contains("pb"), "problemi subito dopo il percorso");
+// 0.85.0: the archive card adds its verdict (.vd) under the header
+const kids = [...det.children].filter((k) => !k.classList.contains("vd"));
+ok(pbs.length === 2 && kids[1].classList.contains("path") && kids[2].classList.contains("pb"), "problemi subito dopo il percorso");
+const vd = det.querySelector(".vd");
+ok(vd && vd.classList.contains("err") && /Telegram famiglia/.test(vd.textContent), `verdetto in cima: ${vd && vd.textContent.trim()}`);
 const em = pbs.find((x) => /Email/.test(x.textContent));
 ok(em && em.classList.contains("warn") && /chiesto ma non partito/.test(em.textContent) && /aggiungilo a un destinatario/.test(em.textContent), "email: mancato in arancio con cosa fare");
 const tg = pbs.find((x) => /Telegram famiglia/.test(x.textContent));
