@@ -45,12 +45,32 @@ strategy:
   title: Notifications                 # default "SuperNotify"
   views: [home, send, setup, stats]    # which views, in this order (default: all five)
   hide: [simulator, automations]       # card kinds to leave out (badge: the status badge)
+  tabs: icons                          # icons (default) | emoji | text - what the view tabs show
+  icons:                               # change the mark of a single view
+    home: mdi:home                     # an mdi icon goes in the tab icon...
+    stats: "📈"                        # ...anything else is put before the name
   cards:                               # extra configuration per card kind, over the suggested one
     control:
       dnd_entity: input_boolean.notifier_dnd
       tiles: [dnd, snooze, announce]
     archive:
       limit: 30
+```
+
+### View tabs
+
+By default every tab shows an mdi icon **and** the view name (`tabs: icons`). Showing both needs
+Home Assistant 2026.2 or later; on older versions the tabs show the name only, so a tab is never
+an unlabelled icon. `tabs: emoji` puts an emoji before the name instead (🔔 Home, ✉️ Send, ⚙️ Setup,
+📊 Stats, 🧰 Tools), `tabs: text` shows the name alone.
+
+In a dashboard of your own (or after **Take control**) the same is one line per view:
+
+```yaml
+views:
+  - title: Home
+    icon: mdi:bell
+    show_icon_and_title: true   # without it Home Assistant shows the icon only
 ```
 
 ## Making it your own

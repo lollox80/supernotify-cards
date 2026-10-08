@@ -96,6 +96,7 @@ views:
   - title: Home
     path: home
     icon: mdi:bell
+    show_icon_and_title: true
     type: sections
     max_columns: 2
     sections:
@@ -109,6 +110,7 @@ views:
   - title: Send
     path: send
     icon: mdi:send
+    show_icon_and_title: true
     type: sections
     max_columns: 2
     sections:
@@ -122,6 +124,7 @@ views:
   - title: Setup
     path: setup
     icon: mdi:tune-variant
+    show_icon_and_title: true
     type: sections
     max_columns: 3
     sections:
@@ -140,6 +143,7 @@ views:
   - title: Stats
     path: stats
     icon: mdi:chart-bar
+    show_icon_and_title: true
     type: sections
     max_columns: 2
     sections:

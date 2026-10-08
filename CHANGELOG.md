@@ -3,6 +3,20 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.84.0] - 2026-10-08
+
+### Changed
+- Dashboard strategy: view tabs show an mdi icon **and** the view name again, through Home
+  Assistant's `show_icon_and_title` (2026.2 and later). On older versions the tabs keep the name
+  only, never an icon alone.
+
+### Added
+- Strategy option `tabs: icons | emoji | text` (default `icons`): `emoji` puts an emoji before the
+  name instead of the icon, `text` shows the name alone.
+- Strategy option `icons: {view: ...}` to change one view: `mdi:xxx` goes in the tab icon, anything
+  else (an emoji) is put before the name.
+- README example dashboard: `show_icon_and_title: true` on every view, so the tabs keep their names.
+
 ## [0.83.0] - 2026-10-08
 
 Visual pass on every card, checked on a real dashboard at desktop and phone width.

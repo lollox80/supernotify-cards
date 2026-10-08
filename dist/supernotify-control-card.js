@@ -8,6 +8,10 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-08 - v0.84.0. strategy: view tabs show an icon AND the name again (`show_icon_and_title`,
+ *   Home Assistant 2026.2 and later; older versions keep the name only, never an icon alone).
+ *   New option `tabs: icons | emoji | text` (default icons) and `icons: {view: mdi:xxx | emoji}` to
+ *   change one view: an mdi icon goes in the tab icon, anything else is put before the name.
  * 2026-10-08 - v0.83.0. Visual pass on every card (seen on a real dashboard, desktop and phone).
  *   - Pause reason "Dashboard: archive" / "Dashboard" reads "from the archive" / "from the dashboard".
  *   - Every "paused until" (status badge, pause feature, overview tile, archive pause bar) uses the
@@ -627,7 +631,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.83.0"; // bundle / HACS release
+const VERSION = "0.84.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -1354,6 +1358,8 @@ function snFlash(card, selector) {
  *   hide    - card kinds to leave out, e.g. [automations, simulator]
  *   cards   - extra configuration per card kind, merged over the suggested one,
  *             e.g. {control: {tiles: [dnd, snooze]}, archive: {limit: 30}}
+ *   tabs    - icons (default: mdi icon + name), emoji (emoji + name) or text (name only)
+ *   icons   - per view, e.g. {home: mdi:home, stats: "📈"}: mdi:xxx = tab icon, else put before the name
  */
 const SN_STRATEGY_VIEWS = {
   home: { icon: "mdi:bell", cols: 2, sections: [["control"], ["overview", "archive"]] },
@@ -1363,6 +1369,15 @@ const SN_STRATEGY_VIEWS = {
   stats: { icon: "mdi:chart-bar", cols: 1, sections: [["stats"]] },
   tools: { icon: "mdi:toolbox-outline", cols: 1, sections: [["tools"]], admin: true },
 };
+// 0.84.0: `tabs: emoji`
+const SN_STRATEGY_EMOJI = { home: "🔔", send: "✉️", setup: "⚙️", stats: "📊", tools: "🧰" };
+// 0.84.0: icon + name in one tab needs `show_icon_and_title` (HA 2026.2); before that an icon hides the name
+function snTabsBoth(hass) {
+  const m = String((hass && hass.config && hass.config.version) || "").match(/^(\d+)\.(\d+)/);
+  if (!m) return true;
+  const y = +m[1], mo = +m[2];
+  return y > 2026 || (y === 2026 && mo >= 2);
+}
 const SN_STRATEGY_TITLES = {
   en: { home: "Home", send: "Send", setup: "Setup", stats: "Stats", tools: "Tools", title: "SuperNotify" },
   it: { home: "Casa", send: "Invia", setup: "Configurazione", stats: "Statistiche", tools: "Strumenti", title: "SuperNotify" },
@@ -1408,10 +1423,17 @@ class SupernotifyDashboardStrategy extends HTMLElement {
         .filter((cards) => cards.length)
         .map((cards) => ({ type: "grid", cards }));
       if (!sections.length) continue;
-      // 0.73.2: no icon, so the tabs show the view names; one section = the full width
+      // one section = the full width
       if (sections.length === 1) sections[0].column_span = 2;
       const view = { title: T[key], path: key, type: "sections",
         max_columns: sections.length === 1 ? 2 : Math.min(v.cols, sections.length), sections };
+      // 0.84.0: tab = icon + name (default), emoji + name, or name only
+      const mode = String(cfg.tabs || "icons");
+      const own = cfg.icons && cfg.icons[key] != null ? String(cfg.icons[key]).trim() : "";
+      const mark = own || (mode === "emoji" ? SN_STRATEGY_EMOJI[key] : mode === "icons" ? v.icon : "");
+      if (mark && /^[a-z]+:/i.test(mark)) {
+        if (snTabsBoth(hass)) { view.icon = mark; view.show_icon_and_title = true; }
+      } else if (mark) view.title = `${mark} ${view.title}`;
       // 0.72.0: SuperNotify's health as a badge on top of Home
       if (key === "home" && !hide.has("badge")) view.badges = [{ type: "custom:supernotify-status-badge", ...(extra.badge || {}) }];
       views.push(view);

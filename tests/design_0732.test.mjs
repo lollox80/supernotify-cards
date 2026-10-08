@@ -19,10 +19,10 @@ ok(G.snPlainMsg("Ci sono 4 aggiornamenti. [Aegis for Ajax Update](https://github
 ok(G.snPlainMsg("[Clock](https://a/b) ok") === "Clock ok", "link intero come prima");
 ok(G.SN_STRINGS.it.snooze === "Pausa", "italiano: Pausa");
 
-// strategy: niente icone, una sezione = tutta la larghezza
+// strategy: il nome della vista si vede sempre (0.84.0: icona solo insieme al nome), una sezione = tutta la larghezza
 const Strat = customElements.get("ll-strategy-dashboard-supernotify");
 const d = await Strat.generate({ type: "custom:supernotify" }, { language: "it", states: {}, user: { is_admin: true } });
-ok(d.views.every((v) => !v.icon), "viste senza icona (si vede il nome)");
+ok(d.views.every((v) => !v.icon || v.show_icon_and_title === true), "il nome della vista si vede sempre");
 const st = d.views.find((v) => v.path === "stats");
 ok(st.max_columns === 2 && st.sections[0].column_span === 2, "Statistiche a tutta larghezza");
 
