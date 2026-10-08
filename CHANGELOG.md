@@ -3,6 +3,27 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.86.0] - 2026-10-08
+
+A lighter archive. Measured on a real installation (about 140 notifications a day): a notification
+is about 5.7 KB in full and 1 KB as a summary; 40 full notifications covered the last 2-3 hours.
+
+### Changed
+- **archive** (0.42.0): the list is read with `enquire_archive` `verbosity: summary` (SuperNotify
+  2.12.1+), 150 notifications by default (`limit`, up to 500) - about a day, for less than the 40
+  full documents of before. Only the 20 newest are read in full; any other notification is read in
+  full when opened, and its row is then drawn from it. With an older SuperNotify the list is `limit`
+  full documents, as before.
+- **overview** (0.38.0): "channel failures today" from the daily totals of today (`verbosity: daily`, a few
+  KB); it counted the last 40 notifications only.
+- **recipients** (0.31.0): the last notification of each person from the light list.
+
+### Added
+- **archive**: **Critical** and **High** filters over the whole archive (31 days), with their
+  counts; shown when there is at least one (`priority_filters: false` hides them). How many per day
+  comes from `verbosity: daily` (shared with the stats card), then only the days that have some are
+  read, and kept in the browser.
+
 ## [0.85.0] - 2026-10-08
 
 The notification history and its "why" in **one card** (archive 0.41.0).

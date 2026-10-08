@@ -25,13 +25,14 @@ type: custom:supernotify-archive-card
 
 | Option | Required | Description |
 |---|---|---|
-| `limit` | no | notifications read from the archive (default 40, max 100) |
+| `limit` | no | notifications in the list (default 150, max 500; before SuperNotify 2.12.1: full documents, default 40, max 100) |
 | `source` | no | `sensor` to keep using the command_line bridge below even on SuperNotify 2.10+ |
 | `trigger_entity` | no | entity whose change means "a notification was sent" (default `sensor.supernotify_notifications`) |
 | `entity` | no | bridge only: sensor holding the archive index (default `sensor.supernotify_archivio`) |
 | `intro` | no | info banner at the top of the card |
 | `style` | no | `supernotify` (default) or `theme` |
 | `pause` | no | `false` hides the pause bar under the detail (default shown when SuperNotify has `supernotify.snooze`) |
+| `priority_filters` | no | `false` hides the **Critical** and **High** filters (default shown when the archive has some) |
 | `group_repeats` | no | `false` lists every notification on its own line (default: repeats in a row are one "×N" line) |
 | `auto_select` | no | `false` waits for a tap instead of opening the latest notification |
 | `expand` | no | `true` opens the folded parts of the detail (routine skips, channels not involved, trace) |
@@ -54,6 +55,14 @@ data:
 
 Critical notifications are never paused from here. "Only for me" removes you from the people the
 notification goes to; channels with fixed targets (speakers, the dashboard) still play.
+
+**A light list (0.86.0).** On SuperNotify 2.12.1 or later the list is read as summaries
+(`enquire_archive` with `verbosity: summary`, about 1 KB a notification instead of about 6 KB), and
+only the 20 newest in full - those keep the missed count, the spoken text and the whisper mark in
+the list. Any other notification is read in full when you open it. **Critical** and **High** look
+in the whole archive (31 days): the card asks SuperNotify how many there are per day
+(`verbosity: daily`, shared with the stats card) and then reads only the days that have some; a
+finished day is kept in the browser and never read again.
 
 **SuperNotify 2.10.0 or later: nothing to set up.** The card reads the archive through the
 `supernotify.enquire_archive` action (the file archive must be on in SuperNotify's options). It

@@ -8,6 +8,20 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-08 - v0.86.0. A lighter archive (measured on a real installation: ~140 notifications a
+ *   day, 5.7 KB each in full, 1 KB as a summary).
+ *   - archive 0.42.0: the list is read with enquire_archive `verbosity: summary` (SuperNotify
+ *     2.12.1+), 150 notifications by default (`limit`, up to 500) - about a day, for less than the
+ *     40 full documents of before. Only the 20 newest are read in full (they keep the missed
+ *     count, the spoken text and the whisper mark in the list); any other is read in full when
+ *     opened, and its row is then drawn from it. Older SuperNotify: `limit` full documents as before.
+ *   - "Critical" and "High" filters over the whole archive (31 days): how many per day from
+ *     `verbosity: daily` (shared with the stats card), then only the days that have some are read,
+ *     as summaries, and kept in this browser - a finished day is not read again. Shown when there
+ *     is at least one; `priority_filters: false` hides them.
+ *   - overview: "channel failures today" from the daily totals of today (it read 40 full documents,
+ *     which on a busy day were the last 2-3 hours only).
+ *   - recipients: the last notification of each person from the light list.
  * 2026-10-08 - v0.85.0. archive 0.41.0: the history and its "why" in ONE card.
  *   - List on the left (on top when the card is narrow): a status mark (✔ arrived, ! failed or
  *     worth a look, ⊘ went out on no channel), the title, one line that says how it went (the
@@ -648,7 +662,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.85.0"; // bundle / HACS release
+const VERSION = "0.86.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -660,19 +674,19 @@ const VERSION = "0.85.0"; // bundle / HACS release
  */
 const SN_CARD_VERSIONS = {
   control: "0.39.1",
-  overview: "0.37.2",
+  overview: "0.38.0",
   bands: "0.21.1",
   deliveries: "0.32.1",
   transports: "0.27.1",
-  recipients: "0.30.1",
+  recipients: "0.31.0",
   scenarios: "0.31.1",
   simulator: "0.17.0",
   composer: "0.25.0",
   automations: "0.21.4",
   stats: "0.32.3",
-  archive: "0.41.0",
+  archive: "0.42.0",
   tools: "0.2.2",
-  why: "0.16.0",
+  why: "0.17.0",
 };
 
 /**
@@ -2494,6 +2508,7 @@ const SN_FORM_LABELS = {
     hide_defaults: "Hide automatic DEFAULT_ channels", limit: "Notifications in the list",
     expand: "Open the folded parts", max_height: "Maximum height (CSS, e.g. 70vh)",
     group_repeats: "Group repeats of the same notification", auto_select: "Open the latest notification",
+    priority_filters: "Critical and High filters (whole archive)",
     source: "Archive source", entity: "Archive sensor (bridge only)", trigger_entity: "Refresh when this changes",
     dry_run: "Show \"Try without sending\"", dry_run_dupe_check: "Simulate the duplicate check too",
     days: "Days shown by default", manifest_url: "Automations manifest URL",
@@ -2519,6 +2534,7 @@ const SN_FORM_LABELS = {
     hide_defaults: "Nascondi i canali automatici DEFAULT_", limit: "Notifiche nell'elenco",
     expand: "Apri le parti chiuse", max_height: "Altezza massima (CSS, es. 70vh)",
     group_repeats: "Raggruppa le notifiche ripetute", auto_select: "Apri l'ultima notifica",
+    priority_filters: "Filtri Critiche e Alte (tutto l'archivio)",
     source: "Sorgente dell'archivio", entity: "Sensore archivio (solo ponte)", trigger_entity: "Aggiorna quando cambia",
     dry_run: "Mostra \"Prova senza inviare\"", dry_run_dupe_check: "Simula anche il controllo doppioni",
     days: "Giorni mostrati di default", manifest_url: "URL del manifest delle automazioni",
@@ -2542,7 +2558,7 @@ function snForm(kind) {
     sel("style", [["supernotify", "o_supernotify"], ["theme", "o_theme"]]),
     sel("icons", [["", "o_mdi"], ["emoji", "o_emoji"]]),
     bool("show_version"), txt("intro", true)] };
-  const archive = [num("limit", 5, 100), sel("source", [["", "o_auto"], ["sensor", "o_sensor"]]),
+  const archive = [num("limit", 5, 500), sel("source", [["", "o_auto"], ["sensor", "o_sensor"]]),
     ent("entity", "sensor"), ent("trigger_entity", "sensor")];
   const S = {
     control: [ent("dnd_entity", ["input_boolean", "switch"]), ent("quiet_entity", ["binary_sensor", "input_boolean"]),
@@ -2560,7 +2576,7 @@ function snForm(kind) {
     composer: [ent("update_entity", "update"), bool("dry_run"), bool("dry_run_dupe_check"), bool("show_off")],
     automations: [txt("manifest_url")],
     stats: [num("days", 2, 90), sel("source", [["", "o_auto"], ["archive", "o_archive"], ["history", "o_history"]]), ent("sent_today_entity", "sensor"), ent("count_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update"), bool("daily", true)],
-    archive: [...archive, bool("group_repeats", true), bool("auto_select", true), bool("expand"), txt("max_height")],
+    archive: [...archive, bool("group_repeats", true), bool("priority_filters", true), bool("auto_select", true), bool("expand"), txt("max_height")],
     why: [...archive, bool("group_repeats", true), bool("auto_select", true), bool("expand"), txt("max_height")],
     tools: [num("archive_days", 1, 365), num("media_days", 1, 365)],
   };
@@ -2803,6 +2819,10 @@ const SN_ARCHIVE_SPOKEN_CHARS = 110;
 const SN_ARCHIVE_DETAIL_TEXT = 400;
 const SN_ARCHIVE_DETAIL_VALUE = 160;
 const SN_ARCHIVE_REFRESH = 5;
+const SN_ARCHIVE_LIGHT = 150;      // 0.86.0: notifications in the light list (summaries)
+const SN_ARCHIVE_LIGHT_MAX = 500;
+const SN_ARCHIVE_FULL_RECENT = 20; // 0.86.0: the newest read in full (missed count, spoken text, whisper)
+const SN_PRIO_DAYS = 31;           // 0.86.0: critical / high searched over this many days
 
 /** Length and slice by code point, like Python str: an emoji is one character, not two. */
 function snLen(s) { return Array.from(String(s)).length; }
@@ -2945,6 +2965,138 @@ function snArchiveItem(doc, chan, scen) {
   }
   return item;
 }
+
+/** 0.86.0: what the light list keeps of a summary (provenance and presence only serve the detail). */
+function snArchiveLightRow(sum) {
+  const deliveries = {};
+  for (const [name, res] of Object.entries(sum.deliveries || {})) {
+    if (!snIsObj(res)) continue;
+    const o = {};
+    if ("skipped" in res) o.skipped = snIsObj(res.skipped) ? (res.skipped.suppression_reason || res.skipped.skip_reason || "") : (res.skipped || "");
+    for (const k of ["success", "error", "suppressed"]) if (res[k]) o[k] = Array.isArray(res[k]) ? res[k].length : res[k];
+    if (Array.isArray(res.reasons) && res.reasons.length) o.reasons = res.reasons.slice(0, 1);
+    deliveries[name] = o;
+  }
+  const row = { id: String(sum.id || ""), created: sum.created, message: sum.message, priority: sum.priority,
+    outcome: sum.outcome, deliveries };
+  // the summary has the title alone; a full document has it in condition_variables
+  const title = sum.title || ((sum.condition_variables || {}).notification_title);
+  if (title) row.title = title;
+  const sc = sum.scenarios || sum.selected_scenario_names;
+  if (Array.isArray(sc) && sc.length) row.scenarios = sc.slice(0, 6);
+  return row;
+}
+
+/** 0.86.0: the compact index row of a light (summary) notification - as snArchiveItem, without
+ * what the summary does not have (missed count, spoken text, whisper, duration). */
+function snArchiveItemSummary(row, chan, scen) {
+  const message = String(row.message || "").trim();
+  const title = row.title ? snCut(row.title, 120) : snCut(message.split("\n")[0], 120);
+  let body = message;
+  if (title && body.startsWith(title)) body = body.slice(title.length);
+  body = body.split(/\s+/).filter(Boolean).join(" ");
+  const item = { id: String(row.id || "").slice(0, 8), fid: String(row.id || ""), t: snArchiveStamp(row), ti: title, light: true };
+  if (body) {
+    item.m = snCut(body, SN_ARCHIVE_MESSAGE_CHARS);
+    if (snLen(body) > SN_ARCHIVE_MESSAGE_CHARS) item.mt = true;
+  }
+  if (row.priority && row.priority !== "medium") item.p = row.priority;
+  if (row.outcome && row.outcome !== "success") item.o = row.outcome;
+  const reason = (raw) => {
+    const key = String(raw || "").toUpperCase();
+    return raw ? SN_ARCHIVE_REASONS[key] || snCut(raw, 18).toLowerCase() : "";
+  };
+  const c = [];
+  let d = 0, f = 0, sk = 0;
+  for (const [name, res] of Object.entries(row.deliveries || {})) {
+    if (!snIsObj(res)) continue;
+    const i = chan.id(name);
+    if ("skipped" in res) { sk++; const r = reason(res.skipped); c.push(r ? [i, "s", r] : [i, "s"]); continue; }
+    if (res.error) { f++; c.push([i, "e"]); continue; }
+    if (res.success) { d++; c.push(i); continue; }
+    sk++;
+    const r = reason((res.reasons || [])[0]);
+    c.push(r ? [i, "s", r] : [i, "s"]);
+  }
+  if (c.length) item.c = c;
+  if (d) item.d = d;
+  if (f) item.f = f;
+  if (sk) item.s = sk;
+  if (Array.isArray(row.scenarios) && row.scenarios.length) item.sc = row.scenarios.map((x) => scen.id(x));
+  return item;
+}
+
+/**
+ * 0.86.0: critical and high notifications over the whole archive. How many per day comes from
+ * enquire_archive verbosity daily (shared with the stats card, kept in this browser); then only
+ * the days that have some are read, as summaries, and their rows kept here - a finished day is
+ * never read again. `counts` is null until known, or when this SuperNotify has no daily.
+ */
+const SN_PRIO_KEY = "supernotify-archive-prio";
+const snArchivePrio = {
+  counts: null, days: 0, ver: 0, busy: null, at: 0,
+
+  _load() {
+    try {
+      const c = JSON.parse(window.localStorage.getItem(SN_PRIO_KEY) || "null");
+      if (c && c.v === 1 && c.days && typeof c.days === "object") return c;
+    } catch (e) { /* private mode or a broken cache */ }
+    return { v: 1, days: {} };
+  },
+
+  _save(c) {
+    try { window.localStorage.setItem(SN_PRIO_KEY, JSON.stringify(c)); } catch (e) { /* full or private */ }
+  },
+
+  /** Read again at most every `minMs` (default 5 min), or now with force. */
+  refresh(hass, force, minMs = 300000) {
+    if (this.busy) return this.busy;
+    if (!force && this.at && Date.now() - this.at < minMs) return Promise.resolve();
+    this.at = Date.now();
+    this.busy = (async () => {
+      if (snStatsDaily.busy) await snStatsDaily.busy.catch(() => {});
+      const from = new Date(Date.now() - SN_PRIO_DAYS * 86400000);
+      const fromKey = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}-${String(from.getDate()).padStart(2, "0")}`;
+      const all = await snStatsDaily.get(hass, from.getTime());
+      if (!all) { this.counts = null; return; }
+      const days = all.filter((d) => d && d.date >= fromKey); // the stats card may have read a longer window
+      const c = this._load();
+      const keep = {};
+      const counts = { critical: 0, high: 0 };
+      for (const d of days) {
+        const pr = (d && d.priority) || {};
+        const n = { critical: +pr.critical || 0, high: +pr.high || 0 };
+        counts.critical += n.critical;
+        counts.high += n.high;
+        if (!d.date || (!n.critical && !n.high)) continue;
+        const old = c.days[d.date];
+        if (old && old.n && old.n.critical === n.critical && old.n.high === n.high) { keep[d.date] = old; continue; }
+        const start = new Date(`${d.date}T00:00:00`);
+        const end = new Date(start); end.setDate(end.getDate() + 1);
+        const r = await snWS(hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
+          service_data: { verbosity: "summary", after: start.toISOString(), before: end.toISOString(), limit: 5000 },
+          return_response: true }, 60000);
+        const rows = ((r && r.response && r.response.notifications) || []).filter(snIsObj)
+          .filter((x) => x.priority === "critical" || x.priority === "high").map(snArchiveLightRow);
+        keep[d.date] = { n, rows };
+      }
+      c.days = keep;
+      this._save(c);
+      this.counts = counts;
+      this.days = days.length;
+      this.ver += 1;
+      window.dispatchEvent(new CustomEvent("supernotify-archive"));
+    })().catch(() => { /* counts stay as they were */ }).finally(() => { this.busy = null; });
+    return this.busy;
+  },
+
+  /** The kept rows of one priority, newest first. */
+  rows(p) {
+    const c = this._load();
+    return Object.values(c.days).flatMap((d) => d.rows || []).filter((x) => x.priority === p)
+      .sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
+  },
+};
 
 function snArchivePool() {
   const names = [];
@@ -3246,11 +3398,70 @@ const snArchiveStore = {
   version: 0,          // bumped on every fetch, so a card that missed the event still redraws
   pokes: 0,            // 0.61.0: bumped by the supernotify_notification event (snLive)
   trigger: null,
+  // 0.86.0: the light list - enquire_archive verbosity summary, ~1 KB a notification
+  light: [],           // summary rows, newest first, trimmed to what the list shows
+  lightLimit: 0,
+  lightStamp: undefined,
+  lightFetched: null,
+  lightLoading: null,
+  lightOk: null,       // false when this SuperNotify has no verbosity summary (before 2.12.1)
+  extra: new Map(),    // full documents read one by one (a notification opened from the light list)
 
   /** A notification just finished (live event): read the newest entries now. */
   poke(hass) {
     this.pokes += 1;
     if (hass && this.fetched) this.ensure(hass, this.limit, this.trigger);
+    if (hass && this.lightFetched) this.ensureLight(hass, this.lightLimit, this.trigger);
+  },
+
+  /** The full document of a notification, if this browser has it (list or opened). */
+  findDoc(id) {
+    const want = String(id || "");
+    if (!want) return null;
+    return this.docs.find((d) => d.id === want) || this.extra.get(want)
+      || this.docs.find((d) => String(d.id || "").startsWith(want))
+      || [...this.extra.values()].find((d) => String(d.id || "").startsWith(want)) || null;
+  },
+
+  /**
+   * 0.86.0: keep the light list current - first `limit` notifications as summaries, then only
+   * the newest few. Only what the list draws is kept (no provenance, no presence).
+   */
+  ensureLight(hass, limit, trigger) {
+    if (this.lightOk === false) return;
+    if (trigger) this.trigger = trigger;
+    const st = hass.states[trigger || this.trigger || "sensor.supernotify_notifications"];
+    const stamp = (st ? st.last_updated : "none") + "|" + this.pokes;
+    const want = Math.max(1, Math.min(SN_ARCHIVE_LIGHT_MAX, limit || SN_ARCHIVE_LIGHT));
+    if (this.lightLoading && Date.now() - (this.lightAt || 0) < 20000) return;
+    let data = null;
+    if (!this.lightFetched || want > this.lightLimit) data = { verbosity: "summary", limit: want };
+    else if (stamp !== this.lightStamp) data = { verbosity: "summary", limit: SN_ARCHIVE_REFRESH };
+    if (!data) return;
+    this.lightLimit = Math.max(this.lightLimit, want);
+    this.lightStamp = stamp;
+    const run = (this.lightRun || 0) + 1;
+    this.lightRun = run;
+    this.lightAt = Date.now();
+    this.lightLoading = this._call(hass, data).then((resp) => {
+      if (run !== this.lightRun) return;
+      const got = (resp.notifications || []).filter(snIsObj).map(snArchiveLightRow);
+      const seen = new Set(got.map((d) => d.id));
+      const merged = got.concat(this.light.filter((d) => !seen.has(d.id)));
+      merged.sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
+      this.light = merged.slice(0, this.lightLimit);
+      this.lightOk = true;
+      this.lightFetched = new Date();
+    }).catch(() => {
+      // before 2.12.1 there is no summary: the cards read full documents as before
+      if (run === this.lightRun && !this.lightFetched) this.lightOk = false;
+    }).finally(() => {
+      if (run !== this.lightRun) return;
+      this.lightLoading = null;
+      this.index = null;
+      this.version += 1;
+      window.dispatchEvent(new CustomEvent("supernotify-archive"));
+    });
   },
 
   async _call(hass, data) {
@@ -3310,6 +3521,15 @@ const snArchiveStore = {
       for (const doc of this.docs) {
         try { items.push(snArchiveItem(doc, chan, scen)); } catch (e) { /* one bad file never empties the list */ }
       }
+      // 0.86.0: then the light list, for what the full documents do not cover; a notification
+      // already opened is drawn from its full document
+      const have = new Set(this.docs.map((d) => String(d.id || "")));
+      for (const row of this.light) {
+        if (have.has(row.id)) continue;
+        const full = this.extra.get(row.id);
+        try { items.push(full ? snArchiveItem(full, chan, scen) : snArchiveItemSummary(row, chan, scen)); } catch (e) { /* skip */ }
+      }
+      items.sort((a, b) => (b.t || 0) - (a.t || 0));
       this.index = { items, chan: chan.names, scen: scen.names, native: true,
         generated: this.fetched ? this.fetched.toISOString() : null };
     }
@@ -3319,11 +3539,18 @@ const snArchiveStore = {
   /** The archived notification whose id starts with this, from the store or from the action. */
   async doc(hass, id) {
     const wanted = String(id || "").toLowerCase();
-    const found = this.docs.find((d) => String(d.id || "").toLowerCase().startsWith(wanted));
+    const found = this.docs.find((d) => String(d.id || "").toLowerCase().startsWith(wanted))
+      || [...this.extra.values()].find((d) => String(d.id || "").toLowerCase().startsWith(wanted));
     if (found) return found;
+    // 0.86.0: a notification of the light list - the action wants the whole id
+    const row = this.light.find((d) => String(d.id || "").toLowerCase().startsWith(wanted));
     try {
-      const resp = await this._call(hass, { id: wanted });
-      return snIsObj(resp) && resp.id ? resp : null;
+      const resp = await this._call(hass, { id: row ? row.id : wanted, verbosity: "standard" });
+      if (!(snIsObj(resp) && resp.id)) return null;
+      this.extra.set(String(resp.id), resp);
+      if (this.extra.size > 60) this.extra.delete(this.extra.keys().next().value);
+      this.index = null;
+      return resp;
     } catch (e) {
       // archive_entry_not_found comes back as a service_validation_error: the file was
       // purged since the list was read, or the id never existed
@@ -4547,6 +4774,35 @@ class SupernotifyOverviewCard extends SnCard {
   // 0.60.0: sensor.supernotify_failures only counts crashes inside SuperNotify, never a channel
   // that failed; with the native archive count the failed channel sends of today instead
   _failures() {
+    // 0.86.0: the whole of today from verbosity daily (a few KB); 40 full documents covered only
+    // the last hours on a busy installation
+    if (this._hass && snArchiveNative(this._hass, this._config) && !this._ftNo) {
+      const trig = this._hass.states[this._config.trigger_entity || "sensor.supernotify_notifications"];
+      const stamp = trig ? trig.last_updated : "";
+      if (!this._ftBusy && (this._ftStamp !== stamp || Date.now() - (this._ftAt || 0) > 300000)
+        && Date.now() - (this._ftAt || 0) > 60000) {
+        this._ftBusy = true;
+        this._ftStamp = stamp;
+        this._ftAt = Date.now();
+        const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+        snWS(this._hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
+          service_data: { verbosity: "daily", after: d0.toISOString() }, return_response: true }, 30000).then((r) => {
+          const days = r && r.response && r.response.days;
+          if (!Array.isArray(days)) throw new Error("no days");
+          const key = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, "0")}-${String(d0.getDate()).padStart(2, "0")}`;
+          const day = days.find((x) => x && x.date === key);
+          const n = day ? Object.values(day.deliveries || {}).reduce((a, x) => a + (+(x && x.failed) || 0), 0) : 0;
+          const changed = this._failToday !== n;
+          this._failToday = n;
+          if (changed && this._rendered) this._update();
+        }).catch(() => {
+          // no daily in this SuperNotify: count from the documents, as before
+          if (this._failToday == null) { this._ftNo = true; if (this._rendered) this._update(); }
+        }).finally(() => { this._ftBusy = false; });
+      }
+      if (this._failToday != null) return { n: this._failToday, today: true };
+      return { n: null, today: true };
+    }
     if (this._hass && snArchiveNative(this._hass, this._config)) {
       snArchiveStore.ensure(this._hass, 40, this._config.trigger_entity);
       if (snArchiveStore.fetched) {
@@ -5770,7 +6026,9 @@ class SupernotifyRecipientsCard extends SnCard {
     if (!when || isNaN(when.getTime())) return null;
     let items;
     if (snArchiveNative(this._hass, this._config)) {
-      snArchiveStore.ensure(this._hass, 40, this._config.trigger_entity);
+      // 0.86.0: title and time are all it needs - the light list, the newest few in full
+      snArchiveStore.ensure(this._hass, SN_ARCHIVE_FULL_RECENT, this._config.trigger_entity);
+      snArchiveStore.ensureLight(this._hass, SN_ARCHIVE_LIGHT, this._config.trigger_entity);
       items = snArchiveStore.getIndex().items || [];
     } else {
       const idx = this._hass.states[this._config.archive_entity || "sensor.supernotify_archivio"];
@@ -8081,7 +8339,12 @@ class SupernotifyArchiveCard extends SnCard {
   _onHass(hass, fresh) {
     if (snArchiveNative(hass, this._config)) {
       // the store redraws this card through the "supernotify-archive" event
-      snArchiveStore.ensure(hass, this._config.limit, this._config.trigger_entity);
+      // 0.86.0: the newest 20 in full, the list as summaries (~1 KB each); before 2.12.1 (no
+      // summary) the list is `limit` full documents, as before
+      const light = snArchiveStore.lightOk !== false;
+      snArchiveStore.ensure(hass, light ? SN_ARCHIVE_FULL_RECENT : this._config.limit, this._config.trigger_entity);
+      if (light) snArchiveStore.ensureLight(hass, this._config.limit, this._config.trigger_entity);
+      if (this._config.priority_filters !== false) snArchivePrio.refresh(hass);
       if (fresh) this._render();
       else if (this._storeVer !== snArchiveStore.version || (this._waitStore && snArchiveStore.fetched)) this._renderList();
       this._storeVer = snArchiveStore.version;
@@ -8092,6 +8355,21 @@ class SupernotifyArchiveCard extends SnCard {
     if (fresh) this._render();
     else if (stamp !== this._stamp) this._renderList();
     this._stamp = stamp;
+  }
+
+  /** 0.86.0: critical or high over the whole archive, as an index of its own. */
+  _prioIndex(p) {
+    if (this._pIdx && this._pIdx.p === p && this._pIdx.ver === snArchivePrio.ver) return this._pIdx.idx;
+    const chan = snArchivePool();
+    const scen = snArchivePool();
+    const items = [];
+    for (const row of snArchivePrio.rows(p)) {
+      const full = snArchiveStore.extra.get(row.id) || snArchiveStore.docs.find((d) => d.id === row.id);
+      try { items.push(full ? snArchiveItem(full, chan, scen) : snArchiveItemSummary(row, chan, scen)); } catch (e) { /* skip */ }
+    }
+    const idx = { items, chan: chan.names, scen: scen.names, native: true };
+    this._pIdx = { p, ver: snArchivePrio.ver, idx };
+    return idx;
   }
 
   connectedCallback() {
@@ -8158,8 +8436,7 @@ class SupernotifyArchiveCard extends SnCard {
     const esc = snEsc;
     if (r.p === "critical") return `<div class="pzn">${esc(t("pz_critical"))}</div>`;
     // the index keeps 8 characters in `id` and the full one in `fid`
-    const doc = snArchiveStore.docs.find((d) => d.id === (r.fid || r.id))
-      || snArchiveStore.docs.find((d) => String(d.id || "").startsWith(r.id));
+    const doc = snArchiveStore.findDoc(r.fid || r.id) || snArchiveStore.findDoc(r.id);
     if (!doc) return "";
     // 0.81.0: the sender too, once the logbook has answered (then the bar is drawn again)
     let senders = [];
@@ -8303,7 +8580,7 @@ class SupernotifyArchiveCard extends SnCard {
   _row(id) {
     if (!id) return null;
     const idx = this._index();
-    const items = (idx && idx.items) || [];
+    const items = [...((idx && idx.items) || []), ...((this._pIdx && this._pIdx.idx.items) || [])];
     return items.find((r) => r.id === id) || items.find((r) => String(r.fid || "").startsWith(id) || String(id).startsWith(r.id)) || null;
   }
 
@@ -8401,6 +8678,7 @@ class SupernotifyArchiveCard extends SnCard {
         .fl .chip.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
         .fl .chip .n { opacity: .65; font-weight: 600; margin-left: 2px; }
         .fl .chip .n.r { color: ${p.crit}; opacity: 1; }
+        .fl .chip .n.o { color: ${p.warn}; opacity: 1; }
         .fl .grp { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
         .tgl { width: 26px; height: 16px; border-radius: 99px; background: ${p.dot}; position: relative; flex: none; }
         .tgl::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
@@ -8598,15 +8876,27 @@ class SupernotifyArchiveCard extends SnCard {
     // sussurro spento e' rumore, se qualcuno lo riaccende si nota.
     const nW = all.filter((r) => r.w).length;
     if (nW) defs.push(["whisper", ta("f_whisper"), nW]);
+    // 0.86.0: critical and high - over the whole archive when SuperNotify has the daily totals,
+    // else over the list; shown when there is at least one (or when it is the filter in use)
+    const wide = idx.native && snArchivePrio.counts;
+    if (this._config.priority_filters !== false) {
+      for (const p of ["critical", "high"]) {
+        const n = wide ? snArchivePrio.counts[p] : all.filter((r) => r.p === p).length;
+        if (n || this._filter === p) defs.push([p, ta(p === "critical" ? "f_critical" : "f_high"), n]);
+      }
+    }
     chipsEl.innerHTML = defs.map(([k, label, n]) =>
-      `<button class="chip${this._filter === k ? " on" : ""}" data-k="${k}" aria-pressed="${this._filter === k}">${esc(label)}<span class="n${k === "problems" && n ? " r" : ""}">${n}</span></button>`).join("")
+      `<button class="chip${this._filter === k ? " on" : ""}" data-k="${k}" aria-pressed="${this._filter === k}">${esc(label)}<span class="n${(k === "problems" || k === "critical") && n ? " r" : k === "high" && n ? " o" : ""}">${n}</span></button>`).join("")
       + `<button class="chip grp${this._groups ? " on" : ""}" id="grp" aria-pressed="${this._groups}"><span class="tgl"></span>${esc(ta("group"))}</button>`;
     chipsEl.querySelectorAll(".chip[data-k]").forEach((n) => {
       n.onclick = () => { this._filter = n.dataset.k; this._renderList(); };
     });
     chipsEl.querySelector("#grp").onclick = () => { this._groups = !this._groups; this._renderList(); };
 
-    const rows = all.filter((r) => {
+    const prioF = this._filter === "critical" || this._filter === "high";
+    const lidx = prioF && wide ? this._prioIndex(this._filter) : idx;
+    const rows = (prioF && wide ? lidx.items : all).filter((r) => {
+      if (prioF && (r.p || "medium") !== this._filter) return false;
       if (this._filter === "today" && !isToday(r)) return false;
       if (this._filter === "problems" && !isPb(r)) return false;
       if (this._filter === "whisper" && !r.w) return false;
@@ -8619,7 +8909,9 @@ class SupernotifyArchiveCard extends SnCard {
     const gen = idx.generated ? new Date(idx.generated).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) }) : "";
     const old = idx.oldest ? new Date(idx.oldest).toLocaleDateString(this._loc()) : "";
     const T = this._TA();
-    meta.innerHTML = snIconify(idx.native
+    meta.innerHTML = snIconify(prioF && wide
+      ? esc(ta("prio_scope").replace("{d}", snArchivePrio.days || SN_PRIO_DAYS))
+      : idx.native
       ? `${all.length} ${T.recent}` + (gen ? ` · ${T.read_at} ${gen}` : "")
       : (idx.total ? `${all.length} ${T.of} ${idx.total} ${T.in_archive}` : `${all.length} ${T.in_archive}`) +
         (old ? ` · ${T.since}: ${old}` : "") + (gen ? ` · ${T.updated} ${gen}` : ""), this._config);
@@ -8654,7 +8946,7 @@ class SupernotifyArchiveCard extends SnCard {
       return `<div class="it row${sub ? " sub" : ""}${st === "none" ? " quiet" : ""}${this._sel === r.id ? " sel" : ""}" data-id="${esc(r.id)}" title="${esc(stTip[st])}">
         <span class="ic ${st}">${icon(st)}</span>
         <div class="bd"><div class="l1"><span class="ti">${esc(snTitleShow(r.ti || r.m || "—"))}</span>${many}${prio}</div>
-          <div class="l2">${sub ? "" : span}${this._sub(r, idx)}${wh}</div></div>
+          <div class="l2">${sub ? "" : span}${this._sub(r, lidx)}${wh}</div></div>
         <span class="hm">${hm(r.t)}</span></div>`;
     };
     const parts = [];
@@ -8713,6 +9005,8 @@ class SupernotifyArchiveCard extends SnCard {
       this._loading = null;
     }
     if (this._sel === id) this._showDetail();
+    const r = this._row(id);
+    if (r && r.light && snArchiveStore.findDoc(r.fid || r.id)) { this._pIdx = null; this._renderList(); }
     this._loadSnz();
   }
 
@@ -8742,7 +9036,11 @@ class SupernotifyArchiveCard extends SnCard {
 
   /** The spoken text says which speaker said it (the index row knows the channel). */
   _said(det) {
-    const r = this._row(this._sel);
+    let r = this._row(this._sel);
+    if (r && !r.sp) {
+      const doc = snArchiveStore.findDoc(r.fid || r.id);
+      if (doc) { try { r = snArchiveItem(doc, snArchivePool(), snArchivePool()); } catch (e) { r = null; } }
+    }
     if (!r || !r.sp) return;
     let el = det.querySelector(".said");
     // the detail read from enquire_archive has no spoken text: the index row has it
@@ -8865,6 +9163,7 @@ const SN_ARCH_STRINGS = {
     v_some: "a channel", v_check: "something to look at below", v_none_short: "no channel",
     v_none: "It went out on no channel", v_ok: "Arrived on {n} channels", v_ok1: "Arrived on 1 channel",
     v_partial: "Arrived on {n} channels of {of}", v_failed: "It did not arrive", v_skipped: "skipped by a rule", v_dupe: "Dropped: the same text had just gone out",
+    f_critical: "Critical", f_high: "High", prio_scope: "in the whole archive (last {d} days)",
     no_detail: "The full detail needs SuperNotify 2.10 or later (enquire_archive) or the shell_command sn_archive_detail.",
     help_t: "How to read it",
     help: "<b>Left</b>: one line per notification - ✔ arrived, <b>!</b> a channel failed or something to look at, ⊘ it went out on no channel (a pause, nobody home, a rule). <b>×N</b> = the same notification N times in a row: tap it to see each one. <b>Right</b>: the notification you tap - the scenarios in force, who was home, every channel with why it went out or not, and the pause.",
@@ -8898,6 +9197,7 @@ const SN_ARCH_STRINGS = {
     v_some: "un canale", v_check: "c'è qualcosa da guardare qui sotto", v_none_short: "nessun canale",
     v_none: "Non è partita su nessun canale", v_ok: "Arrivata su {n} canali", v_ok1: "Arrivata su 1 canale",
     v_partial: "Arrivata su {n} canali su {of}", v_failed: "Non è arrivata", v_skipped: "saltati per una regola", v_dupe: "Scartata: lo stesso testo era appena partito",
+    f_critical: "Critiche", f_high: "Alte", prio_scope: "in tutto l'archivio (ultimi {d} giorni)",
     no_detail: "Il dettaglio completo richiede SuperNotify 2.10 o successivo (enquire_archive) o lo shell_command sn_archive_detail.",
     help_t: "Come si legge",
     help: "<b>A sinistra</b>: una riga per notifica - ✔ arrivata, <b>!</b> un canale ha fallito o c'è qualcosa da guardare, ⊘ non è partita su nessun canale (una pausa, nessuno in casa, una regola). <b>×N</b> = la stessa notifica N volte di fila: toccala per vederle una per una. <b>A destra</b>: la notifica che tocchi - gli scenari in vigore, chi era in casa, ogni canale col perché è partito o no, e la pausa.",
