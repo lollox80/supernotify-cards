@@ -3,6 +3,18 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.87.0] - 2026-10-09
+
+### Added
+- **Dashboard strategy**: an **Archive** view of its own, right after Home (`mdi:archive-outline`,
+  🗂️ with `tabs: emoji`, title in all 11 languages): the archive card at full width, with
+  `max_height: calc(100vh - 300px)` and `pause_sender: true` as defaults (`cards: {archive: ...}`
+  changes them).
+
+### Changed
+- Home no longer shows the archive while the Archive view is there. Like every view it can be left
+  out of `views:` (e.g. `views: [home, send, setup, stats]`): the archive then goes back into Home.
+
 ## [0.86.0] - 2026-10-08
 
 A lighter archive. Measured on a real installation (about 140 notifications a day): a notification

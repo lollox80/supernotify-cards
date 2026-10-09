@@ -32,7 +32,7 @@ const kinds = (d) => d.views.map((v) => `${v.path}:` + v.sections.map((s) => s.c
 // installazione completa, admin
 const d1 = await Strat.generate({ type: "custom:supernotify" }, hass(fullStates));
 console.log("    ", kinds(d1).join("  "));
-ok(d1.views.map((v) => v.path).join(",") === "home,send,setup,stats,tools", "5 viste per un admin");
+ok(d1.views.map((v) => v.path).join(",") === "home,archive,send,setup,stats,tools", "6 viste per un admin (archive dalla 0.87)");
 ok(d1.views[0].title === "Casa" && d1.title === "SuperNotify", "titoli in italiano");
 const setup = d1.views.find((v) => v.path === "setup");
 const bands = setup.sections.flatMap((s) => s.cards).find((c) => c.type === "custom:supernotify-bands-card");
