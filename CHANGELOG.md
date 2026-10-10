@@ -3,6 +3,31 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.88.0] - 2026-10-10
+
+The overview redrawn from the Panoramica study ("Proposta 2"): each piece of information in one
+place, colour only for the state.
+
+### Added
+- **overview** (0.39.0): `parts:` - `status`, `numbers`, `last`, `occupancy`, `scenarios` - so two
+  overview cards can split the blocks across a dashboard, each reading only what it shows.
+  `repeat_entity` (🔁 Repeat on the last notification), `cards_update_entity`, `help` (a "?" with
+  the legend in the status band).
+- **stats** (0.33.0): `kpis: false` (no number boxes; the header says the period, the total and the
+  daily average) and `versions: false` (no version boxes).
+
+### Changed
+- **overview**: the health list is a status band - state on the left, what to look at with its own
+  button (▶ Resume on a pause, Open on the rest), versions of SuperNotify and of the cards on the
+  right. Four numbers from the archive's daily totals (one call, 30 days): Today with yesterday and
+  the 30-day average, Delivered today with the duplicates dropped and the failed channels, Channels
+  on, Silence (pauses and do-not-disturb); an older SuperNotify keeps the numbers of before. The last
+  notification has its time in the title and Why opens the archive card on another view too. Active
+  scenarios are rows with what each changes, plus one line with the effect now.
+- **stats**: the busiest day with its duplicates and today under the daily bars; peak hour and
+  weekend difference in the chart titles; channel errors in their own column; priority and day
+  period as text; insights folded.
+
 ## [0.87.0] - 2026-10-09
 
 ### Added

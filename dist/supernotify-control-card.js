@@ -8,6 +8,23 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-10 - v0.88.0. The overview redrawn ("Proposta 2" of the Panoramica study): one place for
+ *   each piece of information, colour only for the state.
+ *   - overview 0.39.0: a status band - the state on the left (green / orange / red), what to look at
+ *     with its own button (▶ Resume on a pause, Open on repairs and errors), the versions of
+ *     SuperNotify and of the cards on the right, and a "?" with the legend (`help: false` hides it).
+ *     Four numbers from the archive's daily totals (one call, last 30 days): Today with yesterday
+ *     and the 30-day average, Delivered today with the duplicates dropped and the failed channels,
+ *     Channels on with "see which", Silence (pauses and do-not-disturb). Older SuperNotify: the
+ *     numbers of before. Last notification with Repeat (`repeat_entity`) and Why (the archive card,
+ *     on this page or on its own view). Active scenarios as rows - name and what it changes - plus
+ *     one line with the effect now. `parts:` [status, numbers, last, occupancy, scenarios] lets two
+ *     overview cards split them across a dashboard; each reads only what it shows.
+ *   - stats 0.33.0: `kpis: false` and `versions: false` leave out the number and version boxes (the
+ *     overview has them) - the header then says the period, the total and the daily average. Under
+ *     the daily bars the peak with its duplicates and today; the peak hour and the
+ *     weekend difference in the titles; channel errors in their own column; priority and day period
+ *     as one line of text; the insights folded.
  * 2026-10-09 - v0.87.0. Dashboard strategy: the archive gets a view of its own.
  *   - New "Archive" view (mdi:archive-outline, emoji 🗂️) right after Home: the archive card at full
  *     width, `max_height: calc(100vh - 300px)` and `pause_sender: true` as defaults (both can be
@@ -669,7 +686,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.87.0"; // bundle / HACS release
+const VERSION = "0.88.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -681,7 +698,7 @@ const VERSION = "0.87.0"; // bundle / HACS release
  */
 const SN_CARD_VERSIONS = {
   control: "0.39.1",
-  overview: "0.38.0",
+  overview: "0.39.0",
   bands: "0.21.1",
   deliveries: "0.32.1",
   transports: "0.27.1",
@@ -690,7 +707,7 @@ const SN_CARD_VERSIONS = {
   simulator: "0.17.0",
   composer: "0.25.0",
   automations: "0.21.4",
-  stats: "0.32.3",
+  stats: "0.33.0",
   archive: "0.42.0",
   tools: "0.2.2",
   why: "0.17.0",
@@ -2524,6 +2541,7 @@ const SN_FORM_LABELS = {
     expand: "Open the folded parts", max_height: "Maximum height (CSS, e.g. 70vh)",
     group_repeats: "Group repeats of the same notification", auto_select: "Open the latest notification",
     priority_filters: "Critical and High filters (whole archive)",
+    help: "\"?\" button with the legend", kpis: "Number boxes on top", versions: "Version boxes at the bottom",
     source: "Archive source", entity: "Archive sensor (bridge only)", trigger_entity: "Refresh when this changes",
     dry_run: "Show \"Try without sending\"", dry_run_dupe_check: "Simulate the duplicate check too",
     days: "Days shown by default", manifest_url: "Automations manifest URL",
@@ -2550,6 +2568,7 @@ const SN_FORM_LABELS = {
     expand: "Apri le parti chiuse", max_height: "Altezza massima (CSS, es. 70vh)",
     group_repeats: "Raggruppa le notifiche ripetute", auto_select: "Apri l'ultima notifica",
     priority_filters: "Filtri Critiche e Alte (tutto l'archivio)",
+    help: "Pulsante «?» con la legenda", kpis: "Riquadri dei numeri in alto", versions: "Riquadri delle versioni in fondo",
     source: "Sorgente dell'archivio", entity: "Sensore archivio (solo ponte)", trigger_entity: "Aggiorna quando cambia",
     dry_run: "Mostra \"Prova senza inviare\"", dry_run_dupe_check: "Simula anche il controllo doppioni",
     days: "Giorni mostrati di default", manifest_url: "URL del manifest delle automazioni",
@@ -2581,8 +2600,9 @@ function snForm(kind) {
       sel("snooze_via", [["", "o_auto"], ["action", "o_action"], ["event", "o_event"], ["voice", "o_voice"]]), bool("snooze_announce", false), txt("announce_delivery"),
       bool("last_notification"), bool("last_channels"), ent("repeat_entity", ["input_button", "button", "script"]),
       sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6), bool("status", true), bool("catch_up", true)],
-    overview: [ent("update_entity", "update"), ent("sent_today_entity", "sensor"),
-      ent("quiet_entity", ["binary_sensor", "input_boolean"]), bool("health", true),
+    overview: [ent("update_entity", "update"), ent("cards_update_entity", "update"), ent("sent_today_entity", "sensor"),
+      ent("quiet_entity", ["binary_sensor", "input_boolean"]), ent("repeat_entity", ["input_button", "button", "script"]),
+      bool("health", true), bool("help", true),
       sel("stats", [["", "o_three"], ["full", "o_full"]]), bool("last_notification"), bool("occupancy", true),
       bool("repairs", true), num("poll_seconds", 10, 600, 10)],
     deliveries: [txt("title"), bool("group", true), bool("hide_defaults", true)],
@@ -2590,7 +2610,7 @@ function snForm(kind) {
     scenarios: [num("poll_seconds", 10, 600, 10)],
     composer: [ent("update_entity", "update"), bool("dry_run"), bool("dry_run_dupe_check"), bool("show_off")],
     automations: [txt("manifest_url")],
-    stats: [num("days", 2, 90), sel("source", [["", "o_auto"], ["archive", "o_archive"], ["history", "o_history"]]), ent("sent_today_entity", "sensor"), ent("count_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update"), bool("daily", true)],
+    stats: [num("days", 2, 90), sel("source", [["", "o_auto"], ["archive", "o_archive"], ["history", "o_history"]]), ent("sent_today_entity", "sensor"), ent("count_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update"), bool("daily", true), bool("kpis", true), bool("versions", true)],
     archive: [...archive, bool("group_repeats", true), bool("priority_filters", true), bool("auto_select", true), bool("expand"), txt("max_height")],
     why: [...archive, bool("group_repeats", true), bool("auto_select", true), bool("expand"), txt("max_height")],
     tools: [num("archive_days", 1, 365), num("media_days", 1, 365)],
@@ -3707,6 +3727,91 @@ const SN_SWITCH_CSS = `
   .sw input:checked + .sl::after { left: 21px; }
 `;
 
+/**
+ * 0.39.0 (bundle 0.88.0): strings of the new overview - status band, numbers from the archive,
+ * scenarios as rows. Other languages get the English text until translated (SN_I18N_EXTRA).
+ */
+const SN_OV_STRINGS = {
+  en: {
+    ov_help: [
+      "<b>On top, the state.</b> Green: all fine. Orange: something to look at. Red: an error. Each row has its button (Resume a pause, Open the repairs); on the right the installed versions.",
+      "<b>The numbers</b> come from SuperNotify's archive: Today (with yesterday and the 30-day average), Delivered (duplicates dropped are left out, failed channels below), Channels on, Silence (pauses and do-not-disturb).",
+      "<b>Now.</b> The last notification: <b>Repeat</b> sends it again, <b>Why?</b> opens its detail in the archive. Then who is home and the scenarios in force, each with what it changes (🔇 no voice, ✕ channel off), and one line with the effect right now.",
+    ],
+    ov_help_btn: "How to read this", ov_cards: "Cards", ov_up_to_date: "up to date", ov_upd_avail: "update available",
+    ov_k_today: "Today", ov_notif: "notifications", ov_avg30: "30-day average",
+    ov_k_delivered: "Delivered today", ov_dupes: "duplicates dropped", ov_dupes_1: "duplicate dropped",
+    ov_no_fail: "no channel failed", ov_ch_failed: "channels failed", ov_ch_failed_1: "channel failed", ov_in_30: "{n} in 30 days",
+    ov_nodel: "with no channel", ov_nodel_1: "with no channel",
+    ov_k_channels: "Channels", ov_on: "on", ov_off: "off", ov_off_1: "off", ov_see_which: "see which", ov_all_on: "all on",
+    ov_k_silence: "Silence", ov_pauses: "active pauses", ov_pauses_1: "active pause", ov_no_pause: "no pause",
+    ov_all_scen: "All scenarios", ov_eff_now: "Effect now", ov_eff_mute: "no voice on {x}", ov_eff_off: "off: {x}",
+    ov_eff_none: "no channel changed",
+    st_last_n: "Last {n} days", st_n_notif: "{n} notifications", st_per_day: "≈ {n} a day",
+    st_peak_day: "peak {d}: {n}", st_dupes_n: "{n} duplicates", st_today_n: "today {n}",
+    st_peak_at: "peak at {h}", st_weekend_d: "weekend {p}%",
+  },
+  it: {
+    ov_help: [
+      "<b>In alto, lo stato.</b> Verde: tutto a posto. Arancio: qualcosa da guardare. Rosso: un errore. Ogni riga ha il suo pulsante (Riprendi una pausa, Apri le riparazioni); a destra le versioni installate.",
+      "<b>I numeri</b> vengono dall'archivio di SuperNotify: Oggi (con ieri e la media di 30 giorni), Arrivate (senza i doppioni scartati, con sotto i canali falliti), Canali accesi, Silenzio (pause e Non disturbare).",
+      "<b>Adesso.</b> L'ultima notifica: <b>Ripeti</b> la fa ripartire, <b>Perché?</b> apre il dettaglio nell'archivio. Poi chi è in casa e gli scenari in vigore, ognuno con quello che cambia (🔇 voce spenta, ✕ canale spento), e una frase con l'effetto in questo momento.",
+    ],
+    ov_help_btn: "Come si legge", ov_cards: "Card", ov_up_to_date: "aggiornati all'ultima versione", ov_upd_avail: "aggiornamento disponibile",
+    ov_k_today: "Oggi", ov_notif: "notifiche", ov_avg30: "media 30 gg",
+    ov_k_delivered: "Arrivate oggi", ov_dupes: "doppioni scartati", ov_dupes_1: "doppione scartato",
+    ov_no_fail: "nessun canale fallito", ov_ch_failed: "canali falliti", ov_ch_failed_1: "canale fallito", ov_in_30: "{n} in 30 gg",
+    ov_nodel: "senza canale", ov_nodel_1: "senza canale",
+    ov_k_channels: "Canali", ov_on: "accesi", ov_off: "spenti", ov_off_1: "spento", ov_see_which: "vedi quali", ov_all_on: "tutti accesi",
+    ov_k_silence: "Silenzio", ov_pauses: "pause attive", ov_pauses_1: "pausa attiva", ov_no_pause: "nessuna pausa",
+    ov_all_scen: "Tutti gli scenari", ov_eff_now: "Effetto adesso", ov_eff_mute: "voce spenta su {x}", ov_eff_off: "spenti: {x}",
+    ov_eff_none: "nessun canale cambiato",
+    st_last_n: "Ultimi {n} giorni", st_n_notif: "{n} notifiche", st_per_day: "≈ {n} al giorno",
+    st_peak_day: "picco {d}: {n}", st_dupes_n: "{n} doppioni", st_today_n: "oggi {n}",
+    st_peak_at: "picco alle {h}", st_weekend_d: "weekend {p}%",
+  },
+};
+Object.assign(SN_STRINGS.en, SN_OV_STRINGS.en);
+Object.assign(SN_STRINGS.it, SN_OV_STRINGS.it);
+
+/** 0.39.0: compare two dotted versions ("0.88.0" < "0.88.1"): -1, 0 or 1. */
+function snVerCmp(a, b) {
+  const x = String(a).split(/[.-]/).map((n) => parseInt(n, 10) || 0), y = String(b).split(/[.-]/).map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0) ? 1 : -1;
+  return 0;
+}
+
+/**
+ * 0.39.0: the overview's numbers from enquire_archive `verbosity: daily` (last 30 days + today).
+ * "Sent" leaves the dropped duplicates out, as the stats card does; the average is over the
+ * complete days the archive has, at most 30.
+ */
+function snOvDays(days, now) {
+  const pad = (x) => String(x).padStart(2, "0");
+  const key = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const t0 = new Date(now); t0.setHours(0, 0, 0, 0);
+  const y0 = new Date(t0); y0.setDate(y0.getDate() - 1);
+  const kToday = key(t0), kY = key(y0);
+  const by = {};
+  for (const d of days) if (d && d.date) by[d.date] = d;
+  const out = (d, k) => +(((d && d.outcome) || {})[k]) || 0;
+  const sent = (d) => (d ? Math.max(0, (+d.count || 0) - out(d, "dupe")) : 0);
+  const failed = (d) => (d ? Object.values(d.deliveries || {}).reduce((a, x) => a + (+(x && x.failed) || 0), 0) : 0);
+  const td = by[kToday];
+  const past = Object.keys(by).filter((k) => k < kToday).sort();
+  let avg = null;
+  if (past.length) {
+    const first = new Date(`${past[0]}T00:00:00`);
+    const n = Math.min(30, Math.max(1, Math.round((t0 - first) / 86400000)));
+    avg = past.reduce((a, k) => a + sent(by[k]), 0) / n;
+  }
+  return {
+    today: sent(td), yesterday: by[kY] ? sent(by[kY]) : past.length ? 0 : null, avg,
+    success: out(td, "success"), dupes: out(td, "dupe"), noDel: out(td, "no_delivery"),
+    failToday: failed(td), fail30: Object.values(by).reduce((a, d) => a + failed(d), 0),
+  };
+}
+
 class SupernotifyControlCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
@@ -4654,18 +4759,6 @@ class SupernotifyOverviewCard extends SnCard {
     return { poll_seconds: 60 };
   }
 
-  setConfig(config) {
-    if (!config) throw new Error("Invalid configuration");
-    this._config = {
-      poll_seconds: 60, style: "supernotify",
-      health: true,                                   // traffic-light strip on top (0.20.0)
-      update_entity: "update.supernotify_update",     // HACS update entity for the version light
-      quiet_entity: null,                             // e.g. binary_sensor.notifier_dnd
-      ...config,
-    };
-    this._rendered = false;
-  }
-
   _onHass(hass, fresh, changed) {
     super._onHass(hass, fresh, changed);
     // connectedCallback may have run before hass: first data now, not at the first poll
@@ -4705,9 +4798,12 @@ class SupernotifyOverviewCard extends SnCard {
     if (c.quiet_entity && this._st(c.quiet_entity) === "on") chips.push({ k: "warn", t: `🌙 ${T.dnd} ${T.active}` });
     const snz = snLiveSnoozes(this._snoozes);
     const snzL = (x) => snSnoozeLabel(this._hass, x, T) + (snSnoozeReason(x, T) ? ` (${snSnoozeReason(x, T)})` : "");
-    if (snz.length) chips.push({ k: "warn", go: ["control", { snz: true }],
+    if (snz.length) chips.push({ k: "warn", go: ["control", { snz: true }], snz: snz.length,
       t: snz.length === 1 ? `😴 ${T.snoozed}: ${snSnoozeLabel(this._hass, snz[0], T)}` : `😴 ${snz.length} ${T.snoozed.toLowerCase()}`,
-      title: snz.map(snzL).join(", ") });
+      title: snz.map(snzL).join(", "),
+      // 0.39.0: one pause - until when and why, under its name
+      detail: snz.length === 1 ? [snz[0]._end ? `${T.until} ${snSnzUntil(snz[0]._end, this._hass)}` : T.snz_until_resumed,
+        snSnoozeReason(snz[0], T)].filter(Boolean).join(" · ") : "" });
     // 0.63.0: SuperNotify's own repairs (admin only), opened in Settings > Repairs
     const reps = this._repairs || [];
     if (reps.length) chips.push({ k: reps.some((r) => r.sev === "error" || r.sev === "critical") ? "crit" : "warn",
@@ -4754,15 +4850,79 @@ class SupernotifyOverviewCard extends SnCard {
     return (r && r.response) || {};
   }
 
+  // 0.60.0: one row per delivery / transport (switch preferred over the deprecated
+  // binary_sensor, so nothing is counted twice), named by its `name` attribute
+  _scan(kind) {
+    if (!this._hass) return [];
+    return snEntityRows(this._hass, kind).map((r) => ({ id: r.id, name: r.name, state: this._hass.states[r.id].state }));
+  }
+
+  /**
+   * 0.65.0: the last notification is shown here unless a control card on the same page already
+   * shows it. `last_notification: true | false` decides instead.
+   */
+  _showLast() {
+    const v = this._config.last_notification;
+    if (v === true || v === false) return v;
+    return !snCardOn("control", (c) => c._config && c._config.last_notification);
+  }
+
+  /** A link from this card: show it in the card of that kind (0.65.0). */
+  _focus() { /* nothing to show in the overview */ }
+
+  /** Scenario name for a chip: entity ids (reactive path) become the translated alias. */
+  _scenLabel(s) {
+    const m = String(s).match(/^binary_sensor\.supernotify_scenario_(.+)$/);
+    if (!m) return s;
+    for (const dom of ["switch", "binary_sensor"]) {
+      const st = this._hass.states[`${dom}.supernotify_scenario_${m[1]}`];
+      const clean = st && snCleanName(st.attributes.friendly_name, m[1]);
+      if (clean) return clean;
+    }
+    return m[1];
+  }
+
+  setConfig(config) {
+    if (!config) throw new Error("Invalid configuration");
+    this._config = {
+      poll_seconds: 60, style: "supernotify",
+      health: true,                                   // traffic-light strip on top (0.20.0)
+      update_entity: "update.supernotify_update",     // HACS update entity for the version light
+      cards_update_entity: "update.supernotify_cards_update", // 0.39.0: card version in the status band
+      quiet_entity: null,                             // e.g. binary_sensor.notifier_dnd
+      repeat_entity: null,                            // 0.39.0: "Repeat" on the last notification
+      help: true,                                     // 0.39.0: "?" with the legend in the status band
+      ...config,
+    };
+    this._rendered = false;
+  }
+
+  /**
+   * 0.39.0: which blocks this card draws - status, numbers, last, occupancy, scenarios (all by
+   * default). Two overview cards can split them across a dashboard (status and numbers on top at
+   * full width, the rest in a narrow column); each one only reads what it shows.
+   */
+  _parts() {
+    const c = this._config;
+    const all = ["status", "numbers", "last", "occupancy", "scenarios"];
+    const want = Array.isArray(c.parts) && c.parts.length ? c.parts.map(String) : all;
+    return new Set(want.filter((x) => all.includes(x)
+      && !(x === "status" && !c.health)
+      && !(x === "occupancy" && c.occupancy === false)
+      && !(x === "last" && !this._showLast())));
+  }
+
   async _refresh() {
     if (!this._hass) return;
+    const P = this._parts();
+    const top = P.has("status") || P.has("numbers");
     try {
       const [act, last, snz, occ, rep] = await Promise.all([
-        this._ws("enquire_active_scenarios"),
-        !this._showLast() ? {} : this._ws("enquire_last_notification"),
-        this._ws("enquire_snoozes"),
-        this._config.occupancy === false ? {} : this._ws("enquire_occupancy").catch(() => ({})),
-        this._config.repairs === false ? [] : snRepairsFetch(this._hass),
+        P.has("scenarios") ? this._ws("enquire_active_scenarios") : {},
+        P.has("last") ? this._ws("enquire_last_notification") : {},
+        top ? this._ws("enquire_snoozes") : {},
+        P.has("occupancy") ? this._ws("enquire_occupancy").catch(() => ({})) : {},
+        P.has("status") && this._config.repairs !== false ? snRepairsFetch(this._hass) : [],
       ]);
       this._active = act.scenarios || [];
       this._last = last && Object.keys(last).length ? last : null;
@@ -4770,7 +4930,8 @@ class SupernotifyOverviewCard extends SnCard {
       this._occ = snOccupancy(this._hass, occ);
       this._repairs = rep || [];
       const meter = this._config.sent_today_entity && this._hass.states[this._config.sent_today_entity];
-      this._daily = meter ? null : await snDailyCounts(this._hass, "sensor.supernotify_notifications", 2);
+      // without the archive's daily totals: the meter, else SuperNotify's own counter
+      this._daily = !P.has("numbers") || meter || this._d30 ? null : await snDailyCounts(this._hass, "sensor.supernotify_notifications", 2);
     } catch (e) {
       this._active = this._active || null;
       this._last = this._last || null;
@@ -4779,18 +4940,12 @@ class SupernotifyOverviewCard extends SnCard {
     if (this._rendered) this._update();
   }
 
-  // 0.60.0: one row per delivery / transport (switch preferred over the deprecated
-  // binary_sensor, so nothing is counted twice), named by its `name` attribute
-  _scan(kind) {
-    if (!this._hass) return [];
-    return snEntityRows(this._hass, kind).map((r) => ({ id: r.id, name: r.name, state: this._hass.states[r.id].state }));
-  }
-
   // 0.60.0: sensor.supernotify_failures only counts crashes inside SuperNotify, never a channel
   // that failed; with the native archive count the failed channel sends of today instead
   _failures() {
     // 0.86.0: the whole of today from verbosity daily (a few KB); 40 full documents covered only
-    // the last hours on a busy installation
+    // the last hours on a busy installation. 0.39.0: the last 30 days in the same call - today,
+    // yesterday, the average, duplicates and channel failures for the numbers.
     if (this._hass && snArchiveNative(this._hass, this._config) && !this._ftNo) {
       const trig = this._hass.states[this._config.trigger_entity || "sensor.supernotify_notifications"];
       const stamp = trig ? trig.last_updated : "";
@@ -4799,16 +4954,15 @@ class SupernotifyOverviewCard extends SnCard {
         this._ftBusy = true;
         this._ftStamp = stamp;
         this._ftAt = Date.now();
-        const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+        const from = new Date(); from.setHours(0, 0, 0, 0); from.setDate(from.getDate() - 30);
         snWS(this._hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
-          service_data: { verbosity: "daily", after: d0.toISOString() }, return_response: true }, 30000).then((r) => {
+          service_data: { verbosity: "daily", after: from.toISOString() }, return_response: true }, 30000).then((r) => {
           const days = r && r.response && r.response.days;
           if (!Array.isArray(days)) throw new Error("no days");
-          const key = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, "0")}-${String(d0.getDate()).padStart(2, "0")}`;
-          const day = days.find((x) => x && x.date === key);
-          const n = day ? Object.values(day.deliveries || {}).reduce((a, x) => a + (+(x && x.failed) || 0), 0) : 0;
-          const changed = this._failToday !== n;
-          this._failToday = n;
+          const d30 = snOvDays(days.filter(snIsObj), new Date());
+          const changed = JSON.stringify(d30) !== JSON.stringify(this._d30);
+          this._d30 = d30;
+          this._failToday = d30.failToday;
           if (changed && this._rendered) this._update();
         }).catch(() => {
           // no daily in this SuperNotify: count from the documents, as before
@@ -4839,10 +4993,17 @@ class SupernotifyOverviewCard extends SnCard {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
+    const T = snT(this._config, this._hass);
+    this._lastShown = this._showLast();
+    const P = this._parts();
+    const band = P.has("status") && this._config.health !== "chips";
+    const nowL = P.has("last") || P.has("occupancy");
+    const two = nowL && P.has("scenarios");
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; container-type: inline-size; }
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .part + .part { margin-top: 14px; }
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
         /* 0.56.1: no hole in the grid - 4 numbers 2+2, 5 numbers 3+2 (one row when the card is wide) */
         .stats[data-n="4"] { grid-template-columns: repeat(2, 1fr); }
@@ -4854,13 +5015,19 @@ class SupernotifyOverviewCard extends SnCard {
           .stats[data-n="5"] { grid-template-columns: repeat(5, 1fr); }
           .stats[data-n="5"] .stat, .stats[data-n="5"] .stat:nth-child(n+4) { grid-column: auto; }
         }
-        .stat { border: 0; border-radius: 10px; padding: 12px 14px; background: ${p.soft}; }
+        .stat { border: 0; border-radius: 10px; padding: 12px 14px; background: ${p.soft}; min-width: 0; }
         .stat .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.35;
                    font-weight: 800; color: ${p.muted}; overflow-wrap: anywhere; }
-        .stat .v { font-size: 22px; font-weight: 800; margin-top: 3px; }
-        .stat .s { font-size: 11px; color: ${p.muted}; margin-top: 2px; }
+        .stat .v { font-size: 22px; font-weight: 800; margin-top: 3px; overflow-wrap: anywhere; }
+        .stat .v small { font-size: 13px; font-weight: 600; color: ${p.muted}; }
+        .stat .s { font-size: 11.5px; color: ${p.muted}; margin-top: 2px; }
+        .stat .s a, .stat .s button { color: ${p.brandD}; font-weight: 650; }
+        .stat .s .bad { color: ${p.crit}; font-weight: 700; }
         .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-               font-weight: 800; color: ${p.muted}; margin: 16px 0 8px; }
+               font-weight: 800; color: ${p.muted}; margin: 16px 0 8px; display: flex; align-items: center; gap: 8px; }
+        .sec .sp { flex: 1; }
+        .sec .lnk { text-transform: none; letter-spacing: 0; font-weight: 650; font-size: 12px; color: ${p.brandD};
+                    border: 0; background: none; font-family: inherit; cursor: pointer; padding: 4px 0; }
         .row { display: flex; align-items: center; justify-content: space-between;
                gap: 10px; padding: 8px 2px; border-bottom: 1px solid ${p.line};
                font-size: 13.5px; }
@@ -4871,19 +5038,22 @@ class SupernotifyOverviewCard extends SnCard {
         .b-crit { background: rgba(226,60,60,.12); color: ${p.crit}; }
         .lastmsg { font-size: 13px; }
         .lastmsg .t { color: ${p.muted}; font-size: 12.5px; margin-top: 3px; }
-        .lastmsg .lt { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+        .lastmsg .lt { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
         .lastmsg .lmm { margin-top: 2px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line;
                         display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
         .lastmsg .lmm.solo { margin-top: 0; font-size: 14px; }
-        .lastmsg .lf { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+        .lastmsg .lf { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
         .lastmsg .badge { display: inline-flex; align-items: center; gap: 4px; }
-        .whyb { margin-left: auto; border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.brandD};
-                border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+        .lastmsg .lb { display: flex; gap: 6px; flex-wrap: wrap; }
+        .act, .whyb { border: 1.5px solid ${p.brand}; background: ${p.panel}; color: ${p.brandD};
+                border-radius: 999px; padding: 0 14px; min-height: 34px; font: inherit; font-size: 12.5px; font-weight: 700;
+                cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; white-space: nowrap; }
+        .act:disabled { opacity: .5; cursor: default; }
         .chip { display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid ${p.line}; border-radius: 999px;
                 padding: 5px 12px; font-size: 12px; font-weight: 650; margin: 0 6px 6px 0;
                 background: ${p.soft}; color: ${p.brandD}; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 10px; }
-        .health { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+        .health { display: flex; flex-wrap: wrap; gap: 6px; }
         .health:empty { display: none; }
         .hc { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 11px;
               font-size: 11.5px; font-weight: 700; text-decoration: none; }
@@ -4891,185 +5061,384 @@ class SupernotifyOverviewCard extends SnCard {
         .hc.warn { background: rgba(240,160,32,.16); color: ${p.warn}; }
         .hc.crit { background: rgba(226,60,60,.12); color: ${p.crit}; }
         .hc.off { background: ${p.soft}; color: ${p.muted}; }
-        .health:has(.hb) { display: block; }
-        .hb { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 10px; }
-        .hb .hbi { --mdc-icon-size: 26px; font-size: 22px; }
-        .hb.ok { background: rgba(46,158,91,.12); color: ${p.ok}; }
-        .hb.warn { background: ${p.warnSoft}; color: ${p.warnInk}; }
-        .hb.crit { background: rgba(226,60,60,.10); color: ${p.crit}; }
-        .hbt { font-size: 17px; font-weight: 700; } .hbs { font-size: 13px; margin-top: 2px; }
-        .hl { margin: 6px 2px 0; }
-        .hr { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid ${p.line};
-              font-size: 14px; }
-        .hr:last-child { border-bottom: 0; }
+        .health:has(.band) { display: block; }
+        /* 0.39.0: the status band - state on the left, what to look at with its button, versions on the right */
+        .band { display: flex; flex-direction: column; border: 1.5px solid ${p.line}; border-radius: 12px; overflow: hidden; }
+        .bl { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+        .band.ok .bl { background: rgba(46,158,91,.12); color: ${p.ok}; }
+        .band.warn .bl { background: ${p.warnSoft}; color: ${p.warnInk}; }
+        .band.crit .bl { background: rgba(226,60,60,.10); color: ${p.crit}; }
+        .bi { width: 38px; height: 38px; border-radius: 50%; flex: none; display: inline-flex; align-items: center;
+              justify-content: center; color: #fff; }
+        .band.ok .bi { background: ${p.ok}; } .band.warn .bi { background: ${p.warn}; } .band.crit .bi { background: ${p.crit}; }
+        .hbt { font-size: 17px; font-weight: 700; } .hbs { font-size: 12.5px; margin-top: 2px; }
+        .brows { flex: 1; min-width: 0; }
+        .hr { display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-top: 1px solid ${p.line};
+              font-size: 13.5px; }
         .hr .hi { flex: none; } .hr.crit .hi { color: ${p.crit}; } .hr.warn .hi { color: ${p.warn}; }
-        .hr.off .hi { color: ${p.muted}; } .hr.ok .hi { color: ${p.ok}; } .hr.ok .ht { color: ${p.muted}; }
-        .hr .ht { flex: 1; min-width: 0; } .hr .ht > div:first-child { font-weight: 600; }
-        .hr.ok .ht > div:first-child { font-weight: 400; }
-        .hr .hd { font-size: 12.5px; color: ${p.muted}; margin-top: 2px; overflow-wrap: anywhere; }
-        .hr .ha { flex: none; font-weight: 600; text-decoration: none; color: ${p.brandD}; padding: 8px 4px; }
+        .hr.off .hi { color: ${p.muted}; }
+        .hr .ht { flex: 1; min-width: 0; } .hr .ht b { font-weight: 650; }
+        .hr .hd { font-size: 12.5px; color: ${p.muted}; overflow-wrap: anywhere; }
+        .hr .ha { flex: none; }
+        .bver { border-top: 1px solid ${p.line}; padding: 10px 16px; font-size: 12px; color: ${p.muted};
+                display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+        .bver a { color: inherit; text-decoration: none; }
+        .bver .vok { color: ${p.ok}; font-weight: 700; } .bver .vup { color: ${p.warn}; font-weight: 700; }
+        .bver .vn { flex: 1; }
+        .hq { width: 30px; height: 30px; border-radius: 9px; flex: none; font: inherit; font-weight: 700; font-size: 14px;
+              cursor: pointer; border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.muted}; }
+        .hq[aria-expanded="true"] { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
+        .help { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: ${p.soft}; font-size: 12.5px;
+                line-height: 1.55; display: grid; gap: 10px; }
+        .help b { color: ${p.brandD}; }
+        @container (min-width: 760px) {
+          .band { flex-direction: row; align-items: stretch; }
+          .bl { width: 290px; flex: none; }
+          .band.alone .bl { width: auto; flex: 1; }
+          .brows .hr:first-child { border-top: 0; }
+          .brows .hr { border-top: 1px solid ${p.line}; border-left: 0; }
+          .bver { border-top: 0; border-left: 1px solid ${p.line}; width: 210px; flex: none; flex-direction: column;
+                  align-items: flex-start; justify-content: center; position: relative; padding-right: 48px; }
+          .bver .hq { position: absolute; top: 8px; right: 8px; }
+          .help { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+        }
+        .now2 { display: grid; gap: 0 18px; }
+        @container (min-width: 760px) { .now2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+        .now2 > div > .sec:first-child, .part > .sec:first-child { margin-top: 0; }
+        .scr { display: flex; justify-content: space-between; gap: 12px; padding: 8px 2px; border-top: 1px solid ${p.line};
+               font-size: 13px; align-items: center; }
+        .scr:first-child { border-top: 0; }
+        .scr b { font-weight: 650; overflow-wrap: anywhere; }
+        .scr .eff { font-size: 12px; color: ${p.muted}; text-align: right; }
+        .scr.go { cursor: pointer; }
+        .effnow { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: ${p.soft}; font-size: 12.5px; color: ${p.muted}; }
+        .effnow b { color: ${p.ink}; }
         .hgo { border: 0; background: none; font: inherit; cursor: pointer; }
         .chip.go { cursor: pointer; }
       </style>
       <ha-card>
-        ${snIntro(this._config, this._dark)}<div class="health" id="health"></div><div class="stats" id="stats"></div>
-        ${!(this._lastShown = this._showLast()) ? "" : `<div class="sec">${snT(this._config, this._hass).last_notif}</div>
-        <div class="lastmsg" id="last">—</div>`}
-        ${this._config.occupancy === false ? "" : `<div class="sec">${snT(this._config, this._hass).occ_title}</div><div id="occ">—</div>`}
-        <div class="sec">${snT(this._config, this._hass).act_scen}</div>
-        <div id="scen">—</div>
+        ${snIntro(this._config, this._dark)}
+        ${P.has("status") ? `<div class="part"><div class="health" id="health"></div>${band ? `<div id="helpBox"></div>` : ""}</div>` : ""}
+        ${P.has("numbers") ? `<div class="part"><div class="stats" id="stats"></div></div>` : ""}
+        ${nowL || P.has("scenarios") ? `<div class="part${two ? " now2" : ""}">
+          ${nowL ? `<div>
+            ${P.has("last") ? `<div class="sec" id="lastH">${T.last_notif}</div><div class="lastmsg" id="last">—</div>` : ""}
+            ${P.has("occupancy") ? `<div class="sec">${T.occ_title}</div><div id="occ">—</div>` : ""}
+          </div>` : ""}
+          ${P.has("scenarios") ? `<div><div class="sec" id="scenH">${T.act_scen}</div><div id="scen">—</div></div>` : ""}
+        </div>` : ""}
         ${snVer(this._config, "overview", p)}
       </ha-card>`, this && this._config);
+    this._healthHtml = this._statsHtml = null; // fresh elements: draw them again
     this._update();
   }
 
   _update() {
     if (!this.shadowRoot) return;
+    const P = this._parts();
+    if (P.has("status")) this._updStatus();
+    if (P.has("numbers")) this._updNumbers();
+    if (P.has("last")) this._updLast();
+    if (P.has("occupancy")) this._updOcc();
+    if (P.has("scenarios")) this._updScen();
+  }
+
+  /** 0.39.0: the status band (or the chips of `health: chips`). */
+  _updStatus() {
+    const healthEl = this.shadowRoot.getElementById("health");
+    if (!healthEl) return;
     const esc = snEsc;
-    const sent = this._st("sensor.supernotify_notifications");
+    const T = snT(this._config, this._hass);
+    const c = this._config;
+    let html = "";
+    let goes = [];
+    if (c.health === "chips") {
+      html = this._health().map((h) => h.href
+        ? `<a class="hc ${h.k}" href="${esc(h.href)}" target="_blank" rel="noopener">${esc(h.t)}</a>`
+        : `<span class="hc ${h.k}"${h.title ? ` title="${esc(h.title)}"` : ""}>${esc(h.t)}</span>`).join("");
+      html = html.replace(/ href="\/config\/repairs" target="_blank" rel="noopener"/g, ' href="/config/repairs" data-nav="1"');
+    } else {
+      // 0.52.0: one sentence, then what to look at, each with its detail and action
+      const dels = this._scan("delivery");
+      const delsOn = dels.filter((d) => d.state === "on").length;
+      const all = this._health();
+      const todo = all.filter((h) => h.k === "crit" || h.k === "warn" || h.k === "off");
+      const chOn = T.h_ch_on.replace("{on}", delsOn).replace("{tot}", dels.length);
+      const lvl = todo.some((h) => h.k === "crit") ? "crit" : todo.length ? "warn" : "ok";
+      const head = todo.length
+        ? (todo.length === 1 ? T.h_look_1 : T.h_look_n.replace("{n}", todo.length))
+        : T.h_all_good;
+      const sub = todo.length ? `${T.h_rest_ok}${dels.length ? " · " + chOn : ""}` : (dels.length ? chOn : "");
+      const canResume = snHasSnoozeAction(this._hass);
+      const row = (h) => {
+        const m = String(h.t).match(/^(\S+)\s+(.*)$/);
+        const icon = m ? m[1] : "", text = m ? m[2] : h.t;
+        let btn = "";
+        if (h.snz && canResume) btn = `<button class="act ha" data-resume="1">▶ ${esc(h.snz > 1 ? T.snz_resume_all : T.snz_resume)}</button>`;
+        else if (h.href) btn = `<a class="act ha" href="${esc(h.href)}"${h.nav ? ' data-nav="1"' : ' target="_blank" rel="noopener"'}>${esc(T.h_open)} ›</a>`;
+        else if (h.go && snCardReach(h.go[0])) btn = `<button class="act ha hgo" data-go="${goes.push(h.go) - 1}">${esc(T.go_open)} ›</button>`;
+        const det = h.detail || (h.title && !text.includes(h.title) ? h.title : "");
+        return `<div class="hr ${h.k}"><span class="hi">${esc(icon)}</span>
+          <div class="ht"><b>${esc(text)}</b>${det ? `<div class="hd">${esc(det)}</div>` : ""}</div>${btn}</div>`;
+      };
+      const icon = lvl === "ok"
+        ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`
+        : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 6.5v7M12 17.5h.01"/></svg>`;
+      html = `<div class="band ${lvl}${todo.length ? "" : " alone"}">
+        <div class="bl"><span class="bi">${icon}</span><div><div class="hbt">${esc(head)}</div>${sub ? `<div class="hbs">${esc(sub)}</div>` : ""}</div></div>
+        ${todo.length ? `<div class="brows">${todo.map(row).join("")}</div>` : ""}
+        ${this._versionsHtml()}</div>`;
+    }
+    // redrawn only when something changed: a click is not lost to a redraw on every state change
+    const hb = this.shadowRoot.getElementById("helpBox");
+    const helpHtml = this._helpOpen ? `<div class="help">${T.ov_help.map((s) => `<div>${s}</div>`).join("")}</div>` : "";
+    if (hb && hb.innerHTML !== helpHtml) hb.innerHTML = helpHtml;
+    if (html === this._healthHtml) return;
+    this._healthHtml = html;
+    healthEl.innerHTML = snIconify(html, this && this._config);
+    healthEl.querySelectorAll("a[data-nav]").forEach((a) => {
+      a.onclick = (e) => { e.preventDefault(); snNavigate(a.getAttribute("href")); };
+    });
+    this._goes = goes;
+    healthEl.querySelectorAll("[data-go]").forEach((b) => {
+      b.onclick = () => { const g = this._goes[+b.dataset.go]; if (g) snGo(g[0], g[1]); };
+    });
+    healthEl.querySelectorAll("[data-resume]").forEach((b) => { b.onclick = () => this._resume(b); });
+    const hq = healthEl.querySelector(".hq");
+    if (hq) hq.onclick = () => { this._helpOpen = !this._helpOpen; this._updStatus(); };
+  }
+
+  /** Versions on the right of the status band: SuperNotify and these cards, with "?" (0.39.0). */
+  _versionsHtml() {
+    const esc = snEsc;
+    const T = snT(this._config, this._hass);
+    const c = this._config;
+    const one = (id, name, fallback) => {
+      const st = id && this._hass.states[id];
+      if (!st) return fallback ? { html: `<span><span class="vok">✔</span> ${esc(name)} ${esc(fallback)}</span>`, upd: false } : null;
+      const a = st.attributes || {};
+      const upd = st.state === "on";
+      const txt = upd ? `<span class="vup">⬆</span> ${esc(name)} ${esc(a.installed_version || "")} → ${esc(a.latest_version || "")}`
+        : `<span class="vok">✔</span> ${esc(name)} ${esc(a.installed_version || "")}`;
+      return { html: a.release_url ? `<a href="${esc(a.release_url)}" target="_blank" rel="noopener">${txt}</a>` : `<span>${txt}</span>`, upd };
+    };
+    // the cards: the version running in this browser (HACS may not know a manual install)
+    const cst = c.cards_update_entity && this._hass.states[c.cards_update_entity];
+    const ca = (cst && cst.attributes) || {};
+    const newer = ca.latest_version && snVerCmp(String(ca.latest_version).replace(/^v/, ""), VERSION) > 0;
+    const cards = { upd: !!newer, html: (ca.release_url ? (t) => `<a href="${esc(ca.release_url)}" target="_blank" rel="noopener">${t}</a>` : (t) => `<span>${t}</span>`)(
+      newer ? `<span class="vup">⬆</span> ${esc(T.ov_cards)} ${esc(VERSION)} → ${esc(ca.latest_version)}` : `<span class="vok">✔</span> ${esc(T.ov_cards)} ${esc(VERSION)}`) };
+    const vs = [one(c.update_entity, "SuperNotify"), cards].filter(Boolean);
+    const q = c.help !== false ? `<button class="hq" aria-label="${esc(T.ov_help_btn)}" title="${esc(T.ov_help_btn)}" aria-expanded="${this._helpOpen ? "true" : "false"}">?</button>` : "";
+    if (!vs.length && !q) return "";
+    return `<div class="bver">${vs.map((v) => v.html).join("")}${vs.length ? `<span class="vn">${esc(vs.some((v) => v.upd) ? T.ov_upd_avail : T.ov_up_to_date)}</span>` : ""}${q}</div>`;
+  }
+
+  /** ▶ Resume on the pause row: the one pause, or all of them. */
+  async _resume(b) {
+    const T = snT(this._config, this._hass);
+    const live = snLiveSnoozes(this._snoozes);
+    b.disabled = true;
+    try {
+      if (live.length === 1) {
+        const s = live[0];
+        const scope = String(s.target_type || "NONCRITICAL").toLowerCase();
+        const data = { command: "resume", scope };
+        if (!["noncritical", "everything"].includes(scope)) data.name = Array.isArray(s.target) ? s.target.join("_") : (s.target || "");
+        if (String(s.recipient_type || "").toUpperCase() === "USER" && s.recipient) data.person = s.recipient;
+        await snSnoozeCall(this._hass, data);
+      } else {
+        await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
+      }
+    } catch (e) {
+      b.disabled = false;
+      b.textContent = `✖ ${(e && e.message) || e}`;
+      return;
+    }
+    b.textContent = `✔ ${T.snz_resumed}`;
+    snEnquireBust(400);
+    setTimeout(() => this._refresh(), 600);
+  }
+
+  /** The numbers: today, delivered, channels, silence from the archive (0.39.0); else as before. */
+  _updNumbers() {
+    const statsEl = this.shadowRoot.getElementById("stats");
+    if (!statsEl) return;
+    const esc = snEsc;
+    const p = this._palette();
+    const T = snT(this._config, this._hass);
     const fail = this._failures();
     const failures = fail.n;
     const dels = this._scan("delivery");
     const delsOn = dels.filter((d) => d.state === "on").length;
-    const reactiveAct = this._activeScenarios();
-    const act = reactiveAct !== null ? reactiveAct : this._active;
+    const snz = snLiveSnoozes(this._snoozes);
     const stat = (k, v, s, color) =>
       `<div class="stat"><div class="k">${k}</div><div class="v"${color ? ` style="color:${color}"` : ""}>${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
+    const fmt = (n, dec) => Number(n || 0).toLocaleString(this._hass.language || undefined, { maximumFractionDigits: dec || 0 });
+    const d = this._d30;
+    let html;
+    // every channel that is off, as in "18 / 24 on" (the status band names the ones switched off by hand)
+    const off = dels.filter((x) => x.state !== "on");
+    const chSub = off.length
+      ? `${esc(snPl(T, "ov_off", off.length))}${snCardReach("deliveries") ? ` · <button class="hgo" data-goch="1">${esc(T.ov_see_which)} ›</button>` : ""}`
+      : esc(T.ov_all_on);
+    const chStat = stat(T.ov_k_channels, dels.length ? `${delsOn}<small> / ${dels.length} ${esc(T.ov_on)}</small>` : "—", chSub);
+    const quiet = this._config.quiet_entity ? this._st(this._config.quiet_entity) : null;
+    const lastEnd = snz.map((x) => x._end).filter(Boolean).sort((a, b) => b - a)[0];
+    const silSub = [quiet != null ? `${esc(T.dnd)}: ${esc(quiet === "on" ? T.active : T.off)}` : "",
+      lastEnd ? `${esc(T.until)} ${esc(snSnzUntil(lastEnd, this._hass))}` : ""].filter(Boolean).join(" · ");
+    const silStat = stat(T.ov_k_silence, snz.length ? `${snz.length}<small> ${esc(snW(T, "ov_pauses", snz.length))}</small>` : `<small>${esc(T.ov_no_pause)}</small>`,
+      silSub, snz.length || quiet === "on" ? p.warn : undefined);
+    // the archive's answer is on its way: the new boxes with a dash, not the old numbers for a moment
+    if (!d && this._failToday == null && !this._ftNo && snArchiveNative(this._hass, this._config)) {
+      html = stat(T.ov_k_today, "—", "") + stat(T.ov_k_delivered, "—", "") + chStat + silStat;
+    } else if (d) {
+      const fail30 = d.fail30 ? ` · ${esc(T.ov_in_30).replace("{n}", fmt(d.fail30))}` : "";
+      html = stat(T.ov_k_today, `${fmt(d.today)}<small> ${esc(T.ov_notif)}</small>`,
+          [d.yesterday != null ? `${esc(T.yesterday)} ${fmt(d.yesterday)}` : "", d.avg != null ? `${esc(T.ov_avg30)} ${fmt(d.avg, 1)}` : ""].filter(Boolean).join(" · "))
+        + stat(T.ov_k_delivered, `${fmt(d.success)}${d.dupes ? `<small> · ${esc(snPl(T, "ov_dupes", d.dupes))}</small>` : ""}`,
+          (d.failToday ? `<span class="bad">✖ ${esc(snPl(T, "ov_ch_failed", d.failToday))}</span>` : `${esc(T.ov_no_fail)}`) + fail30
+          + (d.noDel ? ` · ${esc(snPl(T, "ov_nodel", d.noDel))}` : ""), d.success ? p.ok : undefined)
+        + chStat + silStat;
+    } else {
+      // no daily totals in this SuperNotify: the numbers of before
+      const act = this._activeScenarios() !== null ? this._activeScenarios() : this._active;
+      let sentStat;
+      const sent = this._st("sensor.supernotify_notifications");
+      const todayId = this._config.sent_today_entity;
+      const todayState = todayId ? this._hass.states[todayId] : null;
+      if (todayState && !["unknown", "unavailable"].includes(todayState.state)) {
+        const yd = todayState.attributes && todayState.attributes.last_period;
+        sentStat = stat("📨 " + T.sent_today, esc(Math.round(+todayState.state)), yd != null ? T.yesterday + ": " + esc(Math.round(+yd)) : "");
+      } else if (this._daily && this._daily.today != null) {
+        const yd = this._daily.yesterday;
+        sentStat = stat("📨 " + T.sent_today, esc(this._daily.today), yd != null ? T.yesterday + ": " + esc(yd) : "");
+      } else {
+        sentStat = stat("📨 " + T.sent, sent != null ? esc(sent) : "—", T.since_startup);
+      }
+      html = sentStat
+        + stat("⚠️ " + T.failures, failures != null ? esc(failures) : "—", fail.today ? T.fail_today : "", +failures > 0 ? p.crit : p.ok)
+        + (this._config.stats === "full" ? stat("🎬 " + T.act_scen, act ? act.length : "—", "") : "")
+        + stat("📤 " + T.deliveries, dels.length ? `${delsOn}/${dels.length}` : "—", T.enabled_total)
+        + (this._config.stats !== "full" ? "" : stat("😴 " + T.snoozed, snz.length, lastEnd ? T.until + " " + esc(snSnzUntil(lastEnd, this._hass)) : "", snz.length ? p.warn : undefined));
+    }
+    if (html === this._statsHtml) return;
+    this._statsHtml = html;
+    statsEl.innerHTML = snIconify(html, this && this._config);
+    statsEl.dataset.n = statsEl.children.length;
+    const goch = statsEl.querySelector("[data-goch]");
+    if (goch) goch.onclick = () => snGo("deliveries", { ids: off.map((x) => x.id) });
+  }
+
+  /** 0.56.0 / 0.39.0: the last notification - title, message, priority, channels, Repeat and Why. */
+  _updLast() {
+    const lastEl = this.shadowRoot.getElementById("last");
+    if (!lastEl) return;
+    const esc = snEsc;
     const p = this._palette();
     const T = snT(this._config, this._hass);
-    const snz = snLiveSnoozes(this._snoozes);
-    // Optional daily counter (utility_meter on sensor.supernotify_notifications):
-    // shows "sent today" with yesterday's total from the last_period attribute.
-    let sentStat;
-    const todayId = this._config.sent_today_entity;
-    const todayState = todayId ? this._hass.states[todayId] : null;
-    if (todayState && !["unknown", "unavailable"].includes(todayState.state)) {
-      const yd = todayState.attributes && todayState.attributes.last_period;
-      sentStat = stat("📨 " + T.sent_today, esc(Math.round(+todayState.state)),
-        yd != null ? T.yesterday + ": " + esc(Math.round(+yd)) : "");
-    } else if (this._daily && this._daily.today != null) {
-      // 0.69.0: no utility meter - the long-term statistics of SuperNotify's own counter
-      const yd = this._daily.yesterday;
-      sentStat = stat("📨 " + T.sent_today, esc(this._daily.today), yd != null ? T.yesterday + ": " + esc(yd) : "");
-    } else {
-      sentStat = stat("📨 " + T.sent, sent != null ? esc(sent) : "—", T.since_startup);
-    }
-    const healthEl = this.shadowRoot.getElementById("health");
-    let goesAll = [];
-    if (healthEl) {
-      let html = "";
-      if (this._config.health === "chips") {
-        html = this._health().map((h) => h.href
-          ? `<a class="hc ${h.k}" href="${esc(h.href)}" target="_blank" rel="noopener">${esc(h.t)}</a>`
-          : `<span class="hc ${h.k}"${h.title ? ` title="${esc(h.title)}"` : ""}>${esc(h.t)}</span>`).join("");
-        html = html.replace(/ href="\/config\/repairs" target="_blank" rel="noopener"/g, ' href="/config/repairs" data-nav="1"');
-      } else if (this._config.health) {
-        // 0.52.0: one sentence on top, then what to look at, each with its detail and action
-        goesAll = [];
-        const all = this._health();
-        const todo = all.filter((h) => h.k === "crit" || h.k === "warn" || h.k === "off");
-        const fine = all.filter((h) => h.k === "ok" && !/^✔ (Tutto ok|All good)/.test(h.t));
-        const chOn = T.h_ch_on.replace("{on}", delsOn).replace("{tot}", dels.length);
-        const lvl = todo.some((h) => h.k === "crit") ? "crit" : todo.length ? "warn" : "ok";
-        const head = todo.length
-          ? (todo.length === 1 ? T.h_look_1 : T.h_look_n.replace("{n}", todo.length))
-          : T.h_all_good;
-        const sub = todo.length ? `${T.h_rest_ok}${dels.length ? " · " + chOn : ""}` : (dels.length ? chOn : "");
-        const goes = [];
-        const row = (h) => {
-          const m = String(h.t).match(/^(\S+)\s+(.*)$/);
-          const icon = m ? m[1] : "", text = m ? m[2] : h.t;
-          return `<div class="hr ${h.k}"><span class="hi">${esc(icon)}</span>
-            <div class="ht"><div>${esc(text)}</div>${h.title && !text.includes(h.title) ? `<div class="hd">${esc(h.title)}</div>` : ""}</div>
-            ${h.href ? `<a class="ha" href="${esc(h.href)}"${h.nav ? ' data-nav="1"' : ' target="_blank" rel="noopener"'}>${esc(T.h_open)}</a>`
-              : h.go && snCardReach(h.go[0]) ? `<button class="ha hgo" data-go="${goes.push(h.go) - 1}">${esc(T.go_open)} ›</button>` : ""}</div>`;
-        };
-        html = `<div class="hb ${lvl}"><span class="hbi">${lvl === "ok" ? "✔" : "⚠"}</span>
-            <div><div class="hbt">${esc(head)}</div>${sub ? `<div class="hbs">${esc(sub)}</div>` : ""}</div></div>`
-          + (todo.length || fine.length ? `<div class="hl">${todo.map(row).join("")}${fine.map(row).join("")}</div>` : "");
-        goesAll = goes;
-      }
-      healthEl.innerHTML = snIconify(html, this && this._config);
-      healthEl.querySelectorAll("a[data-nav]").forEach((a) => {
-        a.onclick = (e) => { e.preventDefault(); snNavigate(a.getAttribute("href")); };
-      });
-      this._goes = goesAll;
-      healthEl.querySelectorAll("[data-go]").forEach((b) => {
-        b.onclick = () => { const g = this._goes[+b.dataset.go]; if (g) snGo(g[0], g[1]); };
-      });
-    }
-    const statsEl = this.shadowRoot.getElementById("stats");
-    statsEl.innerHTML =
-      snIconify(sentStat +
-      stat("⚠️ " + T.failures, failures != null ? esc(failures) : "—", fail.today ? T.fail_today : "", +failures > 0 ? p.crit : p.ok) +
-      (this._config.stats === "full" ? stat("🎬 " + T.act_scen, act ? act.length : "—", "") : "") +
-      stat("📤 " + T.deliveries, dels.length ? `${delsOn}/${dels.length}` : "—", T.enabled_total) +
-      (this._config.stats !== "full" ? "" : stat("😴 " + T.snoozed, snz.length, ((e) => e ? T.until + " " + esc(snSnzUntil(e, this._hass)) : "")(snz.map((x) => x._end).filter(Boolean).sort((a, b) => b - a)[0]), snz.length ? p.warn : undefined)), this && this._config);
+    const c = this._config;
+    const head = this.shadowRoot.getElementById("lastH");
+    if (!this._last) { lastEl.textContent = "—"; if (head) head.textContent = T.last_notif; return; }
+    const n = this._last;
+    const title = snPlainMsg(snNotifTitle(n));
+    const msg = snPlainMsg(n.message).slice(0, 600);
+    const prioCol = snPrioColor(p, n.priority);
+    const d = n.created ? new Date(n.created) : null;
+    if (head) head.textContent = d && !isNaN(d) ? `${T.last_notif} · ${snAgo(d, T)}` : T.last_notif;
+    const meta = n.priority ? `<span style="color:${prioCol || p.muted};font-weight:600">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "";
+    const { ok: okN, err: errN, skipped } = snLastDeliveries(this._hass, n);
+    const chips = [];
+    if (okN.length) chips.push(`<span class="badge b-ok" title="${esc(okN.join(", "))}">✔ ${snPl(T, "ln_delivered", okN.length)}</span>`);
+    else if (+n.delivered > 0) chips.push(`<span class="badge b-ok">✔ ${snPl(T, "ln_delivered", +n.delivered)}</span>`);
+    if (errN.length || +n.failed > 0) chips.push(`<span class="badge b-crit" title="${esc(errN.join(", "))}">✖ ${snPl(T, "ln_failed", errN.length || +n.failed)}</span>`);
+    if (+n.missed > 0) chips.push(`<span class="badge" style="background:${p.warnSoft};color:${p.warnInk}">⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
+    if (skipped) chips.push(`<span class="badge b-off">${snPl(T, "skipped_n", skipped)}</span>`);
+    const rep = c.repeat_entity ? `<button class="act" id="repBtn">🔁 ${esc(T.repeat)}</button>` : "";
+    // Why: the archive card on this page, else the archive card of another view
+    const whyHere = n.id && window.__snWhyCards;
+    const why = n.id && (whyHere || snCardReach("archive")) ? `<button class="whyb" id="whyBtn">${esc(T.ln_why)} ›</button>` : "";
+    lastEl.innerHTML = snIconify(`${title ? `<div class="lt">${esc(snTitleShow(title))}</div>` : ""}
+      <div class="lmm${title ? "" : " solo"}">${esc(msg || "—")}</div>
+      ${meta ? `<div class="t">${meta}</div>` : ""}
+      <div class="lf">${chips.join("")}</div>
+      ${rep || why ? `<div class="lf lb">${rep}${why}</div>` : ""}`, this && this._config);
+    const wb = lastEl.querySelector("#whyBtn");
+    if (wb) wb.onclick = () => { if (!snWhyOpen(n.id)) snGo("archive", { id: n.id }); };
+    const rb = lastEl.querySelector("#repBtn");
+    if (rb) rb.onclick = () => {
+      const [dom] = c.repeat_entity.split(".");
+      const svc = dom === "script" ? "turn_on" : "press";
+      this._hass.callService(dom, svc, { entity_id: c.repeat_entity });
+      rb.textContent = `✔ ${T.repeat}`;
+      setTimeout(() => { if (rb.isConnected) rb.textContent = `🔁 ${T.repeat}`; }, 2500);
+    };
+  }
 
-    // 0.56.0: same reading as the control card - title, message, priority and "4 min ago",
-    // channel counts, Why ›. `last_notification: false` hides the block (the control card has it).
-    statsEl.dataset.n = statsEl.children.length;
-    const lastEl = this.shadowRoot.getElementById("last");
-    if (lastEl && this._last) {
-      const n = this._last;
-      const title = snPlainMsg(snNotifTitle(n));
-      const msg = snPlainMsg(n.message).slice(0, 600);
-      const prioCol = snPrioColor(p, n.priority);
-      const d = n.created ? new Date(n.created) : null;
-      const meta = [n.priority ? `<span style="color:${prioCol || p.muted};font-weight:600">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "",
-        d && !isNaN(d) ? `🕐 ${esc(snAgo(d, T))}` : ""].filter(Boolean).join(" · ");
-      const { ok: okN, err: errN, skipped } = snLastDeliveries(this._hass, n);
-      const chips = [];
-      if (okN.length) chips.push(`<span class="badge b-ok" title="${esc(okN.join(", "))}">✔ ${snPl(T, "ln_delivered", okN.length)}</span>`);
-      else if (+n.delivered > 0) chips.push(`<span class="badge b-ok">✔ ${snPl(T, "ln_delivered", +n.delivered)}</span>`);
-      if (errN.length || +n.failed > 0) chips.push(`<span class="badge b-crit" title="${esc(errN.join(", "))}">✖ ${snPl(T, "ln_failed", errN.length || +n.failed)}</span>`);
-      if (+n.missed > 0) chips.push(`<span class="badge" style="background:${p.warnSoft};color:${p.warnInk}">⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
-      if (skipped) chips.push(`<span class="badge b-off">${snPl(T, "skipped_n", skipped)}</span>`);
-      const why = n.id && window.__snWhyCards ? `<button class="whyb" id="whyBtn">${esc(T.ln_why)} ›</button>` : "";
-      lastEl.innerHTML = snIconify(`${title ? `<div class="lt">${esc(snTitleShow(title))}</div>` : ""}
-        <div class="lmm${title ? "" : " solo"}">${esc(msg || "—")}</div>
-        ${meta ? `<div class="t">${meta}</div>` : ""}
-        <div class="lf">${chips.join("")}${why}</div>`, this && this._config);
-      const wb = lastEl.querySelector("#whyBtn");
-      if (wb) wb.onclick = () => snWhyOpen(n.id);
-    } else if (lastEl) {
-      lastEl.textContent = "—";
-    }
-
+  _updOcc() {
     const occEl = this.shadowRoot.getElementById("occ");
-    if (occEl) {
-      const o = this._occ;
-      occEl.innerHTML = o ? snIconify(`<div style="display:flex;flex-wrap:wrap;align-items:flex-start">`
-        + `<span class="badge ${o.home.length ? "b-ok" : "b-off"}" style="padding:7px 12px;margin:0 6px 6px 0">${esc(T["occ_" + o.state] || o.state)}</span>`
-        + o.home.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1">🏠 ${esc(n)}</span>`).join("")
-        + o.away.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1" style="color:${p.muted}">🚶 ${esc(n)}</span>`).join("") + `</div>`, this && this._config) : "—";
-      if (o && snCardReach("recipients")) occEl.querySelectorAll("[data-gor]").forEach((c) => { c.onclick = () => snGo("recipients", { persons: o.ids }); });
-    }
-    this.shadowRoot.getElementById("scen").innerHTML = snIconify(act && act.length
-      ? act.map((s) => this._scenChip(s)).join("")
-      : `<span class="badge b-off">${T.none}</span>`, this && this._config);
-    if (snCardReach("scenarios")) this.shadowRoot.getElementById("scen").querySelectorAll("[data-gos]").forEach((c) => {
-      c.onclick = () => snGo("scenarios", { names: [c.dataset.gos] });
-    });
+    if (!occEl) return;
+    const esc = snEsc;
+    const p = this._palette();
+    const T = snT(this._config, this._hass);
+    const o = this._occ;
+    occEl.innerHTML = o ? snIconify(`<div style="display:flex;flex-wrap:wrap;align-items:flex-start">`
+      + `<span class="badge ${o.home.length ? "b-ok" : "b-off"}" style="padding:7px 12px;margin:0 6px 6px 0">${esc(T["occ_" + o.state] || o.state)}</span>`
+      + o.home.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1">🏠 ${esc(n)}</span>`).join("")
+      + o.away.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1" style="color:${p.muted}">🚶 ${esc(n)}</span>`).join("") + `</div>`, this && this._config) : "—";
+    if (o && snCardReach("recipients")) occEl.querySelectorAll("[data-gor]").forEach((c) => { c.onclick = () => snGo("recipients", { persons: o.ids }); });
   }
 
-  /**
-   * 0.65.0: the last notification is shown here unless a control card on the same page already
-   * shows it. `last_notification: true | false` decides instead.
-   */
-  _showLast() {
-    const v = this._config.last_notification;
-    if (v === true || v === false) return v;
-    return !snCardOn("control", (c) => c._config && c._config.last_notification);
+  /** 0.39.0: active scenarios as rows - name and what it changes - and one line on the effect now. */
+  _updScen() {
+    const el = this.shadowRoot.getElementById("scen");
+    if (!el) return;
+    const esc = snEsc;
+    const T = snT(this._config, this._hass);
+    const reactiveAct = this._activeScenarios();
+    const act = reactiveAct !== null ? reactiveAct : this._active;
+    const head = this.shadowRoot.getElementById("scenH");
+    const reach = snCardReach("scenarios");
+    if (head) head.innerHTML = `<span>${esc(T.act_scen)}${act && act.length ? ` · ${act.length}` : ""}</span><span class="sp"></span>`
+      + (reach ? `<button class="lnk" id="allScen">${esc(T.ov_all_scen)} ›</button>` : "");
+    const all = head && head.querySelector("#allScen");
+    if (all) all.onclick = () => snGo("scenarios", {});
+    if (!act || !act.length) { el.innerHTML = `<span class="badge b-off">${T.none}</span>`; return; }
+    const muted = new Set(), off = new Set();
+    const rows = act.map((s) => {
+      const r = this._scenRow(s);
+      for (const e of r.effects) {
+        if (e.off) off.add(e.alias);
+        else if (e.vol === 0) muted.add(e.alias);
+      }
+      return r.html;
+    }).join("");
+    for (const a of off) muted.delete(a);
+    const bits = [];
+    if (muted.size) bits.push(T.ov_eff_mute.replace("{x}", [...muted].join(", ")));
+    if (off.size) bits.push(T.ov_eff_off.replace("{x}", [...off].join(", ")));
+    el.innerHTML = snIconify(`<div>${rows}</div><div class="effnow">${esc(T.ov_eff_now)}: <b>${esc(bits.length ? bits.join(" · ") : T.ov_eff_none)}</b></div>`, this && this._config);
+    if (reach) el.querySelectorAll("[data-gos]").forEach((c) => { c.onclick = () => snGo("scenarios", { names: [c.dataset.gos] }); });
   }
 
-  /** A link from this card: show it in the card of that kind (0.65.0). */
-  _focus() { /* nothing to show in the overview */ }
+  /** One active scenario as a row: name, what it silences or turns down; conditions as tooltip. */
+  _scenRow(s) {
+    const esc = snEsc;
+    const T = snT(this._config, this._hass);
+    const key = snScenarioKey(s);
+    const st = this._hass.states[`switch.supernotify_scenario_${key}`] || this._hass.states[`binary_sensor.supernotify_scenario_${key}`];
+    const redraw = () => { if (this.shadowRoot) this._update(); };
+    const actNames = [...(snActive.names || [key])];
+    const effects = st ? snScenarioEffects(this._hass, st.attributes || {}, key, actNames, redraw) : [];
+    const eff = snEffectShort(effects);
+    const tr = snTraceEnsure(this._hass, redraw);
+    const cl = snScenarioCondLine(this._hass, T, tr && tr[key]);
+    const tip = [cl ? `${T.sc_when}: ${cl.text}` : "", eff].filter(Boolean).join("\n");
+    return { effects, html: `<div class="scr${snCardReach("scenarios") ? " go" : ""}" data-gos="${esc(key)}"${tip ? ` title="${esc(tip)}"` : ""}>`
+      + `<b>${esc(this._scenLabel(s))}</b><span class="eff">${esc(eff || T.ov_eff_none)}</span></div>` };
+  }
 
-  /**
-   * 0.78.0: an active scenario chip says what it silences or turns down, and its conditions as
-   * tooltip (enquire_active_scenarios trace, shared with the scenarios card).
-   */
+  /** Kept for other callers (0.78.0): a scenario as a chip. */
   _scenChip(s) {
     const esc = snEsc;
     const T = snT(this._config, this._hass);
@@ -5084,18 +5453,6 @@ class SupernotifyOverviewCard extends SnCard {
     const p = this._palette();
     return `<span class="chip${snCardReach("scenarios") ? " go" : ""}" data-gos="${esc(key)}"${tip ? ` title="${esc(tip)}"` : ""}>🎬 ${esc(this._scenLabel(s))}${eff ? `<span style="color:${p.muted};font-weight:500"> · ${esc(eff)}</span>` : ""}</span>`;
   }
-
-  /** Scenario name for a chip: entity ids (reactive path) become the translated alias. */
-  _scenLabel(s) {
-    const m = String(s).match(/^binary_sensor\.supernotify_scenario_(.+)$/);
-    if (!m) return s;
-    for (const dom of ["switch", "binary_sensor"]) {
-      const st = this._hass.states[`${dom}.supernotify_scenario_${m[1]}`];
-      const clean = st && snCleanName(st.attributes.friendly_name, m[1]);
-      if (clean) return clean;
-    }
-    return m[1];
-  }
 }
 
 customElements.define("supernotify-overview-card", SupernotifyOverviewCard);
@@ -5105,7 +5462,7 @@ window.customCards.push({
   preview: true,
   documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/overview.md",
   name: "SuperNotify Overview Card",
-  description: "Dashboard overview for SuperNotify: health strip (version, failures, transport errors, DND, snoozes), sent/failure counters, active scenarios, last notification.",
+  description: "Dashboard overview for SuperNotify: status band (what to look at, with its button, and versions), today's numbers from the archive, last notification with Repeat and Why, who is home, active scenarios with their effect.",
 });
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -7685,6 +8042,8 @@ class SupernotifyStatsCard extends SnCard {
       periods: [7, 14, 30],
       source: "",                 // 0.70.0: "" automatic, "archive" or "history"
       period_scenarios: SN_BAND_KEYS,
+      kpis: true,                 // 0.33.0: false = no number boxes (the overview shows them)
+      versions: true,             // 0.33.0: false = no version boxes (the overview's status band has them)
       ...(config || {}),
     };
     // the window picked in the header wins over `days`, and is remembered per browser
@@ -7845,7 +8204,7 @@ class SupernotifyStatsCard extends SnCard {
       if (day.getTime() + 86400000 <= startMs) continue;
       const count = +d.count || 0;
       const sent = Math.max(0, count - (+((d.outcome || {}).dupe) || 0));
-      out.push({ dk: this._dayKey(day), dn: sent, noch: true });
+      out.push({ dk: this._dayKey(day), dn: sent, dd: +((d.outcome || {}).dupe) || 0, noch: true });
       (Array.isArray(d.hour) ? d.hour : []).forEach((n, h) => {
         if (+n > 0) out.push({ t: new Date(y, m - 1, dd, h, 30).getTime(), w: +n, nd: true, noch: true });
       });
@@ -7908,6 +8267,7 @@ class SupernotifyStatsCard extends SnCard {
     const perHour = new Array(24).fill(0);
     const perWd = new Array(7).fill(0);
     const perDayHist = {};
+    const perDayDupe = {}; // 0.33.0: duplicates dropped per day (daily totals only)
     const prioCount = {};
     const periodCount = {};
     const chanOk = {};
@@ -7933,6 +8293,7 @@ class SupernotifyStatsCard extends SnCard {
         spineCount += w;
       }
       if (ev.dk) perDayHist[ev.dk] = (perDayHist[ev.dk] || 0) + (+ev.dn || 0);
+      if (ev.dk && ev.dd) perDayDupe[ev.dk] = (perDayDupe[ev.dk] || 0) + ev.dd;
       const p = ev.p;
       if (p) prioCount[p] = (prioCount[p] || 0) + w;
       const dp = ev.dp;
@@ -7970,7 +8331,7 @@ class SupernotifyStatsCard extends SnCard {
       if (k === todayKey && liveVal != null && (v == null || liveVal >= v)) v = liveVal;
       if (v == null) v = nativeByKey[k];
       if (v == null) v = perDayHist[k] || 0;
-      perDay.push({ key: k, d: new Date(dayCursor), n: v, today: k === todayKey });
+      perDay.push({ key: k, d: new Date(dayCursor), n: v, today: k === todayKey, dupes: perDayDupe[k] || 0 });
       dayCursor.setDate(dayCursor.getDate() + 1);
     }
     const completeDays = perDay.filter((x) => !x.today);
@@ -8079,10 +8440,18 @@ class SupernotifyStatsCard extends SnCard {
         .b-upd { background: rgba(240,160,32,.16); color: ${p.warn}; }
         .empty { color: ${p.muted}; font-size: 12.5px; padding: 8px 0; }
         .foot { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
+        .ver:empty { display: none; }
+        .dl { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: ${p.muted}; margin-top: 2px; flex-wrap: wrap; }
+        .hrow .ke { width: 44px; font-size: 11px; font-weight: 700; color: ${p.crit}; white-space: nowrap; }
+        .tl { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; }
+        .tl i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        details.insd { margin-top: 14px; border-top: 1px solid ${p.line}; padding-top: 10px; }
+        details.insd summary { cursor: pointer; font-size: 12.5px; font-weight: 650; color: ${p.muted}; }
+        details.insd .ins { margin-top: 6px; }
       </style>
       <ha-card>
         ${snIntro(this._config, this._dark)}
-        <div class="hdr"><h3>📊 ${T.st_title}</h3>
+        <div class="hdr"><h3 id="sttl">${this._config.kpis === false ? T.st_loading : `📊 ${T.st_title}`}</h3>
           <span class="per">${(this._config.periods || []).map(Number).filter((n) => n >= 2).map((n) =>
             `<button class="pb${n === this._days ? " on" : ""}" data-d="${n}">${n} ${T.st_days_short}</button>`).join("")}</span>
           <span class="win" id="win">${T.st_loading}</span></div>
@@ -8127,6 +8496,12 @@ class SupernotifyStatsCard extends SnCard {
         ? this._t("st_hist_note", { n: d.histDays })
         : "";
     const body = sr.getElementById("body");
+    // 0.33.0: without the number boxes the header says the period, the total and the daily average
+    const ttl = sr.getElementById("sttl");
+    if (ttl && this._config.kpis === false) {
+      ttl.textContent = [this._t("st_last_n", { n: d.days }), this._t("st_n_notif", { n: this._fmt(d.total) }),
+        this._t("st_per_day", { n: this._fmt(d.avg, 0) })].join(" · ");
+    }
     if (!d.total && !d.spineCount) {
       body.innerHTML = snIconify(`<div class="empty">${T.st_no_data}${this._error ? ` <small>(${esc(this._error)})</small>` : ""}</div>`, this && this._config);
       return;
@@ -8160,7 +8535,7 @@ class SupernotifyStatsCard extends SnCard {
       const alias = this._aliasFor(ch.name);
       return `<div class="hrow"><span class="nm" title="${esc(ch.name)}">${this._iconFor(ch.name)} ${alias ? `${esc(alias)} <small style="color:${p.muted}">${snTech(ch.name, alias)}</small>` : esc(ch.name)}</span>
         <span class="tr"><span class="ok" style="width:${(ch.ok / maxCh) * 100}%"></span><span class="ko" style="width:${(ch.ko / maxCh) * 100}%"></span></span>
-        <span class="ct">${ch.ko && !ch.ok ? `<span style="color:${p.crit}">✖ ${ch.ko}</span>` : `${tot}${ch.ko ? `<span class="kx" style="color:${p.crit}">✖ ${ch.ko}</span>` : ""}`}</span></div>`;
+        <span class="ct">${tot}</span><span class="ke">${ch.ko ? `✖ ${ch.ko}` : ""}</span></div>`;
     }).join("");
     const chNote = d.chanUnknown
       ? `<div class="empty" style="font-size:11px">${d.chanKnown}/${d.chanKnown + d.chanUnknown} ${T.st_total.toLowerCase()} · ${d.chanUnknown} ${T.st_unknown}</div>`
@@ -8169,27 +8544,36 @@ class SupernotifyStatsCard extends SnCard {
     const prioOrder = ["critical", "high", "medium", "low", "minimum"];
     const prioTot = Object.values(d.prioCount).reduce((a, b) => a + b, 0) || 1;
     const prioChips = prioOrder.filter((k) => d.prioCount[k]).map((k) =>
-      `<span class="chip"><i style="background:${SN_PRIO_COLORS[k]}"></i>${T["prio_" + k] || k} ${Math.round((d.prioCount[k] / prioTot) * 100)}%</span>`).join("") || `<span class="empty">—</span>`;
+      `<span><i style="background:${SN_PRIO_COLORS[k]}"></i>${T["prio_" + k] || k} ${Math.round((d.prioCount[k] / prioTot) * 100)}%</span>`).join("") || `<span class="empty">—</span>`;
     const perTot = Object.values(d.periodCount).reduce((a, b) => a + b, 0) || 1;
     const perChips = Object.keys(d.periodCount).sort((a, b) => d.periodCount[b] - d.periodCount[a]).map((k) =>
-      `<span class="chip">${esc(snBandName(T, String(k).trim().toLowerCase().replace(/[\s-]+/g, "_")))} ${Math.round((d.periodCount[k] / perTot) * 100)}%</span>`).join("") || `<span class="empty">—</span>`;
+      `<span>${esc(snBandName(T, String(k).trim().toLowerCase().replace(/[\s-]+/g, "_")))} ${Math.round((d.periodCount[k] / perTot) * 100)}%</span>`).join("") || `<span class="empty">—</span>`;
 
+    // 0.33.0: under the daily bars the peak (with its duplicates) and today;
+    // the peak hour and the weekend difference in the titles of their charts
+    const peakD = d.perDay.reduce((a, x) => (!a || x.n > a.n ? x : a), null);
+    const dm = (x) => `${x.d.getDate()}/${x.d.getMonth() + 1}`;
+    const dayLine = d.perDay.length ? `<div class="dl">${peakD && peakD.n
+      ? `<span>${this._t("st_peak_day", { d: dm(peakD), n: this._fmt(peakD.n) })}${peakD.dupes ? ` (${this._t("st_dupes_n", { n: this._fmt(peakD.dupes) })})` : ""}</span>` : ""}`
+      + `<span>${this._t("st_today_n", { n: this._fmt(d.perDay[d.perDay.length - 1].n) })}</span></div>` : "";
+    const weDiff = d.wdPerDay > 0 && d.wePerDay != null ? Math.round(((d.wePerDay - d.wdPerDay) / d.wdPerDay) * 100) : null;
+    const ins = this._insights(d);
     body.innerHTML = snIconify(`
-      <div class="kpis">${kpis}</div>
+      ${this._config.kpis === false ? "" : `<div class="kpis">${kpis}</div>`}
       <div class="sec"><span>${T.st_daily}</span><span class="n">${this._fmt(d.total)}</span></div>
-      <div class="bars">${daily}</div>
+      <div class="bars">${daily}</div>${dayLine}
       <div class="grid2">
-        <div><div class="sec"><span>${T.st_hourly}</span><span class="n">${this._fmt(d.spineCount)} ${T.st_logged}</span></div><div class="bars">${hourly}</div></div>
-        <div><div class="sec"><span>${T.st_weekday}</span><span class="n">${this._fmt(d.spineCount)} ${T.st_logged}</span></div><div class="bars">${wd}</div></div>
+        <div><div class="sec"><span>${T.st_hourly}${d.spineCount ? ` · ${this._t("st_peak_at", { h: d.peakHour })}` : ""}</span><span class="n">${this._fmt(d.spineCount)} ${T.st_logged}</span></div><div class="bars">${hourly}</div></div>
+        <div><div class="sec"><span>${T.st_weekday}${weDiff != null && weDiff !== 0 ? ` · ${this._t("st_weekend_d", { p: `${weDiff > 0 ? "+" : "−"}${Math.abs(weDiff)}` })}` : ""}</span><span class="n">${this._fmt(d.spineCount)} ${T.st_logged}</span></div><div class="bars">${wd}</div></div>
       </div>
       <div class="sec"><span>${T.st_channels}</span><span class="n">${this._fmt(d.sends)}</span></div>
       ${chRows || `<div class="empty">${T.st_no_data}</div>`}${chNote}
       <div class="grid2">
-        <div><div class="sec"><span>${T.st_priority}</span></div><div class="chips">${prioChips}</div></div>
-        <div><div class="sec"><span>${T.st_period}</span></div><div class="chips">${perChips}</div></div>
+        <div><div class="sec"><span>${T.st_priority}</span></div><div class="tl">${prioChips}</div></div>
+        <div><div class="sec"><span>${T.st_period}</span></div><div class="tl">${perChips}</div></div>
       </div>
-      <div class="sec"><span>💡 ${T.st_insights}</span></div>
-      <ul class="ins">${this._insights(d).map((s) => `<li>${s}</li>`).join("")}</ul>`, this && this._config);
+      <details class="insd"><summary>💡 ${ins.length} ${T.st_insights.toLowerCase()}</summary>
+      <ul class="ins">${ins.map((s) => `<li>${s}</li>`).join("")}</ul></details>`, this && this._config);
   }
 
   // Channel names are DELIVERY names; look the transport up on the delivery
@@ -8268,6 +8652,7 @@ class SupernotifyStatsCard extends SnCard {
     if (!sr || !this._hass) return;
     const el = sr.getElementById("ver");
     if (!el) return;
+    if (this._config.versions === false) { el.innerHTML = ""; return; }
     const T = snT(this._config, this._hass);
     const box = (id, fallbackName, fallbackVer, emoji) => {
       const st = this._hass.states[id];

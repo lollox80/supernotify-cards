@@ -53,8 +53,15 @@ update_entity: update.supernotify_update                # HACS update entity
 cards_update_entity: update.supernotify_cards_update
 refresh_minutes: 10
 top_channels: 8
+kpis: true              # 0.33.0: false = no number boxes on top; the header then says "Last 30 days · 3864 notifications · ≈ 123 a day"
+versions: true          # 0.33.0: false = no version boxes at the bottom (the overview's status band shows them)
 grid_options: { columns: full }   # recommended inside a column_span: 2 section
 ```
+
+From 0.33.0 the busiest day and its dropped duplicates, and today, are written under the daily bars;
+the peak hour and the weekend difference are in the titles of their charts, channel errors have a
+column of their own, priority and day period are one line of text each, and the insights are folded
+("💡 7 insights", tap to open).
 
 Before SuperNotify 2.12.1 (or with `source: history`), the card expects these helpers + automations (adapt names to yours):
 

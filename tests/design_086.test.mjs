@@ -145,7 +145,7 @@ ok(!a._index().items.find((x) => x.id === "t0000025").light, "dopo l'apertura la
 const o = mount("supernotify-overview-card", {});
 await wait(30); o._failures(); await wait(80);
 const fo = o._failures();
-ok(fo.n === 1 && fo.today && calls.some((c) => c.verbosity === "daily" && c.after && new Date(c.after).getTime() === d0.getTime()), `panoramica: 1 fallito oggi, da daily di oggi (${fo.n})`);
+ok(fo.n === 1 && fo.today && calls.some((c) => c.verbosity === "daily" && c.after && new Date(c.after).getTime() === new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() - 30).getTime() /* 0.88.0: 30 days */), `panoramica: 1 fallito oggi, da daily di oggi (${fo.n})`);
 
 // ── 5. SuperNotify senza summary: come prima ────────────────────────────
 // fresh bundle, as on a page of an older installation

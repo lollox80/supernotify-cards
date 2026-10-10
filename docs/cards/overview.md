@@ -2,6 +2,8 @@
 
 [← SuperNotify Cards](../../README.md) · [Common options](../configuration.md)
 
+<!-- CHANGELOG: 2026-10-10 - 0.39.0 layout: status band, numbers from the archive, parts, repeat, scenarios as rows. -->
+
 Dashboard overview shipped in the same bundle: **health** on top — one sentence
 ("2 things to look at", or "All good" with how many channels are on) and a list
 of what to look at, each with its detail and an "Open" link where there is one
@@ -15,6 +17,50 @@ counts. Transport status lives in the transports card.
 
 <img src="../images/overview.png" alt="supernotify-overview-card" width="420">
 
+## The 0.39.0 layout (bundle 0.88.0)
+
+Each piece of information in one place, colour only for the state:
+
+- **Status band**: the state on the left (green all fine, orange something to look at, red an
+  error), what to look at in the middle with its own button - **▶ Resume** on a pause (all of them
+  when there are several), **Open ›** on repairs, errors and channels off - and on the right the
+  versions of SuperNotify and of the cards, with a **?** that opens the legend (`help: false` hides it).
+- **Four numbers** from SuperNotify's archive (`enquire_archive` `verbosity: daily`, one call for
+  the last 30 days, SuperNotify 2.12.1+): **Today** (duplicates left out, as in the stats card) with
+  yesterday and the 30-day average; **Delivered today** with the duplicates dropped, the failed
+  channels today and in 30 days; **Channels** on / total with "see which"; **Silence**: active pauses
+  and do-not-disturb (`quiet_entity`). An older SuperNotify keeps the numbers of before.
+- **Last notification**: the time in its title, **🔁 Repeat** (`repeat_entity`, e.g. the
+  `input_button` your repeat automation listens to) and **Why ›** - the archive card on this page,
+  or the view where it is.
+- **Active scenarios** as rows - name and what it silences or turns down - and one line with the
+  effect now ("voice off on Alexa · off: TTS").
+
+`parts:` picks the blocks - `status`, `numbers`, `last`, `occupancy`, `scenarios` (all by default) -
+so two overview cards can split them across a dashboard; each reads only what it shows:
+
+```yaml
+# a sections view: state and numbers on top at full width, "now" on the left, trends on the right
+sections:
+  - type: grid
+    column_span: 3
+    cards:
+      - type: custom:supernotify-overview-card
+        parts: [status, numbers]
+        quiet_entity: binary_sensor.notifier_dnd
+  - type: grid
+    cards:
+      - type: custom:supernotify-overview-card
+        parts: [last, occupancy, scenarios]
+        repeat_entity: input_button.supernotify_show_last
+  - type: grid
+    column_span: 2
+    cards:
+      - type: custom:supernotify-stats-card
+        kpis: false
+        versions: false
+```
+
 ```yaml
 type: custom:supernotify-overview-card
 # optional:
@@ -25,6 +71,10 @@ last_notification: true    # show it even with a control card on the page (false
 occupancy: false       # hide "Who is home"
 repairs: false         # leave SuperNotify's repairs out of the health list
 update_entity: update.supernotify_update   # HACS update entity for the version chip
+cards_update_entity: update.supernotify_cards_update   # 0.39.0: newer cards available? (the version shown is the one running)
+repeat_entity: input_button.supernotify_show_last      # 0.39.0: Repeat on the last notification (input_button, button or script)
+parts: [status, numbers, last, occupancy, scenarios]  # 0.39.0: the blocks to draw
+help: true              # 0.39.0: "?" with the legend in the status band
 quiet_entity: binary_sensor.notifier_dnd   # your DND sensor, for the 🌙 chip
 sent_today_entity: sensor.supernotify_sent_today   # optional daily utility_meter for "sent today"; without it (0.69.0+) the long-term statistics of sensor.supernotify_notifications
 style: theme            # follow the HA theme instead of the SuperNotify look

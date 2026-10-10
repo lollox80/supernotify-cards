@@ -32,7 +32,8 @@ window.__snWhyCards = 1;
 const oc = mount();
 await flush(); await flush();
 const last = oc.shadowRoot.getElementById("last");
-const txt = last ? last.textContent.replace(/\s+/g, " ") : "";
+// 0.88.0: "4 min" moved into the block title
+const txt = last ? (oc.shadowRoot.getElementById("lastH").textContent + " " + last.textContent).replace(/\s+/g, " ") : "";
 ok(/Porta d'ingresso/.test(txt) && /La porta è aperta/.test(txt), "titolo + messaggio");
 ok(/4 min/.test(txt) && !/\d{4}-\d\d-\d\d \d\d:\d\d/.test(txt), `tempo relativo, non timestamp (${txt.slice(0, 120)})`);
 ok(/2 consegnati/.test(txt), "conteggio consegnate al plurale");
