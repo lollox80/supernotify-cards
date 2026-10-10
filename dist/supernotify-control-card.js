@@ -8,6 +8,10 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-10 - v0.88.1. overview 0.39.1: the 30 days of numbers through the daily store shared with
+ *   the stats card and kept in the browser - after the first time only today is read (on a busy
+ *   archive 30 days took ~4 s on every refresh, today ~0.5 s). The first time today is read alone
+ *   first, so a SuperNotify without `daily` does not mark the shared store as without it.
  * 2026-10-10 - v0.88.0. The overview redrawn ("Proposta 2" of the Panoramica study): one place for
  *   each piece of information, colour only for the state.
  *   - overview 0.39.0: a status band - the state on the left (green / orange / red), what to look at
@@ -686,7 +690,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.88.0"; // bundle / HACS release
+const VERSION = "0.88.1"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -698,7 +702,7 @@ const VERSION = "0.88.0"; // bundle / HACS release
  */
 const SN_CARD_VERSIONS = {
   control: "0.39.1",
-  overview: "0.39.0",
+  overview: "0.39.1",
   bands: "0.21.1",
   deliveries: "0.32.1",
   transports: "0.27.1",
@@ -4955,9 +4959,18 @@ class SupernotifyOverviewCard extends SnCard {
         this._ftStamp = stamp;
         this._ftAt = Date.now();
         const from = new Date(); from.setHours(0, 0, 0, 0); from.setDate(from.getDate() - 30);
-        snWS(this._hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
-          service_data: { verbosity: "daily", after: from.toISOString() }, return_response: true }, 30000).then((r) => {
-          const days = r && r.response && r.response.days;
+        // 0.39.1: the 30 days through the store shared with the stats card, kept in this browser - a
+        // finished day is not read again, so after the first time only today is asked for (30 days
+        // take seconds on a busy archive). Until the store has answered once, today alone first:
+        // it tells whether this SuperNotify has `daily` at all, without marking the store as without.
+        const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+        const store = () => snStatsDaily.get(this._hass, from.getTime());
+        (snStatsDaily.ok === true ? store() : snWS(this._hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
+          service_data: { verbosity: "daily", after: d0.toISOString() }, return_response: true }, 30000).then((r) => {
+          const today = r && r.response && r.response.days;
+          if (!Array.isArray(today)) throw new Error("no days");
+          return store().then((all) => (Array.isArray(all) ? all : today), () => today);
+        })).then((days) => {
           if (!Array.isArray(days)) throw new Error("no days");
           const d30 = snOvDays(days.filter(snIsObj), new Date());
           const changed = JSON.stringify(d30) !== JSON.stringify(this._d30);

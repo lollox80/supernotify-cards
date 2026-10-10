@@ -3,6 +3,13 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.88.1] - 2026-10-10
+
+### Fixed
+- **overview** (0.39.1): the 30 days behind the numbers are read through the daily store shared with
+  the stats card and kept in the browser, so after the first time only today is read (30 days took
+  about 4 s on a busy archive at every refresh; today about 0.5 s).
+
 ## [0.88.0] - 2026-10-10
 
 The overview redrawn from the Panoramica study ("Proposta 2"): each piece of information in one
