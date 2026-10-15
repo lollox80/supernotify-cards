@@ -8,6 +8,19 @@
  * Example config: see README.md
  *
  * CHANGELOG
+ * 2026-10-15 - v0.89.0. Up to date with SuperNotify 2.13-2.15.
+ *   - deliveries 0.33.0: each channel says how its last send went - "✔ sent 5 min ago", "✖ failed
+ *     21:07", "⏭ skipped: snoozed" - from last_outcome / last_sent_at / last_skip_reason on the
+ *     delivery switch (SuperNotify 2.14); the same in the detail as "Last send".
+ *   - overview 0.40.0 and the status badge/tile: channels whose last send failed are a red item of
+ *     the status ("✖ 1 channel failed on the last send", opens them in the channels card).
+ *   - archive 0.43.0: Critical / High read in one call - enquire_archive `priority` (SuperNotify
+ *     2.14) - instead of one call per day that has some; kept in this browser until the daily
+ *     totals change. Older SuperNotify: one call per day as before.
+ *   - scenarios 0.32.0 (shared helper): with `scenario_control: {refresh: true}` the active
+ *     scenarios come from the binary_sensors, live, with no enquire_active_scenarios every 30 s
+ *     (SuperNotify 2.13 or later, read from its update entity); with refresh off (sensors
+ *     "unknown"), an older SuperNotify or no update entity the cards ask SuperNotify as before.
  * 2026-10-10 - v0.88.1. overview 0.39.1: the 30 days of numbers through the daily store shared with
  *   the stats card and kept in the browser - after the first time only today is read (on a busy
  *   archive 30 days took ~4 s on every refresh, today ~0.5 s). The first time today is read alone
@@ -690,7 +703,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.88.1"; // bundle / HACS release
+const VERSION = "0.89.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -702,17 +715,17 @@ const VERSION = "0.88.1"; // bundle / HACS release
  */
 const SN_CARD_VERSIONS = {
   control: "0.39.1",
-  overview: "0.39.1",
+  overview: "0.40.0",
   bands: "0.21.1",
-  deliveries: "0.32.1",
+  deliveries: "0.33.0",
   transports: "0.27.1",
   recipients: "0.31.0",
-  scenarios: "0.31.1",
+  scenarios: "0.32.0",
   simulator: "0.17.0",
   composer: "0.25.0",
   automations: "0.21.4",
   stats: "0.33.0",
-  archive: "0.42.0",
+  archive: "0.43.0",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -849,6 +862,8 @@ const SN_STRINGS = {
     det_more: "All attributes", det_yes: "yes", det_no: "no", det_action: "Action", det_target: "Fixed targets",
     det_target_req: "Needs a target", det_target_use: "Targets use", det_inclusion: "Used when", det_prio: "Priorities",
     det_occ: "Who must be home", det_transport: "Transport", det_data: "Data", det_debug: "Debug",
+    det_last: "Last send", ls_ok: "sent", ls_err: "failed", ls_skip: "skipped",
+    h_ch_err: "channels failed on the last send", h_ch_err_1: "channel failed on the last send",
     det_err_last: "Last error", det_err_in: "In", det_err_n: "Errors since start", det_select: "Selection",
     adv_html: "Text for email (HTML)", adv_clip: "Video clip from a URL", adv_actions: "Buttons on the notification",
     adv_act_id: "action id", adv_act_title: "button text", adv_act_add: "+ button", adv_groups: "Button groups (comma)",
@@ -982,6 +997,8 @@ const SN_STRINGS = {
     det_more: "Tutti gli attributi", det_yes: "sì", det_no: "no", det_action: "Azione", det_target: "Destinatari fissi",
     det_target_req: "Serve un destinatario", det_target_use: "Uso dei destinatari", det_inclusion: "Si usa", det_prio: "Priorità",
     det_occ: "Chi deve essere in casa", det_transport: "Transport", det_data: "Dati", det_debug: "Debug",
+    det_last: "Ultimo invio", ls_ok: "inviata", ls_err: "fallita", ls_skip: "saltata",
+    h_ch_err: "canali falliti all'ultimo invio", h_ch_err_1: "canale fallito all'ultimo invio",
     det_err_last: "Ultimo errore", det_err_in: "In", det_err_n: "Errori dall'avvio", det_select: "Selezione",
     adv_html: "Testo per l'email (HTML)", adv_clip: "Video da un indirizzo", adv_actions: "Pulsanti sulla notifica",
     adv_act_id: "id azione", adv_act_title: "testo del pulsante", adv_act_add: "+ pulsante", adv_groups: "Gruppi di pulsanti (virgola)",
@@ -1528,10 +1545,10 @@ if (!window.customStrategies.some((x) => x && x.type === "supernotify")) {
 const SN_NATIVE_STR = {
   en: { all_good: "All good", paused: "Paused", until: "until", resume: "Resume", test: "Send a test",
     sure: "Tap again to send", sent: "Sent", last: "Last", none: "No notification yet", ago: "ago",
-    min: "min", h: "h", err: "transports with errors", off: "channels off" },
+    min: "min", h: "h", err: "transports with errors", off: "channels off", ch_err: "channels failed" },
   it: { all_good: "Tutto ok", paused: "In pausa", until: "fino alle", resume: "Riprendi", test: "Manda una prova",
     sure: "Tocca di nuovo per inviare", sent: "Inviata", last: "Ultima", none: "Nessuna notifica ancora", ago: "fa",
-    min: "min", h: "h", err: "transport con errori", off: "canali spenti" },
+    min: "min", h: "h", err: "transport con errori", off: "canali spenti", ch_err: "canali falliti" },
 };
 function snNativeT(hass) {
   const l = String((hass && (hass.locale && hass.locale.language || hass.language)) || "en").slice(0, 2);
@@ -1653,6 +1670,10 @@ function snNativeHealth(hass, snoozes, opts) {
   });
   if (tr.length) out.push({ k: "crit", n: tr.length, text: `${tr.length} ${T.err}`,
     title: tr.map((t) => (t.a.last_error_message ? `${t.name}: ${t.a.last_error_message}` : t.name)).join(" · ") });
+  // 0.89.0: channels whose last send failed (SuperNotify >= 2.14)
+  const chErr = snChannelsFailed(hass, ignore);
+  if (chErr.length) out.push({ k: "crit", n: chErr.length, text: `${chErr.length} ${T.ch_err || T.err}`,
+    title: chErr.map((d) => snDeliveryAlias(hass, d.name) || d.name).join(", ") });
   const off = opts.channels_off === false ? [] : snChannelsOff(hass, snEntityRows(hass, "delivery"), ignore);
   if (off.length) out.push({ k: "off", n: off.length, text: `${off.length} ${T.off}`,
     title: off.map((d) => snDeliveryAlias(hass, d.name) || d.name).join(", ") });
@@ -2689,8 +2710,35 @@ function snScenarioActive(hass, bsId) {
  * every 30 s (sooner after a change made from a card, see snEnquireBust). `v` grows when the
  * list changes, so the cards' change tracker (snChanged) redraws them.
  */
-const snActive = { names: null, t: 0, busy: false, v: 0 };
+const snActive = { names: null, t: 0, busy: false, v: 0, live: false, states: null };
+function snActiveSet(next) {
+  const prev = snActive.names;
+  if (!prev || prev.size !== next.size || [...next].some((x) => !prev.has(x))) { snActive.names = next; snActive.v++; }
+}
+
+/**
+ * 0.89.0: with `scenario_control: {refresh: true}` SuperNotify keeps the scenario binary_sensors
+ * live (2.13+: "unknown" when it is off). Live = at least one scenario with conditions reads on/off
+ * - a manual scenario is on/off anyway, so it does not count. The set of "on" names, or null.
+ * Worked out once per hass.states object.
+ */
+function snLiveScenarioNames(hass) {
+  if (!hass || !hass.states) return null;
+  if (snActive.states === hass.states) return snActive.live ? snActive.names : null;
+  snActive.states = hass.states;
+  // a 2.12 SuperNotify could leave them at their startup value (0.60.0): only from 2.13 on, as said
+  // by its update entity - when that cannot be told, ask SuperNotify as before
+  if (snSupernotifyAtLeast(hass, "2.13.0") !== true) { snActive.live = false; return null; }
+  const ids = Object.keys(hass.states).filter((e) => e.startsWith("binary_sensor.supernotify_scenario_"));
+  const isLive = ids.some((e) => ["on", "off"].includes(hass.states[e].state) && !snIsManualScenario(hass, e));
+  snActive.live = isLive;
+  if (!isLive) return null;
+  snActiveSet(new Set(ids.filter((e) => hass.states[e].state === "on").map((e) => e.replace(/^binary_sensor\.supernotify_scenario_/, ""))));
+  return snActive.names;
+}
+
 function snActiveEnsure(hass) {
+  if (snLiveScenarioNames(hass)) return; // 0.89.0: live binary_sensors, nothing to ask
   if (!hass || !hass.callWS || snActive.busy || Date.now() - snActive.t < 30000) return;
   const svc = hass.services && hass.services.supernotify;
   if (svc && !svc.enquire_active_scenarios) return;
@@ -2698,9 +2746,8 @@ function snActiveEnsure(hass) {
   snActive.t = Date.now();
   snEnquire(hass, "enquire_active_scenarios").then((r) => {
     const list = (r && r.response && r.response.scenarios) || [];
-    const next = new Set(list.map((x) => String(x).replace(/^(binary_sensor|switch)\.supernotify_scenario_/, "")));
-    const prev = snActive.names;
-    if (!prev || prev.size !== next.size || [...next].some((x) => !prev.has(x))) { snActive.names = next; snActive.v++; }
+    if (snActive.live) return; // the sensors came alive meanwhile
+    snActiveSet(new Set(list.map((x) => String(x).replace(/^(binary_sensor|switch)\.supernotify_scenario_/, ""))));
   }).catch(() => {}).finally(() => { snActive.busy = false; });
 }
 
@@ -2772,6 +2819,38 @@ function snEntityRows(hass, kind) {
     byName.set(name, { id, name, on: s.state === "on", a, isSwitch: m[1] === "switch" });
   }
   return [...byName.values()];
+}
+
+/**
+ * 0.89.0: how the last send of a delivery went (SuperNotify >= 2.14: last_outcome, last_sent_at and
+ * last_skip_reason on the delivery switch; empty again after a restart). Null when not known.
+ * {k: "ok" | "err" | "skip", at: Date | null, why: skip reason code}
+ */
+function snLastSend(a) {
+  const o = String((a && a.last_outcome) || "").toLowerCase();
+  if (!o) return null;
+  const t = a.last_sent_at ? new Date(a.last_sent_at) : null;
+  const at = t && !isNaN(t.getTime()) ? t : null;
+  const k = o === "success" ? "ok" : o === "error" || o === "failed" ? "err" : o === "skipped" ? "skip" : "";
+  return k ? { k, at, why: a.last_skip_reason || "" } : null;
+}
+
+/** 0.89.0: "✔ sent 5 min ago" / "✖ failed 21:07" / "⏭ skipped: snoozed" for one delivery, "" when unknown. */
+function snLastSendText(a, T) {
+  const ls = snLastSend(a);
+  if (!ls) return "";
+  const when = ls.at ? ` ${snAgo(ls.at, T)}` : "";
+  if (ls.k === "ok") return `✔ ${T.ls_ok}${when}`;
+  if (ls.k === "err") return `✖ ${T.ls_err}${when}`;
+  const code = String(ls.why || "").toUpperCase();
+  const why = code ? ((T.dry_reasons && T.dry_reasons[code]) || String(ls.why).toLowerCase().replace(/_/g, " ")) : "";
+  return `⏭ ${T.ls_skip}${why ? `: ${why}` : ""}`;
+}
+
+/** 0.89.0: switched-on channels whose last send failed, minus the ignored ones (lower-case names). */
+function snChannelsFailed(hass, ignore) {
+  return snEntityRows(hass, "delivery").filter((d) => d.on && (snLastSend(d.a) || {}).k === "err"
+    && !(ignore && ignore.has(String(d.name).toLowerCase())));
 }
 
 /**
@@ -3104,9 +3183,38 @@ const snArchivePrio = {
       const counts = { critical: 0, high: 0 };
       for (const d of days) {
         const pr = (d && d.priority) || {};
+        counts.critical += +pr.critical || 0;
+        counts.high += +pr.high || 0;
+      }
+      // 0.89.0: SuperNotify >= 2.14 filters by priority itself - one call for the whole window,
+      // read again only when the daily totals change
+      const svc = hass.services && hass.services.supernotify && hass.services.supernotify.enquire_archive;
+      if (svc && svc.fields && svc.fields.priority) {
+        const sig = `${fromKey}|${counts.critical}|${counts.high}`;
+        if (!(c.one && c.sig === sig)) {
+          let rows = [];
+          if (counts.critical || counts.high) {
+            const r = await snWS(hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
+              service_data: { verbosity: "summary", after: from.toISOString(), priority: ["critical", "high"], limit: 5000 },
+              return_response: true }, 60000);
+            rows = ((r && r.response && r.response.notifications) || []).filter(snIsObj)
+              .filter((x) => x.priority === "critical" || x.priority === "high").map(snArchiveLightRow);
+          }
+          c.days = { all: { n: counts, rows } };
+          c.one = true;
+          c.sig = sig;
+        }
+        this._save(c);
+        this.counts = counts;
+        this.days = days.length;
+        this.ver += 1;
+        window.dispatchEvent(new CustomEvent("supernotify-archive"));
+        return;
+      }
+      if (c.one) { c.days = {}; c.one = false; } // back on an older SuperNotify
+      for (const d of days) {
+        const pr = (d && d.priority) || {};
         const n = { critical: +pr.critical || 0, high: +pr.high || 0 };
-        counts.critical += n.critical;
-        counts.high += n.high;
         if (!d.date || (!n.critical && !n.high)) continue;
         const old = c.days[d.date];
         if (old && old.n && old.n.critical === n.critical && old.n.high === n.high) { keep[d.date] = old; continue; }
@@ -4798,6 +4906,10 @@ class SupernotifyOverviewCard extends SnCard {
     }).join(" · ") });
     const ign = new Set((c.ignore || []).map((x) => String(x).toLowerCase()));
     const delsOff = snChannelsOff(this._hass, this._scan("delivery"), ign); // 0.74.0: switched off by hand
+    // 0.89.0: a channel whose last send failed (SuperNotify >= 2.14), with when and to see it
+    const chErr = snChannelsFailed(this._hass, ign);
+    if (chErr.length) chips.push({ k: "crit", go: ["deliveries", { ids: chErr.map((d) => d.id) }], t: `✖ ${snPl(T, "h_ch_err", chErr.length)}`,
+      title: chErr.map((d) => `${snDeliveryAlias(this._hass, d.name) || d.name}: ${snLastSendText(d.a, T)}`).join(" · ") });
     if (delsOff.length) chips.push({ k: "off", go: ["deliveries", { ids: delsOff.map((d) => d.id) }], t: `🔕 ${snPl(T, "h_channels_off", delsOff.length)}`, title: delsOff.map((d) => snDeliveryAlias(this._hass, d.name) || d.name).join(", ") });
     if (c.quiet_entity && this._st(c.quiet_entity) === "on") chips.push({ k: "warn", t: `🌙 ${T.dnd} ${T.active}` });
     const snz = snLiveSnoozes(this._snoozes);
@@ -5956,10 +6068,15 @@ class SupernotifyDeliveriesCard extends SnCard {
       if (nTgt) tags.push(`🎯 ${nTgt} ${T.fixed_targets}`);
       if (d.a.target_usage && d.a.target_usage !== "no_action") tags.push(`↔️ ${d.a.target_usage}`);
       if (SN_NATIVE_TARGET_TRANSPORTS.includes(tr)) tags.push(T.native_target_tag);
+      // 0.89.0: how the last send went (SuperNotify >= 2.14)
+      const lsTxt = snLastSendText(d.a, T);
+      const lsK = (snLastSend(d.a) || {}).k;
       const meta = [state ? `<span class="st ${cls}">${esc(state)}</span>` : "",
+        lsTxt ? `<span class="st ls${lsK === "err" ? " crit" : ""}">${esc(lsTxt)}</span>` : "",
         snTech(tech, alias || d.name), tr && !snSame(tr, d.name) && !snSame(tr, alias) ? snTech(tr, "") : ""].filter(Boolean).join(" · ");
       const open = this._open && this._open.has(d.id);
       const det = open ? snDetailHtml([
+        [T.det_last, snLastSendText(d.a, T) || undefined],
         [T.det_transport, tr || undefined],
         [T.det_action, d.a.action || undefined],
         [T.det_target, snTargetList(d.a.target)],

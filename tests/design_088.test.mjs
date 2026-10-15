@@ -70,7 +70,7 @@ const band = R.querySelector(".band");
 console.log("    band:", band.className, [...R.querySelectorAll(".hr")].map(txt).join(" | "));
 ok(band && band.classList.contains("crit"), "banda rossa: email fallita oggi, più pausa, canale spento, non disturbare");
 ok(/4 cose da guardare/.test(txt(band.querySelector(".bl"))) && /2 di 3 canali accesi/.test(txt(band.querySelector(".bl"))), `frase e canali (${txt(band.querySelector(".bl"))})`);
-ok(/SuperNotify 2\.13\.2/.test(txt(R.querySelector(".bver"))) && /Card 0\.88\.\d/.test(txt(R.querySelector(".bver"))), "versioni a destra della banda");
+ok(/SuperNotify 2\.13\.2/.test(txt(R.querySelector(".bver"))) && /Card 0\.(8[89]|9\d)\.\d/.test(txt(R.querySelector(".bver"))), "versioni a destra della banda");
 ok(!R.querySelector(".hr.ok"), "le versioni non sono più righe dell'elenco");
 const pz = R.querySelector("[data-resume]");
 ok(pz && /Riprendi/.test(pz.textContent) && /finché non riprendi|fino alle/.test(txt(pz.closest(".hr"))), "pausa con ▶ Riprendi e fino a quando");

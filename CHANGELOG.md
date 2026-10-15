@@ -3,6 +3,26 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.89.0] - 2026-10-15
+
+Up to date with SuperNotify 2.13-2.15.
+
+### Added
+- **deliveries** (0.33.0): how each channel's last send went - "✔ sent 5 min ago", "✖ failed 21:07",
+  "⏭ skipped: snoozed" - from `last_outcome` / `last_sent_at` / `last_skip_reason` on the delivery
+  switch (SuperNotify 2.14); the same as "Last send" in the detail.
+- **overview** (0.40.0), status badge and tile: channels whose last send failed are a red item of the
+  status ("✖ 1 channel failed on the last send"), opening them in the channels card; `ignore:` applies.
+
+### Changed
+- **archive** (0.43.0): the Critical / High filters read the whole window in one call with
+  `enquire_archive` `priority` (SuperNotify 2.14), kept in the browser until the daily totals change,
+  instead of one call per day that has some. Older SuperNotify: one call per day as before.
+- **scenarios** (0.32.0) and every card showing active scenarios: with `scenario_control: {refresh: true}`
+  (SuperNotify 2.13+) the active scenarios come from the live binary_sensors, with no
+  `enquire_active_scenarios` every 30 s. With refresh off, an older SuperNotify or no update entity
+  the cards ask SuperNotify as before.
+
 ## [0.88.1] - 2026-10-10
 
 ### Fixed
