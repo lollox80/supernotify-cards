@@ -145,10 +145,15 @@ drawing small in their row. A tap on a drawing opens the details panel. The move
 card is off screen, with **Movements of the drawings** (`animations`) off, and with the system's
 "reduce motion" setting. Screen readers read "<name>: <state>".
 
-## Robot vacuum details
+## Robot vacuum and 3D printer details
 
 A robot has no power sensor, so its panel shows cleanings in place of energy: Today / Week / Month /
 Year with the cleanings, the time and the m² from the robot's own totals (their long-term statistics -
 `total_stats_cleanings`, `total_stats_time`, `total_stats_area` on Ecovacs), each cleaning this month
 as a bar (its duration), the average, and the latest cleanings with their area. The single cleanings
 come from the vacuum's state history (cleaning, returning, paused), as far back as the recorder keeps it.
+
+An appliance with a state of its own (a 3D printer, a Home Connect appliance) has the same panel with
+its prints or cycles, from the history of that state (Bambu Lab `print_status`, Home Connect
+`operation_state`): duration, filament in grams (`print_weight`) and the print's name, a failed print in
+orange. Its hours come from its own counter (`total_usage_hours`) when it has one, else from the runs read.
