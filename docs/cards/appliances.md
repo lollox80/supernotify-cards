@@ -93,7 +93,8 @@ card shows no Emptied / Remind button, and Switch off the plug switches the plug
 |---|---|---|
 | `price_per_kwh` | no | price of a kWh, for the costs (none without it or `price_entity`) |
 | `price_entity` | no | a sensor or input_number with the price, instead of a fixed one |
-| `illustrations` | no | `false` always uses the mdi icon (default: the illustration of [skyrotter's appliance cards](https://github.com/skyrotter/ha-appliance-electromenager-cards) when they are installed) |
+| `illustrations` | no | `false` always uses the mdi icon (default: the animated drawing of [skyrotter's appliance cards](https://github.com/skyrotter/ha-appliance-electromenager-cards) when they are installed) |
+| `animations` | no | `false` keeps those drawings still (default: they move - the drum turns, the robot's brushes spin) |
 | `show_new` | no | `false` hides the badge of the new appliances found |
 | `hide` | no | entry ids or names to leave out |
 | `appliances` | no | per appliance (by entry id or name), what the card cannot find or read - see below |
@@ -125,3 +126,7 @@ With [skyrotter/ha-appliance-electromenager-cards](https://github.com/skyrotter/
 installed, each appliance card shows their animated washing machine, dryer, dishwasher, oven,
 robot vacuum or 3D printer, fed with the appliance's power sensor and plug; without them an mdi icon
 (`mdi:washing-machine`, `mdi:dishwasher`, `mdi:tumble-dryer`, `mdi:robot-vacuum`, ...).
+Only the drawing is shown - their texts, figures and buttons are hidden, since the card says those
+already - and a tap on it opens the details panel. Both are switches in the visual editor:
+**Animated drawings** (`illustrations`) and **Movements of the drawings** (`animations`); the
+system's "reduce motion" setting stops the movements too.

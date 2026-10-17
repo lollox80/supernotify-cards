@@ -312,5 +312,44 @@ ok(!gen0.views.some((x) => x.path === "appliances"), "zero elettrodomestici: nes
 const genHide = await api.SupernotifyDashboardStrategy.generate({ hide: ["appliances"] }, mkHass());
 ok(!genHide.views.some((x) => x.path === "appliances"), "hide: [appliances] la toglie");
 
+// ── 9. 0.1.2: i disegni animati di skyrotter, opzionali (illustrations / animations) ──
+// un finto elemento al posto delle loro card: stessa struttura (.illus e .head/.stats) della v1.18
+const artCfg = [];
+class FakeArt extends dom.window.HTMLElement {
+  setConfig(c) {
+    artCfg.push({ tag: this.localName, ...c });
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    this.shadowRoot.innerHTML = '<ha-card><div class="wrap"><div class="top"><div class="illus"><svg></svg></div><div class="head">testi</div><div class="stats"></div></div></div></ha-card>';
+  }
+}
+customElements.define("appliance-washer-card", FakeArt);
+customElements.define("appliance-robot-vacuum-solo-card", class extends FakeArt {});
+const mkArt = async (cfg) => {
+  api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;
+  const c = document.createElement("supernotify-appliances-card");
+  c.setConfig(cfg);
+  document.body.appendChild(c);
+  c.hass = mkHass(); await wait(400); c.hass = mkHass(); await wait(300);
+  return c;
+};
+const a1 = await mkArt({});
+const lavArt = [...a1.shadowRoot.querySelectorAll(".ap")].find((n) => /Lavatrice/.test(n.textContent));
+const wEl = lavArt && lavArt.querySelector(".art.ill appliance-washer-card");
+const wCfg = artCfg.find((c) => c.tag === "appliance-washer-card");
+ok(wEl && wCfg && wCfg.power === "sensor.presa_lavatrice_power" && wCfg.switch === "switch.presa_lavatrice" && wCfg.animations === true,
+  `lavatrice: il loro disegno con la presa vera e i movimenti (${JSON.stringify(wCfg)})`);
+const trim = wEl && wEl.shadowRoot.querySelector("style[data-sn]");
+ok(trim && /\.head, \.stats/.test(trim.textContent) && !/animation: none/.test(trim.textContent), "solo il disegno: testi e cifre della loro card nascosti");
+ok(wEl && wEl.style.pointerEvents === "none" && wEl.getAttribute("aria-hidden") === "true", "il disegno non prende i tocchi (si apre il nostro pannello)");
+const vCfg = artCfg.find((c) => c.tag === "appliance-robot-vacuum-solo-card");
+ok(vCfg && vCfg.entity === "vacuum.bruno" && vCfg.show_buttons === false && vCfg.show_battery === false && !vCfg.power, `Bruno: il robot con la sua entità, senza i loro pulsanti (${JSON.stringify(vCfg)})`);
+artCfg.length = 0;
+const a2 = await mkArt({ animations: false });
+const wEl2 = a2.shadowRoot.querySelector(".art.ill appliance-washer-card");
+const wCfg2 = artCfg.find((c) => c.tag === "appliance-washer-card");
+ok(wEl2 && wCfg2 && wCfg2.animations === false && /animation: none/.test(wEl2.shadowRoot.querySelector("style[data-sn]").textContent), "animations: false = disegno fermo");
+const a3 = await mkArt({ illustrations: false });
+ok(!a3.shadowRoot.querySelector(".art.ill") && a3.shadowRoot.querySelector('.art ha-icon[icon="mdi:washing-machine"]'), "illustrations: false = icona mdi");
+
 console.log(fail ? `\n${fail} FAIL` : "\nall passed");
 process.exit(fail ? 1 : 0);

@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.91.0] - 2026-10-17
 
 ### Added
-- **appliances** (0.1.1), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
+- **appliances** (0.1.2), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
   watches. What asks for something (finished and not emptied, a stuck robot vacuum) and what is running
   come first as cards, with the power now (W / kW) when there is a power sensor: illustration ([skyrotter's appliance cards](https://github.com/skyrotter/ha-appliance-electromenager-cards)
   when installed, else an mdi icon), coloured status dot, start → end, duration, kWh and cost of the last
@@ -14,7 +14,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`mobile_app_notification_action`), **Resume cleaning** is `vacuum.start` - and a ⋮ menu (Switch off
   the plug, Remind me later, Details, Settings). Running: the estimated end, a bar and the time left, from
   the appliance's own remaining time or the average of its short / long cycles. Idle appliances are rows
-  under "Idle". `?device=<device or entry id>` in the URL puts one first, outlined. A badge counts the
+  under "Idle". Optional animated drawings of skyrotter's Appliance Cards when installed (`illustrations`, `animations`: on/off in the editor). `?device=<device or entry id>` in the URL puts one first, outlined. A badge counts the
   appliances found and not set up yet. Details panel (dialog; bottom sheet on a phone): power now, Today /
   Week / Month / Year, energy of each cycle this month (short / long / unusual), averages, latest cycles,
   the appliance's notifications in the archive. Data: the entries (`config_entries/get`), the plug /

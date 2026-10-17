@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.1.1",
+  appliances: "0.1.2",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -2595,7 +2595,7 @@ function snBandName(T, key, custom) {
 const SN_FORM_LABELS = {
   en: {
     price_per_kwh: "Price per kWh (for the cost)", price_entity: "Price entity (instead of a fixed price)",
-    illustrations: "Appliance illustrations (when skyrotter's cards are installed)", show_new: "Badge for new appliances found",
+    illustrations: "Animated drawings (skyrotter's Appliance Cards, when installed)", animations: "Movements of the drawings", show_new: "Badge for new appliances found",
     _common: "Look and text", style: "Colours", icons: "Icons", show_version: "Show the card version",
     intro: "Intro text on top", title: "Title", dnd_entity: "Do-not-disturb switch",
     quiet_entity: "Computed quiet state (optional)", presence_entity: "Person for the status bar",
@@ -2624,7 +2624,7 @@ const SN_FORM_LABELS = {
   },
   it: {
     price_per_kwh: "Prezzo al kWh (per il costo)", price_entity: "Entità del prezzo (al posto del prezzo fisso)",
-    illustrations: "Illustrazioni degli elettrodomestici (se ci sono le card di skyrotter)", show_new: "Badge dei nuovi elettrodomestici trovati",
+    illustrations: "Disegni animati (Appliance Cards di skyrotter, se installate)", animations: "Movimenti dei disegni", show_new: "Badge dei nuovi elettrodomestici trovati",
     _common: "Aspetto e testi", style: "Colori", icons: "Icone", show_version: "Mostra la versione della card",
     intro: "Testo introduttivo in alto", title: "Titolo", dnd_entity: "Interruttore non disturbare",
     quiet_entity: "Stato silenzioso calcolato (facoltativo)", presence_entity: "Persona nella barra di stato",
@@ -2688,7 +2688,7 @@ function snForm(kind) {
     archive: [...archive, bool("group_repeats", true), bool("priority_filters", true), bool("auto_select", true), bool("expand"), txt("max_height")],
     why: [...archive, bool("group_repeats", true), bool("auto_select", true), bool("expand"), txt("max_height")],
     tools: [num("archive_days", 1, 365), num("media_days", 1, 365)],
-    appliances: [num("price_per_kwh", 0, 5, 0.001), ent("price_entity", ["sensor", "input_number"]), bool("illustrations", true), bool("show_new", true)],
+    appliances: [num("price_per_kwh", 0, 5, 0.001), ent("price_entity", ["sensor", "input_number"]), bool("illustrations", true), bool("animations", true), bool("show_new", true)],
   };
   return {
     schema: [...(S[kind] || []), common],
@@ -10832,6 +10832,9 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.1.2 (bundle 0.91.0): skyrotter's animated drawings as an option - `illustrations` (on/off) and
+   * `animations` (their movements on/off), both in the visual editor; only the drawing is shown, a tap
+   * on it opens the details panel.
    * 0.1.1 (bundle 0.91.0): the power now on each appliance with a power sensor (⚡ on the cards, at the
    * right of the idle rows, W or kW); the list is rebuilt only when what it shows changes.
    * 0.1.0 (bundle 0.91.0): the appliances Appliance Autonotify watches - washing machine, dishwasher,
@@ -10858,7 +10861,7 @@ class SupernotifyAppliancesCard extends SnCard {
   }
 
   setConfig(config) {
-    this._config = { style: "supernotify", illustrations: true, show_new: true, ...(config || {}) };
+    this._config = { style: "supernotify", illustrations: true, animations: true, show_new: true, ...(config || {}) };
     this._rendered = false;
     this._panel = this._panel || null; // entry_id of the open details panel
     this._menu = null;
@@ -11199,7 +11202,7 @@ class SupernotifyAppliancesCard extends SnCard {
     for (const box of root.querySelectorAll("[data-art]")) {
       const x = items.find((i) => i.ap.id === box.dataset.art);
       if (!x) continue;
-      const el = this._config.illustrations !== false && snApplArt(this._art, x.ap, this._hass);
+      const el = this._config.illustrations !== false && snApplArt(this._art, x.ap, this._hass, this._config.animations !== false);
       if (el) { box.classList.add("ill"); box.appendChild(el); }
       else box.innerHTML = `<ha-icon icon="${snEsc(x.ap.icon)}"></ha-icon>`;
     }
@@ -11731,24 +11734,50 @@ function snApplPeriods(cy, now) {
   });
 }
 
-/** skyrotter's appliance card for this appliance, kept between draws; null when not installed. */
-function snApplArt(cache, ap, hass) {
+/** skyrotter's appliance card for this appliance, kept between draws; null when not installed.
+ * Only its drawing is shown: the texts, figures and buttons of their card are hidden (the card says
+ * those already), and it takes no clicks, so a tap opens the details panel, not their more-info. */
+function snApplArt(cache, ap, hass, anim) {
   const tag = SN_APPL_ART[ap.type];
   if (!tag || !customElements.get(tag) || !(ap.power || ap.vacuum)) return null;
-  let el = cache.get(ap.id);
+  const key = `${ap.id}|${anim ? 1 : 0}`;
+  let el = cache.get(key);
   if (!el) {
     el = document.createElement(tag);
-    const cfg = { type: `custom:${tag}`, name: ap.name, show_toggle: false };
-    if (ap.power) { cfg.power = ap.power; cfg.threshold = ap.threshold; }
-    if (ap.switch) cfg.switch = ap.switch;
-    if (ap.vacuum) cfg.entity = ap.vacuum;
-    if (ap.remaining) cfg.remaining = ap.remaining;
-    if (ap.progress) cfg.progress = ap.progress;
+    const cfg = { type: `custom:${tag}`, name: ap.name, animations: anim };
+    if (ap.vacuum) {
+      cfg.entity = ap.vacuum;
+      for (const k of ["battery", "area", "time", "fan", "status", "consumables", "buttons"]) cfg[`show_${k}`] = false;
+    } else {
+      if (ap.power) { cfg.power = ap.power; cfg.threshold = ap.threshold; }
+      if (ap.switch) cfg.switch = ap.switch;
+      if (ap.remaining) cfg.remaining = ap.remaining;
+      if (ap.progress) cfg.progress = ap.progress;
+    }
     try { el.setConfig(cfg); } catch (e) { return null; }
-    cache.set(ap.id, el);
+    el.style.pointerEvents = "none";
+    el.setAttribute("aria-hidden", "true");
+    cache.set(key, el);
   }
   try { el.hass = hass; } catch (e) { /* their card */ }
+  snApplArtTrim(el, anim);
   return el;
+}
+
+// what of skyrotter's card is hidden around the drawing (v1.18: .head/.stats/.modes/.bar; the robot's .title)
+const SN_APPL_ART_CSS = `ha-card { background: none !important; box-shadow: none !important; border: none !important; padding: 0 !important; cursor: inherit !important; }
+.wrap { padding: 0 !important; } .top { display: block !important; }
+.head, .stats, .modes, .bar, .title, .info, .actions, .chips, .buttons { display: none !important; }
+.illus { width: 100% !important; padding: 0 !important; background: none !important; }`;
+
+/** Their shadow root is rebuilt by setConfig: add the trim (and no motion) once it is there. */
+function snApplArtTrim(el, anim) {
+  const root = el.shadowRoot;
+  if (!root || root.querySelector("style[data-sn]")) return;
+  const st = document.createElement("style");
+  st.dataset.sn = "1";
+  st.textContent = SN_APPL_ART_CSS + (anim ? "" : " *, *::before, *::after { animation: none !important; transition: none !important; }");
+  root.appendChild(st);
 }
 
 /** Statistics rows -> bins { t, dt, mean, max }. */
@@ -11975,8 +12004,8 @@ function snApplCss(p) {
   .ap.flash { border-color: var(--primary-color, #03a9f4); box-shadow: 0 0 0 2px rgba(var(--rgb-primary-color, 3,169,244), .25); }
   .art { flex: 0 0 96px; min-height: 96px; display: flex; align-items: center; justify-content: center; cursor: pointer;
     border-radius: 12px; background: ${p.soft}; overflow: hidden; }
-  .art.ill { flex-basis: 150px; background: none; }
-  .art.ill > * { width: 100%; }
+  .art.ill { background: none; padding: 4px; box-sizing: border-box; }
+  .art.ill > * { width: 100%; display: block; }
   .art ha-icon { --mdc-icon-size: 56px; color: ${p.brandD}; }
   .main { flex: 1; min-width: 0; }
   .l1 { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; position: relative; padding-right: 40px; min-height: 28px; }
@@ -12051,8 +12080,7 @@ function snApplCss(p) {
     .ap { gap: 10px; padding: 10px; }
     .art { flex-basis: 56px; min-height: 56px; align-self: flex-start; }
     .art ha-icon { --mdc-icon-size: 34px; }
-    .ap:has(.art.ill) { flex-direction: column; }
-    .art.ill { flex-basis: auto; min-height: 84px; align-self: stretch; }
+    .art.ill { flex-basis: 72px; padding: 2px; }
     .eta .big { font-size: 26px; }
   }
   @media (max-width: 600px) {
