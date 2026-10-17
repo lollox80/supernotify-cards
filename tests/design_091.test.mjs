@@ -257,8 +257,10 @@ ok(sheet.querySelectorAll(".bars .b").length === inMonth, `una barra per ciclo d
 ok(sheet.querySelectorAll(".bars .b.anom").length === (long.start >= m0.getTime() ? 1 : 0), "il ciclo da 22 h in arancio");
 ok(sheet.querySelector(".bars .b.short") && sheet.querySelector(".bars .b.long"), "corti e lunghi di colori diversi");
 ok(/Corti · media/.test(txt(sheet.querySelector(".leg"))) && /Lunghi · media 2\sh\s30\smin/.test(txt(sheet.querySelector(".leg"))), `legenda con le medie (${txt(sheet.querySelector(".leg"))})`);
-ok(sheet.querySelectorAll(".tb tbody tr").length === 8 && sheet.querySelector(".tb tr.anom"), "tabella degli ultimi cicli, l'anomalo segnato");
+ok(sheet.querySelectorAll(".tb:not(.days) tbody tr").length === 8 && sheet.querySelector(".tb:not(.days) tr.anom"), "tabella degli ultimi cicli, l'anomalo segnato");
 ok(/a ore/.test(txt(sheet)), "dice che i cicli vecchi sono a ore");
+const d7 = [...sheet.querySelectorAll(".tb.days tbody tr")];
+ok(d7.length === 7 && /Ultimi 7 giorni/.test(txt(sheet)) && /kWh/.test(txt(d7[0])) && /€/.test(txt(sheet.querySelector(".tb.days"))), `ultimi 7 giorni: una riga al giorno con consumo e costo (${txt(d7[1])})`);
 ok(sheet.querySelector("#pNotifs") && /Impostazioni/.test(txt(sheet.querySelector("#pSettings"))), "pulsanti Notifiche e Impostazioni");
 ok(R.activeElement && R.activeElement.dataset.ptab === "stats", "cambiando scheda il fuoco resta sulla scheda");
 R.getElementById("ov").onkeydown({ key: "Escape" });
@@ -393,10 +395,40 @@ const vs = a5.shadowRoot.querySelector(".ov .sheet");
 const vt = vs ? [...vs.querySelectorAll(".tile")].map((t) => txt(t)) : [];
 console.log("    Bruno:", vt.join(" | "));
 ok(vt.length === 4 && /^Oggi\s*2 pulizie\s*1 h 15 min/.test(vt[0]) && !/-/.test(vt.join(" ")), "Bruno: pulizie e tempo da Oggi ad Anno, un contatore tornato indietro non conta");
-ok(vs.querySelectorAll(".bars .b").length === (NOW - 5 * H >= new Date(new Date(NOW).setDate(1)).setHours(0, 0, 0, 0) ? 2 : 0) && vs.querySelectorAll(".tb tbody tr").length === 2
-  && /40 min/.test(txt(vs.querySelector(".tb"))) && /31 m²/.test(txt(vs.querySelector(".tb"))), "Bruno: barre e tabella delle pulizie con durata e area");
+ok(vs.querySelectorAll(".bars .b").length === (NOW - 5 * H >= new Date(new Date(NOW).setDate(1)).setHours(0, 0, 0, 0) ? 2 : 0) && vs.querySelectorAll(".tb:not(.days) tbody tr").length === 2
+  && /40 min/.test(txt(vs.querySelector(".tb:not(.days)"))) && /31 m²/.test(txt(vs.querySelector(".tb:not(.days)"))), "Bruno: barre e tabella delle pulizie con durata e area");
 ok(!/consumi e cicli non si contano/.test(txt(vs)) && /cronologia di Home Assistant/.test(txt(vs)), "Bruno: niente più «non si contano», dice da dove vengono i dati");
 a5.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
+
+// un dispositivo aggiunto a mano: il deumidificatore, stato dalla potenza, niente Autonotify
+api.snAppl._listKey = null;
+const mStates = baseStates(); mStates["sensor.presa_lavastoviglie_power"] = pw(180, "Presa Lavastoviglie Potenza");
+const a7 = await mkArt({ devices: [{ name: "Deumidificatore", power_entity: "sensor.presa_lavastoviglie_power", switch_entity: "switch.presa_lavastoviglie", threshold: 20, info: ["sensor.bruno_batteria"] }] }, mStates);
+const deu = apOf(a7, /Deumidificatore/);
+ok(deu && /In funzione/.test(txt(deu.querySelector(".st"))) && !deu.querySelector(".pb"), "a mano: in funzione dalla potenza (180 W > 20 W), nessun pulsante di Autonotify");
+const deuAp = api.snAppl._list.find((x) => x.name === "Deumidificatore");
+ok(deuAp && deuAp.manual && deuAp.id === "manual_deumidificatore" && deuAp.type === "dehumidifier" && deuAp.switch === "switch.presa_lavastoviglie", "a mano: id, tipo dal nome, presa");
+a7._openPanel(deuAp.id); await wait(200);
+const dSheet = a7.shadowRoot.querySelector(".ov .sheet");
+ok(dSheet && !dSheet.querySelector("#pNotifs") && /aggiunto a mano/.test(txt(dSheet)) && /Bruno Batteria|Batteria/.test(txt(dSheet.querySelector(".facts"))), "a mano: panoramica senza notifiche di Autonotify, dice da dove viene, mostra le entità di info:");
+a7.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
+
+// 0.2.0: una card per un solo dispositivo, con il nuovo nome
+ok(customElements.get("supernotify-devices-card") && customElements.get("supernotify-appliances-card"), "supernotify-devices-card, e il vecchio nome resta");
+api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;
+const one = document.createElement("supernotify-devices-card");
+one.setConfig({ device: "Lavatrice", price_per_kwh: 0.25 });
+document.body.appendChild(one);
+one.hass = mkHass(); await wait(400); one.hass = mkHass(); await wait(400);
+const oneR = one.shadowRoot;
+ok(oneR.querySelector(".one .ptabs") && !oneR.querySelector(".ov .sheet") && !oneR.querySelector(".hdr") && /Lavatrice/.test(txt(oneR.querySelector(".one .ph")))
+  && !oneR.querySelector(".one .x"), "device: Lavatrice = panoramica e schede dentro la card, senza elenco, titolo né pulsante Chiudi");
+oneR.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
+ok(oneR.querySelector(".one .tiles") && oneR.querySelector(".tb.days"), "device: la scheda dello storico nella card");
+const none = document.createElement("supernotify-devices-card");
+none.setConfig({ device: "Frigorifero" }); document.body.appendChild(none);
+none.hass = mkHass(); await wait(300); none.hass = mkHass(); await wait(200);
+ok(/Nessun elettrodomestico o dispositivo di nome «Frigorifero»/.test(txt(none.shadowRoot)), "device: nome sbagliato, lo dice");
 
 // in funzione: il tempo che manca sul display e l'avanzamento
 api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;

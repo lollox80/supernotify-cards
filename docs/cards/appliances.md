@@ -108,6 +108,8 @@ card shows no Emptied / Remind button, and Switch off the plug switches the plug
 | `show_new` | no | `false` hides the badge of the new appliances found |
 | `hide` | no | entry ids or names to leave out |
 | `appliances` | no | per appliance (by entry id or name), what the card cannot find or read - see below |
+| `device` | no | one device only (its name or entry id): its overview and history right in the card, with no list and no dialog - a control centre for that device |
+| `devices` | no | devices added by hand, next to Autonotify's - see [Devices added by hand](#devices-added-by-hand) |
 | `title`, `intro`, `style`, `show_version` | no | as on every card |
 
 ```yaml
@@ -130,6 +132,46 @@ appliances:
 `threshold`, `grace_period` and `min_duration` are only for the cycles in the panel: whether an
 appliance is running or finished is Autonotify's own decision. Set them as in Autonotify when its
 cycles and the card's disagree.
+
+## One device per card
+
+```yaml
+type: custom:supernotify-devices-card
+device: Lavatrice
+price_entity: input_number.costo_energia_kwh
+```
+
+The card shows that device alone - the drawing, the state, the **Overview** and the history tabs,
+the buttons - as the details panel does, inside the card. It works for an Autonotify appliance and for a
+device added by hand (`device: Deumidificatore` with `devices:` below). Since 0.2.0 the card is
+`custom:supernotify-devices-card`; `custom:supernotify-appliances-card` keeps working.
+
+## Devices added by hand
+
+Anything Autonotify does not watch - a dehumidifier, a heater, a fridge - can be added under `devices:`,
+with the same keys as `appliances:`. It gets the same drawing (by `type`, or from its name), overview and
+history; it runs while its power is above `threshold` (and through the pauses of its cycle, by
+`grace_period`); there is no "to empty" and no reminders, which come from Autonotify.
+
+```yaml
+devices:
+  - name: Deumidificatore
+    type: dehumidifier                       # else from the name; a drawing for the known types
+    power_entity: sensor.presa_deumidificatore_power   # needs state_class: measurement for the history
+    switch_entity: switch.presa_deumidificatore
+    threshold: 20
+    info:                                    # shown in the overview
+      - sensor.deumidificatore_tank
+      - sensor.deumidificatore_current_humidity
+```
+
+`info:` works under `appliances:` too. A robot (`vacuum:`) or a device with a state of its own
+(`device_id:`) can be added the same way.
+
+## Last 7 days
+
+The history tab has one row a day for the last 7 days - cycles (cleanings, prints), time, energy and
+cost, or area, or filament - next to Today / Week / Month / Year.
 
 ## Illustrations
 

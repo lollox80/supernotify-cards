@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.91.0] - 2026-10-17
 
 ### Added
-- **appliances** (0.1.6), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
+- **appliances** (0.2.0), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
   watches. What asks for something (finished and not emptied, a stuck robot vacuum) and what is running
   come first as cards, with the power now (W / kW) when there is a power sensor: an animated drawing of its own (washer, dryer,
   dishwasher, oven, 3D printer, robot vacuum with or without its dock) that follows its state - time left
@@ -19,11 +19,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   under "Idle". On a computer the appliances that ask for something sit side by side with bigger drawings, the idle ones in columns. Drawings, their movements and the robot's dock are switches in the editor (`illustrations`, `animations`, `robot_dock`); the movements stop off screen. `?device=<device or entry id>` in the URL puts one first, outlined. A badge counts the
   appliances found and not set up yet. A tap opens the details panel (dialog; bottom sheet on a phone) on an **Overview** tab - the drawing, the state, the cycle under way or the last one, the average, the notifications sent, what the device says (plug, battery, consumables, temperatures) and the buttons for now - with the history one tab away: power now, Today /
   Week / Month / Year, energy of each cycle this month (short / long / unusual), averages, latest cycles,
-  the appliance's notifications in the archive; for a robot vacuum, its cleanings (count, time, m²) from its own totals and state history; for a 3D printer (or a Home Connect appliance), its prints (duration, filament, name, failed ones marked) from its state history.
+  the appliance's notifications in the archive, and the last 7 days one row a day; for a robot vacuum, its cleanings (count, time, m²) from its own totals and state history; for a 3D printer (or a Home Connect appliance), its prints (duration, filament, name, failed ones marked) from its state history.
   A 3D printer is found on the device that prints, not on another device with the same name. Data: the entries (`config_entries/get`), the plug /
   vacuum / device found by name (`appliances:` overrides), the state from what Autonotify sent through
   SuperNotify (its archive), cycles and energy from the recorder's statistics. Costs only with
   `price_per_kwh` or `price_entity`. 11 languages.
+- **appliances**: devices added by hand (`devices:`) next to Autonotify's - a dehumidifier, a heater, anything with a power sensor, a vacuum or a state of its own - with the same drawings, overview and history; `info:` lists entities to show in the overview. `device: <name>` shows one device alone, its overview and history inside the card. The card is now `supernotify-devices-card` ("SuperNotify devices" in the picker); `supernotify-appliances-card` stays as an alias.
 - **strategy**: an **Appliances** view (Elettrodomestici, Haushaltsgeräte, ...) right after Archive, only when Appliance Autonotify has an appliance.
 
 ### Changed
