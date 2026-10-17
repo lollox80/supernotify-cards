@@ -188,6 +188,7 @@ ok(note.includes(`Fine ciclo alle ${hm(tLavEnd)}`) && note.includes(`+3 promemor
 const sum = txt(lav.querySelector(".sum"));
 console.log("    riassunto:", sum);
 ok(sum.includes(`${hm(tLavStart)} → ${hm(tLavEnd)}`) && /1\sh\s20\smin/.test(sum) && /kWh/.test(sum) && /€/.test(sum), "inizio → fine, durata, kWh, €");
+ok(/^1,2\sW · /.test(sum.replace(/^⚡\s*/, "")) && lav.querySelector(".sum .pw"), "potenza istantanea in testa al riassunto (1,2 W)");
 ok(txt(lav.querySelector(".pb")) === "Svuotata" && lav.querySelectorAll(".pb").length === 1, "un solo pulsante: Svuotata");
 ok(lav.querySelector('[data-open] ha-icon[icon="mdi:washing-machine"]'), "illustrazione: icona mdi (card skyrotter non installate)");
 ok(/Dettagli, consumi e cicli/.test(txt(lav.querySelector(".lnk"))), "link Dettagli, consumi e cicli");
@@ -198,6 +199,7 @@ ok(/Durata filtro al 5%/.test(txt(br)) && !/spazzola/.test(txt(br)), "consumabil
 ok(txt(br.querySelector(".pb")) === "Riprendi pulizia", "Bruno: Riprendi pulizia");
 const ls = [...R.querySelectorAll(".row")].find((n) => /Lavastoviglie/.test(n.textContent));
 ok(/Fermo · Ultimo ciclo ieri/.test(txt(ls)), `Lavastoviglie: ${txt(ls.querySelector(".rs"))}`);
+ok(/^0,4\sW$/.test(txt(ls.querySelector(".rp"))), `riga: potenza della presa vera a destra (${txt(ls.querySelector(".rp"))})`);
 const asc = [...R.querySelectorAll(".row")].find((n) => /Asciugatrice/.test(n.textContent));
 ok(/Spento/.test(txt(asc)), "Asciugatrice: spenta (presa spenta)");
 ok(txt(R.getElementById("newdev")) === "1 nuovo dispositivo ›" && R.querySelector('#newdev a[href="/config/integrations/integration/appliance_autonotify"]'),
@@ -233,7 +235,7 @@ ok(![...R.querySelectorAll(".ap")].some((n) => /Lavatrice/.test(n.textContent)) 
 await wait(300);
 const sheet = R.querySelector(".ov .sheet");
 ok(sheet && sheet.getAttribute("role") === "dialog" && sheet.getAttribute("aria-modal") === "true", "pannello: dialog modale");
-ok(/Lavatrice/.test(txt(sheet.querySelector(".ph"))) && /ora 1 W/.test(txt(sheet.querySelector(".ph"))), `testata con stato e potenza (${txt(sheet.querySelector(".ph"))})`);
+ok(/Lavatrice/.test(txt(sheet.querySelector(".ph"))) && /ora 1,2\sW/.test(txt(sheet.querySelector(".ph"))), `testata con stato e potenza (${txt(sheet.querySelector(".ph"))})`);
 const tiles = [...sheet.querySelectorAll(".tile")].map((t) => txt(t));
 console.log("    riquadri:", tiles.join(" | "));
 ok(tiles.length === 4 && /^Oggi/.test(tiles[0]) && /^Anno/.test(tiles[3]) && tiles.every((t) => /kWh/.test(t) && /cicl/.test(t) && /€/.test(t)), "Oggi / Settimana / Mese / Anno con kWh, cicli e costo");
@@ -277,6 +279,7 @@ console.log("    in funzione:", txt(run).slice(0, 160));
 ok(run && /In funzione/.test(txt(run.querySelector(".st"))) && run.querySelector(".dot.run"), "in funzione, pallino blu");
 ok(run && /Fine prevista/.test(txt(run.querySelector(".eta"))) && run.querySelector(".bar i") && /mancano/.test(txt(run.querySelector(".left"))), "fine prevista, barra, tempo rimasto");
 ok(run && /stima dai cicli simili/.test(txt(run)), "dice che è una stima dai cicli simili");
+ok(run && /1,9\skW/.test(txt(run.querySelector(".sum"))), "in funzione: 1900 W scritti 1,9 kW");
 ok(run && !run.querySelector(".pb"), "in funzione nessun pulsante principale (silenziare per elettrodomestico non è possibile)");
 
 // ── 6. utente non admin: niente pulsanti con fire_event ───────────────────

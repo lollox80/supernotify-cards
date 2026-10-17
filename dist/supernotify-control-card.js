@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.1.0",
+  appliances: "0.1.1",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,8 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.1.1 (bundle 0.91.0): the power now on each appliance with a power sensor (⚡ on the cards, at the
+   * right of the idle rows, W or kW); the list is rebuilt only when what it shows changes.
    * 0.1.0 (bundle 0.91.0): the appliances Appliance Autonotify watches - washing machine, dishwasher,
    * dryer, robot vacuum, 3D printer - one card each for what asks for something (finished, stuck) or is
    * running, one row each for the idle ones, and a details panel with energy and cycles.
@@ -10969,9 +10971,15 @@ class SupernotifyAppliancesCard extends SnCard {
     if (idle.length) {
       parts.push(`<div class="sec">${esc(T.stopped)}</div><div class="rows">${idle.map((x) => this._rowHtml(x)).join("")}</div>`);
     }
-    body.innerHTML = snIconify(parts.join(""), this._config);
-    this._mountArt(body, items);
-    this._bind(body, items);
+    // the power changes every few seconds: rebuild only what changed, so a focused button keeps its focus
+    const html = snIconify(parts.join(""), this._config);
+    this._shown = items;
+    if (html !== this._bodyLast || !body.querySelector(".ap, .row")) {
+      this._bodyLast = html;
+      body.innerHTML = html;
+      this._mountArt(body, items);
+      this._bind(body, items);
+    }
     if (flash && !this._flashT) {
       this._flashT = setTimeout(() => { this._flashT = null; this._focusAt = 0; this._update(); }, Math.max(0, 5000 - (Date.now() - this._focusAt)));
     }
@@ -11027,6 +11035,18 @@ class SupernotifyAppliancesCard extends SnCard {
   _fmtKwh(kwh) {
     if (kwh == null || !Number.isFinite(kwh)) return "";
     return `${kwh.toLocaleString(this._loc(), { maximumFractionDigits: kwh < 10 ? 2 : 1 })} kWh`;
+  }
+
+  /** The power sensor's reading now, NaN without one or while it is unavailable. */
+  _powerNow(ap) {
+    return ap.power ? parseFloat(this._st(ap.power)) : NaN;
+  }
+
+  /** "1850 W", "1,85 kW", "0,8 W". */
+  _fmtW(w) {
+    if (!Number.isFinite(w)) return "";
+    if (Math.abs(w) >= 1000) return `${(w / 1000).toLocaleString(this._loc(), { maximumFractionDigits: 2 })} kW`;
+    return `${w.toLocaleString(this._loc(), { maximumFractionDigits: Math.abs(w) < 10 ? 1 : 0 })} W`;
   }
 
   /** €, only with a price (price_per_kwh or price_entity) - never made up. */
@@ -11133,7 +11153,7 @@ class SupernotifyAppliancesCard extends SnCard {
           <span class="st ${cls}"><span class="dot ${cls}"></span>${esc(word)}</span>
           <button class="more" data-more="${esc(ap.id)}" aria-haspopup="menu" aria-expanded="${this._menu === ap.id}" title="${esc(T.more)}">⋮</button>${menu}</div>
         ${run}
-        <div class="sum">${esc(this._summary(ap, s))}</div>
+        <div class="sum">${Number.isFinite(this._powerNow(ap)) ? `<span class="pw" title="${esc(T.power_now)}">⚡ ${esc(this._fmtW(this._powerNow(ap)))}</span> · ` : ""}${esc(this._summary(ap, s))}</div>
         ${notes ? `<div class="note">🔔 ${esc(notes)}</div>` : ""}
         ${extra.join("")}
         <div class="acts">${pri ? `<button class="pb" data-act="${pri.act}" data-id="${esc(ap.id)}"${this._busy[ap.id] ? " disabled" : ""}>${esc(pri.label)}</button>` : ""}
@@ -11164,10 +11184,12 @@ class SupernotifyAppliancesCard extends SnCard {
     const last = s.last || (cy && cy.done.length ? cy.done[cy.done.length - 1] : null);
     const sub = last ? T.last_cycle.replace("{d}", `${this._fmtTime(last.start)} · ${this._fmtDur(last.end - last.start)}`) : T.no_cycle;
     const msg = this._msg[ap.id];
+    const w = this._powerNow(ap);
     return `<div class="row" data-open="${esc(ap.id)}">
       <ha-icon class="ri" icon="${esc(ap.icon)}"></ha-icon>
       <div class="rb"><b>${esc(ap.name)}</b><span class="rs"><span class="dot ${cls}"></span>${esc(word)} · ${esc(sub)}</span>
         ${msg ? `<span class="res ${msg.ok ? "ok" : "err"}">${esc(msg.text)}</span>` : ""}</div>
+      ${Number.isFinite(w) ? `<span class="pw rp" title="${esc(T.power_now)}">${esc(this._fmtW(w))}</span>` : ""}
       <span class="arr" aria-hidden="true">›</span></div>`;
   }
 
@@ -11184,7 +11206,8 @@ class SupernotifyAppliancesCard extends SnCard {
   }
 
   _bind(root, items) {
-    const find = (id) => items.find((i) => i.ap.id === id);
+    // the latest state, not the one of the last rebuild (the body is not rebuilt when nothing shown changed)
+    const find = (id) => (this._shown || items).find((i) => i.ap.id === id);
     root.querySelectorAll("[data-open]").forEach((n) => {
       n.onclick = (e) => { e.preventDefault(); this._openPanel(n.dataset.open); };
     });
@@ -11307,9 +11330,9 @@ class SupernotifyAppliancesCard extends SnCard {
     const cy = snAppl.cyclesOf(ap);
     const s = snApplState(this._hass, ap, Date.now(), cy);
     const [cls, word] = this._status(ap, s);
-    const w = ap.power ? parseFloat(this._st(ap.power)) : NaN;
+    const w = this._powerNow(ap);
     const head = `<div class="ph"><ha-icon icon="${esc(ap.icon)}"></ha-icon><div class="pht"><b id="pTitle">${esc(ap.name)}</b>
-        <span class="st ${cls}"><span class="dot ${cls}"></span>${esc(word)}${Number.isFinite(w) ? ` · ${esc(T.power_now)} ${esc(Math.round(w))} W` : ""}</span></div>
+        <span class="st ${cls}"><span class="dot ${cls}"></span>${esc(word)}${Number.isFinite(w) ? ` · ${esc(T.power_now)} ${esc(this._fmtW(w))}` : ""}</span></div>
         <button class="x" title="${esc(T.close)}" aria-label="${esc(T.close)}">✕</button></div>`;
     let body;
     if (!ap.power) {
@@ -11995,6 +12018,8 @@ function snApplCss(p) {
   .rb { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .rs { font-size: 12.5px; color: ${p.muted}; display: inline-flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .arr { font-size: 22px; color: ${p.muted}; }
+  .pw { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; }
+  .rp { flex: none; font-size: 12.5px; color: ${p.muted}; }
   .ov { position: fixed; inset: 0; z-index: 9; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
   .sheet { background: ${p.panel}; color: ${p.ink}; border-radius: 18px; width: min(720px, 100%); max-height: calc(100vh - 32px);
     overflow: auto; padding: 16px 18px 18px; box-sizing: border-box; box-shadow: 0 12px 40px rgba(0,0,0,.3); }

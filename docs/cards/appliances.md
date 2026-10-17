@@ -19,7 +19,7 @@ price_per_kwh: 0.30        # optional: costs in € (or your currency) - never s
 **First what asks for something, then what is running.** Each of these is a card of its own: the
 illustration, the name, a coloured dot - blue running, orange finished and not emptied yet, red
 stuck or in error, grey idle or off - one line with the last (or current) cycle - start → end,
-duration, kWh and cost - and **one** main button:
+duration, kWh and cost, after the power now (⚡ 1850 W, with a power sensor) - and **one** main button:
 
 | State | Main button | What it does |
 |---|---|---|
@@ -37,7 +37,8 @@ time, e.g. Home Connect or Bambu Lab), else from the average of its cycles of th
 cycles are split into short and long by their duration, and one that has run longer than the short
 ones is taken for a long one.
 
-**Idle** below: one row per appliance with its icon, its last cycle and an arrow to the details.
+**Idle** below: one row per appliance with its icon, its last cycle, the power now at the right
+(standby, e.g. 0.4 W) and an arrow to the details.
 A robot vacuum also shows its battery, its error (number and description) and any consumable
 (brush, filter, mop) under 10%.
 

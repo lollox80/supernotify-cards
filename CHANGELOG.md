@@ -6,9 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.91.0] - 2026-10-17
 
 ### Added
-- **appliances** (0.1.0), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
+- **appliances** (0.1.1), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
   watches. What asks for something (finished and not emptied, a stuck robot vacuum) and what is running
-  come first as cards: illustration ([skyrotter's appliance cards](https://github.com/skyrotter/ha-appliance-electromenager-cards)
+  come first as cards, with the power now (W / kW) when there is a power sensor: illustration ([skyrotter's appliance cards](https://github.com/skyrotter/ha-appliance-electromenager-cards)
   when installed, else an mdi icon), coloured status dot, start → end, duration, kWh and cost of the last
   cycle, one main button - **Emptied** fires the very "Finished" button of the notification
   (`mobile_app_notification_action`), **Resume cleaning** is `vacuum.start` - and a ⋮ menu (Switch off
