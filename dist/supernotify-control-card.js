@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.0",
+  appliances: "0.2.1",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,9 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.1 (bundle 0.91.0): a boiler (water heater) drawing - the water in its window warms from blue to
+   * orange while it heats, bubbles, the hot pipe and the heat above - and a dehumidifier: dry air out of
+   * the grille on top, drops into the tank.
    * 0.2.0 (bundle 0.91.0): devices added by hand (`devices:`) next to Autonotify's - a dehumidifier, a
    * heater, anything with a power sensor, a vacuum or a state of its own: running from the power and
    * its cycles, the same drawings, overview and history, no "to empty" (that is Autonotify's). The
@@ -11641,7 +11644,8 @@ const SN_APPL_ACTIONS = { finished: "APPLIANCE_FINISHED_", remind: "APPLIANCE_RE
 const SN_APPL_DISCOVERY = "Automatic discovery";
 // Autonotify's words for a type, from its translations (en, it), longest first
 const SN_APPL_WORDS = [
-  ["deumidificatore", "dehumidifier"], ["dehumidifier", "dehumidifier"],
+  ["deumidificatore", "dehumidifier"], ["dehumidifier", "dehumidifier"], ["scaldabagno", "boiler"], ["water heater", "boiler"],
+  ["boiler", "boiler"],
   ["washer dryer", "washer_dryer"], ["washer-dryer", "washer_dryer"], ["dish washer", "dishwasher"], ["tumble dryer", "dryer"],
   ["washing machine", "washer"], ["lavastoviglie", "dishwasher"], ["piano cottura", "hob"], ["aspirapolvere", "cleaning_robot"],
   ["asciugatrice", "dryer"], ["dishwasher", "dishwasher"], ["lavasciuga", "washer_dryer"], ["microwave", "microwave"],
@@ -11666,7 +11670,7 @@ const SN_APPL_RUN_DEV = ["run", "running", "prepare", "pause", "actionrequired",
 const SN_APPL_FAILED = ["failed", "error", "aborting", "aborted"];
 // const.py TYPE_ICONS
 const SN_APPL_ICONS = {
-  dehumidifier: "mdi:air-humidifier", dishwasher: "mdi:dishwasher", washer: "mdi:washing-machine", washer_dryer: "mdi:washing-machine", dryer: "mdi:tumble-dryer",
+  dehumidifier: "mdi:air-humidifier", boiler: "mdi:water-boiler", dishwasher: "mdi:dishwasher", washer: "mdi:washing-machine", washer_dryer: "mdi:washing-machine", dryer: "mdi:tumble-dryer",
   oven: "mdi:stove", hob: "mdi:pot-steam", hood: "mdi:fan", coffee_maker: "mdi:coffee-maker", cleaning_robot: "mdi:robot-vacuum",
   air_conditioner: "mdi:air-conditioner", "3d_printer": "mdi:printer-3d", microwave: "mdi:microwave", kettle: "mdi:kettle",
 };
@@ -12005,7 +12009,7 @@ function snApplPeriods(cy, now) {
 // prefers-reduced-motion stops every movement.
 const SN_APPL_SVG_KIND = {
   washer: "washer", washer_dryer: "washer", dryer: "dryer", dishwasher: "dishwasher", cleaning_robot: "robot",
-  "3d_printer": "printer", oven: "oven",
+  "3d_printer": "printer", oven: "oven", boiler: "boiler", water_heater: "boiler", dehumidifier: "dehumidifier",
 };
 
 // the display texts, one per state (CSS shows the right one)
@@ -12158,6 +12162,58 @@ function snApplSvg(kind, uid) {
       <path class="track" d="M28 79.4H68"/><path class="prog" d="M28 79.4H68" pathLength="100"/></g>
       ${snApplBadge(77, 13)}</svg>`;
   }
+  if (kind === "dehumidifier") {
+    const slats = [15, 18.5, 22].map((y) => `<rect class="slat" x="31" y="${y}" width="34" height="1.8" rx=".9"/>`).join("");
+    return `<svg class="sna" viewBox="0 0 96 96" aria-hidden="true">
+      <defs>${defs}
+        <linearGradient id="${u}q" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd3ff"/><stop offset="1" stop-color="#3b9be0"/></linearGradient>
+        <clipPath id="${u}k"><rect x="37" y="60" width="22" height="16" rx="2.5"/></clipPath></defs>
+      ${shadow(90, 26)}
+      <g class="air"><path d="M36 9q3-2.4 0-4.4t0-4.4"/><path d="M48 8q3-2.4 0-4.4t0-4.4"/><path d="M60 9q3-2.4 0-4.4t0-4.4"/></g>
+      <g class="body">
+      <rect x="28" y="86" width="7" height="3" rx="1.2" fill="#59616a"/><rect x="61" y="86" width="7" height="3" rx="1.2" fill="#59616a"/>
+      <rect x="24" y="10" width="48" height="77" rx="9" fill="url(#${u}b)" stroke="#c6ccd2" stroke-width=".7"/>
+      <rect x="24" y="10" width="48" height="77" rx="9" fill="url(#${u}e)"/>
+      <rect x="29" y="13" width="38" height="12" rx="3" fill="#dfe3e8"/>${slats}
+      <rect x="31" y="30" width="34" height="15" rx="3" fill="#1d252e"/>
+      <rect x="34" y="33" width="15" height="6" rx="1.2" fill="#0b1118"/>${snApplLcd(41.5, 37.6)}
+      <circle class="hled" cx="55" cy="36" r="1.6"/><circle cx="60" cy="36" r="1.6" fill="#3b4652"/>
+      <path d="M34 42h28" stroke="#3b4652" stroke-width="1" stroke-linecap="round"/>
+      <rect x="28" y="51" width="40" height="31" rx="5" fill="#eef1f4" stroke="#cfd5db" stroke-width=".7"/>
+      <path d="M40 54.5h16" stroke="#b9c0c7" stroke-width="2" stroke-linecap="round"/>
+      <rect x="36" y="59" width="24" height="18" rx="3" fill="#cfd6dd"/>
+      <g clip-path="url(#${u}k)"><rect x="37" y="60" width="22" height="16" fill="#e8eef3"/>
+        <path class="tank" d="M37 70q2.75-1.6 5.5 0t5.5 0t5.5 0t5.5 0t5.5 0V77H37Z" fill="url(#${u}q)"/>
+        <g class="drops"><path d="M44 58v3"/><path d="M52 56v3"/><path d="M48 54v3"/></g></g>
+      <path d="M31 16a8 8 0 0 1 4-3" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".7"/></g>
+      ${snApplBadge(72, 14, false)}</svg>`;
+  }
+  if (kind === "boiler") {
+    return `<svg class="sna" viewBox="0 0 96 96" aria-hidden="true">
+      <defs>${defs}
+        <linearGradient id="${u}w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb347"/><stop offset="1" stop-color="#ff6a2b"/></linearGradient>
+        <linearGradient id="${u}q" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd3ff"/><stop offset="1" stop-color="#3b9be0"/></linearGradient>
+        <clipPath id="${u}k"><rect x="44" y="17" width="8" height="22" rx="4"/></clipPath></defs>
+      ${shadow(91, 22)}
+      <g class="heat"><path d="M38 9q-2.4-2.4 0-4.4t0-4.4"/><path d="M48 8q-2.4-2.4 0-4.4t0-4.4"/><path d="M58 9q-2.4-2.4 0-4.4t0-4.4"/></g>
+      <g class="body">
+      <path class="pipe cold" d="M41 80v9"/><path class="pipe hot" d="M55 80v9"/>
+      <rect x="38.5" y="84" width="5" height="3" rx="1" fill="#8d959e"/><rect x="52.5" y="84" width="5" height="3" rx="1" fill="#8d959e"/>
+      <rect x="25" y="10" width="46" height="72" rx="21" fill="url(#${u}b)" stroke="#c6ccd2" stroke-width=".7"/>
+      <rect x="25" y="10" width="46" height="72" rx="21" fill="url(#${u}e)"/>
+      <path d="M27 24h42M27 68h42" stroke="#dfe3e8" stroke-width="1"/>
+      <rect x="43" y="16" width="10" height="24" rx="5" fill="#d9dee3" stroke="#bfc6cd" stroke-width=".6"/>
+      <g clip-path="url(#${u}k)">
+        <rect class="bw-cold" x="44" y="17" width="8" height="22" fill="url(#${u}q)"/>
+        <rect class="bw-hot" x="44" y="17" width="8" height="22" fill="url(#${u}w)"/>
+        <g class="bub"><circle cx="46.5" cy="38" r="1"/><circle cx="49.5" cy="38" r=".8"/><circle cx="48" cy="38" r=".7"/></g>
+      </g>
+      <rect x="34" y="45" width="28" height="18" rx="4" fill="#1d252e"/>
+      <rect x="37" y="48" width="22" height="7" rx="1.2" fill="#0b1118"/>${snApplLcd(48, 53.2)}
+      <circle class="hled" cx="40" cy="59" r="1.6"/><circle cx="48" cy="59" r="1.6" fill="#3b4652"/><circle cx="56" cy="59" r="1.6" fill="#3b4652"/>
+      <path d="M33 20a19 19 0 0 1 8-6.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".7"/></g>
+      ${snApplBadge(72, 14, false)}</svg>`;
+  }
   if (kind === "printer") {
     const layers = [50, 54, 58, 62, 66].map((y) => `<path d="M36 ${y}h24"/>`).join("");
     return `<svg class="sna" viewBox="0 0 96 96" aria-hidden="true">
@@ -12212,6 +12268,25 @@ const SN_APPL_SVG_CSS = `
   .s-paused .sna .led { stroke: #94a3b8; }
   .s-paused .sna .lcd { animation: sna-glow 2s ease-in-out infinite; }
   .sna .hot { fill: #4b5563; }
+  .sna .slat { fill: #c3c9cf; }
+  .s-running .sna .slat { fill: #9fc7e6; }
+  .sna .air path { fill: none; stroke: #7fc4f2; stroke-width: 1.8; stroke-linecap: round; opacity: 0; }
+  .s-running .sna .air path { animation: sna-heat 1.8s ease-in-out infinite; }
+  .s-running .sna .air path:nth-child(2) { animation-delay: -.6s; }
+  .s-running .sna .air path:nth-child(3) { animation-delay: -1.2s; }
+  .s-running .sna .tank { animation: sna-wave 2.4s linear infinite; }
+  .sna .pipe { fill: none; stroke-width: 4.5; stroke-linecap: round; }
+  .sna .pipe.cold { stroke: #4a9fe0; } .sna .pipe.hot { stroke: #c9876d; }
+  .s-running .sna .pipe.hot { stroke: #ff5a1f; animation: sna-glow 1.6s ease-in-out infinite; }
+  .sna .bw-hot { opacity: 0; } .sna .bub circle { fill: #fff; opacity: 0; }
+  .s-running .sna .bw-hot { animation: sna-warm 6s ease-in-out infinite alternate; }
+  .s-paused .sna .bw-hot, .s-done .sna .bw-hot { opacity: .8; }
+  .s-running .sna .bub circle { animation: sna-rise 1.8s ease-in infinite; }
+  .s-running .sna .bub circle:nth-child(2) { animation-delay: -.6s; }
+  .s-running .sna .bub circle:nth-child(3) { animation-delay: -1.2s; }
+  .sna .hled { fill: #3b4652; }
+  .s-running .sna .hled { fill: #ff5a1f; animation: sna-glow 1.2s ease-in-out infinite; }
+  .s-error .sna .hled { fill: var(--err); }
   .sna .glow { opacity: 0; }
   .sna .elem { fill: none; stroke: #5b636d; stroke-width: 1.4; stroke-linejoin: round; }
   .s-running .sna .glow { opacity: 1; animation: sna-glow 3s ease-in-out infinite; }
@@ -12294,6 +12369,8 @@ const SN_APPL_SVG_CSS = `
   .s-error .sna .b-error { animation: sna-pop 1s ease-in-out infinite; }
   .s-done .sna .halo, .s-error .sna .halo { stroke-width: 3.2; }
   @keyframes sna-home { from { transform: translate(-22px, 6px); } 80%, to { transform: translate(0, 0); } }
+  @keyframes sna-warm { from { opacity: .6; } to { opacity: 1; } }
+  @keyframes sna-rise { 0% { opacity: .9; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
   @keyframes sna-pop-big { 0%, 100% { transform: scale(1.05); } 50% { transform: scale(1.3); } }
   @keyframes sna-print { from { transform: translateX(-12px); } to { transform: translateX(12px); } }
   @keyframes sna-grow { from { transform: scaleY(.05); } 90%, to { transform: scaleY(1); } }

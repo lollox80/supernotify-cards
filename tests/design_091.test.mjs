@@ -198,7 +198,8 @@ ok(/#312/.test(txt(br)) && /Robot bloccato/.test(txt(br)), "errore 312 con la de
 ok(/Durata filtro al 5%/.test(txt(br)) && !/spazzola/.test(txt(br)), "consumabile sotto il 10%: filtro al 5% (la spazzola al 64% no)");
 ok(txt(br.querySelector(".pb")) === "Riprendi pulizia", "Bruno: Riprendi pulizia");
 const ls = [...R.querySelectorAll(".row")].find((n) => /Lavastoviglie/.test(n.textContent));
-ok(/Fermo · Ultimo ciclo ieri/.test(txt(ls)), `Lavastoviglie: ${txt(ls.querySelector(".rs"))}`);
+// the test cycle started 26 h ago: "ieri" in the day, a date just after midnight
+ok(/Fermo · Ultimo ciclo (ieri|\d{1,2} \S+ \d)/.test(txt(ls)), `Lavastoviglie: ${txt(ls.querySelector(".rs"))}`);
 ok(/^0,4\sW$/.test(txt(ls.querySelector(".rp"))), `riga: potenza della presa vera a destra (${txt(ls.querySelector(".rp"))})`);
 const asc = [...R.querySelectorAll(".row")].find((n) => /Asciugatrice/.test(n.textContent));
 ok(/Spento/.test(txt(asc)), "Asciugatrice: spenta (presa spenta)");

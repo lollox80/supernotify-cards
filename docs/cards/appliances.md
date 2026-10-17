@@ -176,7 +176,7 @@ cost, or area, or filament - next to Today / Week / Month / Year.
 ## Illustrations
 
 Each appliance has a drawing of its own, made for this card and driven by its state (no other card
-needed): washing machine (and washer-dryer), dryer, dishwasher, oven, 3D printer, and a robot vacuum
+needed): washing machine (and washer-dryer), dryer, dishwasher, oven, 3D printer, boiler (water heater), dehumidifier, and a robot vacuum
 with or without its charging dock. Other types keep an mdi icon.
 
 | State | What the drawing shows |

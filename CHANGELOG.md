@@ -9,7 +9,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **appliances** (0.2.0), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
   watches. What asks for something (finished and not emptied, a stuck robot vacuum) and what is running
   come first as cards, with the power now (W / kW) when there is a power sensor: an animated drawing of its own (washer, dryer,
-  dishwasher, oven, 3D printer, robot vacuum with or without its dock) that follows its state - time left
+  dishwasher, oven, 3D printer, boiler, dehumidifier, robot vacuum with or without its dock) that follows its state - time left
   and progress on the display, paused, to empty (with a reminder set, or for over 2 hours), needs help,
   charging, going back to its dock - else an mdi icon, coloured status dot, start → end, duration, kWh and cost of the last
   cycle, one main button - **Emptied** fires the very "Finished" button of the notification
