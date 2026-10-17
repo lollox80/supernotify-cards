@@ -93,8 +93,9 @@ card shows no Emptied / Remind button, and Switch off the plug switches the plug
 |---|---|---|
 | `price_per_kwh` | no | price of a kWh, for the costs (none without it or `price_entity`) |
 | `price_entity` | no | a sensor or input_number with the price, instead of a fixed one |
-| `illustrations` | no | `false` always uses the mdi icon (default: the animated drawing of [skyrotter's appliance cards](https://github.com/skyrotter/ha-appliance-electromenager-cards) when they are installed) |
-| `animations` | no | `false` keeps those drawings still (default: they move - the drum turns, the robot's brushes spin) |
+| `illustrations` | no | `false` always uses the mdi icon (default: the card's own drawing of the appliance) |
+| `animations` | no | `false` keeps the drawings still (default: they move - the drum turns, the robot's brushes spin) |
+| `robot_dock` | no | `false` draws a robot vacuum without its charging dock (default: with it); `dock:` per robot under `appliances:` |
 | `show_new` | no | `false` hides the badge of the new appliances found |
 | `hide` | no | entry ids or names to leave out |
 | `appliances` | no | per appliance (by entry id or name), what the card cannot find or read - see below |
@@ -111,6 +112,7 @@ appliances:
     switch_off_button: false   # no "Switch off the plug" in the menu
   Bruno:
     device_id: 1889e4c8a6963028993b7735031f451d
+    dock: false           # this robot has no charging dock
   A1:
     remaining: sensor.a1_tempo_rimanente
     energy_today: sensor.a1_energy_today   # your own sensors, shown instead of the card's own sums
@@ -122,11 +124,31 @@ cycles and the card's disagree.
 
 ## Illustrations
 
-With [skyrotter/ha-appliance-electromenager-cards](https://github.com/skyrotter/ha-appliance-electromenager-cards)
-installed, each appliance card shows their animated washing machine, dryer, dishwasher, oven,
-robot vacuum or 3D printer, fed with the appliance's power sensor and plug; without them an mdi icon
-(`mdi:washing-machine`, `mdi:dishwasher`, `mdi:tumble-dryer`, `mdi:robot-vacuum`, ...).
-Only the drawing is shown - their texts, figures and buttons are hidden, since the card says those
-already - and a tap on it opens the details panel. Both are switches in the visual editor:
-**Animated drawings** (`illustrations`) and **Movements of the drawings** (`animations`); the
-system's "reduce motion" setting stops the movements too.
+Each appliance has a drawing of its own, made for this card and driven by its state (no other card
+needed): washing machine (and washer-dryer), dryer, dishwasher, oven, 3D printer, and a robot vacuum
+with or without its charging dock. Other types keep an mdi icon.
+
+| State | What the drawing shows |
+|---|---|
+| Off / idle | still, faded when off |
+| Running | it moves (drum, water, heat, spray, print head, brushes); the display shows the time left and a ring or bar the progress, when the appliance or the cycles average give them - else "ON" |
+| Paused | still, grey ⏸ badge, display "PAU" |
+| Finished, to empty | orange badge with an arrow out of a tray, display "END" |
+| ... reminder already set | the badge turns into a clock (after **Remind me later** on this card) |
+| ... for over 2 hours | the badge and the display pulse harder |
+| Needs help | red "!" badge, display "Err", a shake |
+| Robot on its dock | charging: green light and bolt on the dock; going back: it moves to the dock |
+
+A robot has no "to empty" badge: when it is done it goes back to its dock.
+The same four badges on every appliance, so they read the same everywhere. Idle appliances show the
+drawing small in their row. A tap on a drawing opens the details panel. The movements stop while the
+card is off screen, with **Movements of the drawings** (`animations`) off, and with the system's
+"reduce motion" setting. Screen readers read "<name>: <state>".
+
+## Robot vacuum details
+
+A robot has no power sensor, so its panel shows cleanings in place of energy: Today / Week / Month /
+Year with the cleanings, the time and the m² from the robot's own totals (their long-term statistics -
+`total_stats_cleanings`, `total_stats_time`, `total_stats_area` on Ecovacs), each cleaning this month
+as a bar (its duration), the average, and the latest cleanings with their area. The single cleanings
+come from the vacuum's state history (cleaning, returning, paused), as far back as the recorder keeps it.

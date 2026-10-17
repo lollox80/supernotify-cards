@@ -6,18 +6,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.91.0] - 2026-10-17
 
 ### Added
-- **appliances** (0.1.2), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
+- **appliances** (0.1.3), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
   watches. What asks for something (finished and not emptied, a stuck robot vacuum) and what is running
-  come first as cards, with the power now (W / kW) when there is a power sensor: illustration ([skyrotter's appliance cards](https://github.com/skyrotter/ha-appliance-electromenager-cards)
-  when installed, else an mdi icon), coloured status dot, start → end, duration, kWh and cost of the last
+  come first as cards, with the power now (W / kW) when there is a power sensor: an animated drawing of its own (washer, dryer,
+  dishwasher, oven, 3D printer, robot vacuum with or without its dock) that follows its state - time left
+  and progress on the display, paused, to empty (with a reminder set, or for over 2 hours), needs help,
+  charging, going back to its dock - else an mdi icon, coloured status dot, start → end, duration, kWh and cost of the last
   cycle, one main button - **Emptied** fires the very "Finished" button of the notification
   (`mobile_app_notification_action`), **Resume cleaning** is `vacuum.start` - and a ⋮ menu (Switch off
   the plug, Remind me later, Details, Settings). Running: the estimated end, a bar and the time left, from
   the appliance's own remaining time or the average of its short / long cycles. Idle appliances are rows
-  under "Idle". Optional animated drawings of skyrotter's Appliance Cards when installed (`illustrations`, `animations`: on/off in the editor). `?device=<device or entry id>` in the URL puts one first, outlined. A badge counts the
+  under "Idle". Drawings, their movements and the robot's dock are switches in the editor (`illustrations`, `animations`, `robot_dock`); the movements stop off screen. `?device=<device or entry id>` in the URL puts one first, outlined. A badge counts the
   appliances found and not set up yet. Details panel (dialog; bottom sheet on a phone): power now, Today /
   Week / Month / Year, energy of each cycle this month (short / long / unusual), averages, latest cycles,
-  the appliance's notifications in the archive. Data: the entries (`config_entries/get`), the plug /
+  the appliance's notifications in the archive; for a robot vacuum, its cleanings (count, time, m²) from its own totals and state history.
+  A 3D printer is found on the device that prints, not on another device with the same name. Data: the entries (`config_entries/get`), the plug /
   vacuum / device found by name (`appliances:` overrides), the state from what Autonotify sent through
   SuperNotify (its archive), cycles and energy from the recorder's statistics. Costs only with
   `price_per_kwh` or `price_entity`. 11 languages.

@@ -190,7 +190,7 @@ console.log("    riassunto:", sum);
 ok(sum.includes(`${hm(tLavStart)} → ${hm(tLavEnd)}`) && /1\sh\s20\smin/.test(sum) && /kWh/.test(sum) && /€/.test(sum), "inizio → fine, durata, kWh, €");
 ok(/^1,2\sW · /.test(sum.replace(/^⚡\s*/, "")) && lav.querySelector(".sum .pw"), "potenza istantanea in testa al riassunto (1,2 W)");
 ok(txt(lav.querySelector(".pb")) === "Svuotata" && lav.querySelectorAll(".pb").length === 1, "un solo pulsante: Svuotata");
-ok(lav.querySelector('[data-open] ha-icon[icon="mdi:washing-machine"]'), "illustrazione: icona mdi (card skyrotter non installate)");
+ok(lav.querySelector('.art.ill.s-done[data-open] svg.sna .b-done'), "illustrazione: il nostro disegno, finito, con il bollino da svuotare");
 ok(/Dettagli, consumi e cicli/.test(txt(lav.querySelector(".lnk"))), "link Dettagli, consumi e cicli");
 const br = R.querySelector(".ap");
 ok(/Ha bisogno di aiuto/.test(txt(br.querySelector(".st"))) && br.querySelector(".dot.err"), "Bruno: rosso, ha bisogno di aiuto");
@@ -312,44 +312,87 @@ ok(!gen0.views.some((x) => x.path === "appliances"), "zero elettrodomestici: nes
 const genHide = await api.SupernotifyDashboardStrategy.generate({ hide: ["appliances"] }, mkHass());
 ok(!genHide.views.some((x) => x.path === "appliances"), "hide: [appliances] la toglie");
 
-// ── 9. 0.1.2: i disegni animati di skyrotter, opzionali (illustrations / animations) ──
-// un finto elemento al posto delle loro card: stessa struttura (.illus e .head/.stats) della v1.18
-const artCfg = [];
-class FakeArt extends dom.window.HTMLElement {
-  setConfig(c) {
-    artCfg.push({ tag: this.localName, ...c });
-    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    this.shadowRoot.innerHTML = '<ha-card><div class="wrap"><div class="top"><div class="illus"><svg></svg></div><div class="head">testi</div><div class="stats"></div></div></div></ha-card>';
-  }
-}
-customElements.define("appliance-washer-card", FakeArt);
-customElements.define("appliance-robot-vacuum-solo-card", class extends FakeArt {});
-const mkArt = async (cfg) => {
-  api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;
+// ── 9. 0.1.3: i nostri disegni, guidati dallo stato della card ──
+const mkArt = async (cfg, states, docs) => {
+  api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0; api.snAppl.reminded.clear();
   const c = document.createElement("supernotify-appliances-card");
   c.setConfig(cfg);
   document.body.appendChild(c);
-  c.hass = mkHass(); await wait(400); c.hass = mkHass(); await wait(300);
+  c.hass = mkHass({ states, docs }); await wait(400); c.hass = mkHass({ states, docs }); await wait(300);
   return c;
 };
+const apOf = (c, re) => [...c.shadowRoot.querySelectorAll(".ap")].find((n) => re.test(n.textContent));
 const a1 = await mkArt({});
-const lavArt = [...a1.shadowRoot.querySelectorAll(".ap")].find((n) => /Lavatrice/.test(n.textContent));
-const wEl = lavArt && lavArt.querySelector(".art.ill appliance-washer-card");
-const wCfg = artCfg.find((c) => c.tag === "appliance-washer-card");
-ok(wEl && wCfg && wCfg.power === "sensor.presa_lavatrice_power" && wCfg.switch === "switch.presa_lavatrice" && wCfg.animations === true,
-  `lavatrice: il loro disegno con la presa vera e i movimenti (${JSON.stringify(wCfg)})`);
-const trim = wEl && wEl.shadowRoot.querySelector("style[data-sn]");
-ok(trim && /\.head, \.stats/.test(trim.textContent) && !/animation: none/.test(trim.textContent), "solo il disegno: testi e cifre della loro card nascosti");
-ok(wEl && wEl.style.pointerEvents === "none" && wEl.getAttribute("aria-hidden") === "true", "il disegno non prende i tocchi (si apre il nostro pannello)");
-const vCfg = artCfg.find((c) => c.tag === "appliance-robot-vacuum-solo-card");
-ok(vCfg && vCfg.entity === "vacuum.bruno" && vCfg.show_buttons === false && vCfg.show_battery === false && !vCfg.power, `Bruno: il robot con la sua entità, senza i loro pulsanti (${JSON.stringify(vCfg)})`);
-artCfg.length = 0;
-const a2 = await mkArt({ animations: false });
-const wEl2 = a2.shadowRoot.querySelector(".art.ill appliance-washer-card");
-const wCfg2 = artCfg.find((c) => c.tag === "appliance-washer-card");
-ok(wEl2 && wCfg2 && wCfg2.animations === false && /animation: none/.test(wEl2.shadowRoot.querySelector("style[data-sn]").textContent), "animations: false = disegno fermo");
+const lavA = apOf(a1, /Lavatrice/);
+const lavSvg = lavA && lavA.querySelector(".art svg.sna");
+ok(lavSvg && lavSvg.getAttribute("role") === "img" && /Lavatrice: Finito/.test(lavSvg.getAttribute("aria-label")), `lavatrice: disegno con la voce per i lettori di schermo (${lavSvg && lavSvg.getAttribute("aria-label")})`);
+ok(!document.querySelector("appliance-washer-card") && !a1.shadowRoot.querySelector("[class*=appliance-]"), "nessuna card di skyrotter");
+const lavBox = lavA.querySelector(".art");
+ok(lavBox.classList.contains("stale") === (Date.now() - tLavEnd > 2 * H), `da svuotare da più di 2 ore: insiste (${lavBox.className})`);
+const brA = apOf(a1, /Bruno/);
+ok(brA && brA.querySelector(".art.s-error svg.sna.dockv .b-error"), "Bruno bloccato: robot con la base, bollino «!»");
+ok(!brA.querySelector(".b-done"), "il robot non ha il bollino da svuotare");
+ok(a1.shadowRoot.querySelector(".rows .ri.ill svg.sna"), "anche le righe dei fermi hanno il disegno");
+ok(/\.offs \.sna/.test(a1.shadowRoot.querySelector("style").textContent), "fuori schermo i movimenti si fermano");
+// Ricordamelo dalla card: orologio al posto della freccia, finché non arriva un altro promemoria
+api.snAppl.markRemind(E.lav);
+a1.hass = mkHass(); await wait(200);
+ok(apOf(a1, /Lavatrice/).querySelector(".art.s-done.snooze"), "promemoria impostato: bollino con l'orologio");
+// robot senza base, movimenti spenti, disegni spenti
+const a2 = await mkArt({ robot_dock: false, animations: false });
+const br2 = apOf(a2, /Bruno/);
+ok(br2 && br2.querySelector("svg.sna:not(.dockv)") && br2.querySelector(".art.still"), "robot_dock: false = robot senza base; animations: false = fermo");
 const a3 = await mkArt({ illustrations: false });
-ok(!a3.shadowRoot.querySelector(".art.ill") && a3.shadowRoot.querySelector('.art ha-icon[icon="mdi:washing-machine"]'), "illustrations: false = icona mdi");
+ok(!a3.shadowRoot.querySelector("svg.sna") && a3.shadowRoot.querySelector('.art ha-icon[icon="mdi:washing-machine"]'), "illustrations: false = icona mdi");
+// Bruno in pausa, poi sulla base in carica
+const paused = baseStates(); paused["vacuum.bruno"] = st("paused", { friendly_name: "Bruno", battery_level: 60 }); paused["sensor.bruno_errore"] = st("0");
+const a4 = await mkArt({}, paused);
+const br4 = apOf(a4, /Bruno/);
+ok(br4 && br4.querySelector(".art.s-paused .b-pause") && /In pausa/.test(txt(br4.querySelector(".st"))), "Bruno in pausa: bollino ⏸ e «In pausa»");
+const dock = baseStates(); dock["vacuum.bruno"] = st("docked", { friendly_name: "Bruno", battery_level: 60 }); dock["sensor.bruno_errore"] = st("0");
+const a5 = await mkArt({}, dock, DOCS.filter((d) => !/^br/.test(d.id)));
+const row5 = [...a5.shadowRoot.querySelectorAll(".row")].find((n) => /Bruno/.test(n.textContent));
+ok(row5 && row5.querySelector(".ri.ill.s-idle.charging svg.dockv") && /In carica/.test(txt(row5)), "Bruno sulla base al 60%: in carica");
+// Bruno: il pannello con le pulizie al posto dei consumi
+entities["sensor.bruno_total_cleanings"] = ent("sensor.bruno_total_cleanings", "dBruno", "ecovacs", { translation_key: "total_stats_cleanings" });
+entities["sensor.bruno_total_cleaning_duration"] = ent("sensor.bruno_total_cleaning_duration", "dBruno", "ecovacs", { translation_key: "total_stats_time" });
+entities["sensor.bruno_area_pulita"] = ent("sensor.bruno_area_pulita", "dBruno", "ecovacs", { translation_key: "stats_area" });
+const sec = (t) => t / 1000;
+const vHist = { "vacuum.bruno": [{ s: "docked", lu: sec(NOW - 30 * H) }, { s: "cleaning", lu: sec(NOW - 5 * H) }, { s: "docked", lu: sec(NOW - 5 * H + 40 * MIN) },
+  { s: "cleaning", lu: sec(NOW - 2 * H) }, { s: "returning", lu: sec(NOW - 2 * H + 30 * MIN) }, { s: "docked", lu: sec(NOW - 2 * H + 35 * MIN) }],
+  "sensor.bruno_area_pulita": [{ s: "0", lu: sec(NOW - 5 * H) }, { s: "31", lu: sec(NOW - 5 * H + 39 * MIN) }, { s: "0", lu: sec(NOW - 2 * H) }, { s: "24", lu: sec(NOW - 2 * H + 29 * MIN) }] };
+const d0v = new Date(NOW); d0v.setHours(0, 0, 0, 0);
+const vStats = { "sensor.bruno_total_cleanings": [{ start: d0v.getTime() - 86400000, change: 5 }, { start: d0v.getTime(), change: 2 }, { start: d0v.getTime() - 2 * 86400000, change: -300 }],
+  "sensor.bruno_total_cleaning_duration": [{ start: d0v.getTime(), change: 1.25 }] };
+const vHass = () => { const h = mkHass({ states: dock, docs: DOCS.filter((d) => !/^br/.test(d.id)) }); const w = h.callWS; h.callWS = async (m) => {
+  if (m.type === "history/history_during_period") return vHist;
+  if (m.type === "recorder/statistics_during_period" && m.statistic_ids.includes("sensor.bruno_total_cleanings")) return vStats;
+  return w(m); }; return h; };
+api.snAppl._listKey = null; api.snAppl.stats.clear();
+a5.hass = vHass(); await wait(200);
+[...a5.shadowRoot.querySelectorAll(".row")].find((n) => /Bruno/.test(n.textContent)).onclick({ preventDefault() {} });
+await wait(300); a5.hass = vHass(); await wait(200);
+const vs = a5.shadowRoot.querySelector(".ov .sheet");
+const vt = vs ? [...vs.querySelectorAll(".tile")].map((t) => txt(t)) : [];
+console.log("    Bruno:", vt.join(" | "));
+ok(vt.length === 4 && /^Oggi\s*2 pulizie\s*1 h 15 min/.test(vt[0]) && !/-/.test(vt.join(" ")), "Bruno: pulizie e tempo da Oggi ad Anno, un contatore tornato indietro non conta");
+ok(vs.querySelectorAll(".bars .b").length === (NOW - 5 * H >= new Date(new Date(NOW).setDate(1)).setHours(0, 0, 0, 0) ? 2 : 0) && vs.querySelectorAll(".tb tbody tr").length === 2
+  && /40 min/.test(txt(vs.querySelector(".tb"))) && /31 m²/.test(txt(vs.querySelector(".tb"))), "Bruno: barre e tabella delle pulizie con durata e area");
+ok(!/consumi e cicli non si contano/.test(txt(vs)) && /cronologia di Home Assistant/.test(txt(vs)), "Bruno: niente più «non si contano», dice da dove vengono i dati");
+a5.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
+
+// in funzione: il tempo che manca sul display e l'avanzamento
+api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;
+const c6 = document.createElement("supernotify-appliances-card");
+c6.setConfig({});
+document.body.appendChild(c6);
+c6.hass = mkHass({ docs: runDocs, states: runStates });
+api.snAppl.refreshEvents(mkHass({ docs: runDocs, states: runStates }), true);
+await wait(300); c6.hass = mkHass({ docs: runDocs, states: runStates }); await wait(200);
+const runA = [...c6.shadowRoot.querySelectorAll(".ap")].find((n) => /Lavatrice/.test(n.textContent));
+const lcd = runA && runA.querySelector(".l-run");
+ok(lcd && /^\d+:\d{2}$/.test(lcd.textContent) && runA.querySelector("svg.sna.has-p .prog").getAttribute("stroke-dasharray") !== "0 100",
+  `in funzione: display ${lcd && lcd.textContent} e anello dell'avanzamento`);
 
 console.log(fail ? `\n${fail} FAIL` : "\nall passed");
 process.exit(fail ? 1 : 0);
