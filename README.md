@@ -63,6 +63,7 @@ Each link opens the card's page: screenshot, every option, examples.
 | [automations](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/automations.md) | The automations that notify, with search and enable/disable. |
 | [archive](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/archive.md) | Notification history and why each one went where it went, channel by channel, with pause. |
 | [why](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/why.md) | Since 0.85 an alias of archive, kept so existing dashboards work. |
+| [appliances](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/appliances.md) | The appliances of Appliance Autonotify: finished, stuck or running first, its buttons, energy and cycles (0.91). |
 | [stats](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/stats.md) | Usage over 7/14/30 days: per day, hour, weekday, channel, priority. |
 | [tools](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/tools.md) | Maintenance actions and every SuperNotify question, with readable answers. |
 

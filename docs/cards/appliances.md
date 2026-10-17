@@ -1,0 +1,126 @@
+# supernotify-appliances-card
+
+[← SuperNotify Cards](../../README.md) · [Common options](../configuration.md)
+
+The appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify) watches -
+washing machine, dishwasher, dryer, robot vacuum, 3D printer - with what each one is doing, its
+buttons, and its energy and cycles. In the [dashboard strategy](../dashboard.md) it is the
+**SuperNotifier** view, shown only when Appliance Autonotify has at least one appliance.
+
+<img src="../images/appliances.png" alt="supernotify-appliances-card" width="720">
+
+```yaml
+type: custom:supernotify-appliances-card
+price_per_kwh: 0.30        # optional: costs in € (or your currency) - never shown without a price
+```
+
+## What it shows
+
+**First what asks for something, then what is running.** Each of these is a card of its own: the
+illustration, the name, a coloured dot - blue running, orange finished and not emptied yet, red
+stuck or in error, grey idle or off - one line with the last (or current) cycle - start → end,
+duration, kWh and cost - and **one** main button:
+
+| State | Main button | What it does |
+|---|---|---|
+| Finished, to empty | **Emptied** (Done for a vacuum or a printer) | the very **Finished** button of Autonotify's notification: the same `mobile_app_notification_action` event, so the reminders stop and the notification goes away on the phones |
+| Robot vacuum stuck | **Resume cleaning** | `vacuum.start` |
+| Running | - | the estimated end in big, a bar and the time left |
+
+The rest is in the **⋮** menu: **Switch off the plug** (when there is a plug, it is on and the
+appliance is not running - Autonotify's own Switch Off button), **Remind me later** (its Remind
+Later button), Details and Settings. A finished appliance also says when it finished and how many
+reminders followed: "Finished at 09:38 · +3 reminders until 11:08".
+
+The estimated end comes from the appliance itself when it reports one (remaining time or finish
+time, e.g. Home Connect or Bambu Lab), else from the average of its cycles of the same kind: the
+cycles are split into short and long by their duration, and one that has run longer than the short
+ones is taken for a long one.
+
+**Idle** below: one row per appliance with its icon, its last cycle and an arrow to the details.
+A robot vacuum also shows its battery, its error (number and description) and any consumable
+(brush, filter, mop) under 10%.
+
+**New appliances** found by Autonotify and not set up yet are not on the page: a badge "2 new
+devices" (administrators) opens the integration's page instead.
+
+**One appliance first.** `?device=<device id or entry id>` in the URL of the view puts that
+appliance first, outlined in blue for five seconds - e.g. from the tap on a notification.
+
+## Details panel
+
+"Details, energy and cycles ›" on a card, a tap on its illustration or on an idle row opens it - a
+dialog on a computer, a sheet from the bottom on a phone.
+
+<img src="../images/appliances_panel.png" alt="details panel" width="720">
+<img src="../images/appliances_panel_phone.png" alt="details panel on a phone" width="300">
+
+- the state and the power now;
+- **Today / Week / Month / Year**: kWh, cycles and cost;
+- the energy of each cycle this month, blue for the short ones, purple for the long ones, orange
+  for an unusual one (more than three times the median duration - a machine left on for 22 hours);
+- the averages of short and long cycles, and the latest cycles in a table;
+- **Appliance notifications** opens the archive card filtered on this appliance (on this page or
+  on the Archive view), **Settings** the appliance's page in Appliance Autonotify.
+
+## Where the data comes from
+
+Appliance Autonotify 0.9 has no entities of its own, and a card cannot read the options of a
+config entry, so:
+
+- **the appliances** are its config entries (`config_entries/get`), less the "Automatic discovery"
+  one and the ignored or disabled ones;
+- **the plug, the vacuum or the device** of each is found by the entry's name: the power sensor of
+  a device named like it ("Lavatrice" → the "Presa Lavatrice" plug), never an estimated one
+  (Powercalc, template, ...); the plug's switch on the same device; for a robot vacuum the device
+  with that name and a `vacuum` entity. Set them yourself with `appliances:` when the names differ;
+- **running, finished, emptied** is what Autonotify itself sent through SuperNotify, read back from
+  the archive: the start, the end, each reminder and the Finished button all carry its tag
+  `appliance_<entry id>`. The thresholds are Autonotify's own, so the card agrees with the
+  notifications. Without SuperNotify's archive the power alone decides;
+- **cycles and energy** come from the recorder's statistics of the power sensor - 5-minute ones for
+  the last 10 days, hourly ones before that (kept in this browser and never read again). Cycles
+  older than 10 days are therefore counted by the hour. The power sensor needs
+  `state_class: measurement`, as plugs have.
+
+The buttons fire a Home Assistant event, which only an administrator can do: for anyone else the
+card shows no Emptied / Remind button, and Switch off the plug switches the plug directly.
+
+## Options
+
+| Option | Required | Description |
+|---|---|---|
+| `price_per_kwh` | no | price of a kWh, for the costs (none without it or `price_entity`) |
+| `price_entity` | no | a sensor or input_number with the price, instead of a fixed one |
+| `illustrations` | no | `false` always uses the mdi icon (default: the illustration of [skyrotter's appliance cards](https://github.com/skyrotter/ha-appliance-electromenager-cards) when they are installed) |
+| `show_new` | no | `false` hides the badge of the new appliances found |
+| `hide` | no | entry ids or names to leave out |
+| `appliances` | no | per appliance (by entry id or name), what the card cannot find or read - see below |
+| `title`, `intro`, `style`, `show_version` | no | as on every card |
+
+```yaml
+appliances:
+  Lavatrice:
+    power_entity: sensor.presa_lavatrice_power
+    switch_entity: switch.presa_lavatrice
+    threshold: 5          # W above which it runs (cycles in the panel; default 5)
+    grace_period: 120     # s below the threshold before a cycle ends (default 300)
+    min_duration: 60      # s: shorter ones are not cycles (default 300)
+    switch_off_button: false   # no "Switch off the plug" in the menu
+  Bruno:
+    device_id: 1889e4c8a6963028993b7735031f451d
+  A1:
+    remaining: sensor.a1_tempo_rimanente
+    energy_today: sensor.a1_energy_today   # your own sensors, shown instead of the card's own sums
+```
+
+`threshold`, `grace_period` and `min_duration` are only for the cycles in the panel: whether an
+appliance is running or finished is Autonotify's own decision. Set them as in Autonotify when its
+cycles and the card's disagree.
+
+## Illustrations
+
+With [skyrotter/ha-appliance-electromenager-cards](https://github.com/skyrotter/ha-appliance-electromenager-cards)
+installed, each appliance card shows their animated washing machine, dryer, dishwasher, oven,
+robot vacuum or 3D printer, fed with the appliance's power sensor and plug; without them an mdi icon
+(`mdi:washing-machine`, `mdi:dishwasher`, `mdi:tumble-dryer`, `mdi:robot-vacuum`, ...).

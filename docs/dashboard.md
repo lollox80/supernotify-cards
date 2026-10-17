@@ -44,7 +44,7 @@ The links between cards (a channel off, a person, a scenario) open the right vie
 strategy:
   type: custom:supernotify
   title: Notifications                 # default "SuperNotify"
-  views: [home, send, setup, stats]    # which views, in this order (default: all six)
+  views: [home, send, setup, stats]    # which views, in this order (default: all of them)
   hide: [simulator, automations]       # card kinds to leave out (badge: the status badge)
   tabs: icons                          # icons (default) | emoji | text - what the view tabs show
   icons:                               # change the mark of a single view
@@ -62,11 +62,16 @@ Every view can be left out by not listing it in `views:`. Without `archive` the 
 back into Home, next to the overview, as before 0.87. The Archive view gives its card
 `max_height: calc(100vh - 300px)` and `pause_sender: true`; `cards: {archive: ...}` changes them.
 
+**SuperNotifier (0.91.0).** Right after Archive, a view with the
+[appliances card](cards/appliances.md) (mdi:washing-machine, 🧺), only when
+[Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify) has at least one appliance -
+nothing to set up. `hide: [appliances]` or a `views:` list without `appliances` leaves it out.
+
 ### View tabs
 
 By default every tab shows an mdi icon **and** the view name (`tabs: icons`). Showing both needs
 Home Assistant 2026.2 or later; on older versions the tabs show the name only, so a tab is never
-an unlabelled icon. `tabs: emoji` puts an emoji before the name instead (🔔 Home, 🗂️ Archive, ✉️ Send,
+an unlabelled icon. `tabs: emoji` puts an emoji before the name instead (🔔 Home, 🗂️ Archive, 🧺 SuperNotifier, ✉️ Send,
 ⚙️ Setup, 📊 Stats, 🧰 Tools), `tabs: text` shows the name alone.
 
 In a dashboard of your own (or after **Take control**) the same is one line per view:

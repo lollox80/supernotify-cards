@@ -4,6 +4,9 @@
 // 2026-10-03 - first version (v0.53.1): replaces the lost showcase.html harness of 0.48.4.
 // 2026-10-08 - v0.85.0: archive shot 1100 px wide (list + detail side by side), why shot = the
 //   alias in a 460 px column (list on top, detail below).
+// 2026-10-17 - v0.91.0: appliances card - a demo Appliance Autonotify (entries, plugs, a robot vacuum,
+//   its notifications in the archive, power statistics); desktop and 390 px phone shots, and the details
+//   panel as a dialog and as a bottom sheet (whole viewport, the panel is fixed over the page).
 //
 // Renders each card with invented data (English UI, no real names or addresses) in headless
 // Chromium at 2x and writes docs/images/*.png. <ha-icon> is stubbed with the real Material
@@ -15,8 +18,9 @@
 import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
+import { fileURLToPath, pathToFileURL } from "url";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."); // 0.91.0: fileURLToPath, so it works on Windows too
 const req = createRequire(path.join(ROOT, "package.json"));
 const find = (mod) => {
   for (const base of [ROOT, ...(process.env.NODE_PATH || "").split(path.delimiter).filter(Boolean)]) {
@@ -24,7 +28,7 @@ const find = (mod) => {
   }
   return req.resolve(mod);
 };
-const pw = await import(find("playwright"));
+const pw = await import(pathToFileURL(find("playwright")).href); // 0.91.0: a file URL, as import() wants on Windows
 const chromium = pw.chromium || (pw.default && pw.default.chromium);
 const mdi = createRequire(import.meta.url)(find("@mdi/js"));
 const BUNDLE = fs.readFileSync(path.join(ROOT, "dist/supernotify-control-card.js"), "utf8");
@@ -216,6 +220,98 @@ window.__mkHass = (dark) => ({
 });
 `;
 
+// ── 0.91.0: a demo Appliance Autonotify for the appliances card (no template literals: String.raw) ──
+const APPL_DEMO = String.raw`
+(function () {
+  const NOW = Date.now(), MIN = 60000, H = 3600000, D = 86400000;
+  const iso = function (t) { return new Date(t).toISOString(); };
+  const st = function (state, attributes) { return { state: state, attributes: attributes || {}, last_changed: iso(NOW - 3 * H), last_updated: iso(NOW - 3 * H) }; };
+  const pw = function (w, fn) { return st(String(w), { device_class: "power", unit_of_measurement: "W", state_class: "measurement", friendly_name: fn }); };
+  const ENTRIES = [
+    { entry_id: "01DEMODISC", domain: "appliance_autonotify", title: "Automatic discovery", source: "user" },
+    { entry_id: "01DEMOWASH", domain: "appliance_autonotify", title: "Washing machine", source: "user" },
+    { entry_id: "01DEMODISH", domain: "appliance_autonotify", title: "Dishwasher", source: "user" },
+    { entry_id: "01DEMODRY", domain: "appliance_autonotify", title: "Dryer", source: "integration_discovery" },
+    { entry_id: "01DEMOVAC", domain: "appliance_autonotify", title: "Robbie", source: "import" }];
+  const DEV = { dW: { id: "dW", name: "Washing machine plug" }, dD: { id: "dD", name: "Dishwasher plug" }, dY: { id: "dY", name: "Dryer plug" }, dV: { id: "dV", name: "Robbie" } };
+  const E = {};
+  [["sensor.washing_machine_plug_power", "dW"], ["switch.washing_machine_plug", "dW"], ["sensor.dishwasher_plug_power", "dD"], ["switch.dishwasher_plug", "dD"],
+   ["sensor.dryer_plug_power", "dY"], ["switch.dryer_plug", "dY"], ["vacuum.robbie", "dV"]].forEach(function (x) { E[x[0]] = { entity_id: x[0], device_id: x[1], platform: "demo" }; });
+  E["sensor.robbie_error"] = { entity_id: "sensor.robbie_error", device_id: "dV", platform: "demo", translation_key: "error" };
+  E["sensor.robbie_battery"] = { entity_id: "sensor.robbie_battery", device_id: "dV", platform: "demo" };
+  E["sensor.robbie_filter_lifespan"] = { entity_id: "sensor.robbie_filter_lifespan", device_id: "dV", platform: "demo", translation_key: "lifespan_filter" };
+  const S2 = {
+    "sensor.washing_machine_plug_power": pw(1.1, "Washing machine plug Power"), "switch.washing_machine_plug": st("on"),
+    "sensor.dishwasher_plug_power": pw(1840, "Dishwasher plug Power"), "switch.dishwasher_plug": st("on"),
+    "sensor.dryer_plug_power": pw(0.3, "Dryer plug Power"), "switch.dryer_plug": st("on"),
+    "vacuum.robbie": st("error", { friendly_name: "Robbie" }),
+    "sensor.robbie_error": st("312", { friendly_name: "Robbie Error", description: "Stuck on an obstacle" }),
+    "sensor.robbie_battery": st("62", { device_class: "battery", unit_of_measurement: "%", friendly_name: "Robbie Battery" }),
+    "sensor.robbie_filter_lifespan": st("5", { unit_of_measurement: "%", friendly_name: "Robbie Filter lifespan" }) };
+  const DOCS = [];
+  const doc = function (id, t, title, message, extra) { DOCS.push({ id: id, created: iso(t), message: message, priority: "medium", outcome: "success",
+    condition_variables: { notification_title: title }, extra_data: extra, deliveries: { mobile_push: { success: [{}] } } }); };
+  const tag = function (id, end) { return "appliance_" + id + (end ? "_end" : ""); };
+  doc("w1", NOW - 170 * MIN, "Washing machine", "Washing machine started", { mobile_push_notification_tag: tag("01DEMOWASH"), live_update: true });
+  doc("w2", NOW - 95 * MIN, "Washing machine", "Washing machine is finished", { mobile_push_notification_tag: tag("01DEMOWASH"), mobile_push_clear_notification: true });
+  doc("w3", NOW - 95 * MIN + 2000, "Washing machine", "Washing machine is finished", { mobile_push_notification_tag: tag("01DEMOWASH", true) });
+  doc("w4", NOW - 65 * MIN, "Washing machine", "Washing machine is finished", { mobile_push_notification_tag: tag("01DEMOWASH", true) });
+  doc("w5", NOW - 35 * MIN, "Washing machine", "Washing machine is finished", { mobile_push_notification_tag: tag("01DEMOWASH", true) });
+  doc("w6", NOW - 5 * MIN, "Washing machine", "Washing machine is finished", { mobile_push_notification_tag: tag("01DEMOWASH", true) });
+  doc("d1", NOW - 52 * MIN, "Dishwasher", "Dishwasher started", { mobile_push_notification_tag: tag("01DEMODISH"), live_update: true });
+  doc("v1", NOW - 40 * MIN, "Robbie", "Robbie started", { mobile_push_notification_tag: tag("01DEMOVAC"), live_update: true });
+  doc("v2", NOW - 12 * MIN, "Robbie", "Robbie needs help", {});
+  doc("y1", NOW - 30 * H, "Dryer", "Dryer started", { mobile_push_notification_tag: tag("01DEMODRY"), live_update: true });
+  doc("y2", NOW - 28 * H, "Dryer", "Dryer is finished", { mobile_push_notification_tag: tag("01DEMODRY"), mobile_push_clear_notification: true });
+  doc("y3", NOW - 27 * H, "Dryer", "Dryer is finished", { mobile_push_notification_tag: tag("01DEMODRY", true), mobile_push_clear_notification: true });
+  DOCS.sort(function (a, b) { return b.created.localeCompare(a.created); });
+  // cycles of each plug: [start, minutes]; the washing machine has a 22 h one, left on by mistake
+  const CYC = { "sensor.washing_machine_plug_power": [], "sensor.dishwasher_plug_power": [], "sensor.dryer_plug_power": [] };
+  for (let d = 16; d >= 1; d--) {
+    if (d !== 8 && d !== 7) CYC["sensor.washing_machine_plug_power"].push([NOW - d * D - 3 * H, d % 2 ? 58 : 142]);
+    if (d % 3 === 0) CYC["sensor.dishwasher_plug_power"].push([NOW - d * D - 5 * H, 118 + d]);
+    if (d % 5 === 0) CYC["sensor.dryer_plug_power"].push([NOW - d * D - 2 * H, 95]);
+  }
+  CYC["sensor.washing_machine_plug_power"].push([NOW - 8 * D + 2 * H, 22 * 60 + 12], [NOW - 170 * MIN, 75]);
+  CYC["sensor.dishwasher_plug_power"].push([NOW - 52 * MIN, 60]);
+  const W = { "sensor.washing_machine_plug_power": 620, "sensor.dishwasher_plug_power": 780, "sensor.dryer_plug_power": 1500 };
+  const rows = function (id, a, b, step) {
+    const out = [];
+    for (let t = Math.ceil(a / step) * step; t < Math.min(b, NOW - 5 * MIN); t += step) {
+      const on = (CYC[id] || []).some(function (c) { return t + step > c[0] && t < c[0] + c[1] * MIN; });
+      out.push({ start: t, end: t + step, mean: on ? W[id] : 0.8, max: on ? W[id] * 3 : 1.2 });
+    }
+    return out;
+  };
+  const sum = function (c) { return { id: c.id, created: c.created, message: c.message, title: c.condition_variables.notification_title, priority: "medium", outcome: "success", deliveries: {} }; };
+  window.__mkApplHass = function (dark) {
+    const h = window.__mkHass(dark);
+    const base = h.callWS;
+    h.devices = DEV;
+    h.entities = Object.assign({}, h.entities, E);
+    h.states = Object.assign({}, h.states, S2);
+    h.config = { currency: "EUR" };
+    h.services = Object.assign({}, h.services, { supernotify: Object.assign({}, h.services.supernotify, { enquire_archive: {} }) });
+    h.callWS = async function (m) {
+      if (m.type === "config_entries/get") return ENTRIES;
+      if (m.type === "config_entries/flow/progress") return [{ handler: "appliance_autonotify", context: { source: "integration_discovery" } }];
+      if (m.type === "recorder/statistics_during_period") {
+        const id = m.statistic_ids[0];
+        const out = {}; out[id] = rows(id, Date.parse(m.start_time), Date.parse(m.end_time), m.period === "5minute" ? 5 * MIN : H);
+        return out;
+      }
+      if (m.service === "enquire_archive") {
+        const sd = m.service_data || {};
+        if (sd.id) return { response: DOCS.find(function (d) { return d.id === sd.id; }) };
+        return { response: { notifications: DOCS.filter(function (d) { return !sd.after || d.created >= sd.after; }).map(sum) } };
+      }
+      return base(m);
+    };
+    return h;
+  };
+})();
+`;
+
 const BANDS = Object.fromEntries(["early_morning", "morning", "afternoon", "evening", "night", "late_night"].map((b) =>
   [b, { start: `input_datetime.notifier_start_${b}`, volume: `input_number.notifier_${b}_volume` }]));
 const CONTROL = { presence_entity: "person.alex", dnd_entity: "input_boolean.notifier_dnd", last_notification: true,
@@ -243,6 +339,11 @@ const SHOTS = {
   scenarios_why: [460, [["scenarios", {}]], 1, false, "why"],
   hero: [920, [["control", CONTROL], ["overview", OVERVIEW], ["composer", {}]], 2, false, "composer"],
   dark: [1200, [["control", CONTROL], ["overview", OVERVIEW], ["deliveries", {}]], 3, true],
+  // 0.91.0: the appliances card, its details panel as a dialog and as a phone's bottom sheet
+  appliances: [720, [["appliances", { price_per_kwh: 0.3 }]]],
+  appliances_phone: [390, [["appliances", { price_per_kwh: 0.3 }]]],
+  appliances_panel: [960, [["appliances", { price_per_kwh: 0.3 }]], 1, false, "appl_panel"],
+  appliances_panel_phone: [390, [["appliances", { price_per_kwh: 0.3 }]], 1, false, "appl_panel"],
 };
 
 const stub = `const P=${JSON.stringify(icons)};customElements.define("ha-icon",class extends HTMLElement{static get observedAttributes(){return["icon"]}connectedCallback(){this.r()}attributeChangedCallback(){this.r()}r(){const d=P[this.getAttribute("icon")]||"";this.style.display="inline-flex";this.style.verticalAlign=this.style.verticalAlign||"middle";const z="var(--mdc-icon-size,24px)";this.innerHTML='<svg viewBox="0 0 24 24" style="width:'+z+';height:'+z+';fill:currentColor"><path d="'+d+'"/></svg>'}});customElements.define("ha-card",class extends HTMLElement{connectedCallback(){this.style.display="block";this.style.borderRadius="12px";this.style.border="1px solid var(--line,#e3e8ee)";this.style.overflow="hidden"}});`;
@@ -250,14 +351,14 @@ const stub = `const P=${JSON.stringify(icons)};customElements.define("ha-icon",c
 const browser = await chromium.launch(process.env.SN_CHROMIUM ? { executablePath: process.env.SN_CHROMIUM } : {}); // 0.85.0: SN_CHROMIUM = a local Chromium
 for (const [name, [width, cards, cols = 1, dark = false, before]] of Object.entries(SHOTS)) {
   if (only.size && !only.has(name)) continue;
-  const page = await browser.newPage({ viewport: { width: width + 32, height: 900 }, deviceScaleFactor: 2 });
+  const page = await browser.newPage({ viewport: { width: width + 32, height: width < 500 && before === "appl_panel" ? 844 : 900 }, deviceScaleFactor: 2 });
   const errs = []; page.on("pageerror", (e) => errs.push(String(e)));
   const bg = dark ? "#111418" : "#eef1f5";
   await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>body{margin:0;padding:16px;background:${bg};font-family:Roboto,system-ui,sans-serif;--line:${dark ? "#2b3441" : "#e3e8ee"}}
     #root{width:${width}px;display:grid;grid-template-columns:repeat(${cols},minmax(0,1fr));gap:16px;align-items:start}
     #root>.full{grid-column:1/-1}</style></head><body>
-    <script>${stub}</script><script>window.customCards=[];${DEMO}</script><script>${BUNDLE}</script><div id="root"></div></body></html>`);
+    <script>${stub}</script><script>window.customCards=[];${DEMO}${APPL_DEMO}</script><script>${BUNDLE}</script><div id="root"></div></body></html>`);
   await page.evaluate(([cards, dark, cols]) => {
     const root = document.getElementById("root");
     cards.forEach(([tag, cfg], i) => {
@@ -266,10 +367,23 @@ for (const [name, [width, cards, cols = 1, dark = false, before]] of Object.entr
       if (cols > 1 && i >= cols) el.className = "full";
       if (cols === 2 && i === 2) el.className = "full";
       root.appendChild(el);
-      el.hass = window.__mkHass(dark);
+      el.hass = (tag === "appliances" ? window.__mkApplHass : window.__mkHass)(dark);
     });
   }, [cards, dark, cols]);
   await page.waitForTimeout(1200);
+  if (cards.some(([tag]) => tag === "appliances")) {
+    // the archive and the statistics arrive after the first draw: hand the card a new hass once they are in
+    await page.evaluate((dark) => { const c = document.querySelector("supernotify-appliances-card"); c.hass = window.__mkApplHass(dark); }, dark);
+    await page.waitForTimeout(800);
+  }
+  if (before === "appl_panel") {
+    await page.evaluate(() => {
+      const sr = document.querySelector("supernotify-appliances-card").shadowRoot;
+      const a = [...sr.querySelectorAll(".ap")].find((n) => /Washing/.test(n.textContent));
+      a.querySelector(".lnk").click();
+    });
+    await page.waitForTimeout(900);
+  }
   if (before === "composer") {
     await page.evaluate(() => {
       const c = document.querySelector("supernotify-composer-card");
@@ -325,7 +439,9 @@ for (const [name, [width, cards, cols = 1, dark = false, before]] of Object.entr
     await page.waitForTimeout(300);
   }
   await page.waitForTimeout(400);
-  await page.locator("#root").screenshot({ path: path.join(OUT, name + ".png") });
+  // the details panel is fixed over the page: the whole viewport, not the card's box
+  if (before === "appl_panel") await page.screenshot({ path: path.join(OUT, name + ".png") });
+  else await page.locator("#root").screenshot({ path: path.join(OUT, name + ".png") });
   console.log((errs.length ? "ERR " : "ok  ") + name + (errs.length ? " " + errs[0] : ""));
   await page.close();
 }

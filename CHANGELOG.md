@@ -3,6 +3,31 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.91.0] - 2026-10-17
+
+### Added
+- **appliances** (0.1.0), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
+  watches. What asks for something (finished and not emptied, a stuck robot vacuum) and what is running
+  come first as cards: illustration ([skyrotter's appliance cards](https://github.com/skyrotter/ha-appliance-electromenager-cards)
+  when installed, else an mdi icon), coloured status dot, start → end, duration, kWh and cost of the last
+  cycle, one main button - **Emptied** fires the very "Finished" button of the notification
+  (`mobile_app_notification_action`), **Resume cleaning** is `vacuum.start` - and a ⋮ menu (Switch off
+  the plug, Remind me later, Details, Settings). Running: the estimated end, a bar and the time left, from
+  the appliance's own remaining time or the average of its short / long cycles. Idle appliances are rows
+  under "Idle". `?device=<device or entry id>` in the URL puts one first, outlined. A badge counts the
+  appliances found and not set up yet. Details panel (dialog; bottom sheet on a phone): power now, Today /
+  Week / Month / Year, energy of each cycle this month (short / long / unusual), averages, latest cycles,
+  the appliance's notifications in the archive. Data: the entries (`config_entries/get`), the plug /
+  vacuum / device found by name (`appliances:` overrides), the state from what Autonotify sent through
+  SuperNotify (its archive), cycles and energy from the recorder's statistics. Costs only with
+  `price_per_kwh` or `price_entity`. 11 languages.
+- **strategy**: a **SuperNotifier** view right after Archive, only when Appliance Autonotify has an appliance.
+
+### Changed
+- **archive** (0.45.0): opened from the appliances panel, it shows only that appliance's notifications.
+- `tools/showcase.mjs` runs on Windows (file URLs) and has the appliances shots;
+  `tools/check_card_versions.py` ignores blank lines at the end of a card.
+
 ## [0.90.0] - 2026-10-17
 
 ### Added

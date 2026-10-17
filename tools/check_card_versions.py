@@ -14,6 +14,7 @@ Shared helpers (everything before the first card class) are reported as
 CHANGELOG
 2026-10-04 - cards extending SnCard are recognised again (0.70.0).
 2026-10-17 - the translations at the end of the file (SN_I18N_EXTRA) count as shared, not as the last card (0.90.0).
+2026-10-17 - blank lines at the end of a region do not count as a change (0.91.0).
 
 usage: python3 tools/check_card_versions.py [--base <git-ref>] [--file dist/supernotify-control-card.js]
 """
@@ -49,7 +50,7 @@ def versions(text):
 
 
 def h(s):
-    return hashlib.sha1(s.encode("utf-8")).hexdigest()
+    return hashlib.sha1(s.rstrip().encode("utf-8")).hexdigest()
 
 
 def main():
