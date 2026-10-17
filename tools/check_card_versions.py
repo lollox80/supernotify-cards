@@ -13,6 +13,7 @@ Shared helpers (everything before the first card class) are reported as
 
 CHANGELOG
 2026-10-04 - cards extending SnCard are recognised again (0.70.0).
+2026-10-17 - the translations at the end of the file (SN_I18N_EXTRA) count as shared, not as the last card (0.90.0).
 
 usage: python3 tools/check_card_versions.py [--base <git-ref>] [--file dist/supernotify-control-card.js]
 """
@@ -29,8 +30,13 @@ def regions(text):
     if not marks:
         return {"shared": text}
     out["shared"] = text[: marks[0][0]]
+    # the translations at the end of the file (SN_I18N_EXTRA) belong to every card, not the last one
+    tail = text.find("\nconst SN_I18N_EXTRA", marks[-1][0])
+    if tail < 0:
+        tail = len(text)
+    out["shared"] += text[tail:]
     for i, (pos, name) in enumerate(marks):
-        end = marks[i + 1][0] if i + 1 < len(marks) else len(text)
+        end = marks[i + 1][0] if i + 1 < len(marks) else tail
         out[name] = text[pos:end]
     return out
 

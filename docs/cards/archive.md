@@ -64,6 +64,15 @@ in the whole archive (31 days): the card asks SuperNotify how many there are per
 (`verbosity: daily`, shared with the stats card) and then reads only the days that have some; a
 finished day is kept in the browser and never read again.
 
+**Appliance Autonotify (0.90.0).** Notifications sent by
+[Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify) (washing machine,
+dishwasher, ...) are recognised from their mobile push tag `appliance_<entry_id>`: they read
+"🧺 Autonotify · Washing machine" under the title, the detail says "Sent by 🧺 Autonotify · Washing
+machine", and an **Appliances** filter shows them. The name is the title of the appliance's config
+entry. Only a notification read in full carries the tag - the 20 newest, or one you open - so the
+filter does not see older ones until they are opened. Autonotify calls without a tag (for example a
+plain message with no extra data) are not recognised.
+
 **SuperNotify 2.10.0 or later: nothing to set up.** The card reads the archive through the
 `supernotify.enquire_archive` action (the file archive must be on in SuperNotify's options). It
 asks for the latest `limit` notifications once, then only for the newest few each time

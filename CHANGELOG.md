@@ -3,6 +3,20 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.90.0] - 2026-10-17
+
+### Added
+- **archive** (0.44.0): notifications sent by Appliance Autonotify (washing machine, dishwasher, ...)
+  are recognised from their mobile push tag `appliance_<entry_id>` (`_end` at the end of the cycle):
+  "🧺 Autonotify · Washing machine" under the title, an **Appliances** filter, and "Sent by 🧺 Autonotify ·
+  Washing machine" in the detail instead of "sender not known". The name is the title of the config
+  entry (`config_entries/get`, read once). Only full documents carry the tag - the 20 newest and any
+  one opened - so the filter says it looks at those alone.
+
+### Fixed
+- **archive** (0.44.0): a summary row is redrawn from its full document once opened, as meant since
+  0.86.0 (the check ran after the index had already been rebuilt, so it never fired).
+
 ## [0.89.0] - 2026-10-15
 
 Up to date with SuperNotify 2.13-2.15.
