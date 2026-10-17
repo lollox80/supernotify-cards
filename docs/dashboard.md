@@ -62,7 +62,7 @@ Every view can be left out by not listing it in `views:`. Without `archive` the 
 back into Home, next to the overview, as before 0.87. The Archive view gives its card
 `max_height: calc(100vh - 300px)` and `pause_sender: true`; `cards: {archive: ...}` changes them.
 
-**SuperNotifier (0.91.0).** Right after Archive, a view with the
+**Appliances (0.91.0).** Right after Archive, a view with the
 [appliances card](cards/appliances.md) (mdi:washing-machine, 🧺), only when
 [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify) has at least one appliance -
 nothing to set up. `hide: [appliances]` or a `views:` list without `appliances` leaves it out.
@@ -71,7 +71,7 @@ nothing to set up. `hide: [appliances]` or a `views:` list without `appliances` 
 
 By default every tab shows an mdi icon **and** the view name (`tabs: icons`). Showing both needs
 Home Assistant 2026.2 or later; on older versions the tabs show the name only, so a tab is never
-an unlabelled icon. `tabs: emoji` puts an emoji before the name instead (🔔 Home, 🗂️ Archive, 🧺 SuperNotifier, ✉️ Send,
+an unlabelled icon. `tabs: emoji` puts an emoji before the name instead (🔔 Home, 🗂️ Archive, 🧺 Appliances, ✉️ Send,
 ⚙️ Setup, 📊 Stats, 🧰 Tools), `tabs: text` shows the name alone.
 
 In a dashboard of your own (or after **Take control**) the same is one line per view:

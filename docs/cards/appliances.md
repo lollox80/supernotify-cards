@@ -5,7 +5,7 @@
 The appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify) watches -
 washing machine, dishwasher, dryer, robot vacuum, 3D printer - with what each one is doing, its
 buttons, and its energy and cycles. In the [dashboard strategy](../dashboard.md) it is the
-**SuperNotifier** view, shown only when Appliance Autonotify has at least one appliance.
+**Appliances** view (in Italian *Elettrodomestici*), shown only when Appliance Autonotify has at least one appliance.
 
 <img src="../images/appliances.png" alt="supernotify-appliances-card" width="720">
 

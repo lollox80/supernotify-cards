@@ -1,4 +1,4 @@
-// v0.91.0: supernotify-appliances-card 0.1.0 e vista "SuperNotifier" della strategy.
+// v0.91.0: supernotify-appliances-card 0.1.0 e vista "Elettrodomestici" (Appliances) della strategy.
 // Un HA finto come quello di casa: Lavatrice finita con 3 promemoria, Lavastoviglie ferma,
 // Asciugatrice spenta, Bruno (Ecovacs) in errore 312 con il filtro al 5%, un forno trovato e non
 // configurato. Poi una lavastoviglie in funzione, un utente non admin e zero elettrodomestici.
@@ -306,7 +306,8 @@ const gen = await api.SupernotifyDashboardStrategy.generate({}, mkHass());
 const paths = gen.views.map((v) => v.path);
 const v = gen.views.find((x) => x.path === "appliances");
 ok(v && paths.indexOf("appliances") === paths.indexOf("archive") + 1, `vista dopo Archivio (${paths.join(", ")})`);
-ok(v && v.title === "SuperNotifier" && v.icon === "mdi:washing-machine" && v.sections[0].cards[0].type === "custom:supernotify-appliances-card", "SuperNotifier, mdi:washing-machine, la card");
+ok(v && v.title === "Elettrodomestici" && v.icon === "mdi:washing-machine" && v.sections[0].cards[0].type === "custom:supernotify-appliances-card", "Elettrodomestici, mdi:washing-machine, la card");
+ok(Object.values(api.SN_I18N_EXTRA).every((l) => l.SN_STRATEGY_TITLES.appliances === l.SN_APPL_STRINGS.title), "la vista si chiama come la card in ogni lingua");
 const gen0 = await api.SupernotifyDashboardStrategy.generate({}, mkHass({ entries: [entry(E.disc, "Automatic discovery"), entry(E.ascIgn, "Asciugatrice", "ignore")] }));
 ok(!gen0.views.some((x) => x.path === "appliances"), "zero elettrodomestici: nessuna vista");
 const genHide = await api.SupernotifyDashboardStrategy.generate({ hide: ["appliances"] }, mkHass());

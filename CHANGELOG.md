@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.91.0] - 2026-10-17
 
 ### Added
-- **appliances** (0.1.4), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
+- **appliances** (0.1.5), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
   watches. What asks for something (finished and not emptied, a stuck robot vacuum) and what is running
   come first as cards, with the power now (W / kW) when there is a power sensor: an animated drawing of its own (washer, dryer,
   dishwasher, oven, 3D printer, robot vacuum with or without its dock) that follows its state - time left
@@ -16,7 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`mobile_app_notification_action`), **Resume cleaning** is `vacuum.start` - and a ⋮ menu (Switch off
   the plug, Remind me later, Details, Settings). Running: the estimated end, a bar and the time left, from
   the appliance's own remaining time or the average of its short / long cycles. Idle appliances are rows
-  under "Idle". Drawings, their movements and the robot's dock are switches in the editor (`illustrations`, `animations`, `robot_dock`); the movements stop off screen. `?device=<device or entry id>` in the URL puts one first, outlined. A badge counts the
+  under "Idle". On a computer the appliances that ask for something sit side by side with bigger drawings, the idle ones in columns. Drawings, their movements and the robot's dock are switches in the editor (`illustrations`, `animations`, `robot_dock`); the movements stop off screen. `?device=<device or entry id>` in the URL puts one first, outlined. A badge counts the
   appliances found and not set up yet. Details panel (dialog; bottom sheet on a phone): power now, Today /
   Week / Month / Year, energy of each cycle this month (short / long / unusual), averages, latest cycles,
   the appliance's notifications in the archive; for a robot vacuum, its cleanings (count, time, m²) from its own totals and state history; for a 3D printer (or a Home Connect appliance), its prints (duration, filament, name, failed ones marked) from its state history.
@@ -24,7 +24,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   vacuum / device found by name (`appliances:` overrides), the state from what Autonotify sent through
   SuperNotify (its archive), cycles and energy from the recorder's statistics. Costs only with
   `price_per_kwh` or `price_entity`. 11 languages.
-- **strategy**: a **SuperNotifier** view right after Archive, only when Appliance Autonotify has an appliance.
+- **strategy**: an **Appliances** view (Elettrodomestici, Haushaltsgeräte, ...) right after Archive, only when Appliance Autonotify has an appliance.
 
 ### Changed
 - **archive** (0.45.0): opened from the appliances panel, it shows only that appliance's notifications.
