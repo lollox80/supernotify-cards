@@ -233,7 +233,19 @@ ok(![...R.querySelectorAll(".ap")].some((n) => /Lavatrice/.test(n.textContent)) 
 // ── 3. il pannello dettagli ───────────────────────────────────────────────
 [...R.querySelectorAll(".row")].find((n) => /Lavatrice/.test(n.textContent)).onclick({ preventDefault() {} });
 await wait(300);
+// 0.1.6: prima la panoramica, lo storico a un tocco
+const info = R.querySelector(".ov .sheet");
+ok(info && info.querySelector('.ptab.on[data-ptab="info"]') && info.querySelector(".pinfo .pv-art svg.sna") && !info.querySelector(".tiles"),
+  "un tocco apre la panoramica: disegno grande, niente riquadri");
+const dts = [...info.querySelectorAll(".facts dt")].map((n) => txt(n));
+ok(dts.includes("Ultimo ciclo") && dts.includes("Potenza ora") && dts.includes("Presa") && info.querySelector('[data-pact="switch_off"]'),
+  `panoramica: ultimo ciclo, potenza, presa con Spegni (${dts.join(", ")})`);
+ok(info.querySelector("#pDevice"), "link al dispositivo in Home Assistant");
+ok(R.activeElement && R.activeElement.classList.contains("x"), "fuoco sul pulsante Chiudi");
+info.querySelector('[data-ptab="stats"]').onclick();
+await wait(100);
 const sheet = R.querySelector(".ov .sheet");
+ok(/Consumi e cicli/.test(txt(sheet.querySelector(".ptab.on"))), "seconda scheda: Consumi e cicli");
 ok(sheet && sheet.getAttribute("role") === "dialog" && sheet.getAttribute("aria-modal") === "true", "pannello: dialog modale");
 ok(/Lavatrice/.test(txt(sheet.querySelector(".ph"))) && /ora 1,2\sW/.test(txt(sheet.querySelector(".ph"))), `testata con stato e potenza (${txt(sheet.querySelector(".ph"))})`);
 const tiles = [...sheet.querySelectorAll(".tile")].map((t) => txt(t));
@@ -248,7 +260,7 @@ ok(/Corti · media/.test(txt(sheet.querySelector(".leg"))) && /Lunghi · media 2
 ok(sheet.querySelectorAll(".tb tbody tr").length === 8 && sheet.querySelector(".tb tr.anom"), "tabella degli ultimi cicli, l'anomalo segnato");
 ok(/a ore/.test(txt(sheet)), "dice che i cicli vecchi sono a ore");
 ok(sheet.querySelector("#pNotifs") && /Impostazioni/.test(txt(sheet.querySelector("#pSettings"))), "pulsanti Notifiche e Impostazioni");
-ok(R.activeElement && R.activeElement.classList.contains("x"), "fuoco sul pulsante Chiudi");
+ok(R.activeElement && R.activeElement.dataset.ptab === "stats", "cambiando scheda il fuoco resta sulla scheda");
 R.getElementById("ov").onkeydown({ key: "Escape" });
 ok(!R.querySelector(".ov .sheet"), "Esc chiude");
 
@@ -373,6 +385,10 @@ api.snAppl._listKey = null; api.snAppl.stats.clear();
 a5.hass = vHass(); await wait(200);
 [...a5.shadowRoot.querySelectorAll(".row")].find((n) => /Bruno/.test(n.textContent)).onclick({ preventDefault() {} });
 await wait(300); a5.hass = vHass(); await wait(200);
+const vInfo = a5.shadowRoot.querySelector(".ov .sheet");
+ok(vInfo && vInfo.querySelector(".pv-art svg.dockv") && /Batteria/.test(txt(vInfo.querySelector(".facts"))) && /Pulizie/.test(txt(vInfo.querySelector('[data-ptab="stats"]'))),
+  "Bruno: panoramica con robot sulla base e batteria, scheda Pulizie");
+vInfo.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
 const vs = a5.shadowRoot.querySelector(".ov .sheet");
 const vt = vs ? [...vs.querySelectorAll(".tile")].map((t) => txt(t)) : [];
 console.log("    Bruno:", vt.join(" | "));

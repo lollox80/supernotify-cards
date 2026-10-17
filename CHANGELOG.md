@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.91.0] - 2026-10-17
 
 ### Added
-- **appliances** (0.1.5), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
+- **appliances** (0.1.6), new card: the appliances [Appliance Autonotify](https://github.com/rhizomatics/appliance_autonotify)
   watches. What asks for something (finished and not emptied, a stuck robot vacuum) and what is running
   come first as cards, with the power now (W / kW) when there is a power sensor: an animated drawing of its own (washer, dryer,
   dishwasher, oven, 3D printer, robot vacuum with or without its dock) that follows its state - time left
@@ -17,7 +17,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the plug, Remind me later, Details, Settings). Running: the estimated end, a bar and the time left, from
   the appliance's own remaining time or the average of its short / long cycles. Idle appliances are rows
   under "Idle". On a computer the appliances that ask for something sit side by side with bigger drawings, the idle ones in columns. Drawings, their movements and the robot's dock are switches in the editor (`illustrations`, `animations`, `robot_dock`); the movements stop off screen. `?device=<device or entry id>` in the URL puts one first, outlined. A badge counts the
-  appliances found and not set up yet. Details panel (dialog; bottom sheet on a phone): power now, Today /
+  appliances found and not set up yet. A tap opens the details panel (dialog; bottom sheet on a phone) on an **Overview** tab - the drawing, the state, the cycle under way or the last one, the average, the notifications sent, what the device says (plug, battery, consumables, temperatures) and the buttons for now - with the history one tab away: power now, Today /
   Week / Month / Year, energy of each cycle this month (short / long / unusual), averages, latest cycles,
   the appliance's notifications in the archive; for a robot vacuum, its cleanings (count, time, m²) from its own totals and state history; for a 3D printer (or a Home Connect appliance), its prints (duration, filament, name, failed ones marked) from its state history.
   A 3D printer is found on the device that prints, not on another device with the same name. Data: the entries (`config_entries/get`), the plug /

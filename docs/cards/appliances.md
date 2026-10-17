@@ -50,8 +50,17 @@ appliance first, outlined in blue for five seconds - e.g. from the tap on a noti
 
 ## Details panel
 
-"Details, energy and cycles ›" on a card, a tap on its illustration or on an idle row opens it - a
-dialog on a computer, a sheet from the bottom on a phone.
+A tap on an appliance's drawing or on an idle row opens it on the **Overview** tab; "Details, energy
+and cycles ›" on a card opens the second tab directly - a dialog on a computer, a sheet from the
+bottom on a phone.
+
+**Overview**: the drawing, big, and the state; the cycle under way (estimated end, time left) or the
+last one (start → end, duration, kWh, cost) and the average; the notifications already sent; what the
+device says - the power now and the plug (with **Switch off the plug**), a robot's battery, error and
+consumables, a printer's progress, layer and temperatures; the buttons that make sense now
+(**Emptied**, **Remind me later**, **Resume cleaning**) and a link to the device in Home Assistant.
+
+The second tab - **Energy and cycles**, **Cleanings** for a robot, **Prints** for a printer:
 
 <img src="../images/appliances_panel.png" alt="details panel" width="720">
 <img src="../images/appliances_panel_phone.png" alt="details panel on a phone" width="300">
