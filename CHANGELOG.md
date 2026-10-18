@@ -25,6 +25,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   SuperNotify (its archive), cycles and energy from the recorder's statistics. Costs only with
   `price_per_kwh` or `price_entity`. 11 languages.
 - **appliances**: devices added by hand (`devices:`) next to Autonotify's - a dehumidifier, a heater, anything with a power sensor, a vacuum or a state of its own - with the same drawings, overview and history; `info:` lists entities to show in the overview. `device: <name>` shows one device alone, its overview and history inside the card. The card is now `supernotify-devices-card` ("SuperNotify devices" in the picker); `supernotify-appliances-card` stays as an alias.
+- **appliances** (0.2.3): a compact panel and one-device card - the drawing in the header, power / plug / battery on one line, every button in one row of small ones (the main one filled, no menu). The overview's rows open Home Assistant's own dialog of the entity, to change it; `info:` rows can be named; `actions:` adds buttons of your own (a script, a button, a toggle, or any `tap_action`, with `confirmation`); **Switch on the plug** when it is off (`switch_on_button: false` hides it).
 - **strategy**: an **Appliances** view (Elettrodomestici, Haushaltsgeräte, ...) right after Archive, only when Appliance Autonotify has an appliance.
 
 ### Changed

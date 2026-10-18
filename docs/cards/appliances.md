@@ -121,6 +121,7 @@ appliances:
     grace_period: 120     # s below the threshold before a cycle ends (default 300)
     min_duration: 60      # s: shorter ones are not cycles (default 300)
     switch_off_button: false   # no "Switch off the plug" in the menu
+    switch_on_button: false    # no "Switch on the plug" when it is off
   Bruno:
     device_id: 1889e4c8a6963028993b7735031f451d
     dock: false           # this robot has no charging dock
@@ -167,6 +168,33 @@ devices:
 
 `info:` works under `appliances:` too. A robot (`vacuum:`) or a device with a state of its own
 (`device_id:`) can be added the same way.
+
+## Changing things and buttons of your own
+
+Every row of the overview that comes from an entity - `info:`, a robot's consumables, a printer's
+temperatures - opens Home Assistant's own dialog of that entity when tapped: there you change a time, a
+level, a number or a switch, as anywhere in Home Assistant. An `info:` row can have a name of its own:
+`- { entity: number.bruno_water_flow_level, name: Water }`.
+
+`actions:` (under `appliances:` or `devices:`) adds buttons next to the others:
+
+```yaml
+appliances:
+  Bruno:
+    actions:
+      - entity: script.clean_kitchen              # a script runs, a button is pressed,
+        name: Kitchen                             # a switch / input_boolean / automation is toggled,
+        icon: mdi:silverware-fork-knife           # anything else opens its dialog
+      - name: Empty the bin
+        tap_action:                               # or any tap_action, as in Home Assistant's cards:
+          action: perform-action                  # perform-action, toggle, more-info, navigate, url
+          perform_action: button.press
+          target: { entity_id: button.bruno_empty_dustbin }
+        confirmation: true                        # asks first (or { text: "..." })
+```
+
+When the plug is off, **Switch on the plug** turns it on (the plug's own switch: Autonotify has no
+button for it); `switch_on_button: false` hides it.
 
 ## Last 7 days
 

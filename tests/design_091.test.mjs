@@ -123,7 +123,7 @@ const mkHass = (opts = {}) => ({
   language: "it", locale: { language: "it" }, themes: { darkMode: false }, config: { currency: "EUR", version: "2026.10.1" },
   user: { id: "u1", is_admin: opts.admin !== false }, devices, entities, states: opts.states || baseStates(),
   services: { supernotify: { enquire_archive: {}, enquire_snoozes: {}, snooze: {} } },
-  callService: async (domain, service, data) => { calls.push({ svc: `${domain}.${service}`, data }); },
+  callService: async (domain, service, data, target) => { calls.push({ svc: `${domain}.${service}`, data, target }); },
   callApi: async () => ({}),
   callWS: async (m) => {
     calls.push(m);
@@ -236,19 +236,22 @@ ok(![...R.querySelectorAll(".ap")].some((n) => /Lavatrice/.test(n.textContent)) 
 await wait(300);
 // 0.1.6: prima la panoramica, lo storico a un tocco
 const info = R.querySelector(".ov .sheet");
-ok(info && info.querySelector('.ptab.on[data-ptab="info"]') && info.querySelector(".pinfo .pv-art svg.sna") && !info.querySelector(".tiles"),
-  "un tocco apre la panoramica: disegno grande, niente riquadri");
-const dts = [...info.querySelectorAll(".facts dt")].map((n) => txt(n));
-ok(dts.includes("Ultimo ciclo") && dts.includes("Potenza ora") && dts.includes("Presa") && info.querySelector('[data-pact="switch_off"]'),
-  `panoramica: ultimo ciclo, potenza, presa con Spegni (${dts.join(", ")})`);
-ok(info.querySelector("#pDevice"), "link al dispositivo in Home Assistant");
+ok(info && info.querySelector('.ptab.on[data-ptab="info"]') && info.querySelector(".ph .pv-art svg.sna") && !info.querySelector(".ph .pv-art ha-icon") && !info.querySelector(".tiles"),
+  "un tocco apre la panoramica: il disegno nell'intestazione, una sola immagine, niente riquadri");
 ok(R.activeElement && R.activeElement.classList.contains("x"), "fuoco sul pulsante Chiudi");
+const dts = [...info.querySelectorAll(".facts dt")].map((n) => txt(n));
+ok(dts.includes("Ultimo ciclo") && /1,2\sW/.test(txt(info.querySelector(".pq"))) && /Presa accesa/.test(txt(info.querySelector(".pq")))
+  && info.querySelector('.pchips [data-pact="switch_off"]'), `panoramica: ultimo ciclo; potenza e presa sotto lo stato (${dts.join(", ")})`);
+const chips = [...info.querySelectorAll(".pchips .chip")].map((n) => txt(n));
+ok(chips.some((c) => /Spegni presa/.test(c)) && chips.some((c) => /Notifiche/.test(c)) && chips.some((c) => /Impostazioni/.test(c))
+  && chips.some((c) => /Dispositivo/.test(c)) && !info.querySelector(".pm, .pmenu"), `tutte le azioni in vista, pulsanti piccoli, niente menu (${chips.join(" | ")})`);
+ok(info.querySelector("#pDevice"), "link al dispositivo in Home Assistant");
 info.querySelector('[data-ptab="stats"]').onclick();
 await wait(100);
 const sheet = R.querySelector(".ov .sheet");
 ok(/Consumi e cicli/.test(txt(sheet.querySelector(".ptab.on"))), "seconda scheda: Consumi e cicli");
 ok(sheet && sheet.getAttribute("role") === "dialog" && sheet.getAttribute("aria-modal") === "true", "pannello: dialog modale");
-ok(/Lavatrice/.test(txt(sheet.querySelector(".ph"))) && /ora 1,2\sW/.test(txt(sheet.querySelector(".ph"))), `testata con stato e potenza (${txt(sheet.querySelector(".ph"))})`);
+ok(/Lavatrice/.test(txt(sheet.querySelector(".ph"))) && /⚡ 1,2\sW/.test(txt(sheet.querySelector(".ph .pq"))), `testata con stato e potenza (${txt(sheet.querySelector(".ph"))})`);
 const tiles = [...sheet.querySelectorAll(".tile")].map((t) => txt(t));
 console.log("    riquadri:", tiles.join(" | "));
 ok(tiles.length === 4 && /^Oggi/.test(tiles[0]) && /^Anno/.test(tiles[3]) && tiles.every((t) => /kWh/.test(t) && /cicl/.test(t) && /€/.test(t)), "Oggi / Settimana / Mese / Anno con kWh, cicli e costo");
@@ -389,7 +392,7 @@ a5.hass = vHass(); await wait(200);
 [...a5.shadowRoot.querySelectorAll(".row")].find((n) => /Bruno/.test(n.textContent)).onclick({ preventDefault() {} });
 await wait(300); a5.hass = vHass(); await wait(200);
 const vInfo = a5.shadowRoot.querySelector(".ov .sheet");
-ok(vInfo && vInfo.querySelector(".pv-art svg.dockv") && /Batteria/.test(txt(vInfo.querySelector(".facts"))) && /Pulizie/.test(txt(vInfo.querySelector('[data-ptab="stats"]'))),
+ok(vInfo && vInfo.querySelector(".ph .pv-art svg.dockv") && /🔋 \d+%/.test(txt(vInfo.querySelector(".pq"))) && /Pulizie/.test(txt(vInfo.querySelector('[data-ptab="stats"]'))),
   "Bruno: panoramica con robot sulla base e batteria, scheda Pulizie");
 vInfo.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
 const vs = a5.shadowRoot.querySelector(".ov .sheet");
@@ -414,6 +417,40 @@ const dSheet = a7.shadowRoot.querySelector(".ov .sheet");
 ok(dSheet && !dSheet.querySelector("#pNotifs") && /aggiunto a mano/.test(txt(dSheet)) && /Bruno Batteria|Batteria/.test(txt(dSheet.querySelector(".facts"))), "a mano: panoramica senza notifiche di Autonotify, dice da dove viene, mostra le entità di info:");
 a7.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 
+// 0.2.3: righe toccabili (more-info di HA), pulsanti di actions:, Accendi presa
+api.snAppl._listKey = null;
+const a8 = await mkArt({ devices: [{ name: "Boiler", power_entity: "sensor.presa_asciugatrice_power", switch_entity: "switch.presa_asciugatrice", threshold: 50,
+  info: [{ entity: "sensor.bruno_batteria", name: "Batteria robot" }],
+  actions: [{ entity: "script.pulisci_cucina", name: "Cucina", icon: "mdi:silverware-fork-knife" },
+    { name: "Svuota", tap_action: { action: "perform-action", perform_action: "button.press", target: { entity_id: "button.bruno_svuota" } } },
+    { name: "Con conferma", entity: "script.pericoloso", confirmation: true }] }] }, baseStates());
+const bAp = api.snAppl._list.find((x) => x.name === "Boiler");
+a8._openPanel(bAp.id); await wait(200);
+const bSheet = a8.shadowRoot.querySelector(".ov .sheet");
+const bChips = [...bSheet.querySelectorAll(".pchips .chip")].map((n) => txt(n));
+ok(bChips.includes("Accendi presa") && !bChips.includes("Spegni presa") && bChips.includes("Cucina") && bChips.includes("Svuota")
+  && bSheet.querySelector('[data-uact="0"] ha-icon'), `presa spenta: Accendi presa; i pulsanti di actions: con l'icona (${bChips.join(" | ")})`);
+calls.length = 0;
+bSheet.querySelector('[data-pact="switch_on"]').onclick(); await wait(50);
+ok(calls.some((c) => c.svc === "switch.turn_on" && c.data.entity_id === "switch.presa_asciugatrice"), "Accendi presa = switch.turn_on sulla presa");
+calls.length = 0;
+a8.shadowRoot.querySelector('.ov .sheet [data-uact="0"]').onclick(); await wait(50);
+ok(calls.some((c) => c.svc === "script.turn_on" && c.target && c.target.entity_id === "script.pulisci_cucina"), "uno script da solo: script.turn_on");
+ok(/Fatto: Cucina/.test(txt(a8.shadowRoot.querySelector(".ov .sheet .res"))), "conferma dell'esito");
+calls.length = 0;
+a8.shadowRoot.querySelector('.ov .sheet [data-uact="1"]').onclick(); await wait(50);
+ok(calls.some((c) => c.svc === "button.press" && c.target.entity_id === "button.bruno_svuota"), "tap_action perform-action con target");
+calls.length = 0; let asked = "";
+window.confirm = (q) => { asked = q; return false; };
+a8.shadowRoot.querySelector('.ov .sheet [data-uact="2"]').onclick(); await wait(50);
+ok(/Eseguire «Con conferma»/.test(asked) && !calls.some((c) => c.svc), "confirmation: chiede prima, e con «no» non parte niente");
+let more = null;
+a8.addEventListener("hass-more-info", (e) => { more = e.detail.entityId; });
+const fv = [...a8.shadowRoot.querySelectorAll(".ov .sheet .facts .fv")].find((n) => /Batteria robot/.test(txt(n.closest("dd").previousElementSibling)));
+ok(fv, "info: con il nome dato, la riga è toccabile");
+fv.onclick(); await wait(50);
+ok(more === "sensor.bruno_batteria" && !a8.shadowRoot.querySelector(".ov .sheet"), "tocco sulla riga: finestra di HA dell'entità, il pannello si chiude");
+
 // 0.2.0: una card per un solo dispositivo, con il nuovo nome
 ok(customElements.get("supernotify-devices-card") && customElements.get("supernotify-appliances-card"), "supernotify-devices-card, e il vecchio nome resta");
 api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;
@@ -424,6 +461,7 @@ one.hass = mkHass(); await wait(400); one.hass = mkHass(); await wait(400);
 const oneR = one.shadowRoot;
 ok(oneR.querySelector(".one .ptabs") && !oneR.querySelector(".ov .sheet") && !oneR.querySelector(".hdr") && /Lavatrice/.test(txt(oneR.querySelector(".one .ph")))
   && !oneR.querySelector(".one .x"), "device: Lavatrice = panoramica e schede dentro la card, senza elenco, titolo né pulsante Chiudi");
+ok(/Svuotata/.test(txt(oneR.querySelector(".pchips .chip.main"))) && /Ricordamelo/.test(txt(oneR.querySelector(".pchips"))), "da svuotare: Svuotata in evidenza, poi Ricordamelo, piccoli");
 oneR.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
 ok(oneR.querySelector(".one .tiles") && oneR.querySelector(".tb.days"), "device: la scheda dello storico nella card");
 const none = document.createElement("supernotify-devices-card");
