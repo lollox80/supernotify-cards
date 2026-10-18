@@ -203,6 +203,29 @@ appliances:
 When the plug is off, **Switch on the plug** turns it on (the plug's own switch: Autonotify has no
 button for it); `switch_on_button: false` hides it.
 
+## Maintenance every N cycles
+
+`maintenance:` (under `appliances:` or `devices:`) is a list, so an appliance can have more than one:
+
+```yaml
+appliances:
+  Washing machine:
+    maintenance:
+      - name: Drum clean
+        count: sensor.washer_cycles_since_maintenance   # cycles done since the last one
+        every: input_number.washer_maintenance_every    # an entity or a number
+        done: counter.washer_cycles_since_maintenance   # optional: what "Done" runs
+      - name: Filter
+        left: sensor.washer_filter_cycles_left          # or the cycles left, with every:
+        every: 30
+        warn_before: 5                                  # near from 5 cycles before (default: a tenth)
+```
+
+The overview shows each one as "46 of 50 · in 4 cycles" with a bar. When it is near or due, the card and
+the row of the appliance say so ("🔧 Drum clean · in 4 cycles", "due now"). **Done** asks first, since the
+count starts again, then runs `done:`: a counter is reset, a script runs, a button is pressed, or any
+`tap_action` with `confirmation`, as in `actions:`. Without `done:` there is no Done button.
+
 ## Last 7 days
 
 The history tab has one row a day for the last 7 days - cycles (cleanings, prints), time, energy and

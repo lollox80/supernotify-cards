@@ -467,6 +467,29 @@ ok(bSets && !bSets.open && orari && orari.nextElementSibling.querySelectorAll(".
   && !/Orari/.test(txt(a8.shadowRoot.querySelector(".ov .sheet .pinfo > .facts"))), "le impostazioni ripiegate sotto ⚙️, due entità su una riga (06:30 – 08:00)");
 a8.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 
+// 0.2.6: manutenzione ogni N cicli, una lista
+api.snAppl._listKey = null;
+const s10 = baseStates(); s10["sensor.cicli_da_manut"] = st("46"); s10["input_number.manut_ogni"] = st("50"); s10["sensor.filtro_mancano"] = st("0");
+const a10 = await mkArt({ devices: [{ name: "Lavatrice2", power_entity: "sensor.presa_asciugatrice_power", threshold: 5000,
+  maintenance: [{ name: "Pulizia cestello", count: "sensor.cicli_da_manut", every: "input_number.manut_ogni", done: "counter.cicli_lavatrice" },
+    { name: "Sale", count: 10, every: 50 }, { name: "Filtro", left: "sensor.filtro_mancano", every: 30 }] }] }, s10);
+const lTxt = txt(a10.shadowRoot.querySelector("#body"));
+ok(/Pulizia cestello · tra 4 cicli/.test(lTxt) && /Filtro · da fare/.test(lTxt) && !/Sale/.test(lTxt), `elenco: solo le manutenzioni vicine o da fare (${lTxt.slice(0, 160)})`);
+const lAp = api.snAppl._list.find((x) => x.name === "Lavatrice2");
+a10._openPanel(lAp.id); await wait(200);
+const mSheet = a10.shadowRoot.querySelector(".ov .sheet");
+const mRow = (n) => [...mSheet.querySelectorAll(".facts dt")].find((d) => txt(d) === n);
+ok(mRow("Pulizia cestello") && /46 su 50 · tra 4 cicli/.test(txt(mRow("Pulizia cestello").nextElementSibling)) && mRow("Pulizia cestello").nextElementSibling.classList.contains("wrn")
+  && mRow("Pulizia cestello").nextElementSibling.querySelector(".mbar i[style*='92%']"), "panoramica: 46 su 50, tra 4 cicli, barra al 92%, in evidenza");
+ok(/10 su 50 · tra 40 cicli/.test(txt(mRow("Sale").nextElementSibling)) && !mRow("Sale").nextElementSibling.querySelector(".mdone"), "una lontana: senza evidenza e senza Fatto se non c'è done:");
+ok(mRow("Filtro").nextElementSibling.classList.contains("bad") && /30 su 30 · da fare/.test(txt(mRow("Filtro").nextElementSibling)), "da fare: dai cicli che mancano");
+calls.length = 0; asked = "";
+window.confirm = (q) => { asked = q; return true; };
+mSheet.querySelector('[data-maint="0"]').onclick(); await wait(50);
+ok(/Segnare «Pulizia cestello» come fatto/.test(asked) && calls.some((c) => c.svc === "counter.reset" && c.target && c.target.entity_id === "counter.cicli_lavatrice"),
+  "Fatto: chiede prima, poi counter.reset sul contatore");
+a10.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
+
 // 0.2.0: una card per un solo dispositivo, con il nuovo nome
 ok(customElements.get("supernotify-devices-card") && customElements.get("supernotify-appliances-card"), "supernotify-devices-card, e il vecchio nome resta");
 api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;
