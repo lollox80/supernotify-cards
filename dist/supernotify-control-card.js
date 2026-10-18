@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.3",
+  appliances: "0.2.4",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,10 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.4 (bundle 0.91.0): shorter - what can be changed (times, levels, switches) folds under "Settings",
+   * two entities on one row (`entities: [from, to]`), Notifications / Settings / the device as icons; "reading"
+   * while the history loads, not "no cycle yet"; `cycle_entity:` takes the cycles from a state (an oven's
+   * Running) when the power sensor is no use; no empty filament column for such a device.
    * 0.2.3 (bundle 0.91.0): what the old control centres had - the rows of the overview open Home
    * Assistant's own dialog of the entity (to change a time, a level, a switch), `actions:` adds buttons of
    * your own next to the others (a script, a button, a toggle, any tap_action), and Switch on the plug.
@@ -11131,7 +11135,7 @@ class SupernotifyAppliancesCard extends SnCard {
       return bits.join(" · ");
     }
     const last = s.last || (cy && cy.done.length ? cy.done[cy.done.length - 1] : null);
-    if (!last) return s.since ? `${T.start} ${this._fmtTime(s.since)}` : T.no_cycle;
+    if (!last) return s.since ? `${T.start} ${this._fmtTime(s.since)}` : (!cy || cy.loading) && (ap.power || ap.cycle || ap.vacuum) ? T.loading : T.no_cycle;
     let kwh = last.kwh;
     if (kwh == null && cy) {
       const m = cy.done.find((c) => Math.abs(c.start - last.start) < 15 * 60000 || (c.start <= last.end && c.end >= last.start));
@@ -11465,6 +11469,8 @@ class SupernotifyAppliancesCard extends SnCard {
       b.onclick = () => { this._panelTab = b.dataset.ptab; redraw(); const t = root.querySelector(`[data-ptab="${this._panelTab}"]`); if (t) t.focus(); };
     });
     root.querySelectorAll("[data-more]").forEach((b) => { b.onclick = () => this._moreInfo(b.dataset.more); });
+    const sets = root.querySelector(".psets");
+    if (sets) sets.ontoggle = () => { (this._setsOpen = this._setsOpen || {})[ap.id] = sets.open; };
     root.querySelectorAll("[data-uact]").forEach((b) => { b.onclick = () => this._userAct(ap, (ap.actions || [])[+b.dataset.uact] || {}); });
     root.querySelectorAll("[data-pact]").forEach((b) => {
       b.onclick = () => { const s = snApplState(this._hass, ap, Date.now(), snAppl.cyclesOf(ap)); this._act(b.dataset.pact, ap, s); };
@@ -11513,7 +11519,7 @@ class SupernotifyAppliancesCard extends SnCard {
         <span class="st ${cls}"><span class="dot ${cls}"></span>${esc(word)}</span>${quick ? `<span class="pq">${esc(quick)}</span>` : ""}</div>
         ${inline ? "" : `<button class="x" title="${esc(T.close)}" aria-label="${esc(T.close)}">✕</button>`}</div>`;
     const pri = this._primary(ap, s);
-    const chip = (attr, label, main, icon) => `<button class="chip${main ? " main" : ""}" ${attr}${main && this._busy[ap.id] ? " disabled" : ""}>${
+    const chip = (attr, label, main, icon) => `<button class="chip${main ? " main" : ""}${/class="ic"/.test(attr) ? " ic" : ""}" ${attr.replace(' class="ic"', "")}${main && this._busy[ap.id] ? " disabled" : ""}>${
       icon ? `<ha-icon icon="${esc(icon)}"></ha-icon>` : ""}${esc(label)}</button>`;
     const plugOff = ap.switch && this._st(ap.switch) === "off";
     const acts = [
@@ -11522,9 +11528,9 @@ class SupernotifyAppliancesCard extends SnCard {
       plugOn && s.status !== "running" && ap.switch_off !== false ? chip('data-pact="switch_off"', T.m_switch_off) : "",
       plugOff && ap.switch_on !== false ? chip('data-pact="switch_on"', T.m_switch_on) : "",
       ...(ap.actions || []).map((a, i) => chip(`data-uact="${i}"`, this._userActName(a), false, a.icon)),
-      ap.manual ? "" : chip(`id="pNotifs" title="${esc(T.open_notifs)}"`, `🔔 ${T.chip_notifs}`),
-      admin && !ap.manual ? chip('id="pSettings"', `⚙️ ${T.settings}`) : "",
-      ap.device_id ? chip(`id="pDevice" title="${esc(T.open_device)}"`, T.chip_device) : "",
+      ap.manual ? "" : chip(`id="pNotifs" class="ic" title="${esc(T.open_notifs)}" aria-label="${esc(T.chip_notifs)}"`, "", false, "mdi:bell-outline"),
+      admin && !ap.manual ? chip(`id="pSettings" class="ic" title="${esc(T.settings)}" aria-label="${esc(T.settings)}"`, "", false, "mdi:cog-outline") : "",
+      ap.device_id ? chip(`id="pDevice" class="ic" title="${esc(T.open_device)}" aria-label="${esc(T.chip_device)}"`, "", false, "mdi:devices") : "",
     ].filter(Boolean);
     const msg = this._msg[ap.id];
     const now = (acts.length ? `<div class="pchips">${acts.join("")}</div>` : "") + (msg ? `<div class="res ${msg.ok ? "ok" : "err"}">${esc(msg.text)}</div>` : "");
@@ -11601,17 +11607,20 @@ class SupernotifyAppliancesCard extends SnCard {
     const days = snApplDays(cy, Date.now());
     const max = Math.max(1, ...days.map((d) => what === "kwh" ? d.kwh : d.ms));
     const cost = what === "kwh" && this._price() != null;
+    // no filament column on a device that has none (an oven): the bar goes with the time
+    const third = !(what === "weight" && !days.some((d) => d.weight != null));
     const val = (d) => what === "kwh" ? this._fmtKwh(d.kwh) || "0 kWh"
       : what === "area" ? (d.area != null ? `${Math.round(d.area)} m²` : "—") : (d.weight != null ? `${d.weight.toLocaleString(this._loc(), { maximumFractionDigits: 1 })} g` : "—");
     const rows = days.map((d) => {
       const pct = Math.round((what === "kwh" ? d.kwh : d.ms) / max * 100);
       return `<tr><td>${esc(new Date(d.t).toLocaleDateString(this._loc(), { weekday: "short", day: "numeric" }))}</td><td>${d.n}</td>
-        <td>${esc(d.ms > 0 ? this._fmtDur(d.ms) : "—")}</td><td><span class="dbar"><i style="width:${pct}%"></i></span>${esc(val(d))}</td>
+        ${third ? `<td>${esc(d.ms > 0 ? this._fmtDur(d.ms) : "—")}</td><td><span class="dbar"><i style="width:${pct}%"></i></span>${esc(val(d))}</td>`
+    : `<td><span class="dbar"><i style="width:${pct}%"></i></span>${esc(d.ms > 0 ? this._fmtDur(d.ms) : "—")}</td>`}
         ${cost ? `<td>${esc(d.kwh > 0.005 ? this._fmtCost(d.kwh) : "—")}</td>` : ""}</tr>`;
     }).join("");
     const head = what === "kwh" ? T.col_energy : what === "area" ? T.col_area : T.col_fil;
     return `<div class="sub">${esc(T.last7)}</div>
-      <table class="tb days"><thead><tr><th>${esc(T.col_day)}</th><th>${esc(runsLabel)}</th><th>${esc(T.col_time)}</th><th>${esc(head)}</th>${cost ? `<th>${esc(T.col_cost)}</th>` : ""}</tr></thead>
+      <table class="tb days"><thead><tr><th>${esc(T.col_day)}</th><th>${esc(runsLabel)}</th><th>${esc(T.col_time)}</th>${third ? `<th>${esc(head)}</th>` : ""}${cost ? `<th>${esc(T.col_cost)}</th>` : ""}</tr></thead>
       <tbody>${rows}</tbody></table>`;
   }
 
@@ -11620,10 +11629,11 @@ class SupernotifyAppliancesCard extends SnCard {
     const T = this._T();
     const esc = snEsc;
     const facts = [];
-    const fact = (k, v, cls, eid) => {
+    const sets = [];
+    const btn = (eid, v) => `<button class="fv" data-more="${esc(eid)}" title="${esc(T.open_entity)}">${v}</button>`;
+    const fact = (k, v, cls, eid, into) => {
       if (v == null || v === "") return;
-      const val = eid ? `<button class="fv" data-more="${esc(eid)}" title="${esc(T.open_entity)}">${v}</button>` : v;
-      facts.push(`<dt>${esc(k)}</dt><dd${cls ? ` class="${cls}"` : ""}>${val}</dd>`);
+      (into || facts).push(`<dt>${esc(k)}</dt><dd${cls ? ` class="${cls}"` : ""}>${eid ? btn(eid, v) : v}</dd>`);
     };
     const fmt = (st) => esc(this._hass.formatEntityState ? this._hass.formatEntityState(st)
       : `${st.state}${st.attributes.unit_of_measurement ? " " + st.attributes.unit_of_measurement : ""}`);
@@ -11644,10 +11654,18 @@ class SupernotifyAppliancesCard extends SnCard {
         if (Number.isFinite(pct)) fact(snApplShortName(st, ap), esc(`${Math.round(pct)}%`), pct < 10 ? "wrn" : "", e.entity_id);
       } else if (SN_APPL_INFO_KEYS.includes(k)) fact(snApplShortName(st, ap), fmt(st), "", e.entity_id);
     }
-    for (const i of ap.info || []) { const st = this._hass.states[i.id]; if (st) fact(i.name || snApplShortName(st, ap), fmt(st), "", i.id); }
-    if (ap.manual) fact(T.source_h, esc(T.manual_src.replace("{w}", this._fmtW(ap.threshold))));
+    for (const i of ap.info || []) {
+      const ids = i.ids.filter((id) => this._hass.states[id]);
+      if (!ids.length) continue;
+      // what can be changed (a time, a level, a switch) goes under Settings, folded
+      const into = ids.some((id) => SN_APPL_SET_DOMAINS.includes(id.split(".")[0])) ? sets : facts;
+      into.push(`<dt>${esc(i.name || snApplShortName(this._hass.states[ids[0]], ap))}</dt><dd>${ids.map((id) => btn(id, fmt(this._hass.states[id]))).join(" – ")}</dd>`);
+    }
+    if (ap.manual) fact(T.source_h, esc(T.manual_src.replace("{w}", this._fmtW(ap.threshold))), "", null, ap.info ? sets : facts);
     return `<div class="pinfo">${s.status === "running" ? this._runHtml(ap, s) : ""}
-      ${facts.length ? `<dl class="facts">${facts.join("")}</dl>` : ""}</div>`;
+      ${facts.length ? `<dl class="facts">${facts.join("")}</dl>` : ""}
+      ${sets.length ? `<details class="psets"${this._setsOpen && this._setsOpen[ap.id] ? " open" : ""}><summary>⚙️ ${esc(T.settings)} · ${sets.length}</summary>
+        <dl class="facts">${sets.join("")}</dl></details>` : ""}</div>`;
   }
 
   /** A robot or a device of its own (a 3D printer): cleanings / prints in place of energy - the same tiles, bars and table. */
@@ -11714,6 +11732,9 @@ const SN_APPL_WORDS = [
   ["wash", "washer"], ["hood", "hood"], ["hob", "hob"],
 ];
 // what the overview shows of a device, besides battery, error and consumables (by translation key)
+// info: entities that are settings rather than readings - folded in the overview
+const SN_APPL_SET_DOMAINS = ["input_number", "input_datetime", "input_boolean", "input_select", "input_text", "number", "select",
+  "automation", "humidifier", "switch", "time", "datetime", "text", "timer"];
 const SN_APPL_INFO_KEYS = ["station_state", "print_progress", "program_progress", "current_layer", "nozzle_temp", "bed_temp",
   "subtask_name", "door", "remote_control", "active_program", "selected_program"];
 // what makes a device an appliance with its own state (Home Connect, Bambu Lab, ...)
@@ -11832,10 +11853,21 @@ function snApplResolve(hass, entry, over) {
   }
   if (o.remaining) ap.remaining = o.remaining;
   // entities shown in the overview: "sensor.x" or { entity, name }
-  if (o.info) ap.info = [].concat(o.info).filter(Boolean).map((i) => (typeof i === "object" ? { id: String(i.entity), name: i.name } : { id: String(i) }));
+  if (o.info) ap.info = [].concat(o.info).filter(Boolean).map((i) => (typeof i !== "object" ? { ids: [String(i)] }
+    : { ids: [].concat(i.entities || i.entity).filter(Boolean).map(String), name: i.name }));
   // buttons of your own: { entity } or { name, icon, tap_action, confirmation }
   if (o.actions) ap.actions = [].concat(o.actions).filter((a) => a && typeof a === "object" && (a.entity || a.tap_action));
   if (o.switch_on_button === false) ap.switch_on = false;
+  // the cycles from a state (an oven's "Running") instead of the power, unless a power_entity is given too
+  if (o.cycle_entity) {
+    ap.cycle = o.cycle_entity;
+    if (!o.power_entity) {
+      ap.kind = "device";
+      delete ap.power;
+      ap.vstats = ap.vstats || {};
+      if (!ap.device_id) ap.device_id = (ents.find((e) => e.entity_id === o.cycle_entity) || {}).device_id;
+    }
+  }
   if (o.entity) ap.entity = o.entity;
   if (!ap.power && o.power_entity) ap.power = o.power_entity;
   // the vacuum and the device kinds: a power sensor of their own only when given
@@ -12881,6 +12913,14 @@ function snApplCss(p) {
   .chip ha-icon { --mdc-icon-size: 16px; }
   .chip.main { background: var(--primary-color, ${p.brand}); border-color: var(--primary-color, ${p.brand}); color: #fff; }
   .chip:disabled { opacity: .6; cursor: default; }
+  .chip { white-space: nowrap; flex: none; max-width: 100%; }
+  .chip.ic { padding: 4px 8px; min-width: 34px; justify-content: center; }
+  .chip.ic ha-icon { --mdc-icon-size: 18px; }
+  .psets { margin-top: 10px; border-top: 1px solid ${p.line}; padding-top: 8px; }
+  .psets summary { cursor: pointer; font-weight: 700; font-size: 13px; color: ${p.brandD}; list-style: none; padding: 4px 0; }
+  .psets summary::-webkit-details-marker { display: none; }
+  .psets summary::after { content: " ▾"; } .psets[open] summary::after { content: " ▴"; }
+  .psets .facts { margin-top: 8px; }
   .fv { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: left; cursor: pointer;
     border-bottom: 1px dotted ${p.muted}; }
   .fv:hover { color: ${p.brandD}; border-bottom-color: ${p.brandD}; }

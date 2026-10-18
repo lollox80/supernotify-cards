@@ -243,8 +243,9 @@ const dts = [...info.querySelectorAll(".facts dt")].map((n) => txt(n));
 ok(dts.includes("Ultimo ciclo") && /1,2\sW/.test(txt(info.querySelector(".pq"))) && /Presa accesa/.test(txt(info.querySelector(".pq")))
   && info.querySelector('.pchips [data-pact="switch_off"]'), `panoramica: ultimo ciclo; potenza e presa sotto lo stato (${dts.join(", ")})`);
 const chips = [...info.querySelectorAll(".pchips .chip")].map((n) => txt(n));
-ok(chips.some((c) => /Spegni presa/.test(c)) && chips.some((c) => /Notifiche/.test(c)) && chips.some((c) => /Impostazioni/.test(c))
-  && chips.some((c) => /Dispositivo/.test(c)) && !info.querySelector(".pm, .pmenu"), `tutte le azioni in vista, pulsanti piccoli, niente menu (${chips.join(" | ")})`);
+const icl = (sel) => { const b = info.querySelector(sel); return b && b.classList.contains("ic") && b.getAttribute("aria-label"); };
+ok(chips.some((c) => /Spegni presa/.test(c)) && icl("#pNotifs") === "Notifiche" && icl("#pSettings") === "Impostazioni"
+  && icl("#pDevice") === "Dispositivo" && !info.querySelector(".pm, .pmenu"), `tutte le azioni in vista; Notifiche, Impostazioni e Dispositivo come icone (${chips.join(" | ")})`);
 ok(info.querySelector("#pDevice"), "link al dispositivo in Home Assistant");
 info.querySelector('[data-ptab="stats"]').onclick();
 await wait(100);
@@ -265,7 +266,7 @@ ok(sheet.querySelectorAll(".tb:not(.days) tbody tr").length === 8 && sheet.query
 ok(/a ore/.test(txt(sheet)), "dice che i cicli vecchi sono a ore");
 const d7 = [...sheet.querySelectorAll(".tb.days tbody tr")];
 ok(d7.length === 7 && /Ultimi 7 giorni/.test(txt(sheet)) && /kWh/.test(txt(d7[0])) && /€/.test(txt(sheet.querySelector(".tb.days"))), `ultimi 7 giorni: una riga al giorno con consumo e costo (${txt(d7[1])})`);
-ok(sheet.querySelector("#pNotifs") && /Impostazioni/.test(txt(sheet.querySelector("#pSettings"))), "pulsanti Notifiche e Impostazioni");
+ok(sheet.querySelector("#pNotifs") && sheet.querySelector("#pSettings").getAttribute("aria-label") === "Impostazioni", "pulsanti Notifiche e Impostazioni");
 ok(R.activeElement && R.activeElement.dataset.ptab === "stats", "cambiando scheda il fuoco resta sulla scheda");
 R.getElementById("ov").onkeydown({ key: "Escape" });
 ok(!R.querySelector(".ov .sheet"), "Esc chiude");
@@ -419,11 +420,13 @@ a7.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 
 // 0.2.3: righe toccabili (more-info di HA), pulsanti di actions:, Accendi presa
 api.snAppl._listKey = null;
+const s8 = baseStates(); s8["input_datetime.da"] = st("06:30:00"); s8["input_datetime.a"] = st("08:00:00");
+s8["input_datetime.da"].attributes = { has_date: false, has_time: true, friendly_name: "Da" }; s8["input_datetime.a"].attributes = { has_date: false, has_time: true, friendly_name: "A" };
 const a8 = await mkArt({ devices: [{ name: "Boiler", power_entity: "sensor.presa_asciugatrice_power", switch_entity: "switch.presa_asciugatrice", threshold: 50,
-  info: [{ entity: "sensor.bruno_batteria", name: "Batteria robot" }],
+  info: [{ entity: "sensor.bruno_batteria", name: "Batteria robot" }, { name: "Orari", entities: ["input_datetime.da", "input_datetime.a"] }],
   actions: [{ entity: "script.pulisci_cucina", name: "Cucina", icon: "mdi:silverware-fork-knife" },
     { name: "Svuota", tap_action: { action: "perform-action", perform_action: "button.press", target: { entity_id: "button.bruno_svuota" } } },
-    { name: "Con conferma", entity: "script.pericoloso", confirmation: true }] }] }, baseStates());
+    { name: "Con conferma", entity: "script.pericoloso", confirmation: true }] }] }, s8);
 const bAp = api.snAppl._list.find((x) => x.name === "Boiler");
 a8._openPanel(bAp.id); await wait(200);
 const bSheet = a8.shadowRoot.querySelector(".ov .sheet");
@@ -450,6 +453,12 @@ const fv = [...a8.shadowRoot.querySelectorAll(".ov .sheet .facts .fv")].find((n)
 ok(fv, "info: con il nome dato, la riga è toccabile");
 fv.onclick(); await wait(50);
 ok(more === "sensor.bruno_batteria" && !a8.shadowRoot.querySelector(".ov .sheet"), "tocco sulla riga: finestra di HA dell'entità, il pannello si chiude");
+a8._openPanel(bAp.id); await wait(200);
+const bSets = a8.shadowRoot.querySelector(".ov .sheet .psets");
+const orari = bSets && [...bSets.querySelectorAll("dt")].find((n) => /Orari/.test(txt(n)));
+ok(bSets && !bSets.open && orari && orari.nextElementSibling.querySelectorAll(".fv").length === 2 && /06:30(:00)? – 08:00/.test(txt(orari.nextElementSibling))
+  && !/Orari/.test(txt(a8.shadowRoot.querySelector(".ov .sheet .pinfo > .facts"))), "le impostazioni ripiegate sotto ⚙️, due entità su una riga (06:30 – 08:00)");
+a8.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 
 // 0.2.0: una card per un solo dispositivo, con il nuovo nome
 ok(customElements.get("supernotify-devices-card") && customElements.get("supernotify-appliances-card"), "supernotify-devices-card, e il vecchio nome resta");

@@ -175,6 +175,13 @@ Every row of the overview that comes from an entity - `info:`, a robot's consuma
 temperatures - opens Home Assistant's own dialog of that entity when tapped: there you change a time, a
 level, a number or a switch, as anywhere in Home Assistant. An `info:` row can have a name of its own:
 `- { entity: number.bruno_water_flow_level, name: Water }`.
+Two entities can share a row - `- { name: Mornings, entities: [input_datetime.from, input_datetime.to] }` shows
+"06:30 – 08:00", each tappable. What can be changed (times, numbers, selects, switches, automations) folds
+under **⚙️ Settings** below the readings, so the card stays short.
+
+An appliance whose power sensor tells nothing (an estimated one stuck at 0 W) can take its cycles from a
+state instead: `cycle_entity: sensor.oven_appliance_state` counts each "Running" as a cycle, from Home
+Assistant's history.
 
 `actions:` (under `appliances:` or `devices:`) adds buttons next to the others:
 
