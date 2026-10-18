@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.4",
+  appliances: "0.2.5",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,7 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.5 (bundle 0.91.0): a device added by hand whose power sensor is unavailable runs while its plug is on.
    * 0.2.4 (bundle 0.91.0): shorter - what can be changed (times, levels, switches) folds under "Settings",
    * two entities on one row (`entities: [from, to]`), Notifications / Settings / the device as icons; "reading"
    * while the history loads, not "no cycle yet"; `cycle_entity:` takes the cycles from a state (an oven's
@@ -11978,7 +11979,10 @@ function snApplState(hass, ap, now, cy) {
     const sw = ap.switch && raw(ap.switch);
     if ((!p || p.state === "unavailable") && (!sw || sw.state !== "on")) { if (s.status !== "done") s.status = "off"; }
     else if (sw && sw.state === "off" && s.status !== "done") s.status = "off";
-    else if (!ev || !ev.length) {
+    else if (ap.manual && (!p || ["unavailable", "unknown"].includes(p.state)) && sw && sw.state === "on") {
+      // a device of yours whose power cannot be read now (the meter is offline): its plug on says it runs
+      s.status = "running"; s.since = Date.parse(sw.last_changed);
+    } else if (!ev || !ev.length) {
       // nothing from Autonotify yet: the power alone
       const w = p ? parseFloat(p.state) : NaN;
       if (Number.isFinite(w) && w > ap.threshold) { s.status = "running"; s.since = Date.parse(p.last_changed); }

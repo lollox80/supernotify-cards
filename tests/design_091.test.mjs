@@ -418,6 +418,13 @@ const dSheet = a7.shadowRoot.querySelector(".ov .sheet");
 ok(dSheet && !dSheet.querySelector("#pNotifs") && /aggiunto a mano/.test(txt(dSheet)) && /Bruno Batteria|Batteria/.test(txt(dSheet.querySelector(".facts"))), "a mano: panoramica senza notifiche di Autonotify, dice da dove viene, mostra le entità di info:");
 a7.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 
+// 0.2.5: potenza non leggibile (contatore offline) e presa accesa: in funzione
+api.snAppl._listKey = null;
+const uStates = baseStates(); uStates["sensor.presa_lavastoviglie_power"] = st("unavailable"); uStates["switch.presa_lavastoviglie"] = st("on");
+const a9 = await mkArt({ devices: [{ name: "Deumidificatore", power_entity: "sensor.presa_lavastoviglie_power", switch_entity: "switch.presa_lavastoviglie", threshold: 20 }] }, uStates);
+const deu9 = apOf(a9, /Deumidificatore/);
+ok(deu9 && /In funzione/.test(txt(deu9.querySelector(".st"))), "a mano: potenza non disponibile ma presa accesa = in funzione");
+
 // 0.2.3: righe toccabili (more-info di HA), pulsanti di actions:, Accendi presa
 api.snAppl._listKey = null;
 const s8 = baseStates(); s8["input_datetime.da"] = st("06:30:00"); s8["input_datetime.a"] = st("08:00:00");
