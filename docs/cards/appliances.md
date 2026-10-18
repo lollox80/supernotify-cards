@@ -203,6 +203,29 @@ appliances:
 When the plug is off, **Switch on the plug** turns it on (the plug's own switch: Autonotify has no
 button for it); `switch_on_button: false` hides it.
 
+## While it runs
+
+The overview opens on the drawing inside a ring that fills with the cycle, the estimated end big beside
+it, the time left and the percentage ("estimate from similar cycles" when the appliance does not say).
+The ring takes the colour of the phase - light blue rinse, purple spin, orange drying, red heating - and
+the phase is written under the drawing. The program and the phase come from the device (Home Connect,
+SmartThings, Miele...) or from `program:` / `phase:`:
+
+```yaml
+appliances:
+  Oven:
+    program: select.oven_program
+    phase: sensor.oven_process_phase
+```
+
+When it is not running, the last cycle is four boxes: start (→ end), duration, energy, cost. Every row of the
+overview has an icon; a robot's consumables are a grid of bars with short names ("Filter", "Main brush").
+A band on top of the card and of the panel takes the colour of the state: blue running, orange to empty,
+red needs help.
+
+If the plug, the meter or the appliance's Wi-Fi drops for a few minutes, the card keeps the last state
+for 15 minutes and says "connection lost" instead of showing it off.
+
 ## Maintenance every N cycles
 
 `maintenance:` (under `appliances:` or `devices:`) is a list, so an appliance can have more than one:

@@ -12,7 +12,7 @@ global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.
 dom.window.HTMLElement.prototype.scrollIntoView = function () {};
 dom.window.customCards = [];
 dom.window.fetch = async () => ({ ok: false });
-const api = new dom.window.Function(SRC + "\nreturn { snAppl, snApplCycles, snApplTypes, snApplClassify, snApplEstimate, SN_APPL_STRINGS, SN_I18N_EXTRA, SupernotifyDashboardStrategy };")();
+const api = new dom.window.Function(SRC + "\nreturn { snAppl, snApplCycles, snApplTypes, snApplClassify, snApplEstimate, snApplState, snApplConsName, SN_APPL_STRINGS, SN_I18N_EXTRA, SupernotifyDashboardStrategy };")();
 
 let fail = 0;
 const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
@@ -195,7 +195,7 @@ ok(/Dettagli, consumi e cicli/.test(txt(lav.querySelector(".lnk"))), "link Detta
 const br = R.querySelector(".ap");
 ok(/Ha bisogno di aiuto/.test(txt(br.querySelector(".st"))) && br.querySelector(".dot.err"), "Bruno: rosso, ha bisogno di aiuto");
 ok(/#312/.test(txt(br)) && /Robot bloccato/.test(txt(br)), "errore 312 con la descrizione");
-ok(/Durata filtro al 5%/.test(txt(br)) && !/spazzola/.test(txt(br)), "consumabile sotto il 10%: filtro al 5% (la spazzola al 64% no)");
+ok(/Filtro al 5%/.test(txt(br)) && !/Durata filtro/.test(txt(br)) && !/spazzola/i.test(txt(br)), "consumabile sotto il 10%: «Filtro al 5%», il nome corto (la spazzola al 64% no)");
 ok(txt(br.querySelector(".pb")) === "Riprendi pulizia", "Bruno: Riprendi pulizia");
 const ls = [...R.querySelectorAll(".row")].find((n) => /Lavastoviglie/.test(n.textContent));
 // the test cycle started 26 h ago: "ieri" in the day, a date just after midnight
@@ -240,8 +240,9 @@ ok(info && info.querySelector('.ptab.on[data-ptab="info"]') && info.querySelecto
   "un tocco apre la panoramica: il disegno nell'intestazione, una sola immagine, niente riquadri");
 ok(R.activeElement && R.activeElement.classList.contains("x"), "fuoco sul pulsante Chiudi");
 const dts = [...info.querySelectorAll(".facts dt")].map((n) => txt(n));
-ok(dts.includes("Ultimo ciclo") && /1,2\sW/.test(txt(info.querySelector(".pq"))) && /Presa accesa/.test(txt(info.querySelector(".pq")))
+ok(/Ultimo ciclo/.test(txt(info.querySelector(".lstrip"))) && /→/.test(txt(info.querySelector(".lstrip .v2"))) && /1,2\sW/.test(txt(info.querySelector(".pq"))) && /Presa accesa/.test(txt(info.querySelector(".pq")))
   && info.querySelector('.pchips [data-pact="switch_off"]'), `panoramica: ultimo ciclo; potenza e presa sotto lo stato (${dts.join(", ")})`);
+ok(info.querySelectorAll(".facts dt ha-icon").length === dts.length, "0.2.7: un'icona per ogni riga della panoramica");
 const chips = [...info.querySelectorAll(".pchips .chip")].map((n) => txt(n));
 const icl = (sel) => { const b = info.querySelector(sel); return b && b.classList.contains("ic") && b.getAttribute("aria-label"); };
 ok(chips.some((c) => /Spegni presa/.test(c)) && icl("#pNotifs") === "Notifiche" && icl("#pSettings") === "Impostazioni"
@@ -393,6 +394,9 @@ a5.hass = vHass(); await wait(200);
 [...a5.shadowRoot.querySelectorAll(".row")].find((n) => /Bruno/.test(n.textContent)).onclick({ preventDefault() {} });
 await wait(300); a5.hass = vHass(); await wait(200);
 const vInfo = a5.shadowRoot.querySelector(".ov .sheet");
+const ciNames = vInfo ? [...vInfo.querySelectorAll(".cgrid .ci .cn")].map((n) => txt(n)) : [];
+ok(ciNames.length >= 2 && ciNames.includes("Filtro") && new Set(ciNames).size === ciNames.length && vInfo.querySelector(".cgrid .ci.wrn[data-more]")
+  && !vInfo.querySelector(".facts .fv[data-more*='lifespan']"), `0.2.7 consumabili in griglia, nomi corti e diversi, toccabili (${ciNames.join(" | ")})`);
 ok(vInfo && vInfo.querySelector(".ph .pv-art svg.dockv") && /🔋 \d+%/.test(txt(vInfo.querySelector(".pq"))) && /Pulizie/.test(txt(vInfo.querySelector('[data-ptab="stats"]'))),
   "Bruno: panoramica con robot sulla base e batteria, scheda Pulizie");
 vInfo.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
@@ -490,6 +494,37 @@ ok(/Segnare «Pulizia cestello» come fatto/.test(asked) && calls.some((c) => c.
   "Fatto: chiede prima, poi counter.reset sul contatore");
 a10.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 
+// 0.2.7: in funzione il disegno nell'anello, colore della fase, fascia dello stato; nomi corti; connessione persa
+ok(api.snApplConsName("Durata del filtro manuale") === "Filtro manuale" && api.snApplConsName("Durata della soluzione detergente") === "Soluzione detergente"
+  && api.snApplConsName("Unit care lifespan") === "Unit care" && api.snApplConsName("Filter") === "Filter", "nomi corti dei consumabili");
+api.snAppl._listKey = null;
+const s11 = baseStates(); s11["sensor.presa_lavastoviglie_power"] = pw(480, "Presa Lavastoviglie Potenza");
+s11["select.prog"] = st("Cotone 40°"); s11["sensor.fase"] = st("Risciacquo"); s11["sensor.manca"] = st("30", { unit_of_measurement: "min" });
+const a11 = await mkArt({ devices: [{ name: "Lavatrice3", type: "washer", power_entity: "sensor.presa_lavastoviglie_power", switch_entity: "switch.presa_lavastoviglie", threshold: 20,
+  program: "select.prog", phase: "sensor.fase", remaining: "sensor.manca", info: ["sensor.bruno_batteria"] }] }, s11);
+const l3 = apOf(a11, /Lavatrice3/);
+ok(l3 && l3.classList.contains("st-run"), "elenco: la card in funzione ha la fascia blu (st-run)");
+const l3Ap = api.snAppl._list.find((x) => x.name === "Lavatrice3");
+a11._openPanel(l3Ap.id); await wait(200);
+const hs = a11.shadowRoot.querySelector(".ov .sheet");
+ok(hs && hs.classList.contains("st-run") && hs.querySelector(".hero .hwrap .pv-art") && !hs.querySelector(".ph .pv-art"), "in funzione: il disegno passa nell'anello, non due volte");
+ok(/4fc3f7/.test(hs.querySelector(".hero .arc").getAttribute("style")) && txt(hs.querySelector(".hero .glass")) === "Risciacquo", "anello azzurro del risciacquo, la fase sotto il disegno");
+ok(hs.querySelectorAll(".hero .hpp .fv").length === 2 && /Cotone 40°/.test(txt(hs.querySelector(".hero .hpp"))) && /mancano 30 min/.test(txt(hs.querySelector(".hero"))),
+  "programma e fase toccabili, quanto manca");
+ok(hs.querySelectorAll(".facts dt").length === hs.querySelectorAll(".facts dt ha-icon").length && hs.querySelectorAll(".facts dt").length > 0, "ogni riga ha la sua icona");
+hs.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
+ok(a11.shadowRoot.querySelector(".ov .sheet .ph .pv-art") && !a11.shadowRoot.querySelector(".ov .sheet .hero"), "nella scheda dei consumi il disegno torna in alto");
+a11.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
+a11._panelTab = "info";
+// una caduta breve della connessione tiene l'ultimo stato
+const hAp = { id: "hold_t", kind: "power", power: "sensor.ph", manual: true, threshold: 5 };
+const hh = (state, ago) => ({ states: { "sensor.ph": { state, attributes: { unit_of_measurement: "W" }, last_changed: iso(Date.now() - ago), last_updated: iso(Date.now() - ago) } } });
+const h1 = api.snApplState(hh("500", 30 * 60000), hAp, Date.now(), null);
+const h2 = api.snApplState(hh("unavailable", 2 * 60000), hAp, Date.now(), null);
+const h3 = api.snApplState(hh("unavailable", 20 * 60000), hAp, Date.now(), null);
+ok(h1.status === "running" && h2.status === "running" && h2.lost && h3.status === "off" && !h3.lost,
+  `connessione persa: in funzione per 15 minuti con l'avviso, poi spento (${h1.status}/${h2.status}/${h3.status})`);
+
 // 0.2.0: una card per un solo dispositivo, con il nuovo nome
 ok(customElements.get("supernotify-devices-card") && customElements.get("supernotify-appliances-card"), "supernotify-devices-card, e il vecchio nome resta");
 api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;
@@ -501,6 +536,9 @@ const oneR = one.shadowRoot;
 ok(oneR.querySelector(".one .ptabs") && !oneR.querySelector(".ov .sheet") && !oneR.querySelector(".hdr") && /Lavatrice/.test(txt(oneR.querySelector(".one .ph")))
   && !oneR.querySelector(".one .x"), "device: Lavatrice = panoramica e schede dentro la card, senza elenco, titolo né pulsante Chiudi");
 ok(/Svuotata/.test(txt(oneR.querySelector(".pchips .chip.main"))) && /Ricordamelo/.test(txt(oneR.querySelector(".pchips"))), "da svuotare: Svuotata in evidenza, poi Ricordamelo, piccoli");
+const oneDts = [...oneR.querySelectorAll(".one .facts dt")].map((n) => txt(n));
+ok(oneR.querySelector("ha-card").dataset.st === "done" && oneDts.some((d) => /Notifiche/.test(d)) && oneR.querySelector(".one .lstrip .v2"),
+  `0.2.7 niente si perde: fascia arancione sulla card, notifiche e promemoria, ultimo ciclo con la fine (${oneDts.join(", ")})`);
 oneR.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
 ok(oneR.querySelector(".one .tiles") && oneR.querySelector(".tb.days"), "device: la scheda dello storico nella card");
 const none = document.createElement("supernotify-devices-card");
