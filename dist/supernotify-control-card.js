@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.11",
+  appliances: "0.2.12",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,8 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.12 (bundle 0.91.0): a history read waits up to 2 minutes (30 s before): a Home Assistant busy at
+   * night answers late, and giving up early only made it compute the same read again.
    * 0.2.11 (bundle 0.91.0): a history read that fails (a timeout while the phone wakes up) is read again by
    * itself - in 15 s, then less often - what was already shown stays meanwhile; with nothing to show it
    * says the read failed, with "Try again", instead of "timeout" or "the sensor has no statistics".
@@ -11998,6 +12000,9 @@ const SN_APPL_VAC_KEYS = { count: ["total_stats_cleanings", "total_cleaning_coun
   time: ["total_stats_time", "total_cleaning_time", "total_clean_time"], area: ["total_stats_area", "total_cleaning_area", "total_clean_area"],
   last_area: ["stats_area", "cleaning_area", "last_clean_area"] };
 const SN_APPL_RETRY = 15000; // a failed history read is tried again after this, then less often
+// a history read waits this long: Home Assistant busy (a backup at night) answers in minutes, and a read
+// abandoned early is still computed there - trying again sooner only adds to its load
+const SN_APPL_READ_MS = 120000;
 const SN_APPL_VAC_DAYS = 30; // the state history read for the single cleanings / prints / cycles
 // the states of a run: a robot's, and a device's (Home Connect operation_state, Bambu Lab print_status)
 const SN_APPL_RUN_VAC = ["cleaning", "returning", "paused"];
@@ -12984,10 +12989,10 @@ const snAppl = {
     const mine = cache && cache[id] && cache[id].from === from.getTime() ? cache[id] : null;
     const hourFrom = mine ? new Date(mine.upto) : from;
     const reads = [snWS(hass, { type: "recorder/statistics_during_period", start_time: fineFrom.toISOString(),
-      end_time: new Date(now).toISOString(), statistic_ids: [id], period: "5minute", types: ["mean", "max"] }, 30000)];
+      end_time: new Date(now).toISOString(), statistic_ids: [id], period: "5minute", types: ["mean", "max"] }, SN_APPL_READ_MS)];
     if (hourFrom < fineFrom) {
       reads.push(snWS(hass, { type: "recorder/statistics_during_period", start_time: hourFrom.toISOString(),
-        end_time: fineFrom.toISOString(), statistic_ids: [id], period: "hour", types: ["mean", "max"] }, 30000));
+        end_time: fineFrom.toISOString(), statistic_ids: [id], period: "hour", types: ["mean", "max"] }, SN_APPL_READ_MS));
     }
     Promise.all(reads).then(([fine, hour]) => {
       const hb = (mine ? mine.rows : []).concat(snApplBins(hour && hour[id], 3600000).map((b) => [b.t, b.mean, b.max]))
@@ -13041,9 +13046,9 @@ const snAppl = {
     const totals = [vs.count, vs.time, vs.area].filter(Boolean);
     const reads = [snWS(hass, { type: "history/history_during_period", start_time: new Date(now - SN_APPL_VAC_DAYS * 86400000).toISOString(),
       end_time: new Date(now).toISOString(), entity_ids: [id, vs.last_area, vs.weight, vs.name].filter(Boolean), minimal_response: true,
-      no_attributes: true, significant_changes_only: false }, 30000),
+      no_attributes: true, significant_changes_only: false }, SN_APPL_READ_MS),
     totals.length ? snWS(hass, { type: "recorder/statistics_during_period", start_time: from.toISOString(), end_time: new Date(now).toISOString(),
-      statistic_ids: totals, period: "day", types: ["change"] }, 30000) : Promise.resolve(null)];
+      statistic_ids: totals, period: "day", types: ["change"] }, SN_APPL_READ_MS) : Promise.resolve(null)];
     Promise.all(reads).then(([hist, stats]) => {
       const pts = (k) => (k && hist && hist[k] || []).map((x) => ({ t: (x.lu != null ? x.lu : x.lc) * 1000, s: x.s })).filter((x) => Number.isFinite(x.t));
       const { done, current } = snApplRunCycles(pts(id), { area: pts(vs.last_area), weight: pts(vs.weight), name: pts(vs.name) },
