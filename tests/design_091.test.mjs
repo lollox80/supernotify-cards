@@ -590,6 +590,25 @@ sh.querySelector('[data-pact="switch_off"]').onclick(); await wait(50);
 ok(calls.some((c) => c.svc === "switch.turn_off" || (c.svc || "").endsWith("turn_off")), "il secondo tocco spegne la presa");
 a14.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 
+// 0.2.11: una lettura dello storico che va in timeout si riprova da sola; ciò che c'era resta
+{
+  const fail = { callWS: () => Promise.reject(new Error("timeout")) };
+  const vAp = { id: "v_t", kind: "vacuum", vacuum: "vacuum.t_robot", vstats: {} };
+  api.snAppl.stats.delete("vacuum.t_robot");
+  api.snAppl.loadStats(fail, vAp, true); await wait(50);
+  const e1 = api.snAppl.stats.get("vacuum.t_robot");
+  ok(e1 && e1.error === "timeout" && e1.retryT && e1.fails === 1, "timeout senza niente da mostrare: errore e un nuovo tentativo in programma");
+  clearTimeout(e1.retryT);
+  const pAp = { id: "p_t", kind: "power", power: "sensor.t_power", threshold: 5, grace: 300000, minDur: 300000 };
+  api.snAppl.stats.set("sensor.t_power", { bins: [{ t: 1, dt: 300000, mean: 1, max: 1 }], done: [{ start: 1, end: 2, kwh: 0.5 }], types: {}, loading: false, at: Date.now() - 700000, error: null });
+  api.snAppl.loadStats(fail, pAp); await wait(50);
+  const e2 = api.snAppl.stats.get("sensor.t_power");
+  ok(e2.error === null && e2.done.length === 1 && e2.retryT, "timeout con dati già letti: restano quelli, nessun errore, si riprova");
+  clearTimeout(e2.retryT);
+  const rf = a11._readFailed({ error: "timeout" });
+  ok(/Non sono riuscito a leggere lo storico \(timeout\); riprovo tra poco/.test(rf) && /data-retry/.test(rf) && /Riprova/.test(rf), "il pannello lo dice in chiaro, con Riprova");
+}
+
 // 0.2.0: una card per un solo dispositivo, con il nuovo nome
 ok(customElements.get("supernotify-devices-card") && customElements.get("supernotify-appliances-card"), "supernotify-devices-card, e il vecchio nome resta");
 api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;
