@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.9",
+  appliances: "0.2.10",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,8 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.10 (bundle 0.91.0): no ring around the drawing - the band on top says the state, once; while it
+   * runs, a bar under the end fills in the colour of the phase, with the percentage beside it.
    * 0.2.9 (bundle 0.91.0): the overview looks the same in every state - the drawing in its ring (filling
    * while it runs, full orange to empty, red when it needs help, empty when idle) with the one thing that
    * matters now beside it (the end, how long it waits, the average cycle), then the cycle in four boxes (the
@@ -11277,7 +11279,6 @@ class SupernotifyAppliancesCard extends SnCard {
     if (s.status !== "running") {
       // the same place, what matters now: how long it waits to be emptied, what went wrong, the average cycle
       const avg = cy && cy.types && cy.types.all;
-      const st = s.status === "done" ? "done" : s.status === "error" ? "err" : "off";
       let txt;
       if (s.status === "done" && s.endAt) {
         txt = `<span class="lbl">${esc(snApplEmptiable(ap) ? T.empty_since : T.done_since)}</span><b class="big">${esc(this._fmtDur(Math.max(60000, now - s.endAt)))}</b>
@@ -11288,9 +11289,7 @@ class SupernotifyAppliancesCard extends SnCard {
         txt = `<span class="lbl">${esc(T.avg_cycle)}</span><b class="big">${esc(this._fmtDur(avg.dur))}</b>${avg.kwh > 0.005
           ? `<span class="left">${esc([this._fmtKwh(avg.kwh), this._fmtCost(avg.kwh)].filter(Boolean).join(" · "))}</span>` : ""}`;
       } else txt = `<span class="lbl">${esc(this._status(ap, s)[1])}</span>`;
-      const full = st !== "off" ? `<circle class="arc full ${st}" cx="60" cy="60" r="54"/>` : "";
-      return `<div class="hero"><div class="hwrap"><svg class="hring" viewBox="0 0 120 120" aria-hidden="true"><circle class="trk" cx="60" cy="60" r="54"/>${full}</svg>${art}</div>
-        <div class="htx">${txt}</div></div>`;
+      return `<div class="hero"><div class="hwrap">${art}</div><div class="htx">${txt}</div></div>`;
     }
     const est = snApplEstimate(this._hass, ap, s, snAppl.cyclesOf(ap), now);
     const one = (id) => {
@@ -11302,16 +11301,14 @@ class SupernotifyAppliancesCard extends SnCard {
     const phase = one(ap.phase);
     const col = snApplPhaseColor(ap, phase ? `${phase.raw} ${phase.text}` : "");
     const pct = est ? Math.max(0, Math.min(100, est.pct)) : 0;
-    const C = 2 * Math.PI * 54;
-    const ring = `<svg class="hring" viewBox="0 0 120 120" aria-hidden="true"><circle class="trk" cx="60" cy="60" r="54"/>${est
-      ? `<circle class="arc" cx="60" cy="60" r="54" style="stroke:${col}" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - pct / 100)).toFixed(1)}" transform="rotate(-90 60 60)"/>` : ""}</svg>`;
     const left = est ? est.end - now : 0;
     const txt = est ? `<span class="lbl">${esc(T.end_est)}</span><b class="big">${esc(this._fmtHm(est.end))}</b>
+        <span class="hbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}"><i style="width:${Math.max(2, Math.round(pct))}%;background:${col}"></i></span>
         <span class="left">${esc(left > 60000 ? T.left.replace("{d}", this._fmtDur(left)) : T.almost)} · ${Math.round(pct)}%</span>
         ${est.guess ? `<span class="guess">${esc(T.est_from_avg)}</span>` : ""}`
       : s.since ? `<span class="left">${esc(T.running_for.replace("{d}", this._fmtDur(now - s.since)))}</span>` : "";
     const pp = [prog, phase].filter(Boolean).map((x) => `<button class="fv" data-more="${esc(x.id)}" title="${esc(T.open_entity)}">${esc(x.text)}</button>`).join(" · ");
-    return `<div class="hero"><div class="hwrap">${ring}${art}${phase ? `<span class="glass" style="color:${col}">${esc(phase.text)}</span>` : ""}</div>
+    return `<div class="hero"><div class="hwrap">${art}</div>
       <div class="htx">${txt}${pp ? `<span class="hpp">${pp}</span>` : ""}</div></div>`;
   }
 
@@ -13158,18 +13155,14 @@ function snApplCss(p) {
   .sheet.st-err { box-shadow: inset 0 4px 0 ${p.crit}, 0 12px 40px rgba(0,0,0,.3); }
   ha-card[data-st="run"] { border-top: 4px solid var(--info-color, var(--primary-color, #039be5)); }
   ha-card[data-st="done"] { border-top: 4px solid ${p.warn}; } ha-card[data-st="err"] { border-top: 4px solid ${p.crit}; }
-  .hero { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: center; margin: 2px 0 14px; }
-  .hwrap { position: relative; width: 150px; height: 150px; }
-  .hring { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .hring .trk { fill: none; stroke: ${p.soft}; stroke-width: 7; }
-  .hring .arc { fill: none; stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset .8s; }
-  .hring .arc.done { stroke: ${p.warn}; } .hring .arc.err { stroke: ${p.crit}; }
+  .hero { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 16px; align-items: center; margin: 2px 0 14px; }
+  .hwrap { position: relative; width: 128px; height: 128px; }
+  .hbar { display: block; height: 8px; border-radius: 999px; background: ${p.soft}; overflow: hidden; margin: 8px 0 4px; }
+  .hbar i { display: block; height: 100%; border-radius: 999px; transition: width .8s; }
   .htx .herr { color: ${p.crit}; font-weight: 700; font-size: 15px; }
   .menu .mi[data-armed], .mi.armed { color: ${p.crit}; }
-  .hwrap .pv-art { position: absolute; inset: 24px; display: flex; align-items: center; justify-content: center; }
-  .hwrap .pv-art ha-icon { --mdc-icon-size: 54px; color: ${p.brandD}; }
-  .glass { position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); font-size: 11.5px; font-weight: 800; padding: 1px 9px;
-    border-radius: 999px; background: ${p.panel}; border: 1.5px solid currentColor; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+  .hwrap .pv-art { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .hwrap .pv-art ha-icon { --mdc-icon-size: 64px; color: ${p.brandD}; }
   .htx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .htx .lbl { font-size: 13px; color: ${p.muted}; }
   .htx .big { font-size: 34px; font-weight: 800; letter-spacing: -.5px; line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -13195,8 +13188,8 @@ function snApplCss(p) {
   .ci.wrn b { color: ${p.warn}; } .ci.wrn .cb i { background: ${p.warn}; }
   .ci.bad b { color: ${p.crit}; } .ci.bad .cb i { background: ${p.crit}; }
   @media (max-width: 420px) { .ptab { padding: 10px 10px; font-size: 13.5px; } }
-  @media (max-width: 420px) { .hero { grid-template-columns: 124px minmax(0, 1fr); gap: 12px; } .hwrap { width: 124px; height: 124px; }
-    .hwrap .pv-art { inset: 20px; } .htx .big { font-size: 28px; } }
+  @media (max-width: 420px) { .hero { grid-template-columns: 108px minmax(0, 1fr); gap: 12px; } .hwrap { width: 108px; height: 108px; }
+    .htx .big { font-size: 28px; } }
   .ap.flash { border-color: var(--primary-color, #03a9f4); box-shadow: 0 0 0 2px rgba(var(--rgb-primary-color, 3,169,244), .25); }
   .art { flex: 0 0 96px; min-height: 96px; display: flex; align-items: center; justify-content: center; cursor: pointer;
     border-radius: 12px; background: ${p.soft}; overflow: hidden; }

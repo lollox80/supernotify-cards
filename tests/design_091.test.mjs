@@ -522,7 +522,7 @@ const l3Ap = api.snAppl._list.find((x) => x.name === "Lavatrice3");
 a11._openPanel(l3Ap.id); await wait(200);
 const hs = a11.shadowRoot.querySelector(".ov .sheet");
 ok(hs && hs.classList.contains("st-run") && hs.querySelector(".hero .hwrap .pv-art") && !hs.querySelector(".ph .pv-art"), "in funzione: il disegno passa nell'anello, non due volte");
-ok(/4fc3f7/.test(hs.querySelector(".hero .arc").getAttribute("style")) && txt(hs.querySelector(".hero .glass")) === "Risciacquo", "anello azzurro del risciacquo, la fase sotto il disegno");
+ok(/4fc3f7/.test(hs.querySelector(".hero .hbar i").getAttribute("style")) && !hs.querySelector(".hero .hring"), "0.2.10: niente cerchio, la barra azzurra del risciacquo sotto la fine");
 ok(hs.querySelectorAll(".hero .hpp .fv").length === 2 && /Cotone 40°/.test(txt(hs.querySelector(".hero .hpp"))) && /mancano 30 min/.test(txt(hs.querySelector(".hero"))),
   "programma e fase toccabili, quanto manca");
 ok(hs.querySelectorAll(".facts dt").length === hs.querySelectorAll(".facts dt ha-icon").length && hs.querySelectorAll(".facts dt").length > 0, "ogni riga ha la sua icona");
@@ -581,7 +581,7 @@ let stufa = null;
 for (let i = 0; i < 30 && !stufa; i++) { a14.hass = mkHass({ states: s14 }); await wait(100); stufa = (api.snAppl._list || []).find((x) => x.name === "Stufa"); }
 a14._openPanel(stufa.id); await wait(200);
 let sh = a14.shadowRoot.querySelector(".ov .sheet");
-ok(sh.querySelector(".hero .hring .trk") && !sh.querySelector(".hero .arc"), "ferma: l'anello c'è, vuoto");
+ok(sh.querySelector(".hero .hwrap .pv-art") && !sh.querySelector(".hero .hbar"), "ferma: il disegno nello stesso posto, nessuna barra");
 calls.length = 0;
 sh.querySelector('[data-pact="switch_off"]').onclick(); await wait(50);
 sh = a14.shadowRoot.querySelector(".ov .sheet");
@@ -604,8 +604,8 @@ ok(/Svuotata/.test(txt(oneR.querySelector(".pchips .chip.main"))) && /Ricordamel
 const oneDts = [...oneR.querySelectorAll(".one .facts dt")].map((n) => txt(n));
 ok(oneR.querySelector("ha-card").dataset.st === "done" && oneDts.some((d) => /Notifiche/.test(d)) && oneR.querySelector(".one .lstrip .v2"),
   `0.2.7 niente si perde: fascia arancione sulla card, notifiche e promemoria, ultimo ciclo con la fine (${oneDts.join(", ")})`);
-ok(oneR.querySelector(".one .hero .arc.full.done") && /Da svuotare da/.test(txt(oneR.querySelector(".one .hero"))) && /Fine ciclo alle/.test(txt(oneR.querySelector(".one .hero"))),
-  "0.2.9 da svuotare: stessa grafica, anello pieno arancione, da quanto aspetta e quando è finito");
+ok(oneR.querySelector(".one .hero .hwrap .pv-art") && !oneR.querySelector(".one .hero .hring") && /Da svuotare da/.test(txt(oneR.querySelector(".one .hero"))) && /Fine ciclo alle/.test(txt(oneR.querySelector(".one .hero"))),
+  "0.2.9 da svuotare: stessa grafica (senza cerchio), da quanto aspetta e quando è finito");
 oneR.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
 ok(oneR.querySelector(".one .tiles") && oneR.querySelector(".tb.days"), "device: la scheda dello storico nella card");
 const none = document.createElement("supernotify-devices-card");

@@ -218,10 +218,9 @@ button for it); `switch_on_button: false` hides it.
 
 ## While it runs
 
-The overview opens on the drawing inside a ring that fills with the cycle, the estimated end big beside
-it, the time left and the percentage ("estimate from similar cycles" when the appliance does not say).
-The ring takes the colour of the phase - light blue rinse, purple spin, orange drying, red heating - and
-the phase is written under the drawing. The program and the phase come from the device (Home Connect,
+The overview opens on the drawing with the estimated end big beside it, a bar that fills under it and the
+time left with the percentage ("estimate from similar cycles" when the appliance does not say). The bar
+takes the colour of the phase - light blue rinse, purple spin, orange drying, red heating. The program and the phase come from the device (Home Connect,
 SmartThings, Miele...) or from `program:` / `phase:`:
 
 ```yaml
@@ -231,10 +230,10 @@ appliances:
     phase: sensor.oven_process_phase
 ```
 
-The overview looks the same in every state: the drawing in its ring, the one thing that matters now beside
-it, the cycle in four boxes, then the rows. The ring fills while it runs, is full orange while it waits to be
-emptied ("To empty for 2 h", with when it finished), full red when it needs help (with the error), empty
-when idle (with the average cycle beside it). The boxes are the cycle under way (start, so far) or the last
+The overview looks the same in every state: the drawing, the one thing that matters now beside it, the
+cycle in four boxes, then the rows. Beside the drawing: the end and its bar while it runs, how long it waits
+to be emptied ("To empty for 2 h", with when it finished), the error when it needs help, the average cycle
+when idle. The band on top says the state. The boxes are the cycle under way (start, so far) or the last
 one: start (→ end), duration, energy, cost. Every row has an icon.
 
 Consumables (a robot's brushes and filters, as a grid of bars with short names) and maintenance have a tab
