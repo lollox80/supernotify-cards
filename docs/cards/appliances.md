@@ -200,6 +200,19 @@ appliances:
         confirmation: true                        # asks first (or { text: "..." })
 ```
 
+With more than three buttons of your own (a robot's), they go in a **Commands** menu that opens on a
+tap, in groups; the buttons with no `group:` come first. `commands_menu: always` or `never` (on the
+appliance or on the card) changes the default. `when:` shows a button only in some states - `running`,
+`paused`, `done`, `idle`, `off`, `error` - and `confirmation: double` asks for a second tap on the button
+itself instead of a dialog:
+
+```yaml
+    actions:
+      - { entity: script.clean_kitchen, name: Kitchen, group: Cleaning }
+      - { name: Pause, group: Cleaning, when: [running], tap_action: { action: perform-action, perform_action: vacuum.pause, target: { entity_id: vacuum.bruno } } }
+      - { entity: button.bruno_empty_dustbin, name: Empty the bin, group: Robot, confirmation: double }
+```
+
 When the plug is off, **Switch on the plug** turns it on (the plug's own switch: Autonotify has no
 button for it); `switch_on_button: false` hides it.
 

@@ -525,6 +525,40 @@ const h3 = api.snApplState(hh("unavailable", 20 * 60000), hAp, Date.now(), null)
 ok(h1.status === "running" && h2.status === "running" && h2.lost && h3.status === "off" && !h3.lost,
   `connessione persa: in funzione per 15 minuti con l'avviso, poi spento (${h1.status}/${h2.status}/${h3.status})`);
 
+// 0.2.8: tanti comandi in un menu a gruppi, pulsanti per stato, doppio tocco
+api.snAppl._listKey = null;
+const s12 = baseStates(); s12["sensor.presa_lavastoviglie_power"] = pw(1, "Presa Lavastoviglie Potenza");
+const sc = (n, g, extra) => ({ name: n, entity: `script.${n.toLowerCase()}`, group: g, ...extra });
+const a12 = await mkArt({ devices: [{ name: "Robot2", power_entity: "sensor.presa_lavastoviglie_power", threshold: 20, actions: [
+  sc("Pulisci", "Pulizia"), sc("Pausa", "Pulizia", { when: ["running"] }), sc("Base", "Pulizia"),
+  sc("Trova", "Robot"), sc("Svuota", "Robot", { confirmation: "double" }), sc("Mappa")] }] }, s12);
+const rAp = api.snAppl._list.find((x) => x.name === "Robot2");
+a12._openPanel(rAp.id); await wait(200);
+let rs = a12.shadowRoot.querySelector(".ov .sheet");
+const cm = rs && rs.querySelector("details.cmds");
+const gh = cm ? [...cm.querySelectorAll(".gh")].map((n) => txt(n)) : [];
+ok(cm && !cm.open && !rs.querySelector(".pchips [data-uact]") && /Comandi · 5/.test(txt(cm.querySelector("summary"))), "più di 3 comandi: nel menu Comandi, chiuso, non nella fila");
+ok(gh.join("|") === "Pulizia|Robot" && /Mappa/.test(txt(cm.querySelector(".cgrp > div:first-child"))) && !/Pausa/.test(txt(cm)),
+  `gruppi nell'ordine, quelli senza gruppo prima, Pausa nascosta da ferma (${gh.join(" | ")})`);
+calls.length = 0;
+const sv = [...cm.querySelectorAll("[data-uact]")].find((b) => /Svuota/.test(txt(b)));
+sv.onclick(); await wait(50);
+rs = a12.shadowRoot.querySelector(".ov .sheet");
+const armed = rs.querySelector("[data-uact][data-armed]");
+ok(armed && /Tocca di nuovo/.test(txt(armed)) && !calls.some((c) => c.svc), "doppio tocco: il primo arma il pulsante, non parte niente");
+armed.onclick(); await wait(50);
+ok(calls.some((c) => c.svc === "script.turn_on" && c.target && c.target.entity_id === "script.svuota") && !a12.shadowRoot.querySelector(".ov .sheet [data-armed]"), "il secondo tocco lo esegue");
+a12.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
+api.snAppl._listKey = null;
+const s13 = baseStates(); s13["sensor.presa_lavastoviglie_power"] = pw(300, "Presa Lavastoviglie Potenza");
+const a13 = await mkArt({ devices: [{ name: "Robot3", power_entity: "sensor.presa_lavastoviglie_power", threshold: 20, commands_menu: "never", actions: [
+  sc("Pulisci", "Pulizia", { when: ["idle", "off"] }), sc("Pausa", "Pulizia", { when: "running" }), sc("Base"), sc("Trova"), sc("Mappa")] }] }, s13);
+a13._openPanel(api.snAppl._list.find((x) => x.name === "Robot3").id); await wait(200);
+const r3 = [...a13.shadowRoot.querySelectorAll(".ov .sheet .pchips [data-uact]")].map((n) => txt(n));
+ok(!a13.shadowRoot.querySelector(".ov .sheet details.cmds") && r3.includes("Pausa") && !r3.includes("Pulisci") && r3.length === 4,
+  `commands_menu: never = tutti in fila; in funzione Pausa sì, Pulisci no (${r3.join(" | ")})`);
+a13.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
+
 // 0.2.0: una card per un solo dispositivo, con il nuovo nome
 ok(customElements.get("supernotify-devices-card") && customElements.get("supernotify-appliances-card"), "supernotify-devices-card, e il vecchio nome resta");
 api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;
