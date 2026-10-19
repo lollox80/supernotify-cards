@@ -11726,7 +11726,7 @@ class SupernotifyAppliancesCard extends SnCard {
       const lr = this._lastRun(ap, s);
       if (lr) {
         const cost = lr.kwh != null && lr.kwh > 0.005 ? this._fmtCost(lr.kwh) : "";
-        const cells = [[T.last_run, this._fmtTime(lr.start), `→ ${this._fmtHm(lr.end)}`], [T.col_dur, this._fmtDur(lr.end - lr.start)],
+        const cells = [[T.col_start, this._fmtTime(lr.start), `→ ${this._fmtHm(lr.end)}`], [T.col_dur, this._fmtDur(lr.end - lr.start)],
           lr.kwh != null && lr.kwh > 0.005 ? [T.col_energy, this._fmtKwh(lr.kwh)] : null, cost ? [T.col_cost, cost] : null].filter(Boolean);
         strip = `<div class="lstrip" style="grid-template-columns:repeat(${cells.length},minmax(0,1fr))">${cells.map(([k, v, v2]) =>
           `<div><span class="k">${esc(k)}</span><b>${esc(v)}</b>${v2 ? `<span class="v2">${esc(v2)}</span>` : ""}</div>`).join("")}</div>`;
@@ -13038,9 +13038,8 @@ function snApplCss(p) {
   .sheet.st-run { box-shadow: inset 0 4px 0 var(--info-color, var(--primary-color, #039be5)), 0 12px 40px rgba(0,0,0,.3); }
   .sheet.st-done { box-shadow: inset 0 4px 0 ${p.warn}, 0 12px 40px rgba(0,0,0,.3); }
   .sheet.st-err { box-shadow: inset 0 4px 0 ${p.crit}, 0 12px 40px rgba(0,0,0,.3); }
-  ha-card[data-st="run"] { box-shadow: inset 0 4px 0 var(--info-color, var(--primary-color, #039be5)), var(--ha-card-box-shadow, none); }
-  ha-card[data-st="done"] { box-shadow: inset 0 4px 0 ${p.warn}, var(--ha-card-box-shadow, none); }
-  ha-card[data-st="err"] { box-shadow: inset 0 4px 0 ${p.crit}, var(--ha-card-box-shadow, none); }
+  ha-card[data-st="run"] { border-top: 4px solid var(--info-color, var(--primary-color, #039be5)); }
+  ha-card[data-st="done"] { border-top: 4px solid ${p.warn}; } ha-card[data-st="err"] { border-top: 4px solid ${p.crit}; }
   .hero { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: center; margin: 2px 0 14px; }
   .hwrap { position: relative; width: 150px; height: 150px; }
   .hring { position: absolute; inset: 0; width: 100%; height: 100%; }

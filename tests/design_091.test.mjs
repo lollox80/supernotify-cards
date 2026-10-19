@@ -240,7 +240,7 @@ ok(info && info.querySelector('.ptab.on[data-ptab="info"]') && info.querySelecto
   "un tocco apre la panoramica: il disegno nell'intestazione, una sola immagine, niente riquadri");
 ok(R.activeElement && R.activeElement.classList.contains("x"), "fuoco sul pulsante Chiudi");
 const dts = [...info.querySelectorAll(".facts dt")].map((n) => txt(n));
-ok(/Ultimo ciclo/.test(txt(info.querySelector(".lstrip"))) && /→/.test(txt(info.querySelector(".lstrip .v2"))) && /1,2\sW/.test(txt(info.querySelector(".pq"))) && /Presa accesa/.test(txt(info.querySelector(".pq")))
+ok(/Inizio/.test(txt(info.querySelector(".lstrip"))) && /→/.test(txt(info.querySelector(".lstrip .v2"))) && /1,2\sW/.test(txt(info.querySelector(".pq"))) && /Presa accesa/.test(txt(info.querySelector(".pq")))
   && info.querySelector('.pchips [data-pact="switch_off"]'), `panoramica: ultimo ciclo; potenza e presa sotto lo stato (${dts.join(", ")})`);
 ok(info.querySelectorAll(".facts dt ha-icon").length === dts.length, "0.2.7: un'icona per ogni riga della panoramica");
 const chips = [...info.querySelectorAll(".pchips .chip")].map((n) => txt(n));
