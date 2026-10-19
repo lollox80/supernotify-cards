@@ -236,8 +236,8 @@ ok(![...R.querySelectorAll(".ap")].some((n) => /Lavatrice/.test(n.textContent)) 
 await wait(300);
 // 0.1.6: prima la panoramica, lo storico a un tocco
 const info = R.querySelector(".ov .sheet");
-ok(info && info.querySelector('.ptab.on[data-ptab="info"]') && info.querySelector(".ph .pv-art svg.sna") && !info.querySelector(".ph .pv-art ha-icon") && !info.querySelector(".tiles"),
-  "un tocco apre la panoramica: il disegno nell'intestazione, una sola immagine, niente riquadri");
+ok(info && info.querySelector('.ptab.on[data-ptab="info"]') && info.querySelector(".hero .hwrap .pv-art svg.sna") && !info.querySelector(".ph .pv-art") && !info.querySelector(".tiles"),
+  "un tocco apre la panoramica: il disegno nell'anello (0.2.9, in ogni stato), una sola immagine, niente riquadri");
 ok(R.activeElement && R.activeElement.classList.contains("x"), "fuoco sul pulsante Chiudi");
 const dts = [...info.querySelectorAll(".facts dt")].map((n) => txt(n));
 ok(/Inizio/.test(txt(info.querySelector(".lstrip"))) && /→/.test(txt(info.querySelector(".lstrip .v2"))) && /1,2\sW/.test(txt(info.querySelector(".pq"))) && /Presa accesa/.test(txt(info.querySelector(".pq")))
@@ -393,12 +393,19 @@ api.snAppl._listKey = null; api.snAppl.stats.clear();
 a5.hass = vHass(); await wait(200);
 [...a5.shadowRoot.querySelectorAll(".row")].find((n) => /Bruno/.test(n.textContent)).onclick({ preventDefault() {} });
 await wait(300); a5.hass = vHass(); await wait(200);
-const vInfo = a5.shadowRoot.querySelector(".ov .sheet");
-const ciNames = vInfo ? [...vInfo.querySelectorAll(".cgrid .ci .cn")].map((n) => txt(n)) : [];
-ok(ciNames.length >= 2 && ciNames.includes("Filtro") && new Set(ciNames).size === ciNames.length && vInfo.querySelector(".cgrid .ci.wrn[data-more]")
-  && !vInfo.querySelector(".facts .fv[data-more*='lifespan']"), `0.2.7 consumabili in griglia, nomi corti e diversi, toccabili (${ciNames.join(" | ")})`);
-ok(vInfo && vInfo.querySelector(".ph .pv-art svg.dockv") && /🔋 \d+%/.test(txt(vInfo.querySelector(".pq"))) && /Pulizie/.test(txt(vInfo.querySelector('[data-ptab="stats"]'))),
+let vInfo = a5.shadowRoot.querySelector(".ov .sheet");
+ok(vInfo && vInfo.querySelector(".hero .pv-art svg.dockv") && /🔋 \d+%/.test(txt(vInfo.querySelector(".pq"))) && /Pulizie/.test(txt(vInfo.querySelector('[data-ptab="stats"]'))),
   "Bruno: panoramica con robot sulla base e batteria, scheda Pulizie");
+const dueBtn = vInfo && vInfo.querySelector('.facts .fv[data-ptab="cons"]');
+ok(dueBtn && /Filtro 5%/.test(txt(dueBtn)) && !vInfo.querySelector(".cgrid") && /Consumabili/.test(txt(vInfo.querySelector('.ptab[data-ptab="cons"]'))),
+  "0.2.9: in panoramica una riga dice cosa è consumato; la griglia sta nella scheda Consumabili");
+dueBtn.onclick(); await wait(100);
+vInfo = a5.shadowRoot.querySelector(".ov .sheet");
+const ciNames = vInfo ? [...vInfo.querySelectorAll(".cgrid .ci .cn")].map((n) => txt(n)) : [];
+ok(vInfo.querySelector('.ptab.on[data-ptab="cons"]') && ciNames.length >= 2 && ciNames.includes("Filtro") && new Set(ciNames).size === ciNames.length && vInfo.querySelector(".cgrid .ci.wrn[data-more]"),
+  `toccare la riga apre la scheda: consumabili in griglia, nomi corti e diversi, toccabili (${ciNames.join(" | ")})`);
+vInfo.querySelector('[data-ptab="info"]').onclick(); await wait(100);
+vInfo = a5.shadowRoot.querySelector(".ov .sheet");
 vInfo.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
 const vs = a5.shadowRoot.querySelector(".ov .sheet");
 const vt = vs ? [...vs.querySelectorAll(".tile")].map((t) => txt(t)) : [];
@@ -419,7 +426,8 @@ const deuAp = api.snAppl._list.find((x) => x.name === "Deumidificatore");
 ok(deuAp && deuAp.manual && deuAp.id === "manual_deumidificatore" && deuAp.type === "dehumidifier" && deuAp.switch === "switch.presa_lavastoviglie", "a mano: id, tipo dal nome, presa");
 a7._openPanel(deuAp.id); await wait(200);
 const dSheet = a7.shadowRoot.querySelector(".ov .sheet");
-ok(dSheet && !dSheet.querySelector("#pNotifs") && /aggiunto a mano/.test(txt(dSheet)) && /Bruno Batteria|Batteria/.test(txt(dSheet.querySelector(".facts"))), "a mano: panoramica senza notifiche di Autonotify, dice da dove viene, mostra le entità di info:");
+dSheet.querySelector('[data-ptab="sets"]').onclick(); await wait(100);
+ok(dSheet && !dSheet.querySelector("#pNotifs") && /aggiunto a mano/.test(txt(a7.shadowRoot.querySelector(".ov .sheet .pinfo"))) && /Bruno Batteria|Batteria/.test(txt(dSheet.querySelector(".facts"))), "a mano: panoramica senza notifiche di Autonotify, dice da dove viene, mostra le entità di info:");
 a7.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 
 // 0.2.5: potenza non leggibile (contatore offline) e presa accesa: in funzione
@@ -465,10 +473,13 @@ ok(fv, "info: con il nome dato, la riga è toccabile");
 fv.onclick(); await wait(50);
 ok(more === "sensor.bruno_batteria" && !a8.shadowRoot.querySelector(".ov .sheet"), "tocco sulla riga: finestra di HA dell'entità, il pannello si chiude");
 a8._openPanel(bAp.id); await wait(200);
-const bSets = a8.shadowRoot.querySelector(".ov .sheet .psets");
+const bInfo = txt(a8.shadowRoot.querySelector(".ov .sheet .pinfo"));
+a8.shadowRoot.querySelector('.ov .sheet [data-ptab="sets"]').onclick(); await wait(100);
+const bSets = a8.shadowRoot.querySelector(".ov .sheet .pinfo");
 const orari = bSets && [...bSets.querySelectorAll("dt")].find((n) => /Orari/.test(txt(n)));
-ok(bSets && !bSets.open && orari && orari.nextElementSibling.querySelectorAll(".fv").length === 2 && /06:30(:00)? – 08:00/.test(txt(orari.nextElementSibling))
-  && !/Orari/.test(txt(a8.shadowRoot.querySelector(".ov .sheet .pinfo > .facts"))), "le impostazioni ripiegate sotto ⚙️, due entità su una riga (06:30 – 08:00)");
+ok(a8.shadowRoot.querySelector('.ov .sheet .ptab.on[data-ptab="sets"]') && orari && orari.nextElementSibling.querySelectorAll(".fv").length === 2 && /06:30(:00)? – 08:00/.test(txt(orari.nextElementSibling))
+  && !/Orari/.test(bInfo), "le impostazioni nella loro scheda (0.2.9), due entità su una riga (06:30 – 08:00)");
+a8._panelTab = "info";
 a8.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 
 // 0.2.6: manutenzione ogni N cicli, una lista
@@ -481,6 +492,9 @@ const lTxt = txt(a10.shadowRoot.querySelector("#body"));
 ok(/Pulizia cestello · tra 4 cicli/.test(lTxt) && /Filtro · da fare/.test(lTxt) && !/Sale/.test(lTxt), `elenco: solo le manutenzioni vicine o da fare (${lTxt.slice(0, 160)})`);
 const lAp = api.snAppl._list.find((x) => x.name === "Lavatrice2");
 a10._openPanel(lAp.id); await wait(200);
+ok(/Pulizia cestello tra 4 cicli · Filtro da fare/.test(txt(a10.shadowRoot.querySelector('.ov .sheet .facts .fv[data-ptab="cons"]'))) && /Manutenzione/.test(txt(a10.shadowRoot.querySelector('.ov .sheet .ptab[data-ptab="cons"]'))),
+  "0.2.9: in panoramica la riga di ciò che è vicino o da fare; senza consumabili la scheda si chiama Manutenzione");
+a10.shadowRoot.querySelector('.ov .sheet [data-ptab="cons"]').onclick(); await wait(100);
 const mSheet = a10.shadowRoot.querySelector(".ov .sheet");
 const mRow = (n) => [...mSheet.querySelectorAll(".facts dt")].find((d) => txt(d) === n);
 ok(mRow("Pulizia cestello") && /46 su 50 · tra 4 cicli/.test(txt(mRow("Pulizia cestello").nextElementSibling)) && mRow("Pulizia cestello").nextElementSibling.classList.contains("wrn")
@@ -559,6 +573,23 @@ ok(!a13.shadowRoot.querySelector(".ov .sheet details.cmds") && r3.includes("Paus
   `commands_menu: never = tutti in fila; in funzione Pausa sì, Pulisci no (${r3.join(" | ")})`);
 a13.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 
+// 0.2.9: spegnere la presa vuole due tocchi; da ferma l'anello vuoto e il ciclo medio
+api.snAppl._listKey = null;
+const s14 = baseStates(); s14["sensor.presa_lavastoviglie_power"] = pw(1, "Presa Lavastoviglie Potenza"); s14["switch.presa_lavastoviglie"] = st("on");
+const a14 = await mkArt({ devices: [{ name: "Stufa", power_entity: "sensor.presa_lavastoviglie_power", switch_entity: "switch.presa_lavastoviglie", threshold: 20 }] }, s14);
+let stufa = null;
+for (let i = 0; i < 30 && !stufa; i++) { a14.hass = mkHass({ states: s14 }); await wait(100); stufa = (api.snAppl._list || []).find((x) => x.name === "Stufa"); }
+a14._openPanel(stufa.id); await wait(200);
+let sh = a14.shadowRoot.querySelector(".ov .sheet");
+ok(sh.querySelector(".hero .hring .trk") && !sh.querySelector(".hero .arc"), "ferma: l'anello c'è, vuoto");
+calls.length = 0;
+sh.querySelector('[data-pact="switch_off"]').onclick(); await wait(50);
+sh = a14.shadowRoot.querySelector(".ov .sheet");
+ok(!calls.some((c) => c.svc) && /Tocca di nuovo/.test(txt(sh.querySelector('[data-pact="switch_off"][data-armed]'))), "Spegni presa: il primo tocco chiede il secondo");
+sh.querySelector('[data-pact="switch_off"]').onclick(); await wait(50);
+ok(calls.some((c) => c.svc === "switch.turn_off" || (c.svc || "").endsWith("turn_off")), "il secondo tocco spegne la presa");
+a14.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
+
 // 0.2.0: una card per un solo dispositivo, con il nuovo nome
 ok(customElements.get("supernotify-devices-card") && customElements.get("supernotify-appliances-card"), "supernotify-devices-card, e il vecchio nome resta");
 api.snAppl.rows = []; api.snAppl.rowsAt = 0; api.snAppl.events.clear(); api.snAppl.at = 0;
@@ -573,6 +604,8 @@ ok(/Svuotata/.test(txt(oneR.querySelector(".pchips .chip.main"))) && /Ricordamel
 const oneDts = [...oneR.querySelectorAll(".one .facts dt")].map((n) => txt(n));
 ok(oneR.querySelector("ha-card").dataset.st === "done" && oneDts.some((d) => /Notifiche/.test(d)) && oneR.querySelector(".one .lstrip .v2"),
   `0.2.7 niente si perde: fascia arancione sulla card, notifiche e promemoria, ultimo ciclo con la fine (${oneDts.join(", ")})`);
+ok(oneR.querySelector(".one .hero .arc.full.done") && /Da svuotare da/.test(txt(oneR.querySelector(".one .hero"))) && /Fine ciclo alle/.test(txt(oneR.querySelector(".one .hero"))),
+  "0.2.9 da svuotare: stessa grafica, anello pieno arancione, da quanto aspetta e quando è finito");
 oneR.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
 ok(oneR.querySelector(".one .tiles") && oneR.querySelector(".tb.days"), "device: la scheda dello storico nella card");
 const none = document.createElement("supernotify-devices-card");

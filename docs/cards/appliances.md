@@ -231,8 +231,16 @@ appliances:
     phase: sensor.oven_process_phase
 ```
 
-When it is not running, the last cycle is four boxes: start (→ end), duration, energy, cost. Every row of the
-overview has an icon; a robot's consumables are a grid of bars with short names ("Filter", "Main brush").
+The overview looks the same in every state: the drawing in its ring, the one thing that matters now beside
+it, the cycle in four boxes, then the rows. The ring fills while it runs, is full orange while it waits to be
+emptied ("To empty for 2 h", with when it finished), full red when it needs help (with the error), empty
+when idle (with the average cycle beside it). The boxes are the cycle under way (start, so far) or the last
+one: start (→ end), duration, energy, cost. Every row has an icon.
+
+Consumables (a robot's brushes and filters, as a grid of bars with short names) and maintenance have a tab
+of their own, **Consumables** (or **Maintenance** when there are only maintenance counters); the overview keeps
+one row saying what is worn or due, and a tap on it opens the tab. What can be changed (times, numbers,
+switches, automations) is in the **Settings** tab. Switching the plug off asks for a second tap.
 A band on top of the card and of the panel takes the colour of the state: blue running, orange to empty,
 red needs help.
 
