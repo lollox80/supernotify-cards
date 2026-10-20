@@ -236,8 +236,10 @@ ok(![...R.querySelectorAll(".ap")].some((n) => /Lavatrice/.test(n.textContent)) 
 await wait(300);
 // 0.1.6: prima la panoramica, lo storico a un tocco
 const info = R.querySelector(".ov .sheet");
-ok(info && info.querySelector('.ptab.on[data-ptab="info"]') && info.querySelector(".hero .hwrap .pv-art svg.sna") && !info.querySelector(".ph .pv-art") && !info.querySelector(".tiles"),
-  "un tocco apre la panoramica: il disegno nell'anello (0.2.9, in ogni stato), una sola immagine, niente riquadri");
+ok(info && info.querySelector('.ptab.on[data-ptab="info"]') && info.querySelector(".ph .hwrap .pv-art svg.sna") && info.querySelectorAll(".pv-art").length === 1 && !info.querySelector(".tiles"),
+  "un tocco apre la panoramica: 0.2.13 il disegno grande in testa, una sola immagine, niente riquadri");
+ok(["#pNotifs", "#pSettings", "#pDevice"].every((q) => info.querySelector(`.ph .pside ${q}`)) && info.querySelector(".ph .pside .x") && !info.querySelector(".pchips .chip.ic"),
+  "0.2.13: Chiudi, Notifiche, Impostazioni e Dispositivo in colonna a destra della testata, non tra le azioni");
 ok(R.activeElement && R.activeElement.classList.contains("x"), "fuoco sul pulsante Chiudi");
 const dts = [...info.querySelectorAll(".facts dt")].map((n) => txt(n));
 ok(/Inizio/.test(txt(info.querySelector(".lstrip"))) && /→/.test(txt(info.querySelector(".lstrip .v2"))) && /1,2\sW/.test(txt(info.querySelector(".pq"))) && /Presa accesa/.test(txt(info.querySelector(".pq")))
@@ -250,13 +252,19 @@ ok(chips.some((c) => /Spegni presa/.test(c)) && icl("#pNotifs") === "Notifiche" 
 ok(info.querySelector("#pDevice"), "link al dispositivo in Home Assistant");
 info.querySelector('[data-ptab="stats"]').onclick();
 await wait(100);
-const sheet = R.querySelector(".ov .sheet");
+let sheet = R.querySelector(".ov .sheet");
+ok(R.activeElement && R.activeElement.dataset.ptab === "stats", "cambiando scheda il fuoco resta sulla scheda");
 ok(/Consumi e cicli/.test(txt(sheet.querySelector(".ptab.on"))), "seconda scheda: Consumi e cicli");
 ok(sheet && sheet.getAttribute("role") === "dialog" && sheet.getAttribute("aria-modal") === "true", "pannello: dialog modale");
 ok(/Lavatrice/.test(txt(sheet.querySelector(".ph"))) && /⚡ 1,2\sW/.test(txt(sheet.querySelector(".ph .pq"))), `testata con stato e potenza (${txt(sheet.querySelector(".ph"))})`);
 const tiles = [...sheet.querySelectorAll(".tile")].map((t) => txt(t));
 console.log("    riquadri:", tiles.join(" | "));
 ok(tiles.length === 4 && /^Oggi/.test(tiles[0]) && /^Anno/.test(tiles[3]) && tiles.every((t) => /kWh/.test(t) && /cicl/.test(t) && /€/.test(t)), "Oggi / Settimana / Mese / Anno con kWh, cicli e costo");
+ok(sheet.querySelector(".ph .hwrap .pv-art") && /Da svuotare da|Ciclo medio|Finito da/.test(txt(sheet.querySelector(".ph .htx"))) && !sheet.querySelector(".bars") && /Vedi grafico/.test(txt(sheet.querySelector("[data-full]"))),
+  "0.2.13 Consumi: stessa testata, i quattro periodi e «Vedi grafico», niente grafico qui");
+sheet.querySelector("[data-full]").onclick(); await wait(50);
+sheet = R.querySelector(".ov .sheet");
+ok(sheet.querySelector(".fsov .fs .bars"), "«Vedi grafico» apre il grafico a tutto schermo");
 const m0 = new Date(); m0.setDate(1); m0.setHours(0, 0, 0, 0);
 const inMonth = cy.filter((c) => c.start >= m0.getTime() && c.end < NOW - 30 * MIN).length;
 ok(sheet.querySelectorAll(".bars .b").length === inMonth, `una barra per ciclo del mese (${sheet.querySelectorAll(".bars .b").length}/${inMonth})`);
@@ -267,8 +275,10 @@ ok(sheet.querySelectorAll(".tb:not(.days) tbody tr").length === 8 && sheet.query
 ok(/a ore/.test(txt(sheet)), "dice che i cicli vecchi sono a ore");
 const d7 = [...sheet.querySelectorAll(".tb.days tbody tr")];
 ok(d7.length === 7 && /Ultimi 7 giorni/.test(txt(sheet)) && /kWh/.test(txt(d7[0])) && /€/.test(txt(sheet.querySelector(".tb.days"))), `ultimi 7 giorni: una riga al giorno con consumo e costo (${txt(d7[1])})`);
+ok(R.activeElement && R.activeElement.hasAttribute("data-full-close") && /Lavatrice · Consumi/.test(txt(sheet.querySelector(".fsh"))), "a tutto schermo: titolo e fuoco su Indietro");
+sheet.querySelector(".fsov").onkeydown({ key: "Escape", stopPropagation() {} }); await wait(50);
+ok(R.querySelector(".ov .sheet") && !R.querySelector(".fsov") && R.querySelector(".ov .sheet .tiles"), "Esc chiude solo il tutto schermo, il pannello resta");
 ok(sheet.querySelector("#pNotifs") && sheet.querySelector("#pSettings").getAttribute("aria-label") === "Impostazioni", "pulsanti Notifiche e Impostazioni");
-ok(R.activeElement && R.activeElement.dataset.ptab === "stats", "cambiando scheda il fuoco resta sulla scheda");
 R.getElementById("ov").onkeydown({ key: "Escape" });
 ok(!R.querySelector(".ov .sheet"), "Esc chiude");
 
@@ -394,24 +404,26 @@ a5.hass = vHass(); await wait(200);
 [...a5.shadowRoot.querySelectorAll(".row")].find((n) => /Bruno/.test(n.textContent)).onclick({ preventDefault() {} });
 await wait(300); a5.hass = vHass(); await wait(200);
 let vInfo = a5.shadowRoot.querySelector(".ov .sheet");
-ok(vInfo && vInfo.querySelector(".hero .pv-art svg.dockv") && /🔋 \d+%/.test(txt(vInfo.querySelector(".pq"))) && /Pulizie/.test(txt(vInfo.querySelector('[data-ptab="stats"]'))),
+ok(vInfo && vInfo.querySelector(".ph .hwrap .pv-art svg.dockv") && /🔋 \d+%/.test(txt(vInfo.querySelector(".pq"))) && /Pulizie/.test(txt(vInfo.querySelector('[data-ptab="stats"]'))),
   "Bruno: panoramica con robot sulla base e batteria, scheda Pulizie");
-const dueBtn = vInfo && vInfo.querySelector('.facts .fv[data-ptab="cons"]');
-ok(dueBtn && /Filtro 5%/.test(txt(dueBtn)) && !vInfo.querySelector(".cgrid") && /Consumabili/.test(txt(vInfo.querySelector('.ptab[data-ptab="cons"]'))),
-  "0.2.9: in panoramica una riga dice cosa è consumato; la griglia sta nella scheda Consumabili");
+const dueBtn = vInfo && vInfo.querySelector('.ptab[data-ptab="cons"]');
+ok(dueBtn && dueBtn.querySelector(".tdot.wrn") && /Filtro 5%/.test(dueBtn.getAttribute("title")) && !vInfo.querySelector('.facts [data-ptab="cons"]') && !vInfo.querySelector(".cgrid") && /Consumabili/.test(txt(dueBtn)),
+  "0.2.13: cosa è consumato è un pallino sulla scheda Consumabili (nel suggerimento), non più una riga; la griglia sta nella scheda");
 dueBtn.onclick(); await wait(100);
 vInfo = a5.shadowRoot.querySelector(".ov .sheet");
 const ciNames = vInfo ? [...vInfo.querySelectorAll(".cgrid .ci .cn")].map((n) => txt(n)) : [];
 ok(vInfo.querySelector('.ptab.on[data-ptab="cons"]') && ciNames.length >= 2 && ciNames.includes("Filtro") && new Set(ciNames).size === ciNames.length && vInfo.querySelector(".cgrid .ci.wrn[data-more]"),
-  `toccare la riga apre la scheda: consumabili in griglia, nomi corti e diversi, toccabili (${ciNames.join(" | ")})`);
+  `toccare la scheda: consumabili in griglia, nomi corti e diversi, toccabili (${ciNames.join(" | ")})`);
 vInfo.querySelector('[data-ptab="info"]').onclick(); await wait(100);
 vInfo = a5.shadowRoot.querySelector(".ov .sheet");
 vInfo.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
-const vs = a5.shadowRoot.querySelector(".ov .sheet");
+let vs = a5.shadowRoot.querySelector(".ov .sheet");
 const vt = vs ? [...vs.querySelectorAll(".tile")].map((t) => txt(t)) : [];
 console.log("    Bruno:", vt.join(" | "));
 ok(vt.length === 4 && /^Oggi\s*2 pulizie\s*1 h 15 min/.test(vt[0]) && !/-/.test(vt.join(" ")), "Bruno: pulizie e tempo da Oggi ad Anno, un contatore tornato indietro non conta");
-ok(vs.querySelectorAll(".bars .b").length === (NOW - 5 * H >= new Date(new Date(NOW).setDate(1)).setHours(0, 0, 0, 0) ? 2 : 0) && vs.querySelectorAll(".tb:not(.days) tbody tr").length === 2
+vs.querySelector("[data-full]").onclick(); await wait(50);
+vs = a5.shadowRoot.querySelector(".ov .sheet");
+ok(vs.querySelectorAll(".fsov .bars .b").length === (NOW - 5 * H >= new Date(new Date(NOW).setDate(1)).setHours(0, 0, 0, 0) ? 2 : 0) && vs.querySelectorAll(".tb:not(.days) tbody tr").length === 2
   && /40 min/.test(txt(vs.querySelector(".tb:not(.days)"))) && /31 m²/.test(txt(vs.querySelector(".tb:not(.days)"))), "Bruno: barre e tabella delle pulizie con durata e area");
 ok(!/consumi e cicli non si contano/.test(txt(vs)) && /cronologia di Home Assistant/.test(txt(vs)), "Bruno: niente più «non si contano», dice da dove vengono i dati");
 a5.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
@@ -492,8 +504,9 @@ const lTxt = txt(a10.shadowRoot.querySelector("#body"));
 ok(/Pulizia cestello · tra 4 cicli/.test(lTxt) && /Filtro · da fare/.test(lTxt) && !/Sale/.test(lTxt), `elenco: solo le manutenzioni vicine o da fare (${lTxt.slice(0, 160)})`);
 const lAp = api.snAppl._list.find((x) => x.name === "Lavatrice2");
 a10._openPanel(lAp.id); await wait(200);
-ok(/Pulizia cestello tra 4 cicli · Filtro da fare/.test(txt(a10.shadowRoot.querySelector('.ov .sheet .facts .fv[data-ptab="cons"]'))) && /Manutenzione/.test(txt(a10.shadowRoot.querySelector('.ov .sheet .ptab[data-ptab="cons"]'))),
-  "0.2.9: in panoramica la riga di ciò che è vicino o da fare; senza consumabili la scheda si chiama Manutenzione");
+const mTab = a10.shadowRoot.querySelector('.ov .sheet .ptab[data-ptab="cons"]');
+ok(/Pulizia cestello tra 4 cicli · Filtro da fare/.test(mTab.getAttribute("title")) && mTab.querySelector(".tdot.bad") && /Manutenzione/.test(txt(mTab)),
+  "0.2.13: un pallino rosso sulla scheda (da fare), il suggerimento dice cosa; senza consumabili la scheda si chiama Manutenzione");
 a10.shadowRoot.querySelector('.ov .sheet [data-ptab="cons"]').onclick(); await wait(100);
 const mSheet = a10.shadowRoot.querySelector(".ov .sheet");
 const mRow = (n) => [...mSheet.querySelectorAll(".facts dt")].find((d) => txt(d) === n);
@@ -521,13 +534,13 @@ ok(l3 && l3.classList.contains("st-run"), "elenco: la card in funzione ha la fas
 const l3Ap = api.snAppl._list.find((x) => x.name === "Lavatrice3");
 a11._openPanel(l3Ap.id); await wait(200);
 const hs = a11.shadowRoot.querySelector(".ov .sheet");
-ok(hs && hs.classList.contains("st-run") && hs.querySelector(".hero .hwrap .pv-art") && !hs.querySelector(".ph .pv-art"), "in funzione: il disegno passa nell'anello, non due volte");
-ok(/4fc3f7/.test(hs.querySelector(".hero .hbar i").getAttribute("style")) && !hs.querySelector(".hero .hring"), "0.2.10: niente cerchio, la barra azzurra del risciacquo sotto la fine");
-ok(hs.querySelectorAll(".hero .hpp .fv").length === 2 && /Cotone 40°/.test(txt(hs.querySelector(".hero .hpp"))) && /mancano 30 min/.test(txt(hs.querySelector(".hero"))),
+ok(hs && hs.classList.contains("st-run") && hs.querySelector(".ph .hwrap .pv-art") && hs.querySelectorAll(".pv-art").length === 1, "in funzione: il disegno in testa, una volta");
+ok(/4fc3f7/.test(hs.querySelector(".ph .hbar i").getAttribute("style")) && !hs.querySelector(".hring"), "0.2.10: niente cerchio, la barra azzurra del risciacquo sotto la fine");
+ok(hs.querySelectorAll(".ph .hpp .fv").length === 2 && /Cotone 40°/.test(txt(hs.querySelector(".ph .hpp"))) && /mancano 30 min/.test(txt(hs.querySelector(".ph .htx"))),
   "programma e fase toccabili, quanto manca");
 ok(hs.querySelectorAll(".facts dt").length === hs.querySelectorAll(".facts dt ha-icon").length && hs.querySelectorAll(".facts dt").length > 0, "ogni riga ha la sua icona");
 hs.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
-ok(a11.shadowRoot.querySelector(".ov .sheet .ph .pv-art") && !a11.shadowRoot.querySelector(".ov .sheet .hero"), "nella scheda dei consumi il disegno torna in alto");
+ok(a11.shadowRoot.querySelector(".ov .sheet .ph .hwrap .pv-art") && /mancano 30 min/.test(txt(a11.shadowRoot.querySelector(".ov .sheet .ph .htx"))), "0.2.13: nella scheda dei consumi la stessa testata, con la fine");
 a11.shadowRoot.getElementById("ov").onkeydown({ key: "Escape" });
 a11._panelTab = "info";
 // una caduta breve della connessione tiene l'ultimo stato
@@ -581,7 +594,7 @@ let stufa = null;
 for (let i = 0; i < 30 && !stufa; i++) { a14.hass = mkHass({ states: s14 }); await wait(100); stufa = (api.snAppl._list || []).find((x) => x.name === "Stufa"); }
 a14._openPanel(stufa.id); await wait(200);
 let sh = a14.shadowRoot.querySelector(".ov .sheet");
-ok(sh.querySelector(".hero .hwrap .pv-art") && !sh.querySelector(".hero .hbar"), "ferma: il disegno nello stesso posto, nessuna barra");
+ok(sh.querySelector(".ph .hwrap .pv-art") && !sh.querySelector(".hbar"), "ferma: il disegno nello stesso posto, nessuna barra");
 calls.length = 0;
 sh.querySelector('[data-pact="switch_off"]').onclick(); await wait(50);
 sh = a14.shadowRoot.querySelector(".ov .sheet");
@@ -623,10 +636,14 @@ ok(/Svuotata/.test(txt(oneR.querySelector(".pchips .chip.main"))) && /Ricordamel
 const oneDts = [...oneR.querySelectorAll(".one .facts dt")].map((n) => txt(n));
 ok(oneR.querySelector("ha-card").dataset.st === "done" && oneDts.some((d) => /Notifiche/.test(d)) && oneR.querySelector(".one .lstrip .v2"),
   `0.2.7 niente si perde: fascia arancione sulla card, notifiche e promemoria, ultimo ciclo con la fine (${oneDts.join(", ")})`);
-ok(oneR.querySelector(".one .hero .hwrap .pv-art") && !oneR.querySelector(".one .hero .hring") && /Da svuotare da/.test(txt(oneR.querySelector(".one .hero"))) && /Fine ciclo alle/.test(txt(oneR.querySelector(".one .hero"))),
+ok(oneR.querySelector(".one .ph .hwrap .pv-art") && !oneR.querySelector(".hring") && /Da svuotare da/.test(txt(oneR.querySelector(".one .ph .htx"))) && /Fine ciclo alle/.test(txt(oneR.querySelector(".one .ph .htx"))),
   "0.2.9 da svuotare: stessa grafica (senza cerchio), da quanto aspetta e quando è finito");
 oneR.querySelector('[data-ptab="stats"]').onclick(); await wait(100);
-ok(oneR.querySelector(".one .tiles") && oneR.querySelector(".tb.days"), "device: la scheda dello storico nella card");
+ok(oneR.querySelector(".one .tiles") && !oneR.querySelector(".tb.days"), "device: i periodi nella card");
+oneR.querySelector("[data-full]").onclick(); await wait(50);
+ok(oneR.querySelector(".one .fsov .tb.days") && oneR.querySelector(".one .fsov .bars"), "device: «Vedi grafico» apre giorni e grafico a tutto schermo");
+oneR.querySelector("[data-full-close]").onclick(); await wait(50);
+ok(!oneR.querySelector(".fsov") && oneR.querySelector(".one .tiles"), "Indietro torna ai periodi");
 const none = document.createElement("supernotify-devices-card");
 none.setConfig({ device: "Frigorifero" }); document.body.appendChild(none);
 none.hass = mkHass(); await wait(300); none.hass = mkHass(); await wait(200);

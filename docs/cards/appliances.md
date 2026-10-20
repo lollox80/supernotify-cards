@@ -54,6 +54,13 @@ A tap on an appliance's drawing or on an idle row opens it on the **Overview** t
 and cycles ›" on a card opens the second tab directly - a dialog on a computer, a sheet from the
 bottom on a phone.
 
+Every tab has the same head: the drawing, big, on the left; beside it the name, the state, the power
+and the plug, and what matters now - the estimated end with a bar while it runs, how long it has waited
+to be emptied, what went wrong, or the average cycle; on the right, in a column, **Appliance
+notifications**, **Settings** and the device in Home Assistant. Under the head only the buttons for now.
+Something worn or due puts a dot on the **Maintenance** / **Consumables** tab (orange when near, red
+when due; its tooltip says what).
+
 **Overview**: the drawing, big, and the state; the cycle under way (estimated end, time left) or the
 last one (start → end, duration, kWh, cost) and the average; the notifications already sent; what the
 device says - the power now and the plug (with **Switch off the plug**), a robot's battery, error and
@@ -65,11 +72,11 @@ The second tab - **Energy and cycles**, **Cleanings** for a robot, **Prints** fo
 <img src="../images/appliances_panel.png" alt="details panel" width="720">
 <img src="../images/appliances_panel_phone.png" alt="details panel on a phone" width="300">
 
-- the state and the power now;
-- **Today / Week / Month / Year**: kWh, cycles and cost;
+- **Today / Week / Month / Year** in one row: kWh, cycles and cost;
+- **See chart** opens, full screen (← or Esc goes back):
 - the energy of each cycle this month, blue for the short ones, purple for the long ones, orange
   for an unusual one (more than three times the median duration - a machine left on for 22 hours);
-- the averages of short and long cycles, and the latest cycles in a table;
+- the averages of short and long cycles, the last 7 days and the latest cycles in a table;
 - **Appliance notifications** opens the archive card filtered on this appliance (on this page or
   on the Archive view), **Settings** the appliance's page in Appliance Autonotify.
 
@@ -271,7 +278,7 @@ count starts again, then runs `done:`: a counter is reset, a script runs, a butt
 
 ## Last 7 days
 
-The history tab has one row a day for the last 7 days - cycles (cleanings, prints), time, energy and
+The full-screen chart of the history tab has one row a day for the last 7 days - cycles (cleanings, prints), time, energy and
 cost, or area, or filament - next to Today / Week / Month / Year.
 
 ## Illustrations
