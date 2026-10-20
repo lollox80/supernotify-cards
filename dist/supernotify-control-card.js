@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.15",
+  appliances: "0.2.16",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,7 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.16 (bundle 0.91.0): the overview's rows in two columns, the name over the value.
    * 0.2.15 (bundle 0.91.0): a row of `info:` whose value says nothing (an oven's phase "None" at rest,
    * unknown, unavailable) is not shown.
    * 0.2.14 (bundle 0.91.0): beside the drawing nothing the state already says - an error says what went
@@ -11997,7 +11998,7 @@ class SupernotifyAppliancesCard extends SnCard {
     // what is worn or due: a dot on its tab, what it is in the dot's tooltip
     const dueTab = due.length ? { cls: due.some((d) => d.bad) ? "bad" : "wrn", text: due.map((d) => d.t).join(" · ") } : null;
     const info = `<div class="pinfo">${strip}
-      ${facts.length ? `<dl class="facts">${facts.join("")}</dl>` : ""}</div>`;
+      ${facts.length ? `<dl class="facts two">${facts.map((f) => `<div>${f}</div>`).join("")}</dl>` : ""}</div>`;
     const consHtml = maint.length || grid ? `<div class="pinfo">${maint.length ? `<dl class="facts">${maint.join("")}</dl>` : ""}
       ${grid ? `<div class="csec">${maint.length ? `<div class="ch">${esc(T.cons_h)}</div>` : ""}<div class="cgrid">${grid}</div></div>` : ""}</div>` : "";
     const setsHtml = sets.length ? `<div class="pinfo"><dl class="facts">${sets.join("")}</dl></div>` : "";
@@ -13318,6 +13319,9 @@ function snApplCss(p) {
   .lstrip .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: ${p.muted}; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lstrip b { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lstrip .v2 { font-size: 11.5px; color: ${p.muted}; white-space: nowrap; }
+  .facts.two { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+  .facts.two > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .facts.two dd { font-weight: 600; overflow-wrap: anywhere; }
   .facts dt ha-icon { --mdc-icon-size: 16px; color: ${p.muted}; margin-right: 6px; vertical-align: -3px; }
   .csec { margin-top: 14px; }
   .csec .ch { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: ${p.muted}; margin-bottom: 8px; }
