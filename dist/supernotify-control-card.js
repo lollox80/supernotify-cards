@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.16",
+  appliances: "0.2.17",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,9 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.17 (bundle 0.91.0): Autonotify's notifications are found also when their title has an emoji or
+   * more words around the name ("🧺 Lavatrice", "🤖 Bruno ha finito") - a cycle under way showed as the
+   * last one finished; the newest 16 rows of each appliance are read, not 10.
    * 0.2.16 (bundle 0.91.0): the overview's rows two by two, each still the name and its value side by side.
    * 0.2.15 (bundle 0.91.0): a row of `info:` whose value says nothing (an oven's phase "None" at rest,
    * unknown, unavailable) is not shown.
@@ -13029,14 +13032,14 @@ const snAppl = {
       .finally(() => { this.rowsBusy = false; snApplFire(); });
   },
 
-  /** Per appliance, read in full the newest rows until its state is known (at most 10). */
+  /** Per appliance, read in full the newest rows until its state is known (at most 16). */
   async _classify(hass) {
     for (const e of this.entries) {
       const name = e.title.toLowerCase();
       const rows = this.rows.filter((n) => snApplRowEntry(n, [e], [name]));
       const ev = [];
       let read = 0;
-      for (const n of rows.slice(0, 10)) {
+      for (const n of rows.slice(0, 16)) {
         read++;
         let c = this.docs.get(n.id);
         if (!c) {
@@ -13244,9 +13247,10 @@ function snApplUsable(entries) {
 
 /** Does this archive summary come from that entry's appliance (its name is the title it sends with)? */
 function snApplRowEntry(n, entries, names) {
-  const title = String(n.title || "").toLowerCase();
+  // "🧺 Lavatrice", "🤖 Bruno ha finito": the emoji and words a template puts around the name do not hide it
+  const title = String(n.title || "").toLowerCase().replace(/^[^\p{L}\p{N}]+/u, "").trim();
   const msg = String(n.message || "").toLowerCase();
-  return names.some((nm) => title === nm || title.startsWith(nm + " · ") || (!title && msg.startsWith(nm + " ")));
+  return names.some((nm) => title === nm || title.startsWith(nm + " ") || (!title && msg.startsWith(nm + " ")));
 }
 
 /** What a full document says: live (start/progress), clear (end of cycle), end, emptied, stuck. */
