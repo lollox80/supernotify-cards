@@ -247,6 +247,7 @@ ok(/Inizio/.test(txt(info.querySelector(".lstrip"))) && /→/.test(txt(info.quer
 ok(info.querySelectorAll(".facts dt ha-icon").length === dts.length, "0.2.7: un'icona per ogni riga della panoramica");
 const chips = [...info.querySelectorAll(".pchips .chip")].map((n) => txt(n));
 const icl = (sel) => { const b = info.querySelector(sel); return b && b.classList.contains("ic") && b.getAttribute("aria-label"); };
+ok(!txt(info.querySelector(".ph .htx")).includes(txt(info.querySelector(".ph .st"))), "0.2.14: accanto al disegno non si ripete lo stato");
 ok(chips.some((c) => /Spegni presa/.test(c)) && icl("#pNotifs") === "Notifiche" && icl("#pSettings") === "Impostazioni"
   && icl("#pDevice") === "Dispositivo" && !info.querySelector(".pm, .pmenu"), `tutte le azioni in vista; Notifiche, Impostazioni e Dispositivo come icone (${chips.join(" | ")})`);
 ok(info.querySelector("#pDevice"), "link al dispositivo in Home Assistant");
@@ -264,7 +265,15 @@ ok(sheet.querySelector(".ph .hwrap .pv-art") && /Da svuotare da|Ciclo medio|Fini
   "0.2.13 Consumi: stessa testata, i quattro periodi e «Vedi grafico», niente grafico qui");
 sheet.querySelector("[data-full]").onclick(); await wait(50);
 sheet = R.querySelector(".ov .sheet");
-ok(sheet.querySelector(".fsov .fs .bars"), "«Vedi grafico» apre il grafico a tutto schermo");
+ok(sheet.querySelector(".fsov .fs .bars") && R.activeElement && R.activeElement.hasAttribute("data-full-close"), "«Vedi grafico» apre il grafico a tutto schermo, fuoco su Indietro");
+ok(sheet.querySelector(".fsov .bars .avgl") && /^media \d/.test(txt(sheet.querySelector(".avgl"))) && sheet.querySelectorAll(".fsov .bdays span").length === sheet.querySelectorAll(".fsov .bars .b").length
+  && sheet.querySelector(".fsov .bsel.hint"), `0.2.14: linea della media (${txt(sheet.querySelector(".avgl"))}), i giorni sotto le barre, «tocca una barra»`);
+sheet.querySelector('.fsov [data-bar="0"]').onclick(); await wait(50);
+sheet = R.querySelector(".ov .sheet");
+ok(/kWh/.test(txt(sheet.querySelector(".fsov .bsel:not(.hint)"))) && sheet.querySelector('.fsov [data-bar="0"].on'), `un tocco su una barra dice quel ciclo (${txt(sheet.querySelector(".bsel"))})`);
+sheet.querySelector('.fsov [data-bar="0"]').onclick(); await wait(50);
+sheet = R.querySelector(".ov .sheet");
+ok(sheet.querySelector(".fsov .bsel.hint"), "un secondo tocco lo toglie");
 const m0 = new Date(); m0.setDate(1); m0.setHours(0, 0, 0, 0);
 const inMonth = cy.filter((c) => c.start >= m0.getTime() && c.end < NOW - 30 * MIN).length;
 ok(sheet.querySelectorAll(".bars .b").length === inMonth, `una barra per ciclo del mese (${sheet.querySelectorAll(".bars .b").length}/${inMonth})`);
@@ -275,7 +284,7 @@ ok(sheet.querySelectorAll(".tb:not(.days) tbody tr").length === 8 && sheet.query
 ok(/a ore/.test(txt(sheet)), "dice che i cicli vecchi sono a ore");
 const d7 = [...sheet.querySelectorAll(".tb.days tbody tr")];
 ok(d7.length === 7 && /Ultimi 7 giorni/.test(txt(sheet)) && /kWh/.test(txt(d7[0])) && /€/.test(txt(sheet.querySelector(".tb.days"))), `ultimi 7 giorni: una riga al giorno con consumo e costo (${txt(d7[1])})`);
-ok(R.activeElement && R.activeElement.hasAttribute("data-full-close") && /Lavatrice · Consumi/.test(txt(sheet.querySelector(".fsh"))), "a tutto schermo: titolo e fuoco su Indietro");
+ok(/Lavatrice · Consumi/.test(txt(sheet.querySelector(".fsh"))), "a tutto schermo: il titolo");
 sheet.querySelector(".fsov").onkeydown({ key: "Escape", stopPropagation() {} }); await wait(50);
 ok(R.querySelector(".ov .sheet") && !R.querySelector(".fsov") && R.querySelector(".ov .sheet .tiles"), "Esc chiude solo il tutto schermo, il pannello resta");
 ok(sheet.querySelector("#pNotifs") && sheet.querySelector("#pSettings").getAttribute("aria-label") === "Impostazioni", "pulsanti Notifiche e Impostazioni");
@@ -564,7 +573,8 @@ a12._openPanel(rAp.id); await wait(200);
 let rs = a12.shadowRoot.querySelector(".ov .sheet");
 const cm = rs && rs.querySelector("details.cmds");
 const gh = cm ? [...cm.querySelectorAll(".gh")].map((n) => txt(n)) : [];
-ok(cm && !cm.open && !rs.querySelector(".pchips [data-uact]") && /Comandi · 5/.test(txt(cm.querySelector("summary"))), "più di 3 comandi: nel menu Comandi, chiuso, non nella fila");
+ok(cm && !cm.open && !rs.querySelector(".pchips > .chip[data-uact]") && /Comandi · 5/.test(txt(cm.querySelector("summary"))), "più di 3 comandi: nel menu Comandi, chiuso, non nella fila");
+ok(cm.parentElement.classList.contains("pchips"), "0.2.14: Comandi è una pillola nella fila dei pulsanti");
 ok(gh.join("|") === "Pulizia|Robot" && /Mappa/.test(txt(cm.querySelector(".cgrp > div:first-child"))) && !/Pausa/.test(txt(cm)),
   `gruppi nell'ordine, quelli senza gruppo prima, Pausa nascosta da ferma (${gh.join(" | ")})`);
 calls.length = 0;

@@ -76,6 +76,8 @@ The second tab - **Energy and cycles**, **Cleanings** for a robot, **Prints** fo
 - **See chart** opens, full screen (← or Esc goes back):
 - the energy of each cycle this month, blue for the short ones, purple for the long ones, orange
   for an unusual one (more than three times the median duration - a machine left on for 22 hours);
+- the day of each cycle under its bar, a dashed line for the average; a tap on a bar says that cycle
+  (start, duration, kWh, cost), a second tap hides it;
 - the averages of short and long cycles, the last 7 days and the latest cycles in a table;
 - **Appliance notifications** opens the archive card filtered on this appliance (on this page or
   on the Archive view), **Settings** the appliance's page in Appliance Autonotify.
