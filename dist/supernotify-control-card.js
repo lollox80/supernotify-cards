@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.14",
+  appliances: "0.2.15",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,8 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.15 (bundle 0.91.0): a row of `info:` whose value says nothing (an oven's phase "None" at rest,
+   * unknown, unavailable) is not shown.
    * 0.2.14 (bundle 0.91.0): beside the drawing nothing the state already says - an error says what went
    * wrong, an idle device with no average its last cycle (then not again in the boxes), a plug off for how
    * long; "Commands" is a pill in the row of buttons; the full-screen chart has the days under the bars, a
@@ -11972,7 +11974,8 @@ class SupernotifyAppliancesCard extends SnCard {
       if (m.near) due.push({ t: m.name, w: snApplMaintWhen(T, m), bad: m.due });
     });
     for (const i of ap.info || []) {
-      const ids = i.ids.filter((id) => this._hass.states[id]);
+      // a value that says nothing ("None" from an oven at rest, unknown) is not a row
+      const ids = i.ids.filter((id) => this._hass.states[id] && !["unknown", "unavailable", "none", ""].includes(String(this._hass.states[id].state).toLowerCase()));
       if (!ids.length) continue;
       // what can be changed (a time, a level, a switch) goes under Settings, folded
       const into = ids.some((id) => SN_APPL_SET_DOMAINS.includes(id.split(".")[0])) ? sets : facts;
