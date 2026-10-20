@@ -25,6 +25,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   SuperNotify (its archive), cycles and energy from the recorder's statistics. Costs only with
   `price_per_kwh` or `price_entity`. 11 languages.
 - **appliances**: devices added by hand (`devices:`) next to Autonotify's - a dehumidifier, a heater, anything with a power sensor, a vacuum or a state of its own - with the same drawings, overview and history; `info:` lists entities to show in the overview. `device: <name>` shows one device alone, its overview and history inside the card. The card is now `supernotify-devices-card` ("SuperNotify devices" in the picker); `supernotify-appliances-card` stays as an alias.
+- **appliances** (0.2.18): a notification of Autonotify whose title has not the appliance's name (a title of your own, "🧺 Bucato pronto") is found by its tag: the newest 40 rows with no name in the title are read once - a finished washer stayed "running" all night.
 - **appliances** (0.2.17): Autonotify's notifications are found also when their title has an emoji or more words around the appliance's name ("🧺 Lavatrice", "🤖 Bruno ha finito") - a cycle under way showed as the last one, still to empty; the newest 16 rows of each appliance are read instead of 10.
 - **appliances** (0.2.16): the overview's rows two by two, each still the name and its value side by side (one by one under 360 px).
 - **appliances** (0.2.15): a row of `info:` whose value says nothing - an oven's phase "None" at rest, unknown, unavailable - is not shown.

@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.17",
+  appliances: "0.2.18",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,9 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.18 (bundle 0.91.0): a notification of Autonotify with a title of its own that has not the
+   * appliance's name ("🧺 Bucato pronto") is found by its tag: the newest 40 rows with no name in their
+   * title are read once - a finished washer stayed "running" all night.
    * 0.2.17 (bundle 0.91.0): Autonotify's notifications are found also when their title has an emoji or
    * more words around the name ("🧺 Lavatrice", "🤖 Bruno ha finito") - a cycle under way showed as the
    * last one finished; the newest 16 rows of each appliance are read, not 10.
@@ -12099,6 +12102,7 @@ const SN_APPL_DEVICE_KEYS = ["operation_state", "print_status", "program_progres
 const SN_APPL_VAC_KEYS = { count: ["total_stats_cleanings", "total_cleaning_count", "total_clean_count"],
   time: ["total_stats_time", "total_cleaning_time", "total_clean_time"], area: ["total_stats_area", "total_cleaning_area", "total_clean_area"],
   last_area: ["stats_area", "cleaning_area", "last_clean_area"] };
+const SN_APPL_UNNAMED = 40; // the newest archive rows without an appliance's name read in full, for their tag
 const SN_APPL_RETRY = 15000; // a failed history read is tried again after this, then less often
 // a history read waits this long: Home Assistant busy (a backup at night) answers in minutes, and a read
 // abandoned early is still computed there - trying again sooner only adds to its load
@@ -13019,8 +13023,8 @@ const snAppl = {
       service_data: { verbosity: "summary", after: from.toISOString(), limit: 500 }, return_response: true })
       .then((r) => {
         const got = ((r && r.response && r.response.notifications) || []).filter(snIsObj);
-        const names = this.entries.map((e) => e.title.toLowerCase());
-        const mine = got.filter((n) => snApplRowEntry(n, this.entries, names));
+        // all of them: a title of Autonotify's can be anything ("🧺 Bucato pronto"), its tag says whose it is
+        const mine = got;
         const seen = new Set(mine.map((n) => n.id));
         const cut = Date.now() - 48 * 3600000;
         this.rows = mine.concat(this.rows.filter((n) => !seen.has(n.id))).filter((n) => Date.parse(n.created) >= cut)
@@ -13034,9 +13038,16 @@ const snAppl = {
 
   /** Per appliance, read in full the newest rows until its state is known (at most 16). */
   async _classify(hass) {
+    // the newest rows no appliance's name is in: read once (kept), their tag says the appliance
+    const names = this.entries.map((e) => e.title.toLowerCase());
+    for (const n of this.rows.filter((r) => !snApplRowEntry(r, this.entries, names)).slice(0, SN_APPL_UNNAMED)) {
+      if (this.docs.has(n.id)) continue;
+      const doc = await snArchiveStore.doc(hass, n.id).catch(() => null);
+      if (doc) this.docs.set(n.id, snApplClassify(doc, null));
+    }
     for (const e of this.entries) {
       const name = e.title.toLowerCase();
-      const rows = this.rows.filter((n) => snApplRowEntry(n, [e], [name]));
+      const rows = this.rows.filter((n) => snApplRowEntry(n, [e], [name]) || (this.docs.get(n.id) || {}).entry === e.entry_id);
       const ev = [];
       let read = 0;
       for (const n of rows.slice(0, 16)) {

@@ -76,8 +76,8 @@ const tag = (id, end) => `appliance_${id}${end ? "_end" : ""}`;
 const btns = (id) => [{ action: `APPLIANCE_FINISHED_${id}` }, { action: `APPLIANCE_REMIND_${id}` }, { action: `APPLIANCE_SWITCH_OFF_${id}` }];
 doc("lav-start", tLavStart, "Lavatrice", "Lavatrice started", { mobile_push_notification_tag: tag(E.lav), live_update: true });
 doc("lav-clear", tLavEnd, "Lavatrice", "Lavatrice is finished", { mobile_push_notification_tag: tag(E.lav), mobile_push_clear_notification: true });
-doc("lav-end", tLavEnd + 2000, "Lavatrice", "Lavatrice is finished", { notification_icon: "mdi:washing-machine", mobile_push_notification_tag: tag(E.lav, true) }, btns(E.lav));
-for (const [i, m] of [[1, 90], [2, 60], [3, 30]]) doc(`lav-rem${i}`, NOW - m * MIN, "Lavatrice", "Lavatrice is finished", { mobile_push_notification_tag: tag(E.lav, true) }, btns(E.lav));
+doc("lav-end", tLavEnd + 2000, "🧺 Bucato pronto", "Lavatrice is finished", { notification_icon: "mdi:washing-machine", mobile_push_notification_tag: tag(E.lav, true) }, btns(E.lav));
+for (const [i, m] of [[1, 90], [2, 60], [3, 30]]) doc(`lav-rem${i}`, NOW - m * MIN, "🧺 Bucato pronto", "Lavatrice is finished", { mobile_push_notification_tag: tag(E.lav, true) }, btns(E.lav));
 // la lavastoviglie: un ciclo ieri, svuotata
 doc("ls-start", NOW - 26 * H, "🍽️ Lavastoviglie", "Lavastoviglie started", { mobile_push_notification_tag: tag(E.lavast), live_update: true });
 doc("ls-clear", NOW - 24 * H, "🍽️ Lavastoviglie ha finito", "Lavastoviglie is finished", { mobile_push_notification_tag: tag(E.lavast), mobile_push_clear_notification: true });
@@ -338,7 +338,7 @@ document.body.appendChild(arch);
 arch.hass = mkHass(); await wait(300); arch.hass = mkHass(); await wait(300);
 arch._focus({ appliance: E.lav });
 const shown = [...arch.shadowRoot.querySelectorAll("#list .it .ti")].map((n) => txt(n));
-ok(arch._filter === "appliance" && shown.length > 0 && shown.every((t) => /Lavatrice/.test(t)), `archivio: solo le notifiche della Lavatrice (${shown.length})`);
+ok(arch._filter === "appliance" && shown.length > 0 && shown.every((t) => /Lavatrice|Bucato pronto/.test(t)), `archivio: solo le notifiche della Lavatrice (${shown.length})`);
 
 // ── 8. strategy: la vista c'è solo con degli elettrodomestici ─────────────
 const gen = await api.SupernotifyDashboardStrategy.generate({}, mkHass());
