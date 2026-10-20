@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.18",
+  appliances: "0.2.19",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,9 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.19 (bundle 0.91.0): a robot that goes back to its dock to wash its mop and out again is on one
+   * cleaning, not two: runs up to 45 minutes apart are joined unless the area of the cleaning under way
+   * went back to zero between them.
    * 0.2.18 (bundle 0.91.0): a notification of Autonotify with a title of its own that has not the
    * appliance's name ("🧺 Bucato pronto") is found by its tag: the newest 40 rows with no name in their
    * title are read once - a finished washer stayed "running" all night.
@@ -12102,6 +12105,7 @@ const SN_APPL_DEVICE_KEYS = ["operation_state", "print_status", "program_progres
 const SN_APPL_VAC_KEYS = { count: ["total_stats_cleanings", "total_cleaning_count", "total_clean_count"],
   time: ["total_stats_time", "total_cleaning_time", "total_clean_time"], area: ["total_stats_area", "total_cleaning_area", "total_clean_area"],
   last_area: ["stats_area", "cleaning_area", "last_clean_area"] };
+const SN_APPL_SAME_RUN = 45 * 60000; // a robot back on its dock (mop washing) this long is still on the same cleaning
 const SN_APPL_UNNAMED = 40; // the newest archive rows without an appliance's name read in full, for their tag
 const SN_APPL_RETRY = 15000; // a failed history read is tried again after this, then less often
 // a history read waits this long: Home Assistant busy (a backup at night) answers in minutes, and a read
@@ -13183,7 +13187,9 @@ const snAppl = {
 
 /**
  * A state history -> runs { start, end, area, weight, name, failed }: gaps under 10 minutes joined,
- * under a minute dropped; area and filament the highest value seen, the name the last one.
+ * under a minute dropped; area and filament the highest value seen, the name the last one. A robot back
+ * on its dock to wash its mop is still on the same cleaning: with the area of the cleaning under way, two
+ * runs up to 45 minutes apart are one unless that area went back to zero between them (a new cleaning).
  */
 function snApplRunCycles(pts, extra, runStates) {
   const RUN = new Set(runStates);
@@ -13194,13 +13200,20 @@ function snApplRunCycles(pts, extra, runStates) {
     if (RUN.has(st)) { if (!cur) cur = { start: x.t }; }
     else if (cur) { cur.end = x.t; cur.failed = SN_APPL_FAILED.includes(st); raw.push(cur); cur = null; }
   }
+  const areas = (extra.area || []).map((x) => ({ t: x.t, v: parseFloat(x.s) })).filter((x) => Number.isFinite(x.v));
+  // the area of the cleaning under way went back between a run and the next: the robot began another
+  const restarted = (a, b) => {
+    const v = areas.filter((x) => x.t > a.start && x.t <= b.start + 60000);
+    return v.some((x, i) => i > 0 && x.v < v[i - 1].v);
+  };
+  const same = (a, b) => b.start - a.end < 600000 || (areas.length > 0 && b.start - a.end < SN_APPL_SAME_RUN && !restarted(a, b));
   const out = [];
   for (const c of raw) {
     const prev = out[out.length - 1];
-    if (prev && c.start - prev.end < 600000) { prev.end = c.end; prev.failed = c.failed; }
+    if (prev && same(prev, c)) { prev.end = c.end; prev.failed = c.failed; }
     else out.push({ ...c });
   }
-  if (cur && out.length && cur.start - out[out.length - 1].end < 600000) cur.start = out.pop().start;
+  if (cur && out.length && same(out[out.length - 1], cur)) cur.start = out.pop().start;
   const within = (list, c) => (list || []).filter((x) => x.t >= c.start - 60000 && x.t <= c.end + 600000);
   const top = (list, c) => { const v = within(list, c).map((x) => parseFloat(x.s)).filter(Number.isFinite); return v.length ? Math.max(...v) : null; };
   const done = out.filter((c) => c.end - c.start >= 60000).map((c) => {

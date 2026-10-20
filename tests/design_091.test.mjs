@@ -12,7 +12,7 @@ global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.
 dom.window.HTMLElement.prototype.scrollIntoView = function () {};
 dom.window.customCards = [];
 dom.window.fetch = async () => ({ ok: false });
-const api = new dom.window.Function(SRC + "\nreturn { snAppl, snApplCycles, snApplTypes, snApplClassify, snApplEstimate, snApplState, snApplConsName, SN_APPL_STRINGS, SN_I18N_EXTRA, SupernotifyDashboardStrategy };")();
+const api = new dom.window.Function(SRC + "\nreturn { snAppl, snApplRunCycles, snApplCycles, snApplTypes, snApplClassify, snApplEstimate, snApplState, snApplConsName, SN_APPL_STRINGS, SN_I18N_EXTRA, SupernotifyDashboardStrategy };")();
 
 let fail = 0;
 const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
@@ -671,6 +671,23 @@ const runA = [...c6.shadowRoot.querySelectorAll(".ap")].find((n) => /Lavatrice/.
 const lcd = runA && runA.querySelector(".l-run");
 ok(lcd && /^\d+:\d{2}$/.test(lcd.textContent) && runA.querySelector("svg.sna.has-p .prog").getAttribute("stroke-dasharray") !== "0 100",
   `in funzione: display ${lcd && lcd.textContent} e anello dell'avanzamento`);
+
+// 0.2.19: Bruno 20/10 - one cleaning with two trips back to the dock to wash the mop, then a new one
+{
+  const T0 = new Date(2026, 9, 20, 15, 0).getTime();
+  const at = (h, m, sec = 0) => T0 + ((h - 15) * 60 + m) * 60000 + sec * 1000;
+  const vac = [["error", 15, 0], ["docked", 15, 4], ["cleaning", 15, 5, 57], ["docked", 15, 21, 3], ["cleaning", 15, 35, 10], ["docked", 15, 52, 25],
+    ["cleaning", 15, 56, 20], ["returning", 16, 4, 58], ["docked", 16, 5, 44], ["docked", 22, 10, 2], ["cleaning", 22, 11, 53], ["returning", 22, 14, 40], ["docked", 22, 15, 9]]
+    .map(([s, h, m, sec]) => ({ t: at(h, m, sec), s }));
+  const area = [[12, 15, 0], [19, 15, 15, 59], [20, 15, 36, 12], [31, 15, 48, 47], [34, 16, 3], [34, 21, 55, 56], [0, 22, 10, 2], [1, 22, 13, 5]]
+    .map(([v, h, m, sec]) => ({ t: at(h, m, sec), s: String(v) }));
+  const r = api.snApplRunCycles(vac, { area }, ["cleaning", "returning"]);
+  ok(r.done.length === 2 && r.done[0].start === at(15, 5, 57) && r.done[0].end === at(16, 5, 44) && r.done[0].area === 34
+    && r.done[1].start === at(22, 11, 53) && r.done[1].area === 1,
+    `0.2.19: lavaggio del mocio a metà = una pulizia sola (15:05-16:05, 34 m²), quella delle 22:11 a parte (${r.done.map((c) => `${new Date(c.start).toTimeString().slice(0, 5)}-${new Date(c.end).toTimeString().slice(0, 5)} ${c.area} m²`).join(", ")})`);
+  const r2 = api.snApplRunCycles(vac, {}, ["cleaning", "returning"]);
+  ok(r2.done.length === 3, `senza il sensore dell'area resta come prima: pause oltre 10 minuti separano (${r2.done.length})`);
+}
 
 console.log(fail ? `\n${fail} FAIL` : "\nall passed");
 process.exit(fail ? 1 : 0);
