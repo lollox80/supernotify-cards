@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.20",
+  appliances: "0.2.21",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,9 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.21 (bundle 0.91.0): a device added by hand on a plug ends its cycle once the plug has drawn no more
+   * than the threshold for the grace period, without waiting for the statistics (5 minutes late, or later
+   * after a restart of Home Assistant that left a gap in them).
    * 0.2.20 (bundle 0.91.0): a plug appliance whose newest notification of Autonotify is a "live" (its end
    * lost, or Home Assistant restarted between the two) is idle, not "running" at 0 W, once the plug has
    * been at rest past the grace period and 10 minutes more and the statistics have no cycle under way.
@@ -12112,6 +12115,13 @@ function snApplLiveStale(ap, p, cy, ev, now) {
   const live = ev && ev.find((e) => e.kind === "live");
   return !!live && now - live.t > (ap.grace || 0) + SN_APPL_LIVE_STALE;
 }
+
+/** Whether the plug has drawn no more than the threshold for longer than the grace period (since it last changed). */
+function snApplAtRest(ap, p, now) {
+  const w = p ? parseFloat(p.state) : NaN;
+  const at = p ? Date.parse(p.last_changed) : NaN;
+  return Number.isFinite(w) && w <= ap.threshold && Number.isFinite(at) && now - at > (ap.grace || 0);
+}
 const SN_APPL_SET_DOMAINS = ["input_number", "input_datetime", "input_boolean", "input_select", "input_text", "number", "select",
   "automation", "humidifier", "switch", "time", "datetime", "text", "timer"];
 // the device's own entities whose names are long or English only: a short word of ours
@@ -12406,7 +12416,8 @@ function snApplState(hass, ap, now, cy) {
       // nothing from Autonotify yet: the power alone
       const w = p ? parseFloat(p.state) : NaN;
       if (Number.isFinite(w) && w > ap.threshold) { s.status = "running"; s.since = Date.parse(p.last_changed); }
-      else if (ap.manual && cy && cy.current) s.status = "running";
+      // the statistics are 5 minutes late (more after a restart): a plug at rest past the grace period has ended
+      else if (ap.manual && cy && cy.current && !snApplAtRest(ap, p, now)) s.status = "running";
     }
     // a "live" left as the newest (its end lost, a restart between the two) on a plug at rest: idle
     if (s.status === "running" && !ap.manual && snApplLiveStale(ap, p, cy, ev, now)) { s.status = "idle"; delete s.since; }
