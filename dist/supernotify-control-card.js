@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.0",
   archive: "0.45.0",
-  appliances: "0.2.19",
+  appliances: "0.2.20",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10832,6 +10832,9 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.20 (bundle 0.91.0): a plug appliance whose newest notification of Autonotify is a "live" (its end
+   * lost, or Home Assistant restarted between the two) is idle, not "running" at 0 W, once the plug has
+   * been at rest past the grace period and 10 minutes more and the statistics have no cycle under way.
    * 0.2.19 (bundle 0.91.0): a robot that goes back to its dock to wash its mop and out again is on one
    * cleaning, not two: runs up to 45 minutes apart are joined unless the area of the cleaning under way
    * went back to zero between them.
@@ -12093,6 +12096,22 @@ const SN_APPL_PHASE_COLORS = [
 ];
 const SN_APPL_HOLD = 15 * 60000; // a short drop of the connection keeps the last state this long
 const snApplHeld = new Map();
+// past the grace period, this long more with the plug at rest and no cycle in the statistics: a "live" left
+// as the newest notification of Autonotify (its end lost, Home Assistant restarted) no longer says it runs
+const SN_APPL_LIVE_STALE = 10 * 60000;
+
+/**
+ * Whether the newest "live" of Autonotify is a leftover: the plug draws no more than the threshold now, the
+ * statistics have no cycle under way and the "live" is older than the grace period and SN_APPL_LIVE_STALE.
+ * Unknown power or statistics not read yet: not a leftover, the archive is believed.
+ */
+function snApplLiveStale(ap, p, cy, ev, now) {
+  const w = p ? parseFloat(p.state) : NaN;
+  if (!Number.isFinite(w) || w > ap.threshold) return false;
+  if (!cy || cy.loading || !cy.bins || cy.current) return false;
+  const live = ev && ev.find((e) => e.kind === "live");
+  return !!live && now - live.t > (ap.grace || 0) + SN_APPL_LIVE_STALE;
+}
 const SN_APPL_SET_DOMAINS = ["input_number", "input_datetime", "input_boolean", "input_select", "input_text", "number", "select",
   "automation", "humidifier", "switch", "time", "datetime", "text", "timer"];
 // the device's own entities whose names are long or English only: a short word of ours
@@ -12389,6 +12408,8 @@ function snApplState(hass, ap, now, cy) {
       if (Number.isFinite(w) && w > ap.threshold) { s.status = "running"; s.since = Date.parse(p.last_changed); }
       else if (ap.manual && cy && cy.current) s.status = "running";
     }
+    // a "live" left as the newest (its end lost, a restart between the two) on a plug at rest: idle
+    if (s.status === "running" && !ap.manual && snApplLiveStale(ap, p, cy, ev, now)) { s.status = "idle"; delete s.since; }
   }
   // a plug's cycle under way, from the statistics, when the archive did not say when it began
   if (s.status === "running" && !s.since && cy && cy.current) s.since = cy.current.start;
