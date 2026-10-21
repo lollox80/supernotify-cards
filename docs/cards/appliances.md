@@ -14,6 +14,9 @@ type: custom:supernotify-appliances-card
 price_per_kwh: 0.30        # optional: costs in € (or your currency) - never shown without a price
 ```
 
+In Home Assistant's card picker the card shows its description, not a live preview (reading the archive
+and the statistics each time the picker opened made it slow); on a dashboard it is the full card.
+
 ## What it shows
 
 **First what asks for something, then what is running.** Each of these is a card of its own: the
@@ -103,8 +106,10 @@ config entry, so:
   `appliance_<entry id>`. The thresholds are Autonotify's own, so the card agrees with the
   notifications. A notification is recognised by the appliance's name in its title, also with an
   emoji or more words around it ("🧺 Lavatrice", "🤖 Bruno ha finito"), else by its tag when the
-  title is one of your own with no name in it ("🧺 Bucato pronto"). Without SuperNotify's archive the
-  power alone decides;
+  title is one of your own with no name in it ("🧺 Bucato pronto"). If the newest one is a "live"
+  whose end never came (lost, or Home Assistant restarted in between), an appliance on a plug is idle
+  again once the plug has been at rest for the grace period and 10 minutes more and the statistics show
+  no cycle under way. Without SuperNotify's archive the power alone decides;
 - **cycles and energy** come from the recorder's statistics of the power sensor - 5-minute ones for
   the last 10 days, hourly ones before that (kept in this browser and never read again). Cycles
   older than 10 days are therefore counted by the hour. The power sensor needs
@@ -169,7 +174,8 @@ device added by hand (`device: Deumidificatore` with `devices:` below). Since 0.
 Anything Autonotify does not watch - a dehumidifier, a heater, a fridge - can be added under `devices:`,
 with the same keys as `appliances:`. It gets the same drawing (by `type`, or from its name), overview and
 history; it runs while its power is above `threshold` (and through the pauses of its cycle, by
-`grace_period`); there is no "to empty" and no reminders, which come from Autonotify.
+`grace_period`) and is idle as soon as the plug has stayed at or below `threshold` for `grace_period`,
+without waiting for the statistics; there is no "to empty" and no reminders, which come from Autonotify.
 
 ```yaml
 devices:

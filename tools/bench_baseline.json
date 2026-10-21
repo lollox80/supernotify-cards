@@ -1,0 +1,655 @@
+{
+  "bundle": "dist/supernotify-control-card.js",
+  "bytes": 1135333,
+  "lines": 13645,
+  "node": "v24.19.0",
+  "date": "2026-10-21T13:02:57.230Z",
+  "config": {
+    "entities": 3045,
+    "updates": 200,
+    "warmup": 20,
+    "runs": 3
+  },
+  "eval_ms": 15.14,
+  "eval_cold_ms": 18.87,
+  "eval_runs": [
+    14.25,
+    20.07,
+    16.26,
+    15.14,
+    14.72
+  ],
+  "customCards": 14,
+  "cards": {
+    "supernotify-status-badge": {
+      "first_render_ms": 5.74,
+      "first_render_total_ms": 5.74,
+      "nodes": 6,
+      "first_intervals": 0,
+      "first_ws": 1,
+      "first_renders": 2,
+      "unrelated": {
+        "ms_per_update": 0.8,
+        "ms_mean": 0.84,
+        "renders": 200,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.8,
+        "ms_mean": 0.94,
+        "renders": 200,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-pause": {
+      "first_render_ms": 2.75,
+      "first_render_total_ms": 2.75,
+      "nodes": 5,
+      "first_intervals": 0,
+      "first_ws": 1,
+      "first_renders": 4,
+      "unrelated": {
+        "ms_per_update": 0.03,
+        "ms_mean": 0.04,
+        "renders": 200,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.03,
+        "ms_mean": 0.04,
+        "renders": 200,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-test": {
+      "first_render_ms": 2.44,
+      "first_render_total_ms": 2.44,
+      "nodes": 3,
+      "first_intervals": 0,
+      "first_ws": 0,
+      "first_renders": 3,
+      "unrelated": {
+        "ms_per_update": 0.02,
+        "ms_mean": 0.02,
+        "renders": 200,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.02,
+        "ms_mean": 0.03,
+        "renders": 200,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-last": {
+      "first_render_ms": 1.67,
+      "first_render_total_ms": 1.67,
+      "nodes": 5,
+      "first_intervals": 0,
+      "first_ws": 1,
+      "first_renders": 4,
+      "unrelated": {
+        "ms_per_update": 0.04,
+        "ms_mean": 0.05,
+        "renders": 200,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.05,
+        "ms_mean": 0.07,
+        "renders": 200,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-control-card": {
+      "first_render_ms": 21.85,
+      "first_render_total_ms": 22.46,
+      "nodes": 30,
+      "first_intervals": 2,
+      "first_ws": 5,
+      "first_renders": 1,
+      "unrelated": {
+        "ms_per_update": 0.81,
+        "ms_mean": 0.94,
+        "renders": 1,
+        "mo_calls": 1,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 1.43,
+        "ms_mean": 1.44,
+        "renders": 100,
+        "mo_calls": 100,
+        "ws": 1,
+        "timeouts": 1
+      },
+      "errors": []
+    },
+    "supernotify-overview-card": {
+      "first_render_ms": 33.23,
+      "first_render_total_ms": 41.68,
+      "nodes": 76,
+      "first_intervals": 1,
+      "first_ws": 10,
+      "first_renders": 6,
+      "unrelated": {
+        "ms_per_update": 0.51,
+        "ms_mean": 0.54,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 8.15,
+        "ms_mean": 8.47,
+        "renders": 200,
+        "mo_calls": 200,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-bands-card": {
+      "first_render_ms": 4.15,
+      "first_render_total_ms": 4.19,
+      "nodes": 6,
+      "first_intervals": 0,
+      "first_ws": 0,
+      "first_renders": 1,
+      "unrelated": {
+        "ms_per_update": 0.08,
+        "ms_mean": 0.1,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.08,
+        "ms_mean": 0.09,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-deliveries-card": {
+      "first_render_ms": 16.26,
+      "first_render_total_ms": 16.48,
+      "nodes": 78,
+      "first_intervals": 0,
+      "first_ws": 1,
+      "first_renders": 1,
+      "unrelated": {
+        "ms_per_update": 0.52,
+        "ms_mean": 0.55,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 4.7,
+        "ms_mean": 5.33,
+        "renders": 100,
+        "mo_calls": 100,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-transports-card": {
+      "first_render_ms": 14.62,
+      "first_render_total_ms": 14.69,
+      "nodes": 67,
+      "first_intervals": 0,
+      "first_ws": 0,
+      "first_renders": 1,
+      "unrelated": {
+        "ms_per_update": 0.52,
+        "ms_mean": 0.57,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 5.01,
+        "ms_mean": 5.52,
+        "renders": 100,
+        "mo_calls": 100,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-recipients-card": {
+      "first_render_ms": 9.89,
+      "first_render_total_ms": 9.96,
+      "nodes": 70,
+      "first_intervals": 0,
+      "first_ws": 0,
+      "first_renders": 1,
+      "unrelated": {
+        "ms_per_update": 0.52,
+        "ms_mean": 0.56,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.52,
+        "ms_mean": 0.56,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-scenarios-card": {
+      "first_render_ms": 15.94,
+      "first_render_total_ms": 16.03,
+      "nodes": 59,
+      "first_intervals": 1,
+      "first_ws": 2,
+      "first_renders": 3,
+      "unrelated": {
+        "ms_per_update": 0.5,
+        "ms_mean": 0.54,
+        "renders": 1,
+        "mo_calls": 1,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.54,
+        "ms_mean": 1.39,
+        "renders": 50,
+        "mo_calls": 50,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-simulator-card": {
+      "first_render_ms": 7.21,
+      "first_render_total_ms": 7.29,
+      "nodes": 46,
+      "first_intervals": 0,
+      "first_ws": 3,
+      "first_renders": 1,
+      "unrelated": {
+        "ms_per_update": 0.06,
+        "ms_mean": 0.07,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.06,
+        "ms_mean": 0.07,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-composer-card": {
+      "first_render_ms": 11.98,
+      "first_render_total_ms": 12.02,
+      "nodes": 95,
+      "first_intervals": 0,
+      "first_ws": 0,
+      "first_renders": 1,
+      "unrelated": {
+        "ms_per_update": 0.15,
+        "ms_mean": 0.17,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.15,
+        "ms_mean": 0.17,
+        "renders": 0,
+        "mo_calls": 1,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-automations-card": {
+      "first_render_ms": 4.42,
+      "first_render_total_ms": 4.45,
+      "nodes": 9,
+      "first_intervals": 0,
+      "first_ws": 0,
+      "first_renders": 2,
+      "unrelated": {
+        "ms_per_update": 0.07,
+        "ms_mean": 0.08,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.07,
+        "ms_mean": 0.08,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-stats-card": {
+      "first_render_ms": 10.13,
+      "first_render_total_ms": 10.19,
+      "nodes": 196,
+      "first_intervals": 1,
+      "first_ws": 1,
+      "first_renders": 2,
+      "unrelated": {
+        "ms_per_update": 2.28,
+        "ms_mean": 2.46,
+        "renders": 0,
+        "mo_calls": 200,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 2.24,
+        "ms_mean": 2.43,
+        "renders": 0,
+        "mo_calls": 200,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-archive-card": {
+      "first_render_ms": 50.55,
+      "first_render_total_ms": 50.62,
+      "nodes": 694,
+      "first_intervals": 0,
+      "first_ws": 35,
+      "first_renders": 1,
+      "unrelated": {
+        "ms_per_update": 0.08,
+        "ms_mean": 0.08,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.07,
+        "ms_mean": 0.08,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-why-card": {
+      "first_render_ms": 65.99,
+      "first_render_total_ms": 66.1,
+      "nodes": 694,
+      "first_intervals": 0,
+      "first_ws": 35,
+      "first_renders": 1,
+      "unrelated": {
+        "ms_per_update": 0.07,
+        "ms_mean": 0.08,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.07,
+        "ms_mean": 0.08,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-tools-card": {
+      "first_render_ms": 5.06,
+      "first_render_total_ms": 5.09,
+      "nodes": 54,
+      "first_intervals": 0,
+      "first_ws": 0,
+      "first_renders": 1,
+      "unrelated": {
+        "ms_per_update": 0.06,
+        "ms_mean": 0.07,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.06,
+        "ms_mean": 0.07,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-appliances-card": {
+      "first_render_ms": 6.82,
+      "first_render_total_ms": 6.86,
+      "nodes": 9,
+      "first_intervals": 1,
+      "first_ws": 2,
+      "first_renders": 2,
+      "unrelated": {
+        "ms_per_update": 0.08,
+        "ms_mean": 0.08,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.08,
+        "ms_mean": 0.08,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    },
+    "supernotify-devices-card": {
+      "first_render_ms": 6.52,
+      "first_render_total_ms": 6.55,
+      "nodes": 9,
+      "first_intervals": 1,
+      "first_ws": 2,
+      "first_renders": 2,
+      "unrelated": {
+        "ms_per_update": 0.07,
+        "ms_mean": 0.08,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "relevant": {
+        "ms_per_update": 0.07,
+        "ms_mean": 0.08,
+        "renders": 0,
+        "mo_calls": 0,
+        "ws": 0,
+        "timeouts": 0
+      },
+      "errors": []
+    }
+  },
+  "picker": {
+    "entries": 14,
+    "ms": 181.08,
+    "total_ms": 278.86,
+    "nodes": 1481,
+    "intervals": 6,
+    "ws": 50,
+    "detail": [
+      {
+        "tag": "supernotify-control-card",
+        "ms": 8.2,
+        "nodes": 31,
+        "intervals": 2,
+        "ws_sync": 4
+      },
+      {
+        "tag": "supernotify-overview-card",
+        "ms": 15.59,
+        "nodes": 67,
+        "intervals": 1,
+        "ws_sync": 4
+      },
+      {
+        "tag": "supernotify-bands-card",
+        "ms": 1.7,
+        "nodes": 6,
+        "intervals": 0,
+        "ws_sync": 0
+      },
+      {
+        "tag": "supernotify-deliveries-card",
+        "ms": 12.29,
+        "nodes": 78,
+        "intervals": 0,
+        "ws_sync": 0
+      },
+      {
+        "tag": "supernotify-transports-card",
+        "ms": 11.12,
+        "nodes": 67,
+        "intervals": 0,
+        "ws_sync": 0
+      },
+      {
+        "tag": "supernotify-recipients-card",
+        "ms": 4.89,
+        "nodes": 70,
+        "intervals": 0,
+        "ws_sync": 0
+      },
+      {
+        "tag": "supernotify-scenarios-card",
+        "ms": 4.68,
+        "nodes": 59,
+        "intervals": 1,
+        "ws_sync": 0
+      },
+      {
+        "tag": "supernotify-simulator-card",
+        "ms": 1.14,
+        "nodes": 46,
+        "intervals": 0,
+        "ws_sync": 2
+      },
+      {
+        "tag": "supernotify-composer-card",
+        "ms": 9.02,
+        "nodes": 95,
+        "intervals": 0,
+        "ws_sync": 0
+      },
+      {
+        "tag": "supernotify-automations-card",
+        "ms": 1.02,
+        "nodes": 9,
+        "intervals": 0,
+        "ws_sync": 0
+      },
+      {
+        "tag": "supernotify-stats-card",
+        "ms": 3.06,
+        "nodes": 196,
+        "intervals": 1,
+        "ws_sync": 1
+      },
+      {
+        "tag": "supernotify-archive-card",
+        "ms": 3.57,
+        "nodes": 694,
+        "intervals": 0,
+        "ws_sync": 2
+      },
+      {
+        "tag": "supernotify-tools-card",
+        "ms": 3.79,
+        "nodes": 54,
+        "intervals": 0,
+        "ws_sync": 0
+      },
+      {
+        "tag": "supernotify-devices-card",
+        "ms": 4.13,
+        "nodes": 9,
+        "intervals": 1,
+        "ws_sync": 2
+      }
+    ],
+    "errors": []
+  },
+  "strategy": {
+    "ms": 1.2,
+    "views": 6,
+    "cards": 11,
+    "ws_per_call": 1
+  },
+  "page": {
+    "cards": 20,
+    "mount_ms": 225.18,
+    "mount_total_ms": 339.6,
+    "nodes": 2203,
+    "intervals": 7,
+    "ws_at_mount": 50,
+    "unrelated_ms_per_update": 5.85,
+    "unrelated_ms_mean": 6.17,
+    "unrelated_renders": 800,
+    "unrelated_mo_calls": 201,
+    "unrelated_ws": 0,
+    "errors": []
+  },
+  "wall_s": 590.15
+}

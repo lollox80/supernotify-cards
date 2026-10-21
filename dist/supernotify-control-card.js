@@ -736,7 +736,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.91.0"; // bundle / HACS release
+const VERSION = "0.92.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -750,16 +750,16 @@ const SN_CARD_VERSIONS = {
   control: "0.39.1",
   overview: "0.40.0",
   bands: "0.21.1",
-  deliveries: "0.33.0",
+  deliveries: "0.33.1",
   transports: "0.27.1",
   recipients: "0.31.0",
   scenarios: "0.32.0",
   simulator: "0.17.0",
   composer: "0.25.0",
   automations: "0.21.4",
-  stats: "0.33.0",
-  archive: "0.45.0",
-  appliances: "0.2.21",
+  stats: "0.33.1",
+  archive: "0.45.1",
+  appliances: "0.2.22",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -1233,13 +1233,16 @@ class SnCard extends HTMLElement {
       const tr = this._snTr || (this._snTr = snTracker());
       changed = snChanged(tr, raw);
       hass = snTrackedHass(raw, tr);
-      queueMicrotask(() => snSnap(tr, raw)); // after this setter and its synchronous reads
+      // after this setter and its synchronous reads; 0.92.0 (perf): nothing changed = the last
+      // snapshot still holds, so no new Map per card per unrelated update
+      if (changed) queueMicrotask(() => snSnap(tr, raw));
     }
     const wasDark = this._dark;
     this._hass = hass;
     this._dark = !!(hass.themes && hass.themes.darkMode);
     // native controls (time pickers, selects, scrollbars) follow the HA theme too
-    this.style.colorScheme = this._dark ? "dark" : "light";
+    // 0.92.0 (perf): written only when it changes - a style write on every state change in the house
+    if (wasDark !== this._dark || !this._rendered) this.style.colorScheme = this._dark ? "dark" : "light";
     this._onHass(hass, !this._rendered || wasDark !== this._dark, changed, first);
     snA11yInit(this);
   }
@@ -1304,7 +1307,22 @@ function snA11yText(el) {
   return (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
 }
 
-function snA11yScan(root) {
+/**
+ * 0.92.0 (perf): `scope` = the elements added since the last scan (from the MutationObserver
+ * records). Only they and their descendants are looked at, instead of every element of the card
+ * after every small redraw. Without `scope` the whole root is scanned, as before.
+ */
+function snA11yAll(root, scope, sel) {
+  if (!scope) return root.querySelectorAll(sel);
+  const out = [];
+  for (const n of scope) {
+    if (n.matches && n.matches(sel)) out.push(n);
+    if (n.querySelectorAll) for (const x of n.querySelectorAll(sel)) out.push(x);
+  }
+  return out;
+}
+
+function snA11yScan(root, scope) {
   if (!root) return;
   if (!root.querySelector("style[data-sn-a11y-css]")) {
     const st = document.createElement("style");
@@ -1312,11 +1330,11 @@ function snA11yScan(root) {
     st.textContent = SN_A11Y_CSS;
     root.appendChild(st);
   }
-  const tap = new Set(root.querySelectorAll(SN_A11Y_TAP));
-  root.querySelectorAll("*").forEach((el) => {
+  if (scope && !scope.length) return;
+  snA11yAll(root, scope, "*").forEach((el) => {
     if (el.hasAttribute("data-sn-a11y")) return;
     const tag = el.tagName;
-    if (!(el.onclick || tap.has(el))) return;
+    if (!(el.onclick || el.matches(SN_A11Y_TAP))) return;
     if (SN_A11Y_NATIVE.test(tag) || (tag.includes("-") && tag !== "HA-ICON")) return;
     el.setAttribute("data-sn-a11y", SN_A11Y_ROWTAG.test(tag) && !el.classList.contains("chip") ? "row" : "tap");
     if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "0");
@@ -1327,11 +1345,11 @@ function snA11yScan(root) {
     }
   });
   // icon-only native buttons: their title is their name
-  root.querySelectorAll("button:not([aria-label])").forEach((b) => {
+  snA11yAll(root, scope, "button:not([aria-label])").forEach((b) => {
     if (!snA11yText(b) && b.title) b.setAttribute("aria-label", b.title);
   });
   // a switch says what it switches: the text of its row
-  root.querySelectorAll('input[type="checkbox"]:not([aria-label])').forEach((i) => {
+  snA11yAll(root, scope, 'input[type="checkbox"]:not([aria-label])').forEach((i) => {
     if (i.id && root.querySelector(`label[for="${i.id}"]`)) return;
     const own = i.closest("label");
     if (own && snA11yText(own)) return;
@@ -1339,7 +1357,7 @@ function snA11yScan(root) {
     const name = i.title || (row && snA11yText(row));
     if (name) i.setAttribute("aria-label", name);
   });
-  root.querySelectorAll(SN_A11Y_LIVE).forEach((el) => {
+  snA11yAll(root, scope, SN_A11Y_LIVE).forEach((el) => {
     if (!el.hasAttribute("aria-live")) el.setAttribute("aria-live", "polite");
   });
 }
@@ -1350,7 +1368,14 @@ function snA11yInit(card) {
   card._snA11y = true;
   snA11yScan(root);
   if (typeof MutationObserver !== "undefined") {
-    new MutationObserver(() => snA11yScan(root)).observe(root, { childList: true, subtree: true });
+    // 0.92.0 (perf): only the added elements; the a11y <style> put back after a full redraw is skipped
+    new MutationObserver((recs) => {
+      const added = [];
+      for (const r of recs) for (const n of r.addedNodes) {
+        if (n.nodeType === 1 && n.isConnected && !(n.tagName === "STYLE" && n.hasAttribute("data-sn-a11y-css"))) added.push(n);
+      }
+      if (added.length) snA11yScan(root, added);
+    }).observe(root, { childList: true, subtree: true });
   }
   root.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
@@ -1366,9 +1391,11 @@ const snCards = new Set();
 function snCardRegister(card) {
   if (snCards.has(card)) return;
   snCards.add(card);
-  // the others may now show a link to this one
-  setTimeout(() => window.dispatchEvent(new CustomEvent("supernotify-cards")), 0);
+  // the others may now show a link to this one; 0.92.0 (perf): one event for all the cards that
+  // arrive together, not one per card (each listener redrew N times while a dashboard opened)
+  if (!snCardsT) snCardsT = setTimeout(() => { snCardsT = 0; window.dispatchEvent(new CustomEvent("supernotify-cards")); }, 0);
 }
+let snCardsT = 0;
 
 /** The first card of that kind on the page (connected), or null. */
 function snCardOn(kind, filter) {
@@ -1763,12 +1790,18 @@ const SN_NATIVE_CSS = `:host { display: block; }
 class SupernotifyStatusBadge extends HTMLElement {
   setConfig(config) { this._config = { ...(config || {}) }; }
   set hass(hass) {
+    // 0.92.0 (perf): the badge reads only SuperNotify's own entities - a new states object where
+    // none of them changed (and the entity count is the same) is not worth working the health out again
+    const prev = this._hass;
     this._hass = hass;
     const now = Date.now();
     if (!this._at || now - this._at > 60000) {
       this._at = now;
       snEnquire(hass, "enquire_snoozes").then((r) => { this._snz = ((r && r.response) || {}).snoozes || []; this._draw(); }).catch(() => {});
     }
+    if (prev && hass && prev.states && hass.states && prev.language === hass.language && this._snIds &&
+        snCount(prev.states) === snCount(hass.states) && this._snIds.every((id) => prev.states[id] === hass.states[id])) return;
+    if (hass && hass.states) this._snIds = Object.keys(hass.states).filter((id) => id.includes(".supernotify"));
     this._draw();
   }
   connectedCallback() {
@@ -2774,12 +2807,24 @@ function snActiveSet(next) {
  */
 function snLiveScenarioNames(hass) {
   if (!hass || !hass.states) return null;
-  if (snActive.states === hass.states) return snActive.live ? snActive.names : null;
-  snActive.states = hass.states;
+  // 0.92.0 (perf): keyed on the raw states object (each card reads through its own proxy, so the
+  // cache never hit across cards); a tracked card still notes the scenario sensors it depends on
+  const raw = snRawStates(hass.states);
+  if (snActive.states === raw) {
+    if (raw !== hass.states) {
+      void hass.states[SN_SCAN];
+      void hass.states["update.supernotify_update"];
+      if (snActive.ids) for (const e of snActive.ids) void hass.states[e];
+    }
+    return snActive.live ? snActive.names : null;
+  }
+  snActive.states = raw;
+  snActive.ids = null;
   // a 2.12 SuperNotify could leave them at their startup value (0.60.0): only from 2.13 on, as said
   // by its update entity - when that cannot be told, ask SuperNotify as before
   if (snSupernotifyAtLeast(hass, "2.13.0") !== true) { snActive.live = false; return null; }
   const ids = Object.keys(hass.states).filter((e) => e.startsWith("binary_sensor.supernotify_scenario_"));
+  snActive.ids = ids;
   const isLive = ids.some((e) => ["on", "off"].includes(hass.states[e].state) && !snIsManualScenario(hass, e));
   snActive.live = isLive;
   if (!isLive) return null;
@@ -2847,6 +2892,21 @@ function snDeliveryAlias(hass, deliveryName) {
   return null;
 }
 
+// 0.92.0 (perf): the binary_sensor.supernotify_scenario_* ids, once per states object for the page.
+const snScenIdsW = new WeakMap();
+function snScenarioSensorIds(hass) {
+  if (!hass || !hass.states) return [];
+  const st = hass.states;
+  const raw = snRawStates(st);
+  let ids = snScenIdsW.get(raw);
+  if (!ids) {
+    ids = Object.keys(raw).filter((e) => e.startsWith("binary_sensor.supernotify_scenario_"));
+    snScenIdsW.set(raw, ids);
+  }
+  if (st !== raw) void st[SN_SCAN];
+  return ids;
+}
+
 /**
  * One row per SuperNotify delivery / transport / recipient. SuperNotify >= PR #207
  * (and >= 2.7.0 for recipients) has a real switch.* plus, on older installs, a
@@ -2854,21 +2914,38 @@ function snDeliveryAlias(hass, deliveryName) {
  * rows are not doubled. `name` is the model name (the `name` attribute when there is
  * one: switch entity_ids are slugified).
  */
+// 0.92.0 (perf): rows worked out once per states object for the whole page (cards, badge, health
+// checks used to rescan all entities several times per update each).
+const snRowsW = new WeakMap();
 function snEntityRows(hass, kind) {
-  const byName = new Map();
-  if (!hass) return [];
-  const re = new RegExp(`^(switch|binary_sensor)\\.supernotify_${kind}_(.+)$`);
-  for (const id of Object.keys(hass.states)) {
-    const m = id.match(re);
-    if (!m) continue;
-    const s = hass.states[id];
-    const a = s.attributes || {};
-    const name = kind === "recipient" ? m[2] : String(a.name || m[2]);
-    const prev = byName.get(name);
-    if (prev && prev.isSwitch) continue;
-    byName.set(name, { id, name, on: s.state === "on", a, isSwitch: m[1] === "switch" });
+  if (!hass || !hass.states) return [];
+  const st = hass.states;
+  const raw = snRawStates(st);
+  let per = snRowsW.get(raw);
+  if (!per) { per = new Map(); snRowsW.set(raw, per); }
+  let rows = per.get(kind);
+  if (!rows) {
+    const byName = new Map();
+    const re = new RegExp(`^(switch|binary_sensor)\\.supernotify_${kind}_(.+)$`);
+    for (const id of Object.keys(raw)) {
+      const m = id.match(re);
+      if (!m) continue;
+      const s = raw[id];
+      const a = s.attributes || {};
+      const name = kind === "recipient" ? m[2] : String(a.name || m[2]);
+      const prev = byName.get(name);
+      if (prev && prev.isSwitch) continue;
+      byName.set(name, { id, name, on: s.state === "on", a, isSwitch: m[1] === "switch" });
+    }
+    rows = [...byName.values()];
+    per.set(kind, rows);
   }
-  return [...byName.values()];
+  if (st !== raw) {
+    // a tracked card: it depends on the entity list and on these rows, as when it scanned them itself
+    void st[SN_SCAN];
+    for (const r of rows) void st[r.id];
+  }
+  return rows.map((r) => ({ ...r }));
 }
 
 /**
@@ -3812,10 +3889,31 @@ function snTracker() {
   return { keys: new Set(), scanned: false, snap: null };
 }
 
+// 0.92.0 (perf): HA hands every card the same (immutable) states object for one update: count its
+// entities once for the whole page instead of twice per card per update (3000+ keys each time).
+const snCountW = new WeakMap();
+function snCount(states) {
+  let n = snCountW.get(states);
+  if (n === undefined) { n = Object.keys(states).length; snCountW.set(states, n); }
+  return n;
+}
+// 0.92.0 (perf): the tracked states proxy answers these two symbols - the raw states object (to key
+// page-wide caches on it) and "this card scans the entity list" without listing it again.
+const SN_RAW = Symbol("snRaw");
+const SN_SCAN = Symbol("snScan");
+function snRawStates(states) {
+  return (states && states[SN_RAW]) || states;
+}
+
 function snTrackedHass(hass, tr) {
   if (!hass || !hass.states) return hass;
   const states = new Proxy(hass.states, {
-    get(t, k) { if (typeof k === "string") tr.keys.add(k); return t[k]; },
+    get(t, k) {
+      if (typeof k === "string") { tr.keys.add(k); return t[k]; }
+      if (k === SN_RAW) return t;
+      if (k === SN_SCAN) { tr.scanned = true; return true; }
+      return t[k];
+    },
     has(t, k) { if (typeof k === "string") tr.keys.add(k); return k in t; },
     ownKeys(t) { tr.scanned = true; return Reflect.ownKeys(t); },
   });
@@ -3833,7 +3931,7 @@ function snChanged(tr, hass) {
   if (!p || !hass || !hass.states) return true;
   if (p.lang !== hass.language || p.themes !== hass.themes || p.entities !== hass.entities ||
       p.services !== hass.services || p.minute !== Math.floor(Date.now() / 60000) || p.act !== snActive.v) return true;
-  if (tr.scanned && p.count !== Object.keys(hass.states).length) return true;
+  if (tr.scanned && p.count !== snCount(hass.states)) return true;
   if (tr.keys.size !== p.objs.size) return true; // the card looked at something new
   for (const [k, obj] of p.objs) if (hass.states[k] !== obj) return true;
   return false;
@@ -3845,7 +3943,7 @@ function snSnap(tr, hass) {
   for (const k of tr.keys) objs.set(k, hass.states[k]);
   tr.snap = {
     objs, lang: hass.language, themes: hass.themes, entities: hass.entities, services: hass.services,
-    minute: Math.floor(Date.now() / 60000), count: tr.scanned ? Object.keys(hass.states).length : 0,
+    minute: Math.floor(Date.now() / 60000), count: tr.scanned ? snCount(hass.states) : 0,
     act: snActive.v,
   };
 }
@@ -6079,7 +6177,8 @@ class SupernotifyDeliveriesCard extends SnCard {
   // `delivery: {<name>: {enabled: …}}`, the same source as the why-card).
   _scenarioEffect(name) {
     const off = [], on = [];
-    for (const id of Object.keys(this._hass.states)) {
+    // 0.92.0 (perf): the scenario sensors listed once per states object, not once per row
+    for (const id of snScenarioSensorIds(this._hass)) {
       const m = id.match(/^binary_sensor\.supernotify_scenario_(.+)$/);
       if (!m || !snScenarioActive(this._hass, id)) continue;
       let dl = null;
@@ -8288,7 +8387,14 @@ class SupernotifyStatsCard extends SnCard {
 
   _onHass(hass, fresh, changed, first) {
     if (fresh) this._render();
-    else this._updateVersions();
+    else {
+      // 0.92.0 (perf): only when one of the two update entities (or the language) changed - this
+      // card is not tracked, and redrew its version boxes on every state change in the house
+      const c = this._config || {};
+      const k = [hass.states[c.update_entity], hass.states[c.cards_update_entity], hass.language];
+      const p = this._verKey;
+      if (!p || k.some((x, i) => x !== p[i])) { this._verKey = k; this._updateVersions(); }
+    }
     if (first) this._load();
   }
 
@@ -8898,6 +9004,7 @@ class SupernotifyStatsCard extends SnCard {
       const href = a.release_url ? ` href="${this._esc(a.release_url)}" target="_blank" rel="noopener"` : "";
       return `<a class="vbox"${href}>${icon}<div><b>${this._esc(name)}</b><div class="sm">${sub}</div></div>${badge}</a>`;
     };
+    this._verKey = [this._hass.states[this._config.update_entity], this._hass.states[this._config.cards_update_entity], this._hass.language];
     el.innerHTML =
       snIconify(box(this._config.update_entity, "SuperNotify", null, "🔔") +
       box(this._config.cards_update_entity, "SuperNotify Cards", VERSION, "🃏"), this && this._config);
@@ -10462,7 +10569,9 @@ customElements.define("supernotify-why-card", SupernotifyWhyAliasCard);
 
 window.customCards.push({
   type: "supernotify-archive-card",
-  preview: true,
+  // 0.92.0 (perf): no live preview in HA's card picker - it read the whole archive (about 35 calls,
+  // ~700 elements) every time the picker opened; the picker shows the description instead
+  preview: false,
   documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/archive.md",
   name: "SuperNotify Archive Card",
   description: "Notification history and why each one went out, or not: list on the left, the full detail (scenarios, presence, every channel, pause) on the right. Replaces the Why? card, which stays as an alias.",
@@ -10832,10 +10941,12 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
-   * 0.2.21 (bundle 0.91.0): a device added by hand on a plug ends its cycle once the plug has drawn no more
+   * 0.2.22 (bundle 0.92.0): no live preview in Home Assistant's card picker - it read config entries, the
+   * archive and the statistics every time the picker opened; the picker shows the description instead.
+   * 0.2.21 (bundle 0.92.0): a device added by hand on a plug ends its cycle once the plug has drawn no more
    * than the threshold for the grace period, without waiting for the statistics (5 minutes late, or later
    * after a restart of Home Assistant that left a gap in them).
-   * 0.2.20 (bundle 0.91.0): a plug appliance whose newest notification of Autonotify is a "live" (its end
+   * 0.2.20 (bundle 0.92.0): a plug appliance whose newest notification of Autonotify is a "live" (its end
    * lost, or Home Assistant restarted between the two) is idle, not "running" at 0 W, once the plug has
    * been at rest past the grace period and 10 minutes more and the statistics have no cycle under way.
    * 0.2.19 (bundle 0.91.0): a robot that goes back to its dock to wash its mop and out again is on one
@@ -13659,7 +13770,9 @@ customElements.define("supernotify-devices-card", class extends SupernotifyAppli
 window.customCards.push({
   type: "supernotify-devices-card",
   name: "SuperNotify devices",
-  preview: true,
+  // 0.92.0 (perf): no live preview in the card picker - it read config entries, the archive and the
+  // recorder statistics of every appliance, one after another, each time the picker opened
+  preview: false,
   documentationURL: "https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/appliances.md",
   description: "The appliances Appliance Autonotify watches: running, finished or stuck first, with the Finished / Remind / Switch off buttons of its notifications, and a details panel with energy and cycles.",
 });

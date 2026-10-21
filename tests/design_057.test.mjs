@@ -56,7 +56,9 @@ ok(/snEnquireBust\(800\)/.test(SRC) && /snEnquireBust\(1500\)/.test(SRC), "snooz
 
 // ── 3. card picker ──────────────────────────────────────────────────────
 const cc = window.customCards.filter((c) => c.type.startsWith("supernotify-"));
-ok(cc.length === 14 && cc.every((c) => c.preview === true), "14 card con anteprima nel selettore (0.62.0: + tools; 0.85.0: why dentro archive; 0.91.0: + appliances)");
+// 0.92.0 (perf): archive e devices senza anteprima live (leggevano archivio e statistiche a ogni apertura del selettore)
+const noPrev = ["supernotify-archive-card", "supernotify-devices-card"];
+ok(cc.length === 14 && cc.every((c) => c.preview === !noPrev.includes(c.type)), "14 card nel selettore, anteprima live tranne archive e devices (0.62.0: + tools; 0.85.0: why dentro archive; 0.91.0: + appliances; 0.92.0)");
 ok(cc.every((c) => /docs\/cards\/[a-z]+\.md$/.test(c.documentationURL)), "card con link alla documentazione");
 const K = (t) => customElements.get(`supernotify-${t}-card`);
 const st = K("control").getStubConfig(hass);

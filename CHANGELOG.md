@@ -3,6 +3,27 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.92.0] - 2026-10-21
+
+### Performance
+- **Lighter on every state change in the house.** The entity list is counted once per update for the whole
+  page (it was counted twice per card), and a card that saw nothing relevant no longer takes a new snapshot.
+  The delivery / transport / recipient rows and the scenario sensors are worked out once per update for
+  every card, the status badge and the health checks, instead of each one scanning all the entities again
+  (the deliveries card did it once per row).
+- **stats** (0.33.1): the version boxes are redrawn only when one of the two update entities changes - it
+  redrew them on every state change.
+- **Accessibility pass**: after a redraw only the new elements are looked at, not every element of the
+  card; the full redraw no longer triggers a second pass.
+- **Cards opening together** send one "cards on the page" event instead of one each.
+- **archive** (0.45.1), **devices** (appliances 0.2.22): no live preview in Home Assistant's card picker -
+  it read the archive, config entries and statistics every time the picker opened. The picker shows the
+  description instead; the cards are unchanged on a dashboard.
+
+### Fixed
+- **appliances** (0.2.21): a device added by hand on a plug (a boiler, a heater) is idle once the plug has drawn no more than the threshold for the grace period, instead of "running" at 0 W until the statistics of the next 5 minutes - or longer after a restart of Home Assistant - say the cycle is over.
+- **appliances** (0.2.20): a plug appliance whose newest notification of Autonotify is a "live" one - its end lost, or Home Assistant restarted between the two - no longer stays "running" at 0 W: once the plug has been at rest past the grace period and 10 minutes more, and the statistics have no cycle under way, it is idle.
+
 ## [0.91.0] - 2026-10-17
 
 ### Added
@@ -25,8 +46,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   SuperNotify (its archive), cycles and energy from the recorder's statistics. Costs only with
   `price_per_kwh` or `price_entity`. 11 languages.
 - **appliances**: devices added by hand (`devices:`) next to Autonotify's - a dehumidifier, a heater, anything with a power sensor, a vacuum or a state of its own - with the same drawings, overview and history; `info:` lists entities to show in the overview. `device: <name>` shows one device alone, its overview and history inside the card. The card is now `supernotify-devices-card` ("SuperNotify devices" in the picker); `supernotify-appliances-card` stays as an alias.
-- **appliances** (0.2.21): a device added by hand on a plug (a boiler, a heater) is idle once the plug has drawn no more than the threshold for the grace period, instead of "running" at 0 W until the statistics of the next 5 minutes - or longer after a restart of Home Assistant - say the cycle is over.
-- **appliances** (0.2.20): a plug appliance whose newest notification of Autonotify is a "live" one - its end lost, or Home Assistant restarted between the two - no longer stays "running" at 0 W: once the plug has been at rest past the grace period and 10 minutes more, and the statistics have no cycle under way, it is idle.
 - **appliances** (0.2.19): a robot that goes back to its dock to wash its mop and out again is on one cleaning, not two or three: runs up to 45 minutes apart are joined unless the area of the cleaning under way went back to zero between them.
 - **appliances** (0.2.18): a notification of Autonotify whose title has not the appliance's name (a title of your own, "🧺 Bucato pronto") is found by its tag: the newest 40 rows with no name in the title are read once - a finished washer stayed "running" all night.
 - **appliances** (0.2.17): Autonotify's notifications are found also when their title has an emoji or more words around the appliance's name ("🧺 Lavatrice", "🤖 Bruno ha finito") - a cycle under way showed as the last one, still to empty; the newest 16 rows of each appliance are read instead of 10.
