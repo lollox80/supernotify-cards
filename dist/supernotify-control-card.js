@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.1",
   archive: "0.45.1",
-  appliances: "0.2.22",
+  appliances: "0.2.23",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10941,6 +10941,12 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.23 (bundle 0.92.0): the start of a cycle under way is its own first "live", not one of a cycle before
+   * whose end never reached the archive: a run of "live" rows is cut where the statistics saw a cycle end
+   * between two of them, or where two of them are more than 12 hours apart - a washer started at 22:33 showed
+   * "started 21:08" of the day before, 25 h 50 min, and an estimated end already past. When the newest "live"
+   * itself is of a cycle that ended (none of the one under way reached the archive), the start is the
+   * statistics' one.
    * 0.2.22 (bundle 0.92.0): no live preview in Home Assistant's card picker - it read config entries, the
    * archive and the statistics every time the picker opened; the picker shows the description instead.
    * 0.2.21 (bundle 0.92.0): a device added by hand on a plug ends its cycle once the plug has drawn no more
@@ -12213,6 +12219,18 @@ const snApplHeld = new Map();
 // past the grace period, this long more with the plug at rest and no cycle in the statistics: a "live" left
 // as the newest notification of Autonotify (its end lost, Home Assistant restarted) no longer says it runs
 const SN_APPL_LIVE_STALE = 10 * 60000;
+// two "live" rows further apart than this are not the same cycle, whatever the statistics say
+const SN_APPL_RUN_GAP = 12 * 3600000;
+
+/**
+ * Whether two "live" rows of Autonotify (older, newer: their times) belong to different cycles: a cycle the
+ * statistics saw end between them, or more than SN_APPL_RUN_GAP apart. The end of the cycle before may never
+ * have reached the archive, and its "live" rows would otherwise be read as the start of the one under way.
+ */
+function snApplRunBreak(older, newer, cy) {
+  if (newer - older > SN_APPL_RUN_GAP) return true;
+  return !!(cy && cy.done && cy.done.some((c) => c.end > older && c.end < newer));
+}
 
 /**
  * Whether the newest "live" of Autonotify is a leftover: the plug draws no more than the threshold now, the
@@ -12453,14 +12471,18 @@ function snApplState(hass, ap, now, cy) {
     if (e0.kind === "stuck") {
       s.status = "error";
       let j = 1;
-      while (j < ev.length && ev[j].kind === "live") j++;
+      while (j < ev.length && ev[j].kind === "live" && !(j > 1 && snApplRunBreak(ev[j].t, ev[j - 1].t, cy))) j++;
       if (j > 1) s.since = ev[j - 1].t;
     }
     else if (e0.kind === "live") {
       s.status = "running";
       let i = 0;
-      while (i < ev.length && ev[i].kind === "live") i++;
+      // 0.2.23: only this cycle's own "live" rows, not those of one whose end was lost
+      while (i < ev.length && ev[i].kind === "live" && !(i > 0 && snApplRunBreak(ev[i].t, ev[i - 1].t, cy))) i++;
       if (i < ev.length || !ev.more) s.since = ev[i - 1].t;
+      // the newest "live" is of a cycle the statistics saw end (no "live" of the one under way reached the
+      // archive): the cycle under way starts where the statistics say
+      if (snApplRunBreak(e0.t, now, cy) && cy && cy.current) s.since = cy.current.start;
     } else if (e0.kind === "end" && !snAppl.finished.has(ap.id + "|" + e0.t)) {
       let i = 0;
       while (i < ev.length && ev[i].kind === "end") i++;
