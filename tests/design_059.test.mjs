@@ -44,7 +44,7 @@ ok(trow.some((t) => /^SMS nessun canale lo usa/.test(t)), `transport: SMS, nome 
 
 // C5, A5, C1, C2, C7, C8, C9 (source level)
 // 0.82.0: the duration is written by snSnzDur ("25 min", "1 h 30 min")
-ok(/left = `\$\{T\.snoozed\} · \$\{snSnzDur\(mins, T\)\}`/.test(SRC), "control: «In pausa · 25 min»");
+ok(/left = `\$\{T\.snoozed\} · \$\{snSnzDur\(mins, T\)\}`/.test(SRC) && /if \(mins < 60\) return `\$\{mins\} \$\{T\.min\}`/.test(SRC), "control: «In pausa · 25 min»");
 ok((SRC.match(/hour12: snH12\(this\._hass\)/g) || []).length >= 5, "archivio e perché: formato orario del profilo HA");
 ok(/h % 6 === 0/.test(SRC) && /\.bars text \{ font-size: 10\.5px/.test(SRC) && /opt\.half && cw > 640/.test(SRC), "statistiche: grafici a metà larghezza disegnati alla loro misura");
 ok(/snBandName\(T, String\(k\)/.test(SRC), "statistiche: fasce del giorno col nome");
