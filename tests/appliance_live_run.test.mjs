@@ -50,14 +50,15 @@ ok(s.since === NOW - 90 * MIN, `one cycle, three lives -> since its first (got $
 // 4. a long cycle with live rows 5 h apart is not cut
 ok(snApplRunBreak(NOW - 6 * H, NOW - 1 * H, { done: [] }) === false, "5 h apart, no end between -> same cycle");
 ok(snApplRunBreak(NOW - 13 * H, NOW - 30 * MIN, null) === true, "12.5 h apart -> different cycles");
-ok(snApplRunBreak(lastNight2, tonight, cy) === true, "a cycle of the statistics ended between -> different cycles");
+ok(snApplRunBreak(tonight - 20 * MIN, tonight2, cy) === false, "a pause the statistics cut a cycle at, under 12 h -> same cycle (0.2.24)");
 ok(snApplRunBreak(tonight, tonight2, cy) === false, "tonight's two lives -> same cycle");
 
-// 5. no "live" of tonight's cycle reached the archive at all: the start is the statistics' one
-snAppl.events.set(ap.id, [{ t: lastNight2, kind: "live" }, { t: lastNight, kind: "live" }]);
-s = snApplState(hass, ap, NOW, cy);
-ok(s.status === "running", `only last night's lives, drawing -> running (got ${s.status})`);
-ok(s.since === cy.current.start, `only last night's lives -> since the statistics' start 22:30 (got ${s.since && iso(s.since)})`);
+// 5. 0.2.24: the statistics cut the wash at a pause (a cycle ended at 23:20, one under way since 00:00):
+// the start stays the first live of the wash
+snAppl.events.set(ap.id, [{ t: tonight2, kind: "live" }, { t: tonight, kind: "live" }, { t: lastNight2, kind: "live" }]);
+const split = { loading: false, bins: [], done: [{ start: tonight - 3 * MIN, end: tonight + 47 * MIN }], current: { start: tonight + 88 * MIN } };
+s = snApplState(hass, ap, NOW + 60 * MIN, split);
+ok(s.since === tonight, `wash split by a pause in the statistics -> since 22:33 (got ${s.since && iso(s.since)})`);
 
 console.log(fail ? `\n${fail} FAILED` : "\nall passed");
 process.exit(fail ? 1 : 0);

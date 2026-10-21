@@ -6,6 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- **appliances** (0.2.24): the end of a cycle with a title of its own ("🧺 Bucato pronto", no appliance's name in it) is found however many notifications came after it. For an appliance whose newest event is a "live" over 4 hours old, the rows without a name since that "live" are read in full, oldest first and up to 200, until one with its tag; only the newest 40 such rows were read, and on a busy day the end of last night's wash fell past them, so the washer stayed "running" at 0 W and the next cycle started at the day before. The start of a cycle no longer follows the recorder's statistics (added in 0.2.23): a pause of the washer split its cycle there, and the start jumped to its last part ("start 00:00, 0 min" for a wash under way since 22:32); two "live" rows more than 12 hours apart are still two cycles.
 - **appliances** (0.2.23): a cycle under way starts at its own first "live" notification of Autonotify, not at one of a cycle before whose end never reached the archive. The "live" rows are cut where the statistics saw a cycle end between two of them, or where two of them are more than 12 hours apart: a washer started at 22:33 showed "started 21:08" of the day before, "25 h 50 min" and an estimated end already past. When no "live" of the cycle under way reached the archive at all, its start is the one of the statistics.
 
 ## [0.92.0] - 2026-10-21

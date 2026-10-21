@@ -759,7 +759,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.21.4",
   stats: "0.33.1",
   archive: "0.45.1",
-  appliances: "0.2.23",
+  appliances: "0.2.24",
   tools: "0.2.2",
   why: "0.17.0",
 };
@@ -10941,6 +10941,12 @@ window.customCards.push({
  */
 class SupernotifyAppliancesCard extends SnCard {
   /*
+   * 0.2.24 (bundle 0.92.0): the end of a cycle with a title of its own ("🧺 Bucato pronto") is found however
+   * many notifications came after it: for an appliance whose newest event is a "live", the rows without a name
+   * since that "live", when it is over 4 hours old, are read in full (oldest first, up to 200) until one with its tag - only the newest 40 of
+   * them were read, and on a busy day the end of last night's wash fell past them: "running" at 0 W.
+   * The start of a cycle no longer follows the statistics (0.2.23): a pause of the washer split its cycle there
+   * and the start jumped to the last part ("start 00:00, 0 min" for a wash under way since 22:32).
    * 0.2.23 (bundle 0.92.0): the start of a cycle under way is its own first "live", not one of a cycle before
    * whose end never reached the archive: a run of "live" rows is cut where the statistics saw a cycle end
    * between two of them, or where two of them are more than 12 hours apart - a washer started at 22:33 showed
@@ -12223,13 +12229,14 @@ const SN_APPL_LIVE_STALE = 10 * 60000;
 const SN_APPL_RUN_GAP = 12 * 3600000;
 
 /**
- * Whether two "live" rows of Autonotify (older, newer: their times) belong to different cycles: a cycle the
- * statistics saw end between them, or more than SN_APPL_RUN_GAP apart. The end of the cycle before may never
- * have reached the archive, and its "live" rows would otherwise be read as the start of the one under way.
+ * Whether two "live" rows of Autonotify (older, newer: their times) belong to different cycles: more than
+ * SN_APPL_RUN_GAP apart. The end of the cycle before may never have reached the archive, and its "live" rows
+ * would otherwise be read as the start of the one under way. 0.2.24: not where the statistics saw a cycle end
+ * between them - a washer resting a few minutes between washing and spinning is two cycles there, one here.
  */
+// eslint-disable-next-line no-unused-vars
 function snApplRunBreak(older, newer, cy) {
-  if (newer - older > SN_APPL_RUN_GAP) return true;
-  return !!(cy && cy.done && cy.done.some((c) => c.end > older && c.end < newer));
+  return newer - older > SN_APPL_RUN_GAP;
 }
 
 /**
@@ -12265,6 +12272,10 @@ const SN_APPL_VAC_KEYS = { count: ["total_stats_cleanings", "total_cleaning_coun
   last_area: ["stats_area", "cleaning_area", "last_clean_area"] };
 const SN_APPL_SAME_RUN = 45 * 60000; // a robot back on its dock (mop washing) this long is still on the same cleaning
 const SN_APPL_UNNAMED = 40; // the newest archive rows without an appliance's name read in full, for their tag
+const SN_APPL_UNNAMED_AFTER = 200; // at most, the rows without a name read after the newest "live" of one appliance
+// a "live" newer than this is of a cycle very likely still under way: its end is not looked for past the newest
+// SN_APPL_UNNAMED rows (reading up to 200 rows for every cycle under way held up the statistics, and the estimate)
+const SN_APPL_LIVE_OLD = 4 * 3600000;
 const SN_APPL_RETRY = 15000; // a failed history read is tried again after this, then less often
 // a history read waits this long: Home Assistant busy (a backup at night) answers in minutes, and a read
 // abandoned early is still computed there - trying again sooner only adds to its load
@@ -12480,9 +12491,6 @@ function snApplState(hass, ap, now, cy) {
       // 0.2.23: only this cycle's own "live" rows, not those of one whose end was lost
       while (i < ev.length && ev[i].kind === "live" && !(i > 0 && snApplRunBreak(ev[i].t, ev[i - 1].t, cy))) i++;
       if (i < ev.length || !ev.more) s.since = ev[i - 1].t;
-      // the newest "live" is of a cycle the statistics saw end (no "live" of the one under way reached the
-      // archive): the cycle under way starts where the statistics say
-      if (snApplRunBreak(e0.t, now, cy) && cy && cy.current) s.since = cy.current.start;
     } else if (e0.kind === "end" && !snAppl.finished.has(ap.id + "|" + e0.t)) {
       let i = 0;
       while (i < ev.length && ev[i].kind === "end") i++;
@@ -13214,6 +13222,30 @@ const snAppl = {
       const doc = await snArchiveStore.doc(hass, n.id).catch(() => null);
       if (doc) this.docs.set(n.id, snApplClassify(doc, null));
     }
+    await this._events(hass);
+    // 0.2.24: the end of a cycle often has a title of its own ("🧺 Bucato pronto") and only its tag says whose
+    // it is. Past the newest SN_APPL_UNNAMED rows without a name it was never read and the cycle stayed under
+    // way: for an appliance whose newest event is a "live", the rows without a name since then are read
+    // (oldest first) until one is of that appliance.
+    let found = false;
+    for (const e of this.entries) {
+      const ev = this.events.get(e.entry_id);
+      if (!ev || !ev[0] || ev[0].kind !== "live" || Date.now() - ev[0].t < SN_APPL_LIVE_OLD) continue;
+      const after = this.rows.filter((r) => !this.docs.has(r.id) && Date.parse(r.created) > ev[0].t
+        && !snApplRowEntry(r, this.entries, names)).reverse().slice(0, SN_APPL_UNNAMED_AFTER);
+      for (const n of after) {
+        const doc = await snArchiveStore.doc(hass, n.id).catch(() => null);
+        if (!doc) continue;
+        const c = snApplClassify(doc, null);
+        this.docs.set(n.id, c);
+        if (c && c.entry === e.entry_id && c.kind !== "other") { found = true; if (c.kind !== "live") break; }
+      }
+    }
+    if (found) await this._events(hass);
+  },
+
+  /** Per appliance, its events from the rows: by name, or by the tag of a row read in full (at most 16). */
+  async _events(hass) {
     for (const e of this.entries) {
       const name = e.title.toLowerCase();
       const rows = this.rows.filter((n) => snApplRowEntry(n, [e], [name]) || (this.docs.get(n.id) || {}).entry === e.entry_id);
