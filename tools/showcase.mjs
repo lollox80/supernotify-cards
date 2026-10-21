@@ -7,6 +7,9 @@
 // 2026-10-17 - v0.91.0: appliances card - a demo Appliance Autonotify (entries, plugs, a robot vacuum,
 //   its notifications in the archive, power statistics); desktop and 390 px phone shots, and the details
 //   panel as a dialog and as a bottom sheet (whole viewport, the panel is fixed over the page).
+// 2026-10-21 - appliances 0.2.19: a dehumidifier added by hand (devices:, info:), maintenance on the
+//   washing machine, the robot's consumables and buttons of its own (Commands); shots of the Overview
+//   tab, of the full-screen chart and of the robot's panel.
 //
 // Renders each card with invented data (English UI, no real names or addresses) in headless
 // Chromium at 2x and writes docs/images/*.png. <ha-icon> is stubbed with the real Material
@@ -233,13 +236,16 @@ const APPL_DEMO = String.raw`
     { entry_id: "01DEMODISH", domain: "appliance_autonotify", title: "Dishwasher", source: "user" },
     { entry_id: "01DEMODRY", domain: "appliance_autonotify", title: "Dryer", source: "integration_discovery" },
     { entry_id: "01DEMOVAC", domain: "appliance_autonotify", title: "Robbie", source: "import" }];
-  const DEV = { dW: { id: "dW", name: "Washing machine plug" }, dD: { id: "dD", name: "Dishwasher plug" }, dY: { id: "dY", name: "Dryer plug" }, dV: { id: "dV", name: "Robbie" } };
+  const DEV = { dW: { id: "dW", name: "Washing machine plug" }, dD: { id: "dD", name: "Dishwasher plug" }, dY: { id: "dY", name: "Dryer plug" }, dV: { id: "dV", name: "Robbie" }, dH: { id: "dH", name: "Dehumidifier plug" } };
   const E = {};
   [["sensor.washing_machine_plug_power", "dW"], ["switch.washing_machine_plug", "dW"], ["sensor.dishwasher_plug_power", "dD"], ["switch.dishwasher_plug", "dD"],
-   ["sensor.dryer_plug_power", "dY"], ["switch.dryer_plug", "dY"], ["vacuum.robbie", "dV"]].forEach(function (x) { E[x[0]] = { entity_id: x[0], device_id: x[1], platform: "demo" }; });
+   ["sensor.dryer_plug_power", "dY"], ["switch.dryer_plug", "dY"], ["vacuum.robbie", "dV"],
+   ["sensor.dehumidifier_plug_power", "dH"], ["switch.dehumidifier_plug", "dH"]].forEach(function (x) { E[x[0]] = { entity_id: x[0], device_id: x[1], platform: "demo" }; });
   E["sensor.robbie_error"] = { entity_id: "sensor.robbie_error", device_id: "dV", platform: "demo", translation_key: "error" };
   E["sensor.robbie_battery"] = { entity_id: "sensor.robbie_battery", device_id: "dV", platform: "demo" };
   E["sensor.robbie_filter_lifespan"] = { entity_id: "sensor.robbie_filter_lifespan", device_id: "dV", platform: "demo", translation_key: "lifespan_filter" };
+  E["sensor.robbie_main_brush_lifespan"] = { entity_id: "sensor.robbie_main_brush_lifespan", device_id: "dV", platform: "demo", translation_key: "lifespan_brush" };
+  E["sensor.robbie_side_brush_lifespan"] = { entity_id: "sensor.robbie_side_brush_lifespan", device_id: "dV", platform: "demo", translation_key: "lifespan_side_brush" };
   const S2 = {
     "sensor.washing_machine_plug_power": pw(1.1, "Washing machine plug Power"), "switch.washing_machine_plug": st("on"),
     "sensor.dishwasher_plug_power": pw(1840, "Dishwasher plug Power"), "switch.dishwasher_plug": st("on"),
@@ -247,7 +253,15 @@ const APPL_DEMO = String.raw`
     "vacuum.robbie": st("error", { friendly_name: "Robbie" }),
     "sensor.robbie_error": st("312", { friendly_name: "Robbie Error", description: "Stuck on an obstacle" }),
     "sensor.robbie_battery": st("62", { device_class: "battery", unit_of_measurement: "%", friendly_name: "Robbie Battery" }),
-    "sensor.robbie_filter_lifespan": st("5", { unit_of_measurement: "%", friendly_name: "Robbie Filter lifespan" }) };
+    "sensor.robbie_filter_lifespan": st("5", { unit_of_measurement: "%", friendly_name: "Robbie Filter lifespan" }),
+    "sensor.robbie_main_brush_lifespan": st("64", { unit_of_measurement: "%", friendly_name: "Robbie Main brush lifespan" }),
+    "sensor.robbie_side_brush_lifespan": st("38", { unit_of_measurement: "%", friendly_name: "Robbie Side brush lifespan" }),
+    "sensor.washer_cycles_since_maintenance": st("46", { friendly_name: "Washer cycles since drum clean" }),
+    "sensor.dehumidifier_plug_power": pw(214, "Dehumidifier plug Power"), "switch.dehumidifier_plug": st("on"),
+    "sensor.dehumidifier_tank": st("62", { unit_of_measurement: "%", friendly_name: "Dehumidifier Tank" }),
+    "sensor.dehumidifier_humidity": st("58", { device_class: "humidity", unit_of_measurement: "%", friendly_name: "Dehumidifier Humidity" }),
+    "script.robbie_kitchen": st("off", { friendly_name: "Clean the kitchen" }), "script.robbie_living": st("off", { friendly_name: "Clean the living room" }),
+    "button.robbie_empty_dustbin": st("unknown", { friendly_name: "Robbie Empty the bin" }) };
   const DOCS = [];
   const doc = function (id, t, title, message, extra) { DOCS.push({ id: id, created: iso(t), message: message, priority: "medium", outcome: "success",
     condition_variables: { notification_title: title }, extra_data: extra, deliveries: { mobile_push: { success: [{}] } } }); };
@@ -266,15 +280,17 @@ const APPL_DEMO = String.raw`
   doc("y3", NOW - 27 * H, "Dryer", "Dryer is finished", { mobile_push_notification_tag: tag("01DEMODRY", true), mobile_push_clear_notification: true });
   DOCS.sort(function (a, b) { return b.created.localeCompare(a.created); });
   // cycles of each plug: [start, minutes]; the washing machine has a 22 h one, left on by mistake
-  const CYC = { "sensor.washing_machine_plug_power": [], "sensor.dishwasher_plug_power": [], "sensor.dryer_plug_power": [] };
+  const CYC = { "sensor.washing_machine_plug_power": [], "sensor.dishwasher_plug_power": [], "sensor.dryer_plug_power": [], "sensor.dehumidifier_plug_power": [] };
   for (let d = 16; d >= 1; d--) {
     if (d !== 8 && d !== 7) CYC["sensor.washing_machine_plug_power"].push([NOW - d * D - 3 * H, d % 2 ? 58 : 142]);
     if (d % 3 === 0) CYC["sensor.dishwasher_plug_power"].push([NOW - d * D - 5 * H, 118 + d]);
     if (d % 5 === 0) CYC["sensor.dryer_plug_power"].push([NOW - d * D - 2 * H, 95]);
+    if (d % 2 === 0) CYC["sensor.dehumidifier_plug_power"].push([NOW - d * D - 9 * H, 300]);
   }
   CYC["sensor.washing_machine_plug_power"].push([NOW - 8 * D + 2 * H, 22 * 60 + 12], [NOW - 170 * MIN, 75]);
   CYC["sensor.dishwasher_plug_power"].push([NOW - 52 * MIN, 60]);
-  const W = { "sensor.washing_machine_plug_power": 620, "sensor.dishwasher_plug_power": 780, "sensor.dryer_plug_power": 1500 };
+  CYC["sensor.dehumidifier_plug_power"].push([NOW - 95 * MIN, 120]);
+  const W = { "sensor.washing_machine_plug_power": 620, "sensor.dishwasher_plug_power": 780, "sensor.dryer_plug_power": 1500, "sensor.dehumidifier_plug_power": 210 };
   const rows = function (id, a, b, step) {
     const out = [];
     for (let t = Math.ceil(a / step) * step; t < Math.min(b, NOW - 5 * MIN); t += step) {
@@ -319,6 +335,18 @@ const CONTROL = { presence_entity: "person.alex", dnd_entity: "input_boolean.not
   groups: [{ name: "House modes", entities: ["input_boolean.bedtime", "input_boolean.guests", "input_boolean.babysitter", "input_boolean.holiday"] }] };
 const OVERVIEW = { sent_today_entity: "sensor.supernotify_sent_today", quiet_entity: "input_boolean.notifier_dnd" };
 const ARCH = { source: "sensor", entity: "sensor.supernotify_archive" };
+// 0.2.19: the appliances card as set up in the docs - a device added by hand, maintenance, a robot's buttons
+const APPL = { price_per_kwh: 0.3,
+  appliances: {
+    "Washing machine": { maintenance: [{ name: "Drum clean", count: "sensor.washer_cycles_since_maintenance", every: 50 }] },
+    Robbie: { actions: [
+      { entity: "script.robbie_kitchen", name: "Kitchen", group: "Rooms" },
+      { entity: "script.robbie_living", name: "Living room", group: "Rooms" },
+      { name: "Pause", group: "Robot", when: ["running"], tap_action: { action: "perform-action", perform_action: "vacuum.pause", target: { entity_id: "vacuum.robbie" } } },
+      { entity: "button.robbie_empty_dustbin", name: "Empty the bin", group: "Robot", confirmation: "double" },
+      { name: "Back to the dock", group: "Robot", tap_action: { action: "perform-action", perform_action: "vacuum.return_to_base", target: { entity_id: "vacuum.robbie" } } }] } },
+  devices: [{ name: "Dehumidifier", type: "dehumidifier", power_entity: "sensor.dehumidifier_plug_power", switch_entity: "switch.dehumidifier_plug",
+    threshold: 20, info: [{ entity: "sensor.dehumidifier_tank", name: "Tank" }, "sensor.dehumidifier_humidity"] }] };
 // name -> [css width, cards [[tag, config], ...], columns, dark, before(page)]
 const SHOTS = {
   control: [460, [["control", CONTROL]]],
@@ -340,10 +368,14 @@ const SHOTS = {
   hero: [920, [["control", CONTROL], ["overview", OVERVIEW], ["composer", {}]], 2, false, "composer"],
   dark: [1200, [["control", CONTROL], ["overview", OVERVIEW], ["deliveries", {}]], 3, true],
   // 0.91.0: the appliances card, its details panel as a dialog and as a phone's bottom sheet
-  appliances: [720, [["appliances", { price_per_kwh: 0.3 }]]],
-  appliances_phone: [390, [["appliances", { price_per_kwh: 0.3 }]]],
-  appliances_panel: [960, [["appliances", { price_per_kwh: 0.3 }]], 1, false, "appl_panel"],
-  appliances_panel_phone: [390, [["appliances", { price_per_kwh: 0.3 }]], 1, false, "appl_panel"],
+  // (0.2.19: the Overview tab, the full-screen chart and the robot's panel too)
+  appliances: [720, [["appliances", APPL]]],
+  appliances_phone: [390, [["appliances", APPL]]],
+  appliances_overview: [960, [["appliances", APPL]], 1, false, "appl_overview"],
+  appliances_panel: [960, [["appliances", APPL]], 1, false, "appl_panel"],
+  appliances_panel_phone: [390, [["appliances", APPL]], 1, false, "appl_panel"],
+  appliances_chart: [960, [["appliances", APPL]], 1, false, "appl_chart"],
+  appliances_robot: [960, [["appliances", APPL]], 1, false, "appl_robot"],
 };
 
 const stub = `const P=${JSON.stringify(icons)};customElements.define("ha-icon",class extends HTMLElement{static get observedAttributes(){return["icon"]}connectedCallback(){this.r()}attributeChangedCallback(){this.r()}r(){const d=P[this.getAttribute("icon")]||"";this.style.display="inline-flex";this.style.verticalAlign=this.style.verticalAlign||"middle";const z="var(--mdc-icon-size,24px)";this.innerHTML='<svg viewBox="0 0 24 24" style="width:'+z+';height:'+z+';fill:currentColor"><path d="'+d+'"/></svg>'}});customElements.define("ha-card",class extends HTMLElement{connectedCallback(){this.style.display="block";this.style.borderRadius="12px";this.style.border="1px solid var(--line,#e3e8ee)";this.style.overflow="hidden"}});`;
@@ -351,7 +383,8 @@ const stub = `const P=${JSON.stringify(icons)};customElements.define("ha-icon",c
 const browser = await chromium.launch(process.env.SN_CHROMIUM ? { executablePath: process.env.SN_CHROMIUM } : {}); // 0.85.0: SN_CHROMIUM = a local Chromium
 for (const [name, [width, cards, cols = 1, dark = false, before]] of Object.entries(SHOTS)) {
   if (only.size && !only.has(name)) continue;
-  const page = await browser.newPage({ viewport: { width: width + 32, height: width < 500 && before === "appl_panel" ? 844 : 900 }, deviceScaleFactor: 2 });
+  const appl = /^appl_/.test(before || "");
+  const page = await browser.newPage({ viewport: { width: width + 32, height: width < 500 && appl ? 844 : 900 }, deviceScaleFactor: 2 });
   const errs = []; page.on("pageerror", (e) => errs.push(String(e)));
   const bg = dark ? "#111418" : "#eef1f5";
   await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -376,13 +409,25 @@ for (const [name, [width, cards, cols = 1, dark = false, before]] of Object.entr
     await page.evaluate((dark) => { const c = document.querySelector("supernotify-appliances-card"); c.hass = window.__mkApplHass(dark); }, dark);
     await page.waitForTimeout(800);
   }
-  if (before === "appl_panel") {
-    await page.evaluate(() => {
+  if (appl) {
+    await page.evaluate((before) => {
       const sr = document.querySelector("supernotify-appliances-card").shadowRoot;
-      const a = [...sr.querySelectorAll(".ap")].find((n) => /Washing/.test(n.textContent));
-      a.querySelector(".lnk").click();
-    });
+      const a = [...sr.querySelectorAll(".ap")].find((n) => (before === "appl_robot" ? /Robbie/ : /Washing/).test(n.textContent));
+      // the drawing opens the Overview tab, the link the history tab
+      (before === "appl_overview" || before === "appl_robot" ? a.querySelector("[data-open]") : a.querySelector(".lnk")).click();
+    }, before);
     await page.waitForTimeout(900);
+  }
+  if (before === "appl_robot") {
+    // the consumables tab, the last one
+    await page.evaluate(() => { const t = [...document.querySelector("supernotify-appliances-card").shadowRoot.querySelectorAll("[data-ptab]")]; t[t.length - 1].click(); });
+    await page.waitForTimeout(400);
+  }
+  if (before === "appl_chart") {
+    await page.evaluate(() => { document.querySelector("supernotify-appliances-card").shadowRoot.querySelector("[data-full]").click(); });
+    await page.waitForTimeout(500);
+    await page.evaluate(() => { const b = [...document.querySelector("supernotify-appliances-card").shadowRoot.querySelectorAll("[data-bar]")]; if (b.length) b[b.length - 3].click(); });
+    await page.waitForTimeout(400);
   }
   if (before === "composer") {
     await page.evaluate(() => {
@@ -440,7 +485,7 @@ for (const [name, [width, cards, cols = 1, dark = false, before]] of Object.entr
   }
   await page.waitForTimeout(400);
   // the details panel is fixed over the page: the whole viewport, not the card's box
-  if (before === "appl_panel") await page.screenshot({ path: path.join(OUT, name + ".png") });
+  if (appl) await page.screenshot({ path: path.join(OUT, name + ".png") });
   else await page.locator("#root").screenshot({ path: path.join(OUT, name + ".png") });
   console.log((errs.length ? "ERR " : "ok  ") + name + (errs.length ? " " + errs[0] : ""));
   await page.close();

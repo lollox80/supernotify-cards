@@ -67,6 +67,8 @@ device says - the power now and the plug (with **Switch off the plug**), a robot
 consumables, a printer's progress, layer and temperatures; the buttons that make sense now
 (**Emptied**, **Remind me later**, **Resume cleaning**) and a link to the device in Home Assistant.
 
+<img src="../images/appliances_overview.png" alt="details panel, Overview tab" width="720">
+
 The second tab - **Energy and cycles**, **Cleanings** for a robot, **Prints** for a printer:
 
 <img src="../images/appliances_panel.png" alt="details panel" width="720">
@@ -79,6 +81,9 @@ The second tab - **Energy and cycles**, **Cleanings** for a robot, **Prints** fo
 - the day of each cycle under its bar, a dashed line for the average; a tap on a bar says that cycle
   (start, duration, kWh, cost), a second tap hides it;
 - the averages of short and long cycles, the last 7 days and the latest cycles in a table;
+
+  <img src="../images/appliances_chart.png" alt="full-screen chart" width="720">
+
 - **Appliance notifications** opens the archive card filtered on this appliance (on this page or
   on the Archive view), **Settings** the appliance's page in Appliance Autonotify.
 
@@ -96,7 +101,10 @@ config entry, so:
 - **running, finished, emptied** is what Autonotify itself sent through SuperNotify, read back from
   the archive: the start, the end, each reminder and the Finished button all carry its tag
   `appliance_<entry id>`. The thresholds are Autonotify's own, so the card agrees with the
-  notifications. Without SuperNotify's archive the power alone decides;
+  notifications. A notification is recognised by the appliance's name in its title, also with an
+  emoji or more words around it ("🧺 Lavatrice", "🤖 Bruno ha finito"), else by its tag when the
+  title is one of your own with no name in it ("🧺 Bucato pronto"). Without SuperNotify's archive the
+  power alone decides;
 - **cycles and energy** come from the recorder's statistics of the power sensor - 5-minute ones for
   the last 10 days, hourly ones before that (kept in this browser and never read again). Cycles
   older than 10 days are therefore counted by the hour. The power sensor needs
@@ -183,7 +191,8 @@ devices:
 Every row of the overview that comes from an entity - `info:`, a robot's consumables, a printer's
 temperatures - opens Home Assistant's own dialog of that entity when tapped: there you change a time, a
 level, a number or a switch, as anywhere in Home Assistant. An `info:` row can have a name of its own:
-`- { entity: number.bruno_water_flow_level, name: Water }`.
+`- { entity: number.bruno_water_flow_level, name: Water }`. A row whose value says nothing - an oven's
+phase "None" at rest, unknown, unavailable - is not shown.
 Two entities can share a row - `- { name: Mornings, entities: [input_datetime.from, input_datetime.to] }` shows
 "06:30 – 08:00", each tappable. What can be changed (times, numbers, selects, switches, automations) folds
 under **⚙️ Settings** below the readings, so the card stays short.
@@ -240,14 +249,15 @@ appliances:
 ```
 
 The overview looks the same in every state: the drawing, the one thing that matters now beside it, the
-cycle in four boxes, then the rows. Beside the drawing: the end and its bar while it runs, how long it waits
+cycle in four boxes, then the rows, two side by side (one under each other below 360 px), each with
+its name and value on one line. Beside the drawing: the end and its bar while it runs, how long it waits
 to be emptied ("To empty for 2 h", with when it finished), the error when it needs help, the average cycle
 when idle. The band on top says the state. The boxes are the cycle under way (start, so far) or the last
 one: start (→ end), duration, energy, cost. Every row has an icon.
 
 Consumables (a robot's brushes and filters, as a grid of bars with short names) and maintenance have a tab
-of their own, **Consumables** (or **Maintenance** when there are only maintenance counters); the overview keeps
-one row saying what is worn or due, and a tap on it opens the tab. What can be changed (times, numbers,
+of their own, **Consumables** (or **Maintenance** when there are only maintenance counters); something worn
+or due puts a dot on that tab (orange near, red due; its tooltip says what). What can be changed (times, numbers,
 switches, automations) is in the **Settings** tab. Switching the plug off asks for a second tap.
 A band on top of the card and of the panel takes the colour of the state: blue running, orange to empty,
 red needs help.
@@ -273,7 +283,7 @@ appliances:
         warn_before: 5                                  # near from 5 cycles before (default: a tenth)
 ```
 
-The overview shows each one as "46 of 50 · in 4 cycles" with a bar. When it is near or due, the card and
+The **Maintenance** tab shows each one as "46 of 50 · in 4 cycles" with a bar. When it is near or due, the card and
 the row of the appliance say so ("🔧 Drum clean · in 4 cycles", "due now"). **Done** asks first, since the
 count starts again, then runs `done:`: a counter is reset, a script runs, a button is pressed, or any
 `tap_action` with `confirmation`, as in `actions:`. Without `done:` there is no Done button.
@@ -313,6 +323,10 @@ Year with the cleanings, the time and the m² from the robot's own totals (their
 `total_stats_cleanings`, `total_stats_time`, `total_stats_area` on Ecovacs), each cleaning this month
 as a bar (its duration), the average, and the latest cleanings with their area. The single cleanings
 come from the vacuum's state history (cleaning, returning, paused), as far back as the recorder keeps it.
+A trip back to the dock in the middle - to wash the mop - does not split a cleaning: runs less than 45
+minutes apart are one cleaning, unless the area of the one under way went back to zero between them.
+
+<img src="../images/appliances_robot.png" alt="a robot's panel: Commands and the Consumables tab" width="720">
 
 An appliance with a state of its own (a 3D printer, a Home Connect appliance) has the same panel with
 its prints or cycles, from the history of that state (Bambu Lab `print_status`, Home Connect
