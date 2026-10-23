@@ -1,5 +1,6 @@
 # CHANGELOG
 # 2026-10-03 - first .gitignore: npm dependencies for the jsdom tests, editor/OS leftovers.
+# 2026-10-23 - Python bytecode of the tools/ scripts.
 
 node_modules/
 package-lock.json
@@ -9,3 +10,5 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+__pycache__/
+*.pyc

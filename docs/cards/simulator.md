@@ -23,4 +23,6 @@ described above.
 ```yaml
 type: custom:supernotify-simulator-card
 # dry_run: false   # optional: the estimate instead of SuperNotify's dry run
+# icons:          # optional: the icon of a scenario of your own on its chip
+#   dnd_globale: "🔕"
 ```

@@ -179,7 +179,8 @@ st.hass = mk({ states: base, daily });
 await wait(150);
 const D = st._data || {};
 const archCalls = calls.filter((c) => c[1] === "enquire_archive");
-ok(D.daily && archCalls.length === 1 && archCalls[0][2].verbosity === "daily", `stats: una chiamata daily (${archCalls.length})`);
+// 1.0.0: `_data.daily` (read by nothing in the card) is gone: one call with verbosity daily is the proof
+ok(D.archive && archCalls.length === 1 && archCalls[0][2].verbosity === "daily", `stats: una chiamata daily (${archCalls.length})`);
 ok(D.perHour[9] === 16 && D.perHour[21] === 24, `stats: ore (${D.perHour[9]}, ${D.perHour[21]})`);
 ok(D.perDay.slice(-4).every((x) => x.n === 9), `stats: giorni senza doppioni (${D.perDay.slice(-4).map((x) => x.n)})`);
 ok(D.prioCount.medium === 28 && D.prioCount.low === 12, "stats: priorità");

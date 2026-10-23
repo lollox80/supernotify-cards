@@ -119,7 +119,8 @@ const w = mount("supernotify-why-card", { show_version: true });
 await wait(150);
 ok(w instanceof customElements.get("supernotify-archive-card"), "why-card = archive card");
 ok(w.shadowRoot.querySelector(".split #list") && w.shadowRoot.querySelector("#det"), "alias: stessa card");
-ok(/supernotify-why-card v0\.17\.0/.test(w.shadowRoot.textContent), "alias: versione why nel piè");
+// 1.0.0: the alias shows the archive card's version (the separate why entry is gone)
+ok(/supernotify-archive-card v\d+\.\d+\.\d+/.test(w.shadowRoot.textContent), "alias: versione dell'archivio nel piè");
 ok(customElements.get("supernotify-why-card").getConfigForm().schema.some((x) => x.name === "expand"), "alias: editor con le opzioni del perché");
 ok(!window.customCards.some((c) => c.type === "supernotify-why-card"), "nel selettore delle card solo l'archivio");
 

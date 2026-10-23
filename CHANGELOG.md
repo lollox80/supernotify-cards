@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [1.0.0] - 2026-10-23
 
 ### Fixed
-- **deliveries** (0.33.2), **transports** (0.27.2), **recipients** (0.31.1), **scenarios** (0.32.1): a switch
+- **deliveries** (0.33.2), **transports** (0.27.2), **recipients** (0.31.1), **scenarios** (0.33.0): a switch
   that Home Assistant refuses (a user who is not an administrator gets "401 Unauthorized") goes back where it
   was and says why when you hover it, instead of staying moved as if it had worked.
 - **control** (0.39.2): the pause panel and the "held back during the pause" list are no longer redrawn on every
@@ -28,11 +28,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   notification); only an answer without days, or `daily` refused, does.
 - **stats** (0.33.2): the totals come from the archive whenever SuperNotify's `enquire_archive` action takes
   `verbosity`, also without the `update.supernotify_update` entity (the slow history path was used).
-- **tools** (0.2.3), **simulator** (0.17.1), **composer** (0.25.1): the actions, the simulator's and the
+- **tools** (0.2.3), **simulator** (0.18.0), **composer** (0.25.1): the actions, the simulator's and the
   composer's dry run give up after 30 s instead of waiting forever.
 - Links to a card on another view: a failed read of the dashboard configuration is tried again after a minute
   instead of never; cards removed from the dashboard are no longer kept in memory; technical names are fully
   escaped.
+
+### Changed
+- **Lighter bundle**: about 11% smaller (1,135,135 → 1,008,538 bytes; gzip -9 321,747 → 284,632) with no change
+  in behaviour: code that nothing called any more, translations that nothing read, CSS for markup that is gone and a
+  second copy of the statistics strings in every language are removed (**overview** 0.40.1: only this cleanup).
+- The release history is now only in this file: the changelog at the top of `supernotify-control-card.js` (and the
+  one inside the appliances card) is gone.
+- **archive** (0.45.2): `supernotify-why-card`, the old name kept as an alias, now shows the archive card's version
+  in its footer and the archive card's visual editor.
+- **scenarios** (0.33.0), **simulator** (0.18.0): the built-in icons no longer include a few scenario names of one
+  particular installation (`notifiche_vocali_solo_ufficio`, `notifiche_vocali_off`, `cn_dnd_orario`, `dnd_globale`,
+  `presenza_ingresso`). New option `icons` sets the icon of any scenario: `icons: {my_scenario: "🔔"}`; without it
+  a scenario that is not in the built-in list shows 🎬.
 
 ## [0.92.0] - 2026-10-21
 
@@ -1232,6 +1245,13 @@ Aligned with SuperNotify 2.11 / 2.11.1.
 - scenarios-card: live on/off switch on each row (SuperNotify ≥ 2.7.0).
 
 Older SuperNotify versions (binary_sensor only) keep working through fallbacks.
+
+## [0.23.1] - 2026-09-15
+
+### Fixed
+- **deliveries** (0.17.0): SuperNotify 2.5.0 renamed the delivery attribute `selection` to `inclusion` and made it a
+  list, so the channel tag showed "implicit" for every delivery. The card reads `inclusion`, with `selection` as a
+  fallback, and labels each entry of the list.
 
 ## [0.23.0] - 2026-09-11
 

@@ -19,6 +19,8 @@ groups:
   - name: 🕐 Time bands
     scenarios: [early_morning, morning, afternoon, evening, night, late_night]
 # scenarios not listed fall into an "Other" group
+icons:            # optional: the icon of a scenario of your own (an emoji)
+  dnd_globale: "🔕"
 ```
 
 **Why it applies, and what it changes** (0.66.0): tap a scenario. The detail lists its conditions, each
