@@ -1,17 +1,8 @@
 // v0.62.0: card Strumenti, destinatari con prova e dispositivi, compositore con opzioni avanzate.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, wait, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(SRC)();
-
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+boot();
+load();
 
 const ws = [], svc = [];
 const hass = {
@@ -64,7 +55,8 @@ ok(ro && ro.service_data.kind === "delivery" && /canali: tts/.test($(tc, "r_rese
 tc.shadowRoot.querySelector('.q[data-q="enquire_occupancy"]').click(); await wait(10);
 ok(/Chi è in casa/.test($(tc, "out").textContent) && /person\.lorenzo/.test($(tc, "out").textContent), "interrogazione mostrata come albero");
 tc.shadowRoot.querySelector('.q[data-q="enquire_configuration"]').click(); await wait(10);
-ok(/#241/.test($(tc, "out").textContent), "configurazione: errore spiegato (bug #241)");
+// 1.0.0 (phase 5): bug #241 is fixed in SuperNotify 2.13 (enquire_configuration is JSON-safe): the error is shown as is
+ok(/✖/.test($(tc, "out").textContent) && !/#241/.test($(tc, "out").textContent), "configurazione: errore mostrato, senza la nota sul bug #241 della 2.12.0");
 
 // ── (3) recipients ──
 const rc = mount("supernotify-recipients-card");

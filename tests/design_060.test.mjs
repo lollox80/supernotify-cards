@@ -1,17 +1,8 @@
 // v0.60.0: dati veri - scenari attivi da SuperNotify, titolo, fallimenti reali, toggle, niente doppioni.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, wait, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(SRC)();
-
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+boot();
+load();
 
 const today = new Date(); today.setHours(9, 0, 0, 0);
 const yest = new Date(today.getTime() - 86400000);
@@ -29,9 +20,10 @@ const hass = {
   language: "it", themes: { darkMode: false }, entities: {}, user: { is_admin: true },
   services: { supernotify: { enquire_archive: {}, enquire_active_scenarios: {} } },
   states: {
-    // stale binary_sensors (as on the real install): afternoon still on, late_night off
-    "binary_sensor.supernotify_scenario_afternoon": st("on", { name: "afternoon" }),
-    "binary_sensor.supernotify_scenario_late_night": st("off", { name: "late_night" }),
+    // 1.0.0 (phase 5): SuperNotify 2.13 without `scenario_control: {refresh: true}` - the sensors are
+    // "unknown" (the stale on/off of 2.12 cannot happen any more), so the polled answer decides
+    "binary_sensor.supernotify_scenario_afternoon": st("unknown", { name: "afternoon" }),
+    "binary_sensor.supernotify_scenario_late_night": st("unknown", { name: "late_night" }),
     "switch.supernotify_scenario_afternoon": st("on", { name: "afternoon" }),
     "switch.supernotify_scenario_late_night": st("on", { name: "late_night" }),
     "sensor.supernotify_failures": st("0"),
@@ -45,7 +37,16 @@ const hass = {
   callWS: async (m) => {
     if (m.service === "enquire_active_scenarios") return { response: { scenarios: ["late_night", "multi_home"] } };
     if (m.service === "enquire_last_notification") return { response: LAST };
-    if (m.service === "enquire_archive") return { response: { notifications: DOCS, count: 3 } };
+    if (m.service === "enquire_archive") {
+      // 1.0.0 (phase 5): the overview's numbers come from verbosity daily (SuperNotify 2.13)
+      if ((m.service_data || {}).verbosity === "daily") {
+        const key = (d) => d.toLocaleDateString("sv");
+        return { response: { days: [
+          { date: key(yest), count: 1, deliveries: { mobile_push: { failed: 5 } } },
+          { date: key(today), count: 2, outcome: { success: 1 }, deliveries: { mobile_push: { failed: 3, success: 1 } } }] } };
+      }
+      return { response: { notifications: DOCS, count: 3 } };
+    }
     return { response: {} };
   },
 };
@@ -63,8 +64,8 @@ await wait(80); ov.hass = { ...hass }; await wait(40);
 const last = ov.shadowRoot.getElementById("last");
 ok(last && last.querySelector(".lt") && last.querySelector(".lt").textContent === "Proxmox", "overview: titolo da condition_variables");
 const stats = ov.shadowRoot.getElementById("stats").textContent.replace(/\s+/g, " ");
-ok(/FALLIMENTI|Fallimenti/i.test(stats) && /Fallimenti\s*3/i.test(stats) && /invii falliti oggi/.test(stats), `overview: 3 invii falliti oggi, non lo 0 del sensore (${stats.slice(0, 160)})`);
-ok(/1\/2/.test(stats), `overview: canali 1/2, niente doppione switch+binary_sensor (${stats.match(/\d+\/\d+/)})`);
+ok(/3 canali falliti/.test(stats), `overview: 3 invii falliti oggi, non lo 0 del sensore (${stats.slice(0, 160)})`);
+ok(/1 \/ 2 accesi/.test(stats), `overview: canali 1/2, niente doppione switch+binary_sensor (${stats.match(/\d+ \/ \d+/)})`);
 
 // A2 control
 const cc = document.createElement("supernotify-control-card");

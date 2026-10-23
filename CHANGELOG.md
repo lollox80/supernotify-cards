@@ -3,6 +3,126 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.0] - 2026-10-23
+
+> **Breaking: requires SuperNotify 2.13+ and Home Assistant 2026.2+.** The code that kept the cards
+> working on older versions is removed. On an older SuperNotify or Home Assistant, stay on 0.92.0 until
+> you update. Options of the removed paths are ignored (a dashboard that still has them keeps loading).
+
+### Removed
+- **archive** (0.45.2), **why**, **recipients** (0.31.1): the bridge of before SuperNotify 2.10 - the
+  `sensor.supernotify_archivio` command_line sensor, `shell_command.sn_archive_detail` and
+  `tools/sn_archive_index.py`. The options `source: sensor`, `entity`, `service` (archive / why) and
+  `archive_entity` (recipients) are ignored: everything comes from `supernotify.enquire_archive`.
+  **If you used them:** remove the sensor, its refresh automation, the shell command and the script from
+  your configuration.
+- **archive** (0.45.2): the list of full documents used when SuperNotify had no `verbosity: summary`
+  (before 2.12.1); the list is always the light one.
+- **stats** (0.33.2): the statistics from the "last notification" helpers and the day-by-day reading of
+  the archive. The options `source`, `daily`, `time_entity`, `priority_entity`, `channels_entity`,
+  `period_entity`, `sent_today_entity` and `count_entity` are ignored: the figures always come from
+  `enquire_archive` `verbosity: daily`, in one call. **If you used them:** remove the
+  `input_datetime.supernotify_last_time` / `input_text.supernotify_last_*` helpers, the two automations
+  that wrote them and the `supernotify_inviate_oggi` utility meter. The rows the card kept in the browser
+  for the day-by-day reading (`supernotify-stats-archive`, up to a few hundred KB) are deleted on first load.
+- **overview** (0.40.1): the "three / five numbers" of before SuperNotify 2.12.1 (sent since startup or
+  today, failures from `sensor.supernotify_failures`, ...). `stats: full` and `sent_today_entity` are
+  ignored: the four numbers from the archive (today, delivered, channels, silence) always.
+- **composer** (0.25.2): the version checks on `update.supernotify_update` - "Try without sending" shows
+  whenever SuperNotify is running (`dry_run: false` still hides it), a notification without text is no
+  longer refused, and the dry run checks duplicates by default (`dry_run_dupe_check: false` skips it).
+  `update_entity` is no longer used by this card.
+- **simulator** (0.18.0), **deliveries** (0.33.2), **scenarios** (0.33.1): the version checks for the dry
+  run; `dry_run: false` still keeps the simulator's own estimate.
+- **deliveries**, **transports**, **recipients**, **scenarios**: the `binary_sensor.supernotify_*` of
+  before the switches (SuperNotify 2.7 / PR #207): rows, names and toggles come from the
+  `switch.supernotify_*` entities only. A manual scenario is recognised by its entity registry entry, no
+  longer by its translated name.
+- **control** (0.39.2), tile features: the pause fallbacks of before `supernotify.snooze` - the push
+  button event for admins and the voice commands for everyone else; `snooze_via: event | voice` and
+  `snooze_action` still choose them on purpose.
+- **tools** (0.2.3): the note about SuperNotify 2.12.0 failing to return its configuration (#241, fixed in 2.13).
+- Dashboard strategy: the Home Assistant version check for tabs with icon and name (2026.2 has it).
+- The bundle is about 6% smaller again (1,008,867 → 952,625 bytes; gzip -9 284,758 → 267,934).
+
+### Fixed
+- **deliveries** (0.33.2), **transports** (0.27.2), **recipients** (0.31.1), **scenarios** (0.33.1): a switch
+  that Home Assistant refuses (a user who is not an administrator gets "401 Unauthorized") goes back where it
+  was and says why when you hover it, instead of staying moved as if it had worked.
+- **control** (0.39.2): the pause panel and the "held back during the pause" list are no longer redrawn on every
+  notification sent - an open channel / priority menu closed under your finger and the open list folded back.
+- **control** (0.39.2): with `status: false` the card no longer asks SuperNotify for the active scenarios and
+  who is home, which it did not show anyway; at start the last notification is read once (it was read twice)
+  and who is home is read right away instead of after the first minute.
+- **bands** (0.21.2): a volume slider let go on the value it started from no longer freezes the card until the
+  next real change.
+- **archive** (0.45.2): a detail that failed to load (a timeout, a lost connection) is asked again when you open
+  it, instead of showing the error until the page is reloaded; at most 60 details are kept in memory.
+- **archive** (0.45.2): a channel skipped as a duplicate is routine in the list as it already was in the detail:
+  a delivered notification with one channel skipped as a duplicate is no longer flagged "to look at" in the list
+  while its detail shows no problem. The list and the detail now share one set of routine skip reasons.
+- **appliances** (0.2.23): the statistics kept in this browser are no longer lost for all appliances but one
+  when they load together (each wrote back its own copy); values are stored with one decimal.
+- **stats** (0.33.2), **automations** (0.21.5): a timeout or a lost connection on the first read of the daily
+  totals no longer switches them off until the page is reloaded (the card then read notification by
+  notification); only an answer without days, or `daily` refused, does.
+- **stats** (0.33.2): the totals come from the archive whenever SuperNotify's `enquire_archive` action takes
+  `verbosity`, also without the `update.supernotify_update` entity (the slow history path was used).
+- **tools** (0.2.3), **simulator** (0.18.0), **composer** (0.25.2): the actions, the simulator's and the
+  composer's dry run give up after 30 s instead of waiting forever.
+- Links to a card on another view: a failed read of the dashboard configuration is tried again after a minute
+  instead of never; cards removed from the dashboard are no longer kept in memory; technical names are fully
+  escaped.
+
+### Performance
+- **appliances** (0.2.23): a change of a plug's power rewrites the power figures only, in the list and in the open
+  panel, instead of rebuilding them (drawings keep moving): 10.2 → 2.5 ms per update with the list, 20.4 → 3.7 ms
+  with a panel open (bench, 3 appliances). The statistics of the last 10 days are read again from an hour before
+  the last reading (17,352 → 39 rows for 3 plugs), the 30 days of a robot's or device's history the same way, and
+  two reads of the same plug at once become one. The notifications of the appliances are read again when
+  SuperNotify sends one, not every 30 s; the documents read for them no longer rebuild the archive card's list.
+  Two appliances cards with different options keep a list each. The minute tick draws nothing while the card is
+  off screen, and no timer redraws a card that left the page.
+- **archive** (0.45.2): a read of the archive that brings nothing new no longer redraws the list, and readings that
+  end together redraw it once: per new notification 175 → 55 ms, 2 → 1 list redraws. The status of a row is worked
+  out once per drawing (it was up to six times), the time formats are made once, and the list has one listener for
+  all its rows. First drawing of 150 rows 93 → 44 ms.
+- **scenarios** (0.33.1): no poll of its own - the active scenarios are shared by every card (one interval less
+  per scenarios card on the page); `poll_seconds` is accepted and ignored. The rows come from the scenario
+  entities alone, not a scan of every entity of the house.
+- **deliveries** (0.33.2), **transports** (0.27.2), **recipients** (0.31.1), **overview** (0.40.1): a list that did
+  not change is not rebuilt, and one listener serves all the rows and switches; the scenario effects, the "fallback
+  for" tags and the channels per transport are worked out once per drawing. An update that concerns them:
+  deliveries 3.2 → 0.9 ms, transports 2.8 → 0.8 ms, overview 5.7 → 2.9 ms.
+- **overview**, **simulator** (0.18.0), **stats**, **archive**: the daily totals are read once a minute at most while
+  nothing new is sent (overview, archive priority filters and stats card asked each on their own); the overview
+  no longer asks for the active scenarios it already has; the simulator reads its data once at start and, in
+  dry-run mode, not the default channels it does not use.
+- **composer** (0.25.2), **control** (0.39.2), tile features, status badge: lists worked out once per drawing;
+  the pause feature no longer works out the whole health for its text; a feature given hass, context and entity
+  together draws once.
+- Shared: the rows of the switches are no longer copied for every card, the people and the scenario sensors are
+  listed once per update for the page, answers are copied with `structuredClone`. A page with every card mounts in
+  279 ms instead of 368 ms, the card picker in 210 ms instead of 274 ms (bench, 3,045 entities). `npm run bench`
+  runs the benchmark, now with an archive and an appliances scenario.
+
+### Changed
+- **Lighter bundle**: about 11% smaller (1,135,135 → 1,008,538 bytes; gzip -9 321,747 → 284,632) with no change
+  in behaviour: code that nothing called any more, translations that nothing read, CSS for markup that is gone and a
+  second copy of the statistics strings in every language are removed (**overview** 0.40.1: only this cleanup).
+- The release history is now only in this file: the changelog at the top of `supernotify-control-card.js` (and the
+  one inside the appliances card) is gone.
+- **archive** (0.45.2): `supernotify-why-card`, the old name kept as an alias, now shows the archive card's version
+  in its footer and the archive card's visual editor.
+- **scenarios** (0.33.1), **simulator** (0.18.0): the built-in icons no longer include a few scenario names of one
+  particular installation (`notifiche_vocali_solo_ufficio`, `notifiche_vocali_off`, `cn_dnd_orario`, `dnd_globale`,
+  `presenza_ingresso`). New option `icons` sets the icon of any scenario: `icons: {my_scenario: "🔔"}`; without it
+  a scenario that is not in the built-in list shows 🎬.
+- **simulator** (0.18.0), **composer** (0.25.2), **deliveries** (0.33.2): why a channel would not send (dry run,
+  "Try this channel", the last send of a channel) now uses the same words as the archive's detail, in every language -
+  for example "its transport is off" instead of "transport off", "no action to call" instead of "no action",
+  and, in the languages other than English and Italian, "duplicate of a recent notification" instead of "duplicate".
+
 ## [0.92.0] - 2026-10-21
 
 ### Performance
@@ -1201,6 +1321,13 @@ Aligned with SuperNotify 2.11 / 2.11.1.
 - scenarios-card: live on/off switch on each row (SuperNotify ≥ 2.7.0).
 
 Older SuperNotify versions (binary_sensor only) keep working through fallbacks.
+
+## [0.23.1] - 2026-09-15
+
+### Fixed
+- **deliveries** (0.17.0): SuperNotify 2.5.0 renamed the delivery attribute `selection` to `inclusion` and made it a
+  list, so the channel tag showed "implicit" for every delivery. The card reads `inclusion`, with `selection` as a
+  fallback, and labels each entry of the list.
 
 ## [0.23.0] - 2026-09-11
 

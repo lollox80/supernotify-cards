@@ -1,5 +1,6 @@
 // v0.85.0: archivio e "perché" in UNA card - lista a sinistra, dettaglio a destra;
 // supernotify-why-card resta come alias.
+// 1.0.0 (fase 3): le righe dell'archivio hanno un solo listener sulla lista: .click() invece di .onclick().
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -76,7 +77,7 @@ ok(!camRow.querySelector(".bdg.pr"), "priorità media: niente badge");
 ok(rows[2].querySelector(".ic.none") && rows[2].classList.contains("quiet") && /nessun canale/.test(rows[2].textContent), "nessun canale: grigio, col motivo");
 
 // ── 2. ×N si apre ───────────────────────────────────────────────────────
-camRow.querySelector(".rep").onclick({ stopPropagation() {} });
+camRow.querySelector(".rep").click();
 ok(R.querySelectorAll("#list .it.sub").length === 2, "×3 aperto: le altre due sotto");
 R.querySelector("#grp").onclick();
 ok(R.querySelectorAll("#list .it").length === 5, "Raggruppa spento: cinque righe");
@@ -119,7 +120,8 @@ const w = mount("supernotify-why-card", { show_version: true });
 await wait(150);
 ok(w instanceof customElements.get("supernotify-archive-card"), "why-card = archive card");
 ok(w.shadowRoot.querySelector(".split #list") && w.shadowRoot.querySelector("#det"), "alias: stessa card");
-ok(/supernotify-why-card v0\.17\.0/.test(w.shadowRoot.textContent), "alias: versione why nel piè");
+// 1.0.0: the alias shows the archive card's version (the separate why entry is gone)
+ok(/supernotify-archive-card v\d+\.\d+\.\d+/.test(w.shadowRoot.textContent), "alias: versione dell'archivio nel piè");
 ok(customElements.get("supernotify-why-card").getConfigForm().schema.some((x) => x.name === "expand"), "alias: editor con le opzioni del perché");
 ok(!window.customCards.some((c) => c.type === "supernotify-why-card"), "nel selettore delle card solo l'archivio");
 

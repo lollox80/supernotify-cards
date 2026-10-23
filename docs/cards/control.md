@@ -58,13 +58,13 @@ bands:
 |---|---|---|
 | `presence_entity` | no | `person.*` shown in the status bar |
 | `occupancy` | no | without `presence_entity`, the status bar shows who is home for SuperNotify (`enquire_occupancy`, what its conditions see). `false` hides it |
-| `snooze_via` | no | how pauses are made: `action` (`supernotify.snooze`, `silence` and `unsnooze`, SuperNotify 2.13.0, any user, full panel), `event` (the push buttons event, needs an admin), `voice` (SuperNotify's voice commands, the user's own pauses). Default: `action` when SuperNotify has it, otherwise `event` for admins and `voice` for everyone else |
+| `snooze_via` | no | how pauses are made: `action` (`supernotify.snooze`, `silence` and `unsnooze`, any user, full panel), `event` (the push buttons event, needs an admin), `voice` (SuperNotify's voice commands, the user's own pauses). Default: `action` |
 | `catch_up` | no | `false` hides "while notifications were paused": when no pause is in force, the card with the snooze tile lists what a pause held back since the last OK in this browser (at most 24 h), from SuperNotify's archive. Default `true` |
 | `status` | no | `false` hides the status row (who is home, time band, quiet, active scenarios): for a second control card in the same view. Default `true` |
 | `dnd_entity` | no | `input_boolean` used by the DND tile and status bar |
 | `announce_delivery` | no | SuperNotify delivery used by Announce (default `alexa_announce`) |
 | `snooze_minutes` | no | minutes for the snooze tile (default 30) |
-| `snooze_panel` | no | `true` (default): the snooze tile opens a panel to pause non-critical notifications, everything, one channel or one priority, for everyone or only you, for 15 min to 4 h or until resumed, and lists the pauses in force with Resume. `false`: one tap snoozes as before (`snooze_minutes`, `snooze_action`). Pausing goes through `supernotify.snooze` when SuperNotify has it; before that it fires the same `mobile_app_notification_action` event as the push buttons, which needs an admin user. |
+| `snooze_panel` | no | `true` (default): the snooze tile opens a panel to pause non-critical notifications, everything, one channel or one priority, for everyone or only you, for 15 min to 4 h or until resumed, and lists the pauses in force with Resume. `false`: one tap snoozes as before (`snooze_minutes`, `snooze_action`). Pausing goes through `supernotify.snooze` (any user); with `snooze_via: event` or `snooze_action` it fires the same `mobile_app_notification_action` event as the push buttons, which needs an admin user. |
 | `snooze_announce` | no | `true` says a pause out loud on the announce channel (`announce_delivery`, e.g. Alexa): before pausing, since the pause would stop its own announcement, and after resuming one or all. With a pause for everyone already in force SuperNotify would hold the announcement back, so the card then calls the channel's own action (e.g. `notify.alexa_media`) with its targets and data. Default `false`; a switch in the visual editor |
 | `snooze_action` | no | override the snooze command (default `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_<minutes>`; e.g. use `..._EVERYTHING_...` to pause critical too) |
 | `tiles` | no | list of `dnd`, `snooze`, `announce`, or `{toggle, name, icon}` |
@@ -79,17 +79,13 @@ bands:
 | `tile_columns` | no | force N tile columns (default: as many 150 px tiles as fit, 2 on a phone) |
 | `tile_layout` | no | `stacked` = the tall tiles with the icon on top (before 0.52) |
 
-Active scenarios are read from `binary_sensor.supernotify_scenario_*`. Since
-SuperNotify 2.4.0 these report a live `on`/`off` state (recomputed reactively
-plus a periodic sweep — see `scenario_control` in the SuperNotify config); on
-older versions, or for a scenario configured with `expose_state: false`, they
-stay `unknown` and the counter hides automatically. The overview-card and
-scenarios-card use the same live state for their "active now" count/badge
-when it's available, falling back to their polled `enquire_active_scenarios`
-check (a `poll_seconds` option, default 60) only on older versions.
-From SuperNotify 2.7.0 a scenario also has a `switch.supernotify_scenario_*`
-(enabled or not): a scenario counts as active only when its conditions hold
-**and** its switch is not off.
+Active scenarios are read from `binary_sensor.supernotify_scenario_*`. With
+`scenario_control: {refresh: true}` in the SuperNotify config these report a live `on`/`off`
+state (recomputed reactively plus a periodic sweep); with refresh off, or for a scenario
+configured with `expose_state: false`, they stay `unknown` and the cards ask
+`enquire_active_scenarios` instead (at most every 30 s). A scenario also has a
+`switch.supernotify_scenario_*` (enabled or not): a scenario counts as active only when its
+conditions hold **and** its switch is not off.
 
 The Announce tile calls `notify.supernotify` with
 `data: {delivery_selection: fixed, delivery: {<announce_delivery>: {}}}`.

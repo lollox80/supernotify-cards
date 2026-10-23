@@ -2,7 +2,7 @@
 
 # SuperNotify Cards
 
-[![HACS](https://img.shields.io/badge/HACS-Custom-orange?style=for-the-badge)](https://hacs.xyz/docs/faq/custom_repositories/) [![Release](https://img.shields.io/github/v/release/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/releases/latest) [![Downloads](https://img.shields.io/github/downloads/lollox80/supernotify-cards/total?style=for-the-badge&label=downloads)](https://github.com/lollox80/supernotify-cards/releases) [![SuperNotify](https://img.shields.io/badge/SuperNotify-2.0%2B-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://github.com/rhizomatics/supernotify) [![Tests](https://img.shields.io/github/actions/workflow/status/lollox80/supernotify-cards/lint.yml?branch=main&label=tests&style=for-the-badge)](https://github.com/lollox80/supernotify-cards/actions/workflows/lint.yml) [![HACS validation](https://img.shields.io/github/actions/workflow/status/lollox80/supernotify-cards/hacs.yml?branch=main&label=HACS%20validation&style=for-the-badge)](https://github.com/lollox80/supernotify-cards/actions/workflows/hacs.yml) [![Last commit](https://img.shields.io/github/last-commit/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/commits/main) [![License](https://img.shields.io/github/license/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/blob/main/LICENSE)
+[![HACS](https://img.shields.io/badge/HACS-Custom-orange?style=for-the-badge)](https://hacs.xyz/docs/faq/custom_repositories/) [![Release](https://img.shields.io/github/v/release/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/releases/latest) [![Downloads](https://img.shields.io/github/downloads/lollox80/supernotify-cards/total?style=for-the-badge&label=downloads)](https://github.com/lollox80/supernotify-cards/releases) [![SuperNotify](https://img.shields.io/badge/SuperNotify-2.13%2B-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://github.com/rhizomatics/supernotify) [![Tests](https://img.shields.io/github/actions/workflow/status/lollox80/supernotify-cards/lint.yml?branch=main&label=tests&style=for-the-badge)](https://github.com/lollox80/supernotify-cards/actions/workflows/lint.yml) [![HACS validation](https://img.shields.io/github/actions/workflow/status/lollox80/supernotify-cards/hacs.yml?branch=main&label=HACS%20validation&style=for-the-badge)](https://github.com/lollox80/supernotify-cards/actions/workflows/hacs.yml) [![Last commit](https://img.shields.io/github/last-commit/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/commits/main) [![License](https://img.shields.io/github/license/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/blob/main/LICENSE)
 
 [![Open your Home Assistant instance and open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=lollox80&repository=supernotify-cards&category=plugin)
 
@@ -14,8 +14,9 @@ notification, and see why it went where it went, without touching YAML.
 
 **Who it is for:** you already use SuperNotify and want to run it from the dashboard.
 
-**What you need:** Home Assistant with SuperNotify 2.0 or later; some features need a newer
-SuperNotify ([which ones](https://github.com/lollox80/supernotify-cards/blob/main/docs/configuration.md#which-supernotify-version-each-feature-needs)).
+**What you need:** SuperNotify 2.13 or later, Home Assistant 2026.2 or later. A few features need a
+newer SuperNotify ([which ones](https://github.com/lollox80/supernotify-cards/blob/main/docs/configuration.md#which-supernotify-version-each-feature-needs)).
+Still on an older version? Stay on release 0.92.0 of these cards until you update.
 
 **What's new:** see the [changelog](https://github.com/lollox80/supernotify-cards/blob/main/CHANGELOG.md) (every version, newest first) or the [releases](https://github.com/lollox80/supernotify-cards/releases).
 

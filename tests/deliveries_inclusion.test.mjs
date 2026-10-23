@@ -12,24 +12,25 @@ dom.window.customCards = [];
 new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
 
 // Delivery vere di Lollo (inclusion come la espone l'entità, già risolta)
+// 1.0.0: SuperNotify 2.13 - le delivery sono switch (prima: binary_sensor)
 const DELS = {
-  "binary_sensor.supernotify_delivery_mobile_push": {
+  "switch.supernotify_delivery_mobile_push": {
     state: "on",
     attributes: { name: "mobile_push", transport: "mobile_push", enabled: true,
                   inclusion: ["default"], friendly_name: "Notifica sul telefono" } },
-  "binary_sensor.supernotify_delivery_alexa_announce": {
+  "switch.supernotify_delivery_alexa_announce": {
     state: "on",
     attributes: { name: "alexa_announce", transport: "alexa_media_player", enabled: true,
                   inclusion: ["default"], friendly_name: "Annuncio vocale Alexa" } },
-  "binary_sensor.supernotify_delivery_persistent": {
+  "switch.supernotify_delivery_persistent": {
     state: "on",
     attributes: { name: "persistent", transport: "persistent", enabled: true,
                   inclusion: ["explicit"] } },
-  "binary_sensor.supernotify_delivery_sirena": {
+  "switch.supernotify_delivery_sirena": {
     state: "on",
     attributes: { name: "sirena", transport: "generic", enabled: true,
                   inclusion: ["scenario"] } },
-  "binary_sensor.supernotify_delivery_backup_mail": {
+  "switch.supernotify_delivery_backup_mail": {
     state: "on",
     attributes: { name: "backup_mail", transport: "email", enabled: true,
                   inclusion: ["fallback"] } },
@@ -73,7 +74,7 @@ const el2 = document.createElement("supernotify-deliveries-card");
 el2.setConfig({ style: "flat" });
 document.body.appendChild(el2);
 el2.hass = { language: "it", themes: { darkMode: false }, states: {
-  "binary_sensor.supernotify_delivery_vecchia": {
+  "switch.supernotify_delivery_vecchia": {
     state: "on", attributes: { name: "vecchia", transport: "email", enabled: true } } } };
 ok(el2.shadowRoot.querySelectorAll(".row").length === 1, "una delivery senza inclusion compare lo stesso");
 ok(/Partono da soli/.test(el2.shadowRoot.textContent), "e viene trattata come 'parte da sola'");

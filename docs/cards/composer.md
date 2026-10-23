@@ -11,12 +11,9 @@ and a live phone preview.
 
 <img src="../images/composer.png" alt="supernotify-composer-card" width="800">
 
-Sends via the dedicated `supernotify.notify` action (SuperNotify ≥ 2.3.0) —
-typed fields instead of `notify.supernotify`'s generic `data:` — with
-`delivery_selection: fixed` when channels are picked, and a confirmation
-guard on critical priority. Requires SuperNotify ≥ 2.3.0; on older versions
-use `supernotify-control-card`'s Announce tile or your own automation
-instead.
+Sends via the dedicated `supernotify.notify` action — typed fields instead of
+`notify.supernotify`'s generic `data:` — with `delivery_selection: fixed` when
+channels are picked, and a confirmation guard on critical priority.
 
 ⚠️ **Areas, floors and labels are not resolved by every channel.** SuperNotify
 only resolves them natively for transports that call an HA entity service —
@@ -31,19 +28,12 @@ a person/device directly to the target.
 **Try without sending** (🔍): shows which channels would send right now and to
 whom, which would be skipped and why, missed channels, priority, scenarios in
 force and who is home — without sending anything. It uses SuperNotify's dry
-run (2.12 or later, [issue #218](https://github.com/rhizomatics/supernotify/issues/218)):
-`supernotify.notify` with `dry_run: simulate`. The button shows when
-`update.supernotify_update` says 2.12 or later; `dry_run: true` shows it anyway.
+run ([issue #218](https://github.com/rhizomatics/supernotify/issues/218)):
+`supernotify.notify` with `dry_run: simulate`. `dry_run: false` hides the button.
 
-**SuperNotify 2.12.1 or later** (0.70.0): the dry run checks duplicates the way a real
-send would ("duplicate" in the answer means the real one would be dropped too), and
-the Send after a try is never held back, because SuperNotify keeps simulations in a
-cache of their own. `dry_run_dupe_check: false` skips the check.
-
-**2.12.0:** by default the dry run skips the duplicate check (`force_resend`), because a
-simulated notification is remembered as sent and the real Send right after, with the same
-text, would be dropped as a duplicate. With `dry_run_dupe_check: true` the dry run does
-check duplicates, and the next Send of the same content carries `force_resend` instead.
+The dry run checks duplicates the way a real send would ("duplicate" in the answer means the
+real one would be dropped too), and the Send after a try is never held back, because SuperNotify
+keeps simulations in a cache of their own. `dry_run_dupe_check: false` skips the check.
 
 **Advanced** (closed by default):
 
@@ -65,8 +55,7 @@ check duplicates, and the next Send of the same content carries `force_resend` i
 
 ```yaml
 type: custom:supernotify-composer-card
-# dry_run: true               # optional: show the button whatever the version
-# dry_run_dupe_check: true    # optional: simulate the duplicate check too
+# dry_run: false              # optional: hide "Try without sending"
+# dry_run_dupe_check: false   # optional: skip the duplicate check in the dry run
 # show_off: true              # optional: also offer channels switched off or whose transport is off
-# update_entity: update.supernotify_update
 ```

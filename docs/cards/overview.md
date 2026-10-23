@@ -26,10 +26,11 @@ Each piece of information in one place, colour only for the state:
   when there are several), **Open ›** on repairs, errors and channels off - and on the right the
   versions of SuperNotify and of the cards, with a **?** that opens the legend (`help: false` hides it).
 - **Four numbers** from SuperNotify's archive (`enquire_archive` `verbosity: daily`, one call for
-  the last 30 days, SuperNotify 2.12.1+): **Today** (duplicates left out, as in the stats card) with
+  the last 30 days): **Today** (duplicates left out, as in the stats card) with
   yesterday and the 30-day average; **Delivered today** with the duplicates dropped, the failed
   channels today and in 30 days; **Channels** on / total with "see which"; **Silence**: active pauses
-  and do-not-disturb (`quiet_entity`). An older SuperNotify keeps the numbers of before.
+  and do-not-disturb (`quiet_entity`). Since 1.0.0 always these four: `stats: full` and
+  `sent_today_entity` (the numbers of before SuperNotify 2.12.1) are gone and ignored.
 - **Last notification**: the time in its title, **🔁 Repeat** (`repeat_entity`, e.g. the
   `input_button` your repeat automation listens to) and **Why ›** - the archive card on this page,
   or the view where it is.
@@ -66,7 +67,6 @@ type: custom:supernotify-overview-card
 # optional:
 poll_seconds: 60        # refresh interval for enquire_* data
 health: true            # health sentence + list on top (false = hide, chips = the pre-0.52 chips)
-stats: full             # all five numbers (default: sent, failures, channels)
 last_notification: true    # show it even with a control card on the page (false = never)
 occupancy: false       # hide "Who is home"
 repairs: false         # leave SuperNotify's repairs out of the health list
@@ -76,7 +76,6 @@ repeat_entity: input_button.supernotify_show_last      # 0.39.0: Repeat on the l
 parts: [status, numbers, last, occupancy, scenarios]  # 0.39.0: the blocks to draw
 help: true              # 0.39.0: "?" with the legend in the status band
 quiet_entity: binary_sensor.notifier_dnd   # your DND sensor, for the 🌙 chip
-sent_today_entity: sensor.supernotify_sent_today   # optional daily utility_meter for "sent today"; without it (0.69.0+) the long-term statistics of sensor.supernotify_notifications
 style: theme            # follow the HA theme instead of the SuperNotify look
 ```
 

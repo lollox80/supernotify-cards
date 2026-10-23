@@ -1,18 +1,8 @@
 // v0.61.0: pause mirate nella control, aggiornamento istantaneo, Perché più completo.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, wait, dom, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-new dom.window.Function(SRC)();
-
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+boot({ scroll: true });
+load();
 
 const now = new Date();
 const hms = (d) => d.toTimeString().slice(0, 8);

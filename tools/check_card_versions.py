@@ -15,13 +15,15 @@ CHANGELOG
 2026-10-04 - cards extending SnCard are recognised again (0.70.0).
 2026-10-17 - the translations at the end of the file (SN_I18N_EXTRA) count as shared, not as the last card (0.90.0).
 2026-10-17 - blank lines at the end of a region do not count as a change (0.91.0).
+2026-10-23 - cards extending any shared Sn* base (SnListCard) are recognised (1.0.0).
 
 usage: python3 tools/check_card_versions.py [--base <git-ref>] [--file dist/supernotify-control-card.js]
 """
 import argparse, hashlib, re, subprocess, sys
 
 # 0.70.0: since 0.64.0 the cards extend SnCard - without it every change looked "shared"
-CLASS_RE = re.compile(r"^class Supernotify(\w+)Card extends (?:HTMLElement|SnCard)", re.M)
+# 1.0.0: and the cards built on another shared base (SnListCard), defined among the shared helpers
+CLASS_RE = re.compile(r"^class Supernotify(\w+)Card extends (?:HTMLElement|Sn\w+)", re.M)
 VER_RE = re.compile(r"const SN_CARD_VERSIONS = \{(.*?)\};", re.S)
 
 

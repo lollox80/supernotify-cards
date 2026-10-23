@@ -69,13 +69,11 @@ sr.getElementById("cam").value = "camera.ingresso";
 await c._send();
 ok(calls.length === 1 && calls[0][2].message === "📷 Ingresso" && calls[0][2].camera_entity_id === "camera.ingresso",
   "camera senza testo: inviata con testo '📷 Ingresso' (il telefono scarta i messaggi vuoti)");
-c.hass = mkHass({ ...base, "update.supernotify_update": { ...base["update.supernotify_update"], attributes: { installed_version: "v2.10.3" } } });
-await c._send();
-ok(calls.length === 2 && calls[1][2].message === "📷 Ingresso", "su 2.10.3 con la camera parte lo stesso: ha il testo della camera");
+// 1.0.0 (phase 5): SuperNotify 2.13 minimum - the 2.11.1 version check is gone: a channel without text goes
 sr.getElementById("cam").value = "";
 c._picked = new Set(["mobile_push"]);
 await c._send();
-ok(calls.length === 2 && /2\.11\.1/.test(toast()), `su 2.10.3, canale senza testo: non inviata (${toast()})`);
+ok(calls.length === 2 && !calls[1][2].message && calls[1][2].delivery && "mobile_push" in calls[1][2].delivery, `canale senza testo: inviata (${toast()})`);
 c._picked = new Set();
 sr.getElementById("m").value = "Ciao";
 await c._send();

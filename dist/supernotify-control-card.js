@@ -1,742 +1,15 @@
 /**
- * SuperNotify Control Card — v0.1.0
+ * SuperNotify Control Card — the SuperNotify cards in one file (bundle version: VERSION below)
  * Touch-first control center for SuperNotify (https://github.com/rhizomatics/supernotify)
  *
  * Status bar + big action tiles + grouped mode toggles.
  * Vanilla Custom Element, no build step, no dependencies.
  *
  * Example config: see README.md
- *
- * CHANGELOG
- * 2026-10-17 - v0.91.0. New supernotify-appliances-card 0.1.0 and an "Appliances" view.
- *   - appliances 0.1.0: the appliances Appliance Autonotify watches. What asks for something
- *     (finished and not emptied, a stuck vacuum) and what is running come first as cards - the
- *     illustration (skyrotter's appliance card when installed, else an mdi icon), a coloured status
- *     dot, start → end, duration, kWh and € of the last cycle, ONE main button (Emptied = the very
- *     "Finished" button of the notification, Resume cleaning = vacuum.start) and a ⋮ menu (Switch off
- *     the plug, Remind me later, details, settings); running: the estimated end, a bar and the time
- *     left, from the appliance's remaining time or the average of its short / long cycles. The idle
- *     ones are rows under "Idle". `?device=<device or entry id>` in the URL puts one first, outlined.
- *     A badge counts the appliances found and not set up yet (admins).
- *     Details panel (a dialog; a bottom sheet on a phone): power now, Today / Week / Month / Year
- *     (kWh, cycles, cost), the energy of each cycle this month coloured short / long / unusual (over
- *     3× the median), the averages, the latest cycles, the appliance's notifications in the archive.
- *     Data: Autonotify 0.9 has no entities and a card cannot read an entry's options, so the plug,
- *     vacuum or device is found by the entry's name (`appliances:` overrides it); running / finished
- *     / emptied is what Autonotify itself sent, read back from SuperNotify's archive (its own
- *     thresholds); cycles and energy come from the recorder's statistics of the power sensor (5-minute
- *     for 10 days, hourly before, kept in the browser); € only with `price_per_kwh` or `price_entity`.
- *     The buttons fire the same mobile_app_notification_action event as the notification (fire_event:
- *     admins only).
- *   - strategy: an "Appliances" view (mdi:washing-machine) right after Archive, only when
- *     Appliance Autonotify has at least one appliance.
- *   - archive 0.45.0: "Appliance notifications" from the panel opens the archive filtered on that
- *     appliance.
- * 2026-10-17 - v0.90.0. archive 0.44.0: notifications sent by Appliance Autonotify (washing
- *   machine, dishwasher, ...) are recognised from their mobile push tag `appliance_<entry_id>`
- *   (`_end` at the end of the cycle) - "🧺 Autonotify · Washing machine" under the title, an
- *   "Appliances" filter, and "Sent by 🧺 Autonotify · Washing machine" in the detail instead of
- *   "sender not known". The name is the title of its config entry (config_entries/get, read once).
- *   Only the full documents carry the tag (extra_data): the newest 20 and any one opened; the
- *   summary rows of the rest of the list do not, so the filter says it looks at those alone.
- *   Fixed: a summary row opened is redrawn from its full document, as meant since 0.86.0 (the
- *   check ran after the index had already been rebuilt, so it never fired).
- * 2026-10-15 - v0.89.0. Up to date with SuperNotify 2.13-2.15.
- *   - deliveries 0.33.0: each channel says how its last send went - "✔ sent 5 min ago", "✖ failed
- *     21:07", "⏭ skipped: snoozed" - from last_outcome / last_sent_at / last_skip_reason on the
- *     delivery switch (SuperNotify 2.14); the same in the detail as "Last send".
- *   - overview 0.40.0 and the status badge/tile: channels whose last send failed are a red item of
- *     the status ("✖ 1 channel failed on the last send", opens them in the channels card).
- *   - archive 0.43.0: Critical / High read in one call - enquire_archive `priority` (SuperNotify
- *     2.14) - instead of one call per day that has some; kept in this browser until the daily
- *     totals change. Older SuperNotify: one call per day as before.
- *   - scenarios 0.32.0 (shared helper): with `scenario_control: {refresh: true}` the active
- *     scenarios come from the binary_sensors, live, with no enquire_active_scenarios every 30 s
- *     (SuperNotify 2.13 or later, read from its update entity); with refresh off (sensors
- *     "unknown"), an older SuperNotify or no update entity the cards ask SuperNotify as before.
- * 2026-10-10 - v0.88.1. overview 0.39.1: the 30 days of numbers through the daily store shared with
- *   the stats card and kept in the browser - after the first time only today is read (on a busy
- *   archive 30 days took ~4 s on every refresh, today ~0.5 s). The first time today is read alone
- *   first, so a SuperNotify without `daily` does not mark the shared store as without it.
- * 2026-10-10 - v0.88.0. The overview redrawn ("Proposta 2" of the Panoramica study): one place for
- *   each piece of information, colour only for the state.
- *   - overview 0.39.0: a status band - the state on the left (green / orange / red), what to look at
- *     with its own button (▶ Resume on a pause, Open on repairs and errors), the versions of
- *     SuperNotify and of the cards on the right, and a "?" with the legend (`help: false` hides it).
- *     Four numbers from the archive's daily totals (one call, last 30 days): Today with yesterday
- *     and the 30-day average, Delivered today with the duplicates dropped and the failed channels,
- *     Channels on with "see which", Silence (pauses and do-not-disturb). Older SuperNotify: the
- *     numbers of before. Last notification with Repeat (`repeat_entity`) and Why (the archive card,
- *     on this page or on its own view). Active scenarios as rows - name and what it changes - plus
- *     one line with the effect now. `parts:` [status, numbers, last, occupancy, scenarios] lets two
- *     overview cards split them across a dashboard; each reads only what it shows.
- *   - stats 0.33.0: `kpis: false` and `versions: false` leave out the number and version boxes (the
- *     overview has them) - the header then says the period, the total and the daily average. Under
- *     the daily bars the peak with its duplicates and today; the peak hour and the
- *     weekend difference in the titles; channel errors in their own column; priority and day period
- *     as one line of text; the insights folded.
- * 2026-10-09 - v0.87.0. Dashboard strategy: the archive gets a view of its own.
- *   - New "Archive" view (mdi:archive-outline, emoji 🗂️) right after Home: the archive card at full
- *     width, `max_height: calc(100vh - 300px)` and `pause_sender: true` as defaults (both can be
- *     changed with `cards: {archive: ...}`).
- *   - Home no longer repeats the archive while that view is shown; leave it out of `views:`
- *     (e.g. `views: [home, send, setup, stats]`) and the archive goes back into Home as before.
- *   - View title translated in all 11 languages.
- * 2026-10-08 - v0.86.0. A lighter archive (measured on a real installation: ~140 notifications a
- *   day, 5.7 KB each in full, 1 KB as a summary).
- *   - archive 0.42.0: the list is read with enquire_archive `verbosity: summary` (SuperNotify
- *     2.12.1+), 150 notifications by default (`limit`, up to 500) - about a day, for less than the
- *     40 full documents of before. Only the 20 newest are read in full (they keep the missed
- *     count, the spoken text and the whisper mark in the list); any other is read in full when
- *     opened, and its row is then drawn from it. Older SuperNotify: `limit` full documents as before.
- *   - "Critical" and "High" filters over the whole archive (31 days): how many per day from
- *     `verbosity: daily` (shared with the stats card), then only the days that have some are read,
- *     as summaries, and kept in this browser - a finished day is not read again. Shown when there
- *     is at least one; `priority_filters: false` hides them.
- *   - overview: "channel failures today" from the daily totals of today (it read 40 full documents,
- *     which on a busy day were the last 2-3 hours only).
- *   - recipients: the last notification of each person from the light list.
- * 2026-10-08 - v0.85.0. archive 0.41.0: the history and its "why" in ONE card.
- *   - List on the left (on top when the card is narrow): a status mark (✔ arrived, ! failed or
- *     worth a look, ⊘ went out on no channel), the title, one line that says how it went (the
- *     failed channel in red, else where it went) instead of one pill per channel. Priority shown
- *     only when it is not medium. The same notification several times in a row is one "×N" line
- *     (tap ×N to see each one; "Group repeats" switches it off; `group_repeats: false`).
- *   - On top: today in one line (how many, arrived, to look at), search, "?" for how to read it;
- *     the filters show how many they hold.
- *   - Detail on the right (below when narrow) = the why card's: a verdict on top ("Arrived on 3
- *     channels of 4 · Telegram failed"), the four steps, problems first, every channel, the folded
- *     groups and the trace; the pause bar of the notification at the bottom. The latest
- *     notification opens by itself (`auto_select: false` to wait for a tap).
- *   - With the sensor index and no shell_command sn_archive_detail, the detail is what the index
- *     row knows (channels with outcome and reason, scenarios, counts), as the expanded row was.
- *   - supernotify-why-card (0.16.0) is now an alias of this card: dashboards that have it keep
- *     working. snWhyOpen() from other cards opens the notification here. The strategy no longer
- *     adds a separate why card to Send.
- * 2026-10-08 - v0.84.0. strategy: view tabs show an icon AND the name again (`show_icon_and_title`,
- *   Home Assistant 2026.2 and later; older versions keep the name only, never an icon alone).
- *   New option `tabs: icons | emoji | text` (default icons) and `icons: {view: mdi:xxx | emoji}` to
- *   change one view: an mdi icon goes in the tab icon, anything else is put before the name.
- * 2026-10-08 - v0.83.0. Visual pass on every card (seen on a real dashboard, desktop and phone).
- *   - Pause reason "Dashboard: archive" / "Dashboard" reads "from the archive" / "from the dashboard".
- *   - Every "paused until" (status badge, pause feature, overview tile, archive pause bar) uses the
- *     latest end and adds the weekday when it is not today, like the control card.
- *   - Notification titles (archive, why, control, overview, last feature): Telegram *bold* marks go
- *     and an emoji repeated at the end ("⚠️ Battery low ⚠️") is shown once (snTitleShow).
- *   - deliveries / transports: the expand arrow was a 12px glyph stuck at the top; now readable and
- *     centred on a closed row. Control/overview group arrows a bit bigger too.
- *   - scenarios: a condition with no result read "· · condition" (the unknown mark was the same dot
- *     as the separator); now no mark.
- *   - bands: the "no voice" badge broke across two lines as an empty white pill next to "now".
- *   - recipients: "at home" / "away" no longer split over two lines.
- *   - stats: channel errors on their own small line under the total, so totals stay aligned.
- * 2026-10-08 - v0.82.0. control 0.39.0: the pause tile and the "paused now" list read better.
- *   A tag pause on an automation or script shows its name with 🤖/📜 (the tag comes back from
- *   SuperNotify with spaces instead of underscores, so the friendly name was never found and the
- *   raw "automation.xxx yyy" was shown). Tile: duration in h ("24 h", not "1440 min"), one subject
- *   plus "+N", end time first (weekday when it is not today), subject below, text clamped to 3
- *   lines. Panel rows: name and details stacked, wrapped, button aligned - the name no longer runs
- *   over the details (a global .sl had white-space: nowrap). overview 0.37.1: same names in the chip.
- * 2026-10-07 - v0.81.0. archive 0.40.0: with `pause_sender: true` the pause bar also offers the
- *   automation or script that sent the notification (from the logbook, as the why card finds it),
- *   so almost every notification can be paused, not only those with entity_id in their data.
- *   It needs a SuperNotify whose tag snooze matches the sender (PR #270): off by default until a
- *   release has it - with an older SuperNotify the pause would be accepted and match nothing.
- *   The entity, when there is one, stays first: it is narrower than the whole automation.
- *   Fix: a pause made while the pauses were being read could show as not made until the next read.
- * 2026-10-07 - v0.80.0. archive 0.39.0: pause one notification. An open row gets a pause bar:
- *   30 min, 1 h, 4 h or 24 h, for everyone (default) or only for me. It is SuperNotify's tag
- *   snooze (supernotify.snooze, scope tag) on the entity the notification is about - entity_id in
- *   its data, or its camera - so it holds back every notification about that entity, the "offline"
- *   and the "back online" alike, until the pause ends. A row whose entity is already paused says
- *   until when, with Resume. Not offered for critical notifications (a tag snooze would hold back a
- *   critical too) nor when the call names no entity: the bar then says to add entity_id to the
- *   call's data. "Only for me" takes you off the people the notification goes to; channels with
- *   fixed targets (speakers, the dashboard) still play. Needs SuperNotify with supernotify.snooze
- *   and the archive read through enquire_archive. Pause labels: a tag that is an entity shows its name.
- *   Fix: a pause made a moment ago read as already over when Home Assistant's clock is a few
- *   seconds ahead of the browser's (snoozed_at "in the future" was taken as yesterday).
- * 2026-10-05 - v0.79.0. why 0.15.0, for a notification dropped as a duplicate: (1) a box on top says
- *   when the same text went out before and how many seconds earlier, with a link that opens the
- *   original; when both came from the same run of an automation or script (same context) it says
- *   so - that run calls SuperNotify twice with the same text (two branches, Alexa + Google, are the
- *   usual cause) - and names it. (2) "duplicate" once in the header (it was there twice), the spoken
- *   text only when it differs from the message, (3) the folded group says why the channels were
- *   skipped ("3 skipped · duplicate 2, channel condition 1") instead of "skipped by a rule: normal",
- *   (4) "target required: always" only next to a missing target, where it means something.
- * 2026-10-05 - v0.78.0. Why a scenario is on and what it does, without opening anything.
- *   scenarios 0.31.0: (1) the channel chips say what the scenario changes, not only on/off - the
- *   volume it sets ("🔇 Alexa · muted", "🔉 TTS · vol 20%"), with templates rendered now by Home
- *   Assistant (render_template, refreshed every minute), ⚙ when it changes other options, 🎯 when it
- *   sends to other targets; before, late_night with volume 0 showed a green "✓ Alexa". (2) Under the
- *   name, the conditions with their result now (from enquire_active_scenarios trace: true, one read
- *   every 30 s shared by the cards), no tap needed. (3) When an active scenario turns on a channel
- *   that another active scenario turns off (the "off" wins in SuperNotify) or that is switched off,
- *   the chip is marked ⚠ and a line says by whom. overview 0.37.0: each active scenario chip adds
- *   what it silences or turns down ("· 🔇 Alexa, TTS") and its conditions as tooltip. A time
- *   condition bound to an input_datetime shows its name instead of the entity id (also in why).
- * 2026-10-05 - v0.77.0. channels: a channel with a `fallback:` list (the switch's `fallback` attribute,
- *   SuperNotify PR #260) shows "fallback: <channels>", and a channel named in another's list shows
- *   "fallback for <channel>". Nothing changes without the attribute.
- * 2026-10-05 - v0.76.2. why: a channel that went out as the fallback of another (SuperNotify 2.13.0,
- *   delivery `fallback:`) reads "fallback for <channel>" instead of the raw "fallback:<name>".
- * 2026-10-05 - v0.76.1. Cards stuck on "loading" (overview without last notification, who is home
- *   or active scenarios, stats and archive "reading") on a page opened straight on a view: a
- *   request sent while the page was still connecting could stay unanswered, and the card waited for
- *   it for ever. Every read the cards make (SuperNotify's enquire_* actions, the archive, history,
- *   statistics, repairs, the dashboard configuration) now gives up after a time (10 s for the
- *   enquire_* actions, 20 s for the others, 60-90 s for the archive counts) so the next update asks again.
- * 2026-10-05 - v0.76.0. control: "while you were paused". When no pause is in force, the control
- *   card with the snooze tile asks SuperNotify's archive (enquire_archive, summary) for what a
- *   pause held back since the last time you saw it (at most the last 24 h): notifications
- *   suppressed as SNOOZED, wholly or on some channels. It shows how many, the most frequent ones and
- *   the list; OK hides them until the next pause. `catch_up: false` turns it off.
- * 2026-10-05 - v0.75.2. Stats: SuperNotify reads every archive file for the daily counts, about 11 s
- *   for 30 days on a real installation, and meanwhile the archive and why cards wait too. The daily
- *   counts are now kept in this browser like the per-notification rows: a finished day does not
- *   change, so after the first opening only the days since the last reading are asked for.
- * 2026-10-05 - v0.75.1. Pauses on SuperNotify 2.13.0: the snooze action became three,
- *   supernotify.snooze (minutes), supernotify.silence (until resumed) and supernotify.unsnooze, with
- *   no `command`. The cards call the one that fits; the single action with `command` of the first
- *   draft is still understood when it is the only one there.
- * 2026-10-05 - v0.75.0. "Changed by hand" on the rows, from the switches' `overridden` attribute
- *   (SuperNotify after 2.12.1-beta2; nothing changes before it). Channels, transports, recipients
- *   and scenarios switched at runtime, on or off, show "changed by hand" with a tooltip that says
- *   "Undo the changes made by hand" (tools card) puts them back. Channels: a channel off in the
- *   configuration now reads "off in the configuration", one switched off "switched off by hand".
- * 2026-10-04 - v0.74.1. Archive and why: opened straight on their view, the list could stay on
- *   "reading the archive" although the archive had been read (the redraw was missed). The card
- *   now redraws on the next update whenever it still shows "reading" and the archive is there,
- *   and a reading that never answers is given up after 20 s and tried again.
- * 2026-10-04 - v0.74.0. Ready for the next SuperNotify release, and four fixes. Each new SuperNotify
- *   feature is used only when the installed version has it; older ones keep working as before.
- *   (1) pauses go through supernotify.snooze when it exists: any user gets the full pause panel
- *   (what, for whom, how long) and its Resume buttons, no admin needed and no voice commands
- *   (`snooze_via: action`; `event` and `voice` still force the old ways). The tile features too.
- *   (2) status badge and overview count as "channels off" only those switched off by hand (the
- *   switch's `overridden` attribute), so a channel meant to be off needs no `ignore`. (3) stats:
- *   with enquire_archive `verbosity: daily` the whole window is one call of a few KB instead of a
- *   day-by-day read of every notification (`daily: false` keeps the old way). (4) automations: one
- *   heading per category even when the manifest mixes them. (5) composer: channels switched off,
- *   or whose transport is off, are not offered (`show_off: true` shows them). (6) control:
- *   `status: false` hides the status row, for a second control card in the same view.
- * 2026-10-04 - v0.73.2. From a look at every view on a real installation. (1) why: a channel
- *   skipped for no target is a problem only when the call asked for it by name or SuperNotify
- *   counted a missed channel; an automatic channel with nobody to reach (e.g. notify_entity) is
- *   routine, as SuperNotify 2.11 counts it.
- *   (2) archive and why: messages with markdown links show the link text, also when the archive
- *   index cut the link in half. (3) overview: `ignore: [channel, ...]` as on the status badge.
- *   (4) Italian: the snooze tile is "Pausa". (5) strategy: view tabs show their names (no icons),
- *   a view with one section (Stats, Tools) uses the full width.
- * 2026-10-04 - v0.73.1. Status badge: channels off that are meant to be off no longer keep it amber.
- *   `ignore: [channel, ...]` leaves channels out of the count (e.g. fallbacks switched off in the
- *   YAML); `channels_off: false` leaves the count out altogether. Channels off alone now show in
- *   grey (bell-off), no longer as a warning: amber stays for nothing, red for transports with errors,
- *   blue for pauses.
- * 2026-10-04 - v0.73.0. Eleven languages, the same as SuperNotify's own: German, Spanish, French,
- *   Dutch, Polish, Portuguese, Japanese, Simplified Chinese and Hindi besides English and Italian.
- *   Every card, the visual editor, the badge, the tile features and the dashboard strategy follow
- *   Home Assistant's language (or `language:`). Words shared with SuperNotify (priority, scenario,
- *   transport, recipient, outcomes, dry run...) are taken from SuperNotify's own translations of that
- *   language. SN_I18N_EXTRA at the end of the file, merged over English at load: a string still
- *   missing in a language shows in English. The voice commands for pauses stay English/Italian,
- *   the only languages SuperNotify's sentences have.
- * 2026-10-04 - v0.72.0. SuperNotify in Home Assistant's own cards, no card of ours needed.
- *   (1) Badge `custom:supernotify-status-badge` for any view: SuperNotify's health in one pill -
- *   transports with errors, channels off, pauses in force, else "All good" - colour and icon to
- *   match, the detail in its tooltip; a tap opens `navigation_path` or the counter's dialog.
- *   (2) Tile card features: `custom:supernotify-pause` on the tile of
- *   sensor.supernotify_notifications (30 min / 1 h / 2 h, Resume while paused; administrators
- *   through the push-button event, everyone else through SuperNotify's voice commands, as in the
- *   control card), `custom:supernotify-test` on the tile of a notify.recipient_<name> (send a test
- *   through the whole pipeline, two taps), `custom:supernotify-last` on the counter's tile (title
- *   and age of the last notification). Both the old (stateObj) and new (context) feature APIs.
- * 2026-10-04 - v0.71.0. A dashboard that builds itself: `strategy: {type: custom:supernotify}` in a
- *   dashboard's raw configuration (or "SuperNotify" in Add dashboard, where Home Assistant lists
- *   custom strategies). Views Home, Send, Setup, Stats and - for administrators only - Tools, each
- *   card with the configuration its card picker would suggest (bands from the helpers named like the
- *   README's, automations only when the manifest is there, transports/scenarios/recipients only when
- *   SuperNotify has them). Options: title, views (which and in what order), hide (card kinds),
- *   cards (extra configuration per card kind, e.g. control tiles). Links between views work on it
- *   too: the view map is built from the generated views. "Take control" in the dashboard menu turns
- *   it into an ordinary editable dashboard, as for Home Assistant's own strategies.
- * 2026-10-04 - v0.70.0. SuperNotify 2.12.1. (1) stats: on 2.12.1 or later the figures come from
- *   SuperNotify's own archive (enquire_archive, verbosity summary): hour, weekday, priority,
- *   channels sent and failed, band of the day (the applied scenario named like a band,
- *   `period_scenarios`). No helper, automation or daily meter is needed any more. Each
- *   notification is kept as a small row in the browser, so only new days are read after the
- *   first opening (one call per day, with progress). `source: archive|history` forces one.
- *   (2) composer: "Try without sending" checks duplicates like a real send would (2.12.1 keeps
- *   simulations in their own cache), and Send after a try is never held back - no force_resend.
- * 2026-10-04 - v0.69.0. Daily counts from SuperNotify's own counter: sensor.supernotify_notifications
- *   is a total_increasing RestoreSensor, so Home Assistant keeps its long-term statistics with no
- *   helper. (1) stats 0.30.0: `count_entity` (default sensor.supernotify_notifications) fills the
- *   days the daily utility_meter (`sent_today_entity`) has no statistics for - or all of them when
- *   there is no meter; today = live counter minus its value at midnight. (2) overview 0.35.0:
- *   without a utility meter, "Sent today" and yesterday come from the same statistics instead of
- *   "since startup" (snDailyCounts, read once every 5 minutes).
- * 2026-10-04 - v0.68.0. Phone and accessibility, every card: whatever can be tapped can also be
- *   reached with Tab and used with Enter or Space, has role button and a name for screen readers
- *   (its text, else its tooltip); switches are named after their row, emoji icons are left out
- *   (the text beside them says it), toasts and results are announced. On touch screens rows are
- *   at least 48 px high and buttons and chips 40 px, the switches' touch area is larger; a visible focus ring; no
- *   animations when the system asks for reduced motion.
- * 2026-10-04 - v0.67.0. Links across views: the overview's "Show ›", its people and scenario chips,
- *   and the control card's status links now also reach a card on another view of the same
- *   dashboard - the card reads the dashboard's configuration once (lovelace/config, views the user
- *   cannot see left out), opens that view and the target card shows what was asked when it is drawn.
- * 2026-10-04 - v0.66.0. (1) Active scenarios: SuperNotify's own list (enquire_active_scenarios)
- *   first in control and overview too - from 2.12.1 the binary_sensors stay "unknown" unless
- *   scenario_control.refresh is on. (2) deliveries 0.28.0: "Try this channel" in the detail - a dry
- *   run through that channel only. (3) scenarios 0.27.0: a tap opens why it applies or not (each
- *   condition with its result, from enquire_active_scenarios trace: true) and "What changes if it
- *   applies / without it" (two dry runs compared); "All attributes" opens HA's dialog.
- * 2026-10-04 - v0.65.0. Cards linked, fewer repeats. (1) The cards on a page know each other
- *   (snCards, snGo, snFlash): in the overview, transports with errors open the transports card on
- *   those rows, channels off the channels card, a pause the control card's pause panel, a person
- *   the recipients card, an active scenario the scenarios card; in the control card, who is home
- *   and the active scenarios do the same. (2) overview: the last notification is left out when a
- *   control card on the page already shows it (`last_notification: true|false` decides).
- *   (3) "Undo the changes made by hand" only in the tools card (gone from transports and channels).
- *   (4) simulator: SuperNotify's own dry run (2.12+), the picked scenarios applied and only those,
- *   with a priority; same view as the composer's (snDryHtml, snDryCss). `dry_run: false` keeps the
- *   estimate.
- * 2026-10-04 - v0.64.0. Code cleanup, nothing changes on screen. Every card extends SnCard (the
- *   hass setter, palette, state read, more-info dialog and default grid size were copied in each
- *   card; a card now says what to do with a new hass in _onHass). One snEsc instead of 19 local
- *   copies, snVer for the version footer, snActiveScenarioIds (control, overview),
- *   snLastDeliveries + snPrioColor for the last notification (control, overview), one
- *   _resumeAll in the control card.
- * 2026-10-04 - v0.63.2. control 0.33.2: with a pause for everyone already in force, SuperNotify held
- *   back the announcement of the next pause too (is_global_snooze, seen on the real archive at
- *   09:29). Then the card calls the announce channel's own action with its targets and data.
- * 2026-10-04 - v0.63.1. control 0.33.1: `snooze_announce: true` (off by default, also in the visual
- *   editor) says a pause out loud on the announce channel (`announce_delivery`): before pausing,
- *   since the pause would stop its own announcement, and after resuming one or all.
- * 2026-10-04 - v0.63.0. (1) control 0.33.0 / overview 0.31.0: who is home for SuperNotify
- *   (enquire_occupancy) - names and the occupancy its conditions see; `occupancy: false` hides it.
- *   (2) overview: SuperNotify's own repairs (repairs/list_issues, admin) in the health list, with
- *   their title, opening Settings > Repairs. (3) transports 0.24.0: when the last error happened,
- *   in which step, and the transport's defaults (action, targets, options) under a tap.
- *   (4) deliveries 0.27.0: options, data and targets of each channel under a tap; "All
- *   attributes" opens HA's dialog. (5) archive 0.37.0: what a voice channel said is read from the
- *   envelopes that carry `spoken_message`, and named after that channel. (6) why a pause was set
- *   (by hand, by voice, by the assistant) in the pause list and the health detail. (7) composer
- *   0.21.0: text for email (message_html), clip URL, buttons (actions, action_groups) and
- *   per-channel settings (delivery_control). (8) control: users who are not admin pause through
- *   SuperNotify's voice commands (conversation/process, their own pauses); `snooze_via` forces one way.
- * 2026-10-04 - v0.62.0. (1) New supernotify-tools-card 0.1.0: maintenance with the result on the
- *   spot (refresh entities, resume every pause, archive / picture cleanup older than N days,
- *   reset hand-made changes by kind with the list of what went back) and every enquire_* shown
- *   readable in the card instead of a persistent notification, with Copy JSON. (3)
- *   recipients-card 0.27.0: a person's devices (model, system, app version) on request, and
- *   "Send a test" (two taps) through notify.recipient_<name>, i.e. the whole pipeline.
- *   (4) composer-card 0.20.0: advanced options - spoken message, scenarios to apply / require /
- *   consider, picture from a URL, debug.
- * 2026-10-04 - v0.61.0. (B1) control-card 0.32.0: the snooze tile opens a pause panel - what
- *   (non-critical, everything, one channel, one priority), for whom (everyone or only me), how
- *   long (15 min ... 4 h, or until resumed), and the pauses in force, each with Resume, plus
- *   Resume everything. Same mobile_app_notification_action event as the push buttons
- *   (SNOOZE / SILENCE / NORMAL). `snooze_panel: false` keeps the one-tap snooze.
- *   (B2) snLive: one subscription per page to supernotify_notification - the archive store
- *   reads the newest entries and the cards their enquire_* data as soon as a notification is
- *   done, also when nothing was delivered. (C) why-card 0.13.0: who sent it (the automation or
- *   script from the logbook, else the person), how long it took and the slowest channel,
- *   targets no channel took, names that do not exist.
- * 2026-10-04 - v0.60.0. Real data (gap analysis of 03/10). (A1) Active scenarios come from
- *   enquire_active_scenarios (snActive, every 30 s and after a change) - SuperNotify 2.12.0 can leave
- *   the scenario binary_sensors at their startup value. (A2) snNotifTitle: the title lives in
- *   condition_variables / the delivery envelopes, not at the top level (overview and control showed
- *   no title). (A3) overview "Failures" = failed channel sends today from the archive;
- *   sensor.supernotify_failures only counts crashes inside SuperNotify. (A8) control: tiles and group
- *   pills toggle any domain (a switch.* DND did nothing). (A9) overview and composer list each
- *   delivery once, by its name (switch over the deprecated binary_sensor); transports count "used
- *   by" over every delivery.
- * 2026-10-03 - v0.59.2. No code change: README links the changelog near the top, so HACS shows it.
- * 2026-10-03 - v0.59.1. Contrast measured on every text of the 13 cards in both themes
- *   (tools/contrast_audit.mjs): light-theme green #1b7f45 -> #17733d (it was 4.2-4.4:1 on the green
- *   tints of delivered/active/now chips), okSoft added to the palette (bands and scenarios used it for
- *   the active row but it was never defined, so the row was never tinted), no opacity on the
- *   overview's health sentence, on the version/"list updated" lines and on the why card's skipped
- *   channels. Disabled rows stay faded on purpose.
- * 2026-10-03 - v0.59.0. Design review, part 2 (finishing touches). (A5) archive and why: times
- *   follow the HA profile's time format (snH12). (C3) bands-card 0.20.0: one line per band - name
- *   and "until 13:00", start time, volume slider, percent; about 40% shorter. (C4) scenarios: the
- *   manual scenario's "Apply now" is a button (Applied when on), one switch per row. (C5) control:
- *   the snooze tile reads "Snoozed · 25 min", "garden · until 22:05". (C6) transports: readable
- *   name first, technical name and "used by 2 channels" under it. (C1) stats: hour and weekday
- *   charts drawn at their real width, labels 10.5 px, hours every 6. (C2) stats: day periods by
- *   their band name. (C7) why: step 4 stacked. (C8) archive: scenarios in force by name. (C9)
- *   simulator: the reason sits next to the channel name.
- * 2026-10-03 - v0.58.0. Design review, consistency and visible defects. (A1) stats-card number
- *   tiles are filled like the overview's, no border. (A2) snTech()/snSame(): one rule for technical
- *   names - small monospace, hidden when they say the same as the readable name (deliveries,
- *   scenarios, composer result, stats, why). (A3) deliveries, transports, recipients, scenarios:
- *   a hairline between rows instead of a bottom border bent by the row radius. (A4) archive:
- *   priority in the shared scale (critical red, high orange, medium blue, low grey). (B1) archive:
- *   "6 in the archive" when the total is unknown, not "6 of ?". (B2) why: "1 call". (B3) composer:
- *   "loading the picker…" instead of an orphan "…", gone after 4 s if HA never defines it. (B4)
- *   stats: a channel with only errors shows "✖ 26", not "26 ✖26". (B5) overview/stats: tile labels
- *   wrap instead of spilling out. (B6) control: the last notification's title wraps to two lines,
- *   chips move below, before anything is cut.
- * 2026-10-03 - v0.57.0. (1) Shared reads: control, overview, scenarios and simulator ask
- *   enquire_last_notification / enquire_snoozes / enquire_active_scenarios / ... through
- *   snEnquire(), so cards on the same view share one call (in flight or < 2.5 s old) instead of
- *   one each; a snooze, clear or send forgets the cache and the other cards read again
- *   ("supernotify-refresh"). (2) Card picker: every card has a live preview and a documentation
- *   link; stubs fit any installation (control uses a DND switch only if one exists, archive and
- *   why use the native archive, bands finds helpers named like the README's). bands-card with no
- *   bands shows how to add them instead of an error.
- * 2026-10-03 - v0.56.1. Fixes seen on a real dashboard: overview-card 0.28.1 - with `stats: full`
- *   the five numbers sit 3+2 (one row when the card is wide) instead of leaving a hole, four sit
- *   2+2; a last notification without a title is shown as plain text, not as a bold headline,
- *   clamped to three lines instead of cut mid-word; space between icon and name in the scenario
- *   chips. control-card 0.29.1 and overview: markdown in the message ([text](url), **bold**,
- *   `code`) is shown as plain text (new shared helper snPlainMsg).
- * 2026-10-03 - v0.56.0. overview-card 0.28.0: the last notification reads like the control card's -
- *   title, message, priority and "4 min ago" instead of a raw timestamp, channel counts with the
- *   names in the tooltip ("2 delivered", "1 missed", "2 skipped"), and Why ›. `last_notification:
- *   false` hides the block when the control card already shows it (also in the visual editor).
- * 2026-10-03 - v0.55.0. Visual editor and a simulator that explains.
- *   - Every card answers getConfigForm(): "Add card" / "Edit card" shows a form drawn by Home
- *     Assistant (entity pickers, switches, numbers, dropdowns) for the common options, with a
- *     folded "Look and text" section (colours, icons, version, intro). Options a form cannot
- *     express (control tiles and groups, time bands, scenario groups) stay in the code editor;
- *     the form keeps them. Labels in English and Italian (snForm, SN_FORM_LABELS).
- *   - simulator-card: one row per channel with the reason - "would go out: starts on its own /
- *     turned on by <scenario>", "would not go out: turned off by <scenario> / only when named in
- *     the call / only with a scenario / backup / switched off" - instead of bare chips.
- * 2026-10-03 - v0.54.0. Polish after the redesign.
- *   - Singular and plural: "1 channel off", "1 failure", "1 device", "1 skipped by a rule"
- *     instead of "1 channels off" and the like (helpers snW / snPl, "_1" keys). In Italian the
- *     channel counts are masculine plural: "2 consegnati", "1 mancato" (archive and control
- *     said "consegnata", "consegnate").
- *   - Readable names where the technical ones were left: simulator (scenarios and channels),
- *     scenarios card (channel tags), stats card (top channel and insights); the technical name
- *     stays in the tooltip.
- *   - Time bands: translated names ("Late night" / "Notte fonda") and listed from the morning,
- *     the band that starts after midnight last (bands card, control status bar).
- *   - Archive card: priorities capitalised in English too; the notification id left the
- *     details (it is in the row's tooltip).
- * 2026-10-03 - v0.53.1. composer-card 0.17.1 and automations-card 0.18.1: their version (composer footer,
- *   automations header) was still shown, missed by 0.49.0's `show_version`. New README / docs screenshots of every card from tools/showcase.mjs.
- * 2026-10-03 - v0.53.0. Redesign, step 5: why-card 0.9.0 answers first, details on demand.
- *   - The path in four steps under the title: call (channels named, or normal routing), scenarios
- *     in force, who was home, channels (sent / to look at / skipped).
- *   - Problems first: a failed channel (red) or one asked for but not sent (orange: a skip whose
- *     reason is not a routine one such as snooze, presence, priority, condition, scenario,
- *     switched off) gets its own box with the reason and what to do (NO_TARGET, ERROR,
- *     NO_ACTION, INVALID_ACTION_DATA).
- *   - Then the channels that went out; routine skips, channels not involved and the full
- *     selection trace are folded (`expand: true` opens them).
- * 2026-10-03 - v0.52.1. No card changed: HACS validation action added, release made after it passed
- *   (required to submit the repository to the HACS default store).
- * 2026-10-03 - v0.52.0. Redesign, step 4: control-card 0.27.0 and overview-card 0.25.0.
- *   control: the status bar is one line of text (no box, no capital labels); tiles have the icon
- *   on the left and one colour logic (on = blue tint, needs attention = orange tint), 2 per row on
- *   a phone (`tile_layout: stacked` = the old tall tiles); the last notification shows counts
- *   ("2 delivered", "1 failed", "1 missed", "2 skipped", channel names in the tooltip;
- *   `last_channels: true` = one chip per channel) and a "Why ›" button when a why-card is on the
- *   dashboard. Fixed: the text under an active snooze tile was white on the light orange tint (0.49).
- *   overview: health is one sentence on top ("2 things to look at" / "All good" with how many
- *   channels are on) and a list of what to look at, each with its detail (which channels are off,
- *   by readable name; the transport error message) and an "Open" link where there is one
- *   (`health: chips` = the old chips). Three numbers instead of five (`stats: full` = all five):
- *   active scenarios and snoozes are already in the list below and in the health list.
- * 2026-10-03 - v0.51.0. Redesign, step 3: deliveries-card 0.24.0 grouped by how a channel starts.
- *   - Sections "Start on their own", "Only when named in the call", "Only with a scenario",
- *     "Backup" with their count, instead of the same "always on" tag repeated on every row and a
- *     summary line on top. Header: "Channels · 7 of 8 on" (`title:` to rename it).
- *   - One status line per channel, saying what is going on right now: switched off, transport
- *     off, "paused now by <scenario>" when an active scenario turns it off, "on now through
- *     <scenario>" for a scenario-only channel. Read from the scenario entities' `delivery`
- *     attribute, as the why-card does. Switched-off rows are dimmed.
- *   - The other tags (action, fixed targets, target usage, native area/floor/label) are quieter.
- *   - "Reset overrides" moved to the bottom as a real button. `group: false` keeps one flat list.
- * 2026-10-03 - v0.50.0. Redesign, step 2: Home Assistant icons instead of emoji.
- *   - Every card's HTML goes through snIconify(): the ~80 emoji the cards use (channels,
- *     scenarios, tiles, chips, section headings, outcome signs) become <ha-icon> Material
- *     Design Icons, as in the rest of Home Assistant: the same drawing on iOS, Android and
- *     Windows, the theme's text colour, the size the emoji had. `icons: emoji` keeps the old
- *     look; emoji written in a card's config that are not in the table stay emoji.
- *   - Priority colours follow the palette (control and overview): "High" was #f0a020, 2.2:1.
- *   - The emoji left inside translations ("Critica ⚠️", "Inviata 🚀") are gone.
- * 2026-10-03 - v0.49.0. Redesign, step 1: foundations (design study "Studio card SuperNotify").
- *   - One palette for all 13 cards (snPalette), instead of 13 diverging copies. Light theme
- *     passes WCAG AA as text: blue #0277bd instead of #03a9f4 (2.6:1), warning #a04f00,
- *     success #1b7f45, error #c62828, secondary text #5b6b7c. Dark theme: dark text on blue
- *     fills. `style: theme` still takes every colour from the Home Assistant theme.
- *   - Active snooze tile: tinted surface instead of white text on orange.
- *   - control-card: the "missed" chip of the last notification is orange, as in the other
- *     cards (red stays for failed).
- *   - why-card: a channel skipped by a rule (snooze, scenario, no target) is grey, not orange:
- *     it is normal; orange stays for missed, red for failed.
- *   - The readable name (delivery `alias`) comes first in the deliveries, why, archive and
- *     composer cards; the technical name is small and monospaced next to it (or a tooltip).
- *   - The card version line at the bottom of every card is hidden; `show_version: true` shows it.
- *     The overview health strip still shows the SuperNotify version.
- * 2026-10-03 - v0.48.5. Docs only: short README (HACS shows the README of the latest release),
- *   one page per card in docs/cards. No card changed.
- * 2026-10-03 - v0.48.4. archive-card 0.31.1: skip reasons on the rows follow the UI language (the
- *   index keeps short Italian ones, so an English dashboard showed "pausa", "nessun target"), and
- *   priorities are translated in Italian. README: screenshots of every card (docs/images).
- * 2026-10-03 - v0.48.3. composer-card 0.15.3: camera names instead of entity ids in the picker and
- *   the preview; the preview shows the "📷 <camera>" text that goes out when the message is empty;
- *   the dry-run box shows scenario names as the why-card does. Shared helpers snCameraName /
- *   snScenarioName.
- * 2026-10-03 - v0.48.2. composer-card 0.15.2: a notification with a camera and no text gets
- *   "📷 <camera name>" as its text. SuperNotify sends a text-less photo push with message "",
- *   and the Android companion app showed nothing on the phone.
- * 2026-10-03 - v0.48.1. composer-card 0.15.1: the "Try without sending" button follows what Home
- *   Assistant is running (supernotify.notify able to answer, `response` in its description), not
- *   update.supernotify_update, which says 2.12 as soon as HACS has downloaded it, before the
- *   restart. "An action which does not return responses..." is explained as "restart needed".
- * 2026-10-03 - v0.48.0. composer-card 0.15.0: "Try without sending" on SuperNotify 2.12's real dry run.
- *   - 2.12 has no separate dry-run action: it is supernotify.notify with `dry_run: simulate`,
- *     answering with the notification itself (the archive JSON). The button shows on SuperNotify
- *     2.12 or later (read from update.supernotify_update; `dry_run: true|false` forces it), and the
- *     answer is drawn through snArchiveDetail: channels that would send and to whom, skipped ones
- *     with the reason, missed channels, priority, scenarios, who is home, raw JSON.
- *   - 2.12.0-beta1 writes a simulated notification into the duplicate cache, so the real Send
- *     right after would be dropped as a duplicate. The dry run therefore carries force_resend
- *     (no duplicate check, nothing cached); with `dry_run_dupe_check: true` it checks duplicates
- *     and the next Send of the same content carries force_resend instead.
- *   - `dry_run_action:` (for the action name guessed in 0.44.0) is gone.
- * 2026-10-03 - v0.47.0. Lighter, phone and dark theme.
- *   - Cards redraw only when something they show changed: control, overview, bands, deliveries,
- *     transports, recipients, scenarios and automations used to rescan every state and rebuild
- *     their lists on every state change in the house. Helpers snTracker / snTrackedHass /
- *     snChanged / snSnap: hass is read through a proxy that notes the entities each card looked
- *     at; a redraw happens when one of them, the entity list (for cards that scan it), language,
- *     theme, entity registry or services change, or once a minute for relative times.
- *   - composer-card: a notification without text (SuperNotify 2.11.1), when a camera or a
- *     channel is picked; on older versions it says 2.11.1 is needed. Send errors are shown.
- *   - getGridOptions() on every card: sensible default size in sections dashboards.
- *   - Dark theme / phone, from screenshots of all 13 cards at 390 px in both themes: native
- *     controls (time pickers in the bands card, selects, scrollbars) follow the theme
- *     (color-scheme); stats-card charts are drawn at the card's width, so their labels are no
- *     longer ~5 px on a phone, and redraw on resize; the snooze tile is shorter; "2 h fa" in the
- *     recipients card was capitalised as "2 H Fa".
- *   - overview, scenarios and simulator load their data as soon as they get hass, instead of
- *     showing "0 snoozed" and no last notification until the first 60 s poll.
- * 2026-10-03 - v0.46.0. Aligned with SuperNotify 2.11 / 2.11.1.
- *   - `missed` (2.11): a requested channel that could not go out. The archive rows carry it
- *     (`mi`), the archive card lists it next to delivered/failed/skipped, the why-card header
- *     shows it, and the control card's last-notification block shows a "missed" chip.
- *   - "Problems only" (archive-card) and the dot colour (why-card) no longer flag routine skips:
- *     snooze, presence, priority, delivery condition, scenario, switched-off channel or
- *     transport, and an implicit channel with no target. Shared helper snArchiveProblem().
- *   - Skip reasons: SuperNotify writes SNOOZED (the cards looked for SNOOZE), and
- *     TRANSPORT_DISABLED, NO_SCENARIO, NO_ACTION, INVALID_ACTION_DATA, UNKNOWN had no text.
- *   - Outcomes `error` and `fallback_delivery` are translated (the cards only knew `failed`).
- *   - Snoozes say what they are about (2.11.1 snoozes by name/tag, camera, channel, priority):
- *     control-card tile and overview-card chip, via snSnoozeLabel().
- *   control 0.23.0, overview 0.21.0, archive 0.30.0, why 0.5.0; tools/sn_archive_index.py
- *   writes `mi` and knows the same reasons.
- * 2026-09-26 - v0.45.1. Snooze tile and overview chip no longer show an expired snooze as one
- *   ending tomorrow. enquire_snoozes gives only "HH:MM:SS" and keeps expired snoozes until the
- *   nightly housekeeping, so a snooze that ended at 09:41 showed "1078 min left, until 09:41".
- *   New helper snLiveSnoozes(): works out the end from snoozed_at (+1 day only when the snooze
- *   crosses midnight), drops the ones already over, and uses full ISO timestamps when SuperNotify
- *   sends them. control-card 0.22.2 (tile, countdown, tap-to-clear), overview-card 0.20.3 (chip
- *   and stat). Clearing a snooze that fails now shows the error instead of "Snoozes cleared".
- * 2026-09-25 — v0.45.0. The archive and why cards read the archive through SuperNotify's own
- *   action, supernotify.enquire_archive (SuperNotify 2.10.0), instead of the command_line bridge.
- *   - archive-card 0.29.0, why-card 0.4.0 and recipients-card 0.21.0 use the action when Home
- *     Assistant has it: no sensor, no shell_command and no script in /config/tools are needed any
- *     more. On older SuperNotify, or with `source: sensor`, they keep reading
- *     sensor.supernotify_archivio and shell_command.sn_archive_detail as before;
- *   - one store is shared by all the cards on a page: the latest 40 notifications at first (set
- *     with `limit:`), then only the newest few each time sensor.supernotify_notifications changes;
- *   - the rows and the detail are built in the card by a port of tools/sn_archive_index.py
- *     (_item_of / detail_of), checked field by field against the script on 48 real archived
- *     notifications plus synthetic ones with errors, a full trace and suppressed channels;
- *   - the why-card opens a notification straight from the store, and only asks the action for
- *     one it has not loaded.
- * 2026-09-24 — v0.44.0. composer-card 0.13.0: "Try without sending" button, ready for the
- *   dry-run action jeyrb is adding to SuperNotify (issue #218, engine.async_dry_run()).
- *   - hidden until Home Assistant has the action (`supernotify.enquire_dry_run`, or the name
- *     set with `dry_run_action:`), so the card looks the same as before on older versions;
- *   - sends the same fields as the Send button and shows, without sending anything, which
- *     channels would fire and to whom, which would be skipped and why, the active scenarios,
- *     and whether the notification would be suppressed or fall back;
- *   - the send payload is now built in one place (_payload) for both buttons.
- * 2026-09-23 — v0.43.4. why-card 0.3.2: reads `delivery_provenance` where SuperNotify 2.8
- *   (PR #210) archives it, for every notification and not only with `debug: true`.
- *   - the "selection trace" section is only drawn when there really is a trace, instead of an
- *     empty box next to the channels;
- *   - `call` and `recipient:<name>` are no longer listed as scenarios that switch a channel off.
- * 2026-09-22 — v0.43.3. stats-card 0.22.1: channel icon and alias read the delivery switch,
- *   falling back to the binary_sensor. They only read the binary_sensor, so on SuperNotify 2.8
- *   with the deprecated mirrors deleted the Statistics card lost the channel names and icons.
- * 2026-09-22 — v0.43.2. Reset overrides button found by its registry translation_key: with
- *   SuperNotify 2.8.0 in an Italian HA it is button.supernotify_ripristina_override, not
- *   button.supernotify_reset_overrides, so the deliveries and transports cards did not show it.
- * 2026-09-22 — v0.43.1. why-card 0.3.1: opens the latest notification by itself
- *   (`auto_select: false` to wait for a pick), so it is never an empty box next to the archive.
- * 2026-09-22 — v0.43.0. Less empty space on the Archive and Timetable views.
- *   - archive-card 0.28.0 / why-card 0.3.0: optional `max_height` (any CSS length, e.g.
- *     `calc(100vh - 330px)`) keeps the list / the detail within the screen, scrolling inside,
- *     so the two cards side by side end at about the same height instead of one running on;
- *   - bands-card 0.13.0: the bands flow into two columns when the card is wide.
- * 2026-09-22 — v0.42.0. Layout that uses the width it gets, on a PC as on a phone.
- *   - shared SN_FLOW_CSS: the lists of the recipients, transports, deliveries, scenarios,
- *     automations and archive cards flow into as many columns as fit the CARD's width
- *     (auto-fill, 340px min, CSS grid), headings and summaries spanning the full row - one
- *     column on a phone or in a narrow section, two or three in a wide one;
- *   - composer and stats cards: the two-column parts collapse on the card's own width
- *     (container queries) instead of the browser window's, so they also fold in a narrow
- *     dashboard column on a desktop;
- *   - stats-card: day labels of the per-day chart thinned out on long windows (30 days no
- *     longer overlap), channel names get more room on narrow cards.
- * 2026-09-22 — v0.41.1. overview-card 0.20.2: the "active scenarios" chips showed the raw
- *   binary_sensor entity_id (the reactive path returns ids); they show the scenario's name again.
- * 2026-09-22 — v0.41.0. stats-card 0.21.0: 7 / 14 / 30 day switch in the header (`periods:`
- *   to change the choices, `days:` the default; the choice is remembered per browser). The
- *   daily series comes from long-term statistics, so it covers the whole window; hours,
- *   channels and priorities come from recorder history, and when that is shorter than the
- *   window the card now says over how many days they were computed.
- *   automations-card 0.14.1: no change of its own - the stats strings sit in its part of the
- *   bundle, so the version check counts them as its code.
- * 2026-09-22 — v0.40.1. why-card 0.2.0: the trace is only recorded when the call itself has
- *   `debug: true` (and archived with diagnostics) - the note said diagnostics alone. When the
- *   trace carries `delivery_provenance` (per-delivery enabled_by / disabled_by sources, proposed
- *   upstream), "selected by" and the reasons of the channels that did not start come from it
- *   instead of being reconstructed from today's configuration.
- * 2026-09-22 — v0.40.0. Ready for SuperNotify PR #207 (delivery/transport switches) and a new
- *   "Why?" card.
- *   - shared: snEntityRows() merges switch.* and binary_sensor.* per delivery/transport/
- *     recipient (switch preferred, keyed by the `name` attribute), so the rows are not doubled
- *     once #207 adds switches; snCleanName() also drops the "Delivery / Transport" prefix;
- *     snDeliveryAlias() reads the switch too; snResetOverridesButton() finds
- *     button.supernotify_reset_overrides; snWhyOpen() asks a supernotify-why-card on the
- *     page to show one notification.
- *   - deliveries-card 0.19.0 / transports-card 0.17.0: one row per channel, toggle through
- *     switch.turn_on/off when the switch exists (raw state write only on older SuperNotify),
- *     "transport off" tag from the `transport_enabled` attribute, "Reset overrides" button
- *     when SuperNotify has it.
- *   - recipients-card 0.19.0: last notification received, from notify.recipient_<name>
- *     (SuperNotify 2.7.0 stamps it on every delivery), with the matching archive title;
- *     tapping it opens that notification in the Why? card, or the entity otherwise.
- *   - archive-card 0.26.0: a "Why?" link on an expanded row.
- *   - NEW supernotify-why-card 0.1.0: for one notification, the scenarios in force, who was
- *     home, what the call asked for, and for every channel whether it went out, why not,
- *     and to which targets - plus the channels that did not even start, with the reason
- *     reconstructed from the current configuration, and the full selection trace when the
- *     archive has it (diagnostics). Detail fetched on demand through
- *     shell_command.sn_archive_detail (tools/sn_archive_index.py --detail).
- * 2026-09-22 — v0.30.1. SuperNotify 2.7.0 stable (commit 9065d8e) gives a scenario WITHOUT
- *   conditions a *manual* binary_sensor ("Scenario manuale <name>" / "Scenario Manual <name>",
- *   translation_key scenario_manual): read/write, restored across restarts, and the scenario
- *   applies while it is on (and the scenario switch is on). Before, such scenarios had no
- *   binary_sensor at all.
- *   - snCleanName() also drops the "Scenario manuale / Scenario Manual" prefix;
- *   - new snIsManualScenario(): registry translation_key (hass.entities) with the
- *     friendly_name prefix as fallback;
- *   - scenarios-card 0.17.0: a manual scenario gets a "✋ manual" tag and a second switch
- *     ("apply now") that writes the binary_sensor state - the documented way to drive it
- *     from outside SuperNotify; the enable switch stays as it is.
- * 2026-09-21 — v0.30.0. SuperNotify 2.7.0 (beta5+) gives every scenario and recipient a real
- *   `switch.supernotify_{scenario,recipient}_<name>` (enable/disable), keeps the recipient
- *   binary_sensor only as a deprecated mirror, and keeps the scenario binary_sensor only for
- *   scenarios with conditions, now meaning "conditions hold right now". The cards matched both
- *   domains with /^[a-z_]+\.supernotify_…/, so every recipient and scenario was listed twice,
- *   the recipient toggle wrote a fake state (POST /api/states) that no longer enables anything,
- *   and enabled switches (all "on") were counted as active scenarios.
- *   - new helpers snToggle() (switch.* -> switch.turn_on/turn_off service, anything else ->
- *     old snSetBinaryState fallback), snCleanName() (drops "SuperNotify ", the "Scenario /
- *     Recipient / Condizione scenario" prefix and the " abilitato / Enabled" suffix from the
- *     translated friendly_name) and snScenarioActive() (binary_sensor on AND switch not off);
- *   - recipients-card 0.18.0: one row per recipient, switch preferred, toggle via service;
- *   - scenarios-card 0.16.0: one row per scenario merging switch (enabled + attributes) and
- *     binary_sensor (condition state); new live on/off switch per row; "active now" requires
- *     the scenario to be enabled too;
- *   - control-card 0.22.1 / overview-card 0.20.1: active-scenario count ignores disabled ones.
- *   Older SuperNotify (binary_sensor only) keeps working through the fallbacks.
- * 2026-09-15 — v0.23.1. deliveries-card v0.17.0: SuperNotify 2.5.0 renamed the delivery
- *   attribute `selection` to `inclusion` (and made it a list), so the channel tag silently
- *   fell back to "implicit" for every delivery. Now reads `inclusion` with `selection` as
- *   fallback, and labels each entry of the list instead of the joined string.
- * 2026-09-11 — v0.23.0. New supernotify-archive-card: the notification history, at last.
- *   SuperNotify writes one JSON file per notification under /config/supernotify/archive, but a
- *   browser card cannot read the filesystem (and media_source only serves audio/image/video —
- *   a signed URL for a .json returns 404). So a small script (tools/sn_archive_index.py) is run
- *   by a command_line sensor and publishes a compact index (last 40 notifications, ~8 KB) in the
- *   attributes of sensor.supernotify_archivio: the card reads those, so the data travels over the
- *   authenticated WebSocket and no file is exposed under /local. The index shares two lookup
- *   tables (`chan`, `scen`) that rows reference by position, which roughly halves its size.
- *   The card groups rows by day, shows time, title, message, per-channel outcome (delivered /
- *   failed / skipped with reason), priority and duration, and expands a row for scenarios and ids.
- *   Free-text search plus filters (all / problems only / today). This is a BRIDGE: when
- *   SuperNotify gains a native service (enquire_archive) the card will switch to it.
- *   New i18n block SN_ARCH_STRINGS (en/it).
- * 2026-09-11 — v0.22.0. Per-card versions (Lollo's request): new SN_CARD_VERSIONS map, one entry
- *   per card, bumped only when that card changes; every footer now prints its own card version
- *   instead of the bundle VERSION (which stays for HACS/releases, the stats-card version strip and
- *   the console banner). Initial values = the release in which each card last changed, from
- *   CHANGELOG.md. New tools/check_card_versions.py compares each card's source region with the
- *   previous commit and fails when it changed without a bump (run by the release script and CI).
- * 2026-09-11 — v0.21.0. Control card only. (1) Tiles now sit on a uniform grid
- *   (auto-fit, min 84px — five tiles fit one row in a 2-column section; `tile_columns: N` forces N columns).
- *   (2) Snooze tile shows a live countdown ("⏳ N min left", refreshed every 30 s) while a snooze is
- *   active — snooze_until comes from enquire_snoozes as local "HH:MM:SS". (3) Mode groups are
- *   collapsible: header shows active/total, tap to fold; a folded group still shows its ON pills;
- *   state kept in localStorage (`collapsible: false` disables, per-group `collapsed: true` folds by
- *   default). (4) New native "last notification" block (`last_notification: true`), meant to replace
- *   the markdown card: title from `last_notification_entity`, message (optional
- *   `last_notification_strip` regex removes e.g. a trailing timestamp line), priority chip, relative
- *   time from enquire_last_notification.created, channels with ✔/✖ (+ skipped count) using the
- *   delivery `alias` (shared helper snDeliveryAlias), optional repeat button (`repeat_entity`,
- *   an input_button). Refreshed on every change of sensor.supernotify_notifications and each minute.
- *   New i18n keys (en/it): grp_active, repeat, skipped_n, left, no_notif.
- *   Backup of the pre-change file: X:\sn_backups\cards_021_20260911\supernotify-control-card_pre_021.js
- * 2026-09-10 — v0.20.0. Overview card: new health strip on top (option `health`, default true):
- *   one chip per thing worth a glance — SuperNotify version (up to date / update available /
- *   restart required, from the HACS update entity `update_entity`), engine failures, transports
- *   with error_count > 0, channels switched off, DND active (`quiet_entity`, optional), active
- *   snoozes; a single green "all good" chip when nothing is wrong. Stats card: channel rows show
- *   the delivery `alias` (friendly_name) when configured, technical name underneath. New i18n keys
- *   h_* (en/it). Backup of the pre-change file: X:\sn_backups\stats_card_20260910\supernotify-control-card_pre_health.js
- * 2026-09-10 — v0.19.0. New supernotify-stats-card: usage analytics built ONLY from entities
- *   that already exist (no extra sensor, archive retention untouched — Lollo's choice).
- *   Daily series from the long-term statistics of the daily utility_meter
- *   (sensor.supernotify_inviate_oggi); hour/weekday/priority/day-period/channel detail from
- *   the recorder history of the "last notification" helpers (one change of
- *   input_datetime.supernotify_last_time = one notification, joined with the value the other
- *   helpers had at that moment). Channels come from input_text.supernotify_last_channels, now
- *   written AFTER delivery by the new automation "Supernotify - Log canali consegnati"
- *   (packages/supernotify/ultima_notifica.yaml) as "a, b, ✖c" — ✖ marks a channel that
- *   errored; older "auto (scenari)" values count as unknown. KPIs (total, per day, today vs
- *   average, peak hour, top channel, channel errors), inline-SVG bar charts, priority/period
- *   chips, auto-generated insights (share, peak, night share, weekend delta, 7-day trend,
- *   errors) and a version strip from the HACS update entities (installed vs latest, release
- *   link, brand icon) for both SuperNotify and these cards. i18n en/it.
- *   Backup of the pre-change file: X:\sn_backups\stats_card_20260910\supernotify-control-card_pre_stats.js
- * 2026-09-09 — v0.18.0. Overview card: removed the "Transports" section (name + ok/off badge
- *   per transport) — it duplicated what supernotify-transports-card already shows in the
- *   dedicated "Transport" dashboard view (same on/off state, rendered as a live switch), so
- *   transport status now lives in one place only. No i18n keys removed (`transports` and
- *   `no_transports` are still used by the transports card). Card description updated.
- *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260909\supernotify-control-card_pre_overview_transports.js
- * 2026-09-08 — v0.17.0. Recipients card: explicit ⚙️ gear icon at the end of each row
- *   (next to the on/off switch), so tap-for-details is visible instead of implicit on the
- *   whole row. Tapping it fires the same hass-more-info event as before (native HA dialog,
- *   read-only — SuperNotify has no recipient Config Flow yet, contacts still live in
- *   recipients.yaml). New i18n key `details` (en/it).
- *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_gear.js
- * 2026-09-08 — v0.16.0. SuperNotify 2.4.0-beta1 exposes binary_sensor.supernotify_delivery_*,
- *   _transport_* and _recipient_* as genuinely toggle-able (a state change is picked up by
- *   DeliveryRegistry/PeopleRegistry.handle_entity_state_change and enables/disables the real
- *   delivery/transport/recipient — see custom_components/supernotify/delivery.py and people.py).
- *   Added: deliveries-card and recipients-card rows now have a live on/off switch instead of a
- *   read-only badge; new supernotify-transports-card (same pattern, new — transports had no
- *   dedicated card before). Toggling calls the REST states endpoint directly (POST /api/states/
- *   <entity_id>, via hass.callApi — there is no HA service for a custom binary_sensor), since
- *   that's what SuperNotify's own state-change listener is built to react to.
- *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
+ * Changelog: see CHANGELOG.md
  */
 
-const VERSION = "0.92.0"; // bundle / HACS release
+const VERSION = "1.0.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -747,21 +20,20 @@ const VERSION = "0.92.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.39.1",
-  overview: "0.40.0",
-  bands: "0.21.1",
-  deliveries: "0.33.1",
-  transports: "0.27.1",
-  recipients: "0.31.0",
-  scenarios: "0.32.0",
-  simulator: "0.17.0",
-  composer: "0.25.0",
-  automations: "0.21.4",
-  stats: "0.33.1",
-  archive: "0.45.1",
-  appliances: "0.2.22",
-  tools: "0.2.2",
-  why: "0.17.0",
+  control: "0.39.2",
+  overview: "0.40.1",
+  bands: "0.21.2",
+  deliveries: "0.33.2",
+  transports: "0.27.2",
+  recipients: "0.31.1",
+  scenarios: "0.33.1",
+  simulator: "0.18.0",
+  composer: "0.25.2",
+  automations: "0.21.5",
+  stats: "0.33.2",
+  archive: "0.45.2",
+  appliances: "0.2.23",
+  tools: "0.2.3",
 };
 
 /**
@@ -780,17 +52,14 @@ const SN_STRINGS = {
     announce_ph: "Announce on all speakers…", send: "Send",
     announced: "Announced", cleared: "Snoozes cleared",
     snoozed_for: "Snoozed non-critical notifications for",
-    sent: "Sent", sent_today: "Sent today", since_startup: "since startup",
-    yesterday: "yesterday", failures: "Failures", fail_today: "failed channel sends today", deliveries: "Deliveries",
-    enabled_total: "enabled/total", last_notif: "Last notification",
+    sent: "Sent",
+    yesterday: "yesterday", deliveries: "Deliveries",
+    last_notif: "Last notification",
     transports: "Transports", delivered: "delivered", failed: "failed",
     channels: "channels", none: "none", no_transports: "no transport entities found", tr_used: "used by", tr_unused: "no channel uses it",
     start: "start", volume: "volume", now: "now", crosses: "crosses midnight",
     no_voice: "no voice", mute_hint: "A band at <b>0%</b> sends <b>no voice announcement</b> at all (Alexa and TTS off, push and dashboard still delivered). Critical and high-priority alerts always speak.",
-    enabled: "enabled", implicit: "always on", explicit: "on request",
-    by_scenario: "scenario only", fallback: "backup", fallback_err: "backup on error",
-    inc_sum: "of these channels", inc_always: "start on their own",
-    inc_req: "only when asked for", inc_scen: "only with a scenario",
+    enabled: "enabled",
     grp_auto: "Start on their own", grp_named: "Only when named in the call", grp_scen: "Only with a scenario",
     grp_fallback: "Backup, when the others fail", ch_title: "Channels", ch_count: "{on} of {tot} on",
     off_manual: "switched off", off_config: "off in the configuration", fb_list: "fallback:", fb_for: "fallback for", hand: "changed by hand",
@@ -803,7 +72,7 @@ const SN_STRINGS = {
     details: "Details",
     h_update: "update available:", h_restart: "restart Home Assistant to finish the update",
     h_uptodate: "up to date", h_transport_err: "transports with errors", h_channels_off: "channels off",
-    h_all_good: "All good", h_health: "Health",
+    h_all_good: "All good",
     h_failures: "failures", h_failures_1: "failure", h_transport_err_1: "transport with errors",
     h_channels_off_1: "channel off", channels_1: "channel",
     band_early_morning: "Early morning", band_morning: "Morning", band_afternoon: "Afternoon",
@@ -819,7 +88,7 @@ const SN_STRINGS = {
     media: "media", no_scenarios: "no scenario entities found",
     sim_pick: "🎬 Scenarios — tap to simulate", sim_fire: "📤 Channels",
     sim_hint: "Real engine data (enquire services). Priority-based delivery filtering happens engine-side and is not simulated here. Disabled wins over enabled, like the runtime merge.",
-    sim_none: "no deliveries would fire", scenario_tag: "scenario",
+    sim_none: "no deliveries would fire",
     sim_go: "Would go out", sim_stop: "Would not go out", sim_r_default: "starts on its own",
     sim_r_on: "turned on by", sim_r_off: "turned off by", sim_r_named: "only when named in the call",
     sim_r_scen: "only with a scenario that turns it on", sim_r_fallback: "backup, when the others fail",
@@ -831,23 +100,17 @@ const SN_STRINGS = {
     default_prio: "default (medium)",
     comp_hint: "Picked channels are sent with delivery_selection: fixed (only those fire). Critical really is critical — sirens included.",
     critical_confirm: "Send a CRITICAL notification? Sirens and max volume included.",
-    write_first: "Write a message first", sent_toast: "Sent",
+    sent_toast: "Sent",
     write_or_pick: "Write a message, or pick a camera or a channel",
-    need_2111: "A notification without text needs SuperNotify 2.11.1", send_err: "Not sent",
+    send_err: "Not sent",
     dry_btn: "Try without sending", dry_title: "If you sent it now",
-    dry_err: "Dry run failed", dry_would: "would send", dry_skip: "skipped",
-    dry_nobody: "no recipient, direct targets only", dry_targets: "targets",
-    dry_suppressed: "The notification would be suppressed", dry_fallback: "No channel would fire: fallback to",
+    dry_err: "Dry run failed",
+    dry_nobody: "no recipient, direct targets only",
     dry_none: "No channel selected", dry_scen: "Active scenarios", dry_raw: "Raw response",
     dry_prio: "Priority", dry_would_n: "channels would send", dry_nothing: "Nothing would be sent",
     dry_dupe: "Duplicate of a recent notification: it would be dropped",
     dry_no_dupe: "Duplicate check not simulated, so the real Send right after is not blocked.",
-    dry_restart: "The SuperNotify running now cannot simulate: dry run needs 2.12, and Home Assistant must be restarted after the update.",
     dry_home: "Home", dry_empty: "SuperNotify gave no answer: is it 2.12 or later?",
-    dry_reasons: { NO_TARGET: "no usable target", DUPE: "duplicate", PRIORITY: "not for this priority",
-      SNOOZED: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule",
-      TRANSPORT_DISABLED: "transport off", DELIVERY_DISABLED: "switched off", NO_SCENARIO: "required scenario not in force",
-      NO_ACTION: "no action", INVALID_ACTION_DATA: "invalid data", UNKNOWN: "unknown reason", ERROR: "error" },
     prio_minimum: "Minimum", prio_low: "Low", prio_medium: "Medium",
     prio_high: "High", prio_critical: "Critical",
     target_lbl: "Target — people, devices, areas, floors, labels",
@@ -916,17 +179,14 @@ const SN_STRINGS = {
     announce_ph: "Annuncia su tutti gli Echo di casa…", send: "Invia",
     announced: "Annunciato", cleared: "Pause annullate",
     snoozed_for: "Notifiche non critiche in pausa per",
-    sent: "Inviate", sent_today: "Inviate oggi", since_startup: "dall'avvio",
-    yesterday: "ieri", failures: "Fallimenti", fail_today: "invii falliti oggi", deliveries: "Delivery",
-    enabled_total: "attive/totali", last_notif: "Ultima notifica",
+    sent: "Inviate",
+    yesterday: "ieri", deliveries: "Delivery",
+    last_notif: "Ultima notifica",
     transports: "Transport", delivered: "consegnata", failed: "fallite",
     channels: "canali", none: "nessuno", no_transports: "nessuna entità transport trovata", tr_used: "usato da", tr_unused: "nessun canale lo usa",
     start: "inizio", volume: "volume", now: "ora", crosses: "attraversa mezzanotte",
     no_voice: "niente voce", mute_hint: "Una fascia a <b>0%</b> <b>non manda proprio</b> l'annuncio vocale (Alexa e TTS spenti; push e notifica a schermo arrivano lo stesso). Gli avvisi critici e urgenti parlano sempre.",
-    enabled: "attiva", implicit: "sempre attivo", explicit: "solo su richiesta",
-    by_scenario: "solo con scenario", fallback: "riserva", fallback_err: "riserva su errore",
-    inc_sum: "di questi canali", inc_always: "partono da soli",
-    inc_req: "solo se richiesti", inc_scen: "solo con uno scenario",
+    enabled: "attiva",
     grp_auto: "Partono da soli", grp_named: "Solo se chiamati per nome", grp_scen: "Solo con uno scenario",
     grp_fallback: "Di riserva, se gli altri falliscono", ch_title: "Canali", ch_count: "{on} di {tot} accesi",
     off_manual: "spento a mano", off_config: "spento da configurazione", fb_list: "riserva:", fb_for: "riserva di", hand: "modificato a mano",
@@ -939,7 +199,7 @@ const SN_STRINGS = {
     details: "Dettagli",
     h_update: "aggiornamento disponibile:", h_restart: "riavvia Home Assistant per completare l'aggiornamento",
     h_uptodate: "aggiornato", h_transport_err: "transport con errori", h_channels_off: "canali spenti",
-    h_all_good: "Tutto ok", h_health: "Stato",
+    h_all_good: "Tutto ok",
     h_failures: "fallimenti", h_failures_1: "fallimento", h_channels_off_1: "canale spento", channels_1: "canale",
     band_early_morning: "Mattina presto", band_morning: "Mattina", band_afternoon: "Pomeriggio",
     band_evening: "Sera", band_night: "Notte", band_late_night: "Notte fonda",
@@ -954,7 +214,7 @@ const SN_STRINGS = {
     media: "media", no_scenarios: "nessuna entità scenario trovata",
     sim_pick: "🎬 Scenari — tocca per simulare", sim_fire: "📤 Canali",
     sim_hint: "Dati reali del motore (servizi enquire). Il filtro per priorità delle delivery avviene lato motore e non è simulato qui. Lo spegnimento vince sull'accensione, come nel merge reale.",
-    sim_none: "nessun canale partirebbe", scenario_tag: "scenario",
+    sim_none: "nessun canale partirebbe",
     sim_go: "Partirebbero", sim_stop: "Non partirebbero", sim_r_default: "parte da solo",
     sim_r_on: "acceso da", sim_r_off: "spento da", sim_r_named: "solo se chiamato per nome",
     sim_r_scen: "solo con uno scenario che lo accende", sim_r_fallback: "di riserva, se gli altri falliscono",
@@ -966,23 +226,17 @@ const SN_STRINGS = {
     default_prio: "default (media)",
     comp_hint: "I canali scelti partono con delivery_selection: fixed (solo quelli). Il critical è critical davvero — sirene incluse.",
     critical_confirm: "Inviare una notifica CRITICA? Sirene e volume massimo inclusi.",
-    write_first: "Scrivi prima un messaggio", sent_toast: "Inviata",
+    sent_toast: "Inviata",
     write_or_pick: "Scrivi un messaggio, oppure scegli una camera o un canale",
-    need_2111: "Una notifica senza testo richiede SuperNotify 2.11.1", send_err: "Non inviata",
+    send_err: "Non inviata",
     dry_btn: "Prova senza inviare", dry_title: "Se la inviassi adesso",
-    dry_err: "Simulazione non riuscita", dry_would: "partirebbe", dry_skip: "saltato",
-    dry_nobody: "nessun destinatario, solo target diretti", dry_targets: "target",
-    dry_suppressed: "La notifica verrebbe soppressa", dry_fallback: "Nessun canale partirebbe: ripiego su",
+    dry_err: "Simulazione non riuscita",
+    dry_nobody: "nessun destinatario, solo target diretti",
     dry_none: "Nessun canale selezionato", dry_scen: "Scenari attivi", dry_raw: "Risposta completa",
     dry_prio: "Priorità", dry_would_n: "canali partirebbero", dry_nothing: "Non partirebbe niente",
     dry_dupe: "Doppione di una notifica recente: verrebbe scartata",
     dry_no_dupe: "Controllo doppioni non simulato, così l'Invia subito dopo non viene bloccato.",
-    dry_restart: "Il SuperNotify in esecuzione non sa simulare: la prova richiede la 2.12, e dopo l'aggiornamento Home Assistant va riavviato.",
     dry_home: "In casa", dry_empty: "SuperNotify non ha risposto: è la 2.12 o successiva?",
-    dry_reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione", PRIORITY: "non per questa priorità",
-      SNOOZED: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza",
-      TRANSPORT_DISABLED: "transport spento", DELIVERY_DISABLED: "spento", NO_SCENARIO: "manca uno scenario richiesto",
-      NO_ACTION: "nessuna azione", INVALID_ACTION_DATA: "dati non validi", UNKNOWN: "motivo sconosciuto", ERROR: "errore" },
     prio_minimum: "Minima", prio_low: "Bassa", prio_medium: "Media",
     prio_high: "Alta", prio_critical: "Critica",
     target_lbl: "Target — persone, dispositivi, aree, piani, etichette",
@@ -1044,24 +298,22 @@ const SN_STRINGS = {
 };
 
 /**
- * Active snoozes only, each with `_end` (Date or null = no end).
- * enquire_snoozes returns snoozed_at / snooze_until as local "HH:MM:SS" (no date) and
- * keeps expired snoozes until the nightly housekeeping. The end is anchored on
- * snoozed_at: the start is today (yesterday if that time is still ahead), the end is on
- * the start's day, +1 day only when it is not after the start (snooze across midnight).
- * Full ISO timestamps, when SuperNotify sends them, are used as they are.
- */
-/**
  * What a snooze is about, for people: "everything", "non-critical", a channel alias,
  * a camera name, a tag (SuperNotify 2.11.1, e.g. "porch"), a priority or a transport,
  * plus "for <person>" when it only covers one recipient. Fields from enquire_snoozes.
  */
+/** 1.0.0: an entity's friendly name, else `fallback`. */
+function snFname(hass, id, fallback) {
+  const s = hass && hass.states && hass.states[id];
+  return (s && s.attributes && s.attributes.friendly_name) || fallback;
+}
+
 function snSnoozeLabel(hass, s, T) {
   const st = (hass && hass.states) || {};
   const tt = String((s && s.target_type) || "").toUpperCase();
   const raw = s ? s.target : null;
   const tg = Array.isArray(raw) ? raw.join(", ") : (raw == null ? "" : String(raw));
-  const fname = (id) => (st[id] && st[id].attributes && st[id].attributes.friendly_name) || "";
+  const fname = (id) => snFname(hass, id, "");
   let what;
   if (tt === "EVERYTHING") what = T.snz_all;
   else if (tt === "NONCRITICAL") what = T.snz_nc;
@@ -1085,14 +337,18 @@ function snSnoozeLabel(hass, s, T) {
   return what || "?";
 }
 
+/** 1.0.0: two digits ("07"), the local time "HH:MM" and the local day "YYYY-MM-DD" of a Date (or a time in ms). */
+function snPad2(n) { return String(n).padStart(2, "0"); }
+function snHm(d) { d = new Date(d); return `${snPad2(d.getHours())}:${snPad2(d.getMinutes())}`; }
+function snDayKey(d) { d = new Date(d); return `${d.getFullYear()}-${snPad2(d.getMonth() + 1)}-${snPad2(d.getDate())}`; }
+
 /** 0.82.0: end of a pause, "00:50" today, "00:50 (gio)" on another day. */
 function snSnzUntil(end, hass) {
-  const pad = (n) => String(n).padStart(2, "0");
-  const hm = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
+  const hm = snHm(end);
   if (end.toDateString() === new Date().toDateString()) return hm;
   let day;
   try { day = end.toLocaleDateString((hass && hass.language) || undefined, { weekday: "short" }); }
-  catch (e) { day = `${pad(end.getDate())}/${pad(end.getMonth() + 1)}`; }
+  catch (e) { day = `${snPad2(end.getDate())}/${snPad2(end.getMonth() + 1)}`; }
   return `${hm} (${day})`;
 }
 
@@ -1127,11 +383,24 @@ function snTitleShow(v) {
 }
 
 /** Labels of active snoozes, at most `max` and "+N" for the rest. */
-function snSnoozeLabels(hass, list, T, max = 2) {
-  const labels = [...new Set((list || []).map((s) => snSnoozeLabel(hass, s, T)))];
-  return labels.length > max ? labels.slice(0, max).join(", ") + ` +${labels.length - max}` : labels.join(", ");
+/** 1.0.0: the first `max` of a list joined with ", ", then "+N" for the rest. */
+function snJoinMax(list, max) {
+  return list.length > max ? list.slice(0, max).join(", ") + ` +${list.length - max}` : list.join(", ");
 }
 
+function snSnoozeLabels(hass, list, T, max = 2) {
+  const labels = [...new Set((list || []).map((s) => snSnoozeLabel(hass, s, T)))];
+  return snJoinMax(labels, max);
+}
+
+/**
+ * Active snoozes only, each with `_end` (Date or null = no end).
+ * enquire_snoozes returns snoozed_at / snooze_until as local "HH:MM:SS" (no date) and
+ * keeps expired snoozes until the nightly housekeeping. The end is anchored on
+ * snoozed_at: the start is today (yesterday if that time is still ahead), the end is on
+ * the start's day, +1 day only when it is not after the start (snooze across midnight).
+ * Full ISO timestamps, when SuperNotify sends them, are used as they are.
+ */
 function snLiveSnoozes(list, now) {
   now = now || new Date();
   const hms = (s) => {
@@ -1190,7 +459,7 @@ function snActiveScenarioIds(hass) {
       return !sw || sw.state !== "off";
     }).map((n) => `binary_sensor.supernotify_scenario_${n}`);
   }
-  const ids = Object.keys(hass.states).filter((e) => e.startsWith("binary_sensor.supernotify_scenario_"));
+  const ids = snScenarioSensorIds(hass); // 1.0.0 (perf): listed once per states object
   if (!ids.length) return null;
   const known = ids.filter((e) => !["unknown", "unavailable"].includes(hass.states[e].state));
   if (!known.length) return null; // scenario state not exposed yet
@@ -1210,6 +479,36 @@ function snLastDeliveries(hass, n) {
     }
   }
   return { ok, err, skipped };
+}
+
+/** 1.0.0: "Repeat" on the last notification - press the button (input_button, button) or run the script. */
+function snRepeat(hass, entity) {
+  const [dom] = entity.split(".");
+  return hass.callService(dom, dom === "script" ? "turn_on" : "press", { entity_id: entity });
+}
+
+/**
+ * 1.0.0: the chips of the last notification (control and overview): delivered / failed - one chip a channel
+ * with `perChannel`, else counts with the names in the tooltip - missed and skipped. `k`: the classes
+ * (ok, err, skip) and the attributes of the missed chip; `fb`: the counts of the notification when the
+ * channels do not say.
+ */
+function snLastChips(hass, n, T, k, perChannel, fb) {
+  const esc = snEsc;
+  const chips = [];
+  const { ok, err, skipped } = snLastDeliveries(hass, n);
+  if (perChannel) {
+    for (const l of ok) chips.push(`<span class="${k.ok}">✔ ${esc(l)}</span>`);
+    for (const l of err) chips.push(`<span class="${k.err}">✖ ${esc(l)}</span>`);
+  } else {
+    if (ok.length) chips.push(`<span class="${k.ok}" title="${esc(ok.join(", "))}">✔ ${snPl(T, "ln_delivered", ok.length)}</span>`);
+    else if (fb && +n.delivered > 0) chips.push(`<span class="${k.ok}">✔ ${snPl(T, "ln_delivered", +n.delivered)}</span>`);
+    const nErr = err.length || (fb ? +n.failed || 0 : 0);
+    if (nErr > 0) chips.push(`<span class="${k.err}" title="${esc(err.join(", "))}">✖ ${snPl(T, "ln_failed", nErr)}</span>`);
+  }
+  if (n && +n.missed > 0) chips.push(`<span ${k.mis}>⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
+  if (skipped) chips.push(`<span class="${k.skip}">${snPl(T, "skipped_n", skipped)}</span>`);
+  return chips;
 }
 
 function snPrioColor(p, prio) {
@@ -1387,10 +686,15 @@ function snA11yInit(card) {
 }
 
 /* ── 0.65.0: the cards on the page know each other ── */
+// 1.0.0: weak references - a card on another view is only disconnected and HA keeps it, so it
+// stays reachable; a card HA threw away (an edited dashboard) is no longer kept alive here
 const snCards = new Set();
+const snCardsSeen = new WeakSet();
+const snCardRef = (c) => (typeof WeakRef === "function" ? new WeakRef(c) : { deref: () => c });
 function snCardRegister(card) {
-  if (snCards.has(card)) return;
-  snCards.add(card);
+  if (snCardsSeen.has(card)) return;
+  snCardsSeen.add(card);
+  snCards.add(snCardRef(card));
   // the others may now show a link to this one; 0.92.0 (perf): one event for all the cards that
   // arrive together, not one per card (each listener redrew N times while a dashboard opened)
   if (!snCardsT) snCardsT = setTimeout(() => { snCardsT = 0; window.dispatchEvent(new CustomEvent("supernotify-cards")); }, 0);
@@ -1401,7 +705,9 @@ let snCardsT = 0;
 function snCardOn(kind, filter) {
   const tag = `supernotify-${kind}-card`.toUpperCase();
   // 0.67.0: a card on another view is only disconnected - it comes back when that view opens
-  for (const c of snCards) {
+  for (const ref of snCards) {
+    const c = ref.deref();
+    if (!c) { snCards.delete(ref); continue; } // collected: prune
     if (c.isConnected && c.tagName === tag && (!filter || filter(c))) return c;
   }
   return null;
@@ -1412,7 +718,7 @@ function snCardOn(kind, filter) {
  * configuration (WS lovelace/config), read once per dashboard. Views the user cannot see
  * (`visible:` users) are left out.
  */
-const snDash = { key: null, map: null, busy: false, hass: null };
+const snDash = { key: null, map: null, busy: false, hass: null, failedAt: 0 };
 function snDashKey() {
   const seg = String((window.location && window.location.pathname) || "").split("/")[1] || "";
   return seg || "lovelace";
@@ -1421,6 +727,8 @@ function snDashEnsure(hass) {
   if (!hass || !hass.callWS) return;
   const key = snDashKey();
   if (snDash.busy || (snDash.key === key && snDash.map)) return;
+  // 1.0.0: after a failed read, try again for this dashboard only after 60 s
+  if (snDash.key === key && snDash.failedAt && Date.now() - snDash.failedAt < 60000) return;
   snDash.busy = true;
   snDash.key = key;
   const uid = hass.user && hass.user.id;
@@ -1444,8 +752,9 @@ function snDashEnsure(hass) {
       walk([...(v.sections || []), ...(v.cards || [])], v.path || String(i));
     });
     snDash.map = map;
+    snDash.failedAt = 0;
     window.dispatchEvent(new CustomEvent("supernotify-cards"));
-  }).catch(() => { snDash.map = {}; }).finally(() => { snDash.busy = false; });
+  }).catch(() => { snDash.map = null; snDash.failedAt = Date.now(); }).finally(() => { snDash.busy = false; });
 }
 
 /** A card of that kind on this page or on another view of the dashboard. */
@@ -1515,13 +824,6 @@ const SN_STRATEGY_VIEWS = {
 };
 // 0.84.0: `tabs: emoji`
 const SN_STRATEGY_EMOJI = { home: "🔔", archive: "🗂️", appliances: "🧺", send: "✉️", setup: "⚙️", stats: "📊", tools: "🧰" };
-// 0.84.0: icon + name in one tab needs `show_icon_and_title` (HA 2026.2); before that an icon hides the name
-function snTabsBoth(hass) {
-  const m = String((hass && hass.config && hass.config.version) || "").match(/^(\d+)\.(\d+)/);
-  if (!m) return true;
-  const y = +m[1], mo = +m[2];
-  return y > 2026 || (y === 2026 && mo >= 2);
-}
 const SN_STRATEGY_TITLES = {
   en: { home: "Home", archive: "Archive", appliances: "Appliances", send: "Send", setup: "Setup", stats: "Stats", tools: "Tools", title: "SuperNotify" },
   it: { home: "Casa", archive: "Archivio", appliances: "Elettrodomestici", send: "Invia", setup: "Configurazione", stats: "Statistiche", tools: "Strumenti", title: "SuperNotify" },
@@ -1531,9 +833,8 @@ class SupernotifyDashboardStrategy extends HTMLElement {
   static async generate(config, hass) {
     const cfg = config || {};
     const st = (hass && hass.states) || {};
-    const lang = String((hass && (hass.locale && hass.locale.language || hass.language)) || "en").slice(0, 2);
-    const T = SN_STRATEGY_TITLES[lang] || SN_STRATEGY_TITLES.en;
-    const admin = !hass || !hass.user || hass.user.is_admin !== false;
+    const T = SN_STRATEGY_TITLES[snLang(null, hass)] || SN_STRATEGY_TITLES.en;
+    const admin = snIsAdmin(hass);
     const hide = new Set((cfg.hide || []).map(String));
     const extra = cfg.cards || {};
     const has = (re) => Object.keys(st).some((id) => re.test(id));
@@ -1543,17 +844,15 @@ class SupernotifyDashboardStrategy extends HTMLElement {
       try { manifest = !!(await window.fetch(url, { method: "HEAD", cache: "no-store" })).ok; } catch (e) { manifest = false; }
     }
     const wanted = {
-      transports: has(/^(switch|binary_sensor)\.supernotify_transport_/),
-      scenarios: has(/^(switch|binary_sensor)\.supernotify_scenario_/),
-      recipients: has(/^(switch|binary_sensor)\.supernotify_recipient_/) || has(/^notify\.recipient_/),
+      transports: has(/^switch\.supernotify_transport_/),
+      scenarios: has(/^switch\.supernotify_scenario_/),
+      recipients: has(/^switch\.supernotify_recipient_/) || has(/^notify\.recipient_/),
       automations: manifest,
       appliances: false,
     };
     // 0.91.0: the appliances view only when Appliance Autonotify has an appliance
     if (!hide.has("appliances") && hass && hass.callWS) {
-      try {
-        wanted.appliances = snApplUsable(await hass.callWS({ type: "config_entries/get", domain: "appliance_autonotify" })).length > 0;
-      } catch (e) { wanted.appliances = false; }
+      wanted.appliances = snApplUsable(await snAppliances.read(hass)).length > 0;
     }
     const card = (kind, base) => {
       if (hide.has(kind) || wanted[kind] === false) return null;
@@ -1587,7 +886,7 @@ class SupernotifyDashboardStrategy extends HTMLElement {
       const own = cfg.icons && cfg.icons[key] != null ? String(cfg.icons[key]).trim() : "";
       const mark = own || (mode === "emoji" ? SN_STRATEGY_EMOJI[key] : mode === "icons" ? v.icon : "");
       if (mark && /^[a-z]+:/i.test(mark)) {
-        if (snTabsBoth(hass)) { view.icon = mark; view.show_icon_and_title = true; }
+        view.icon = mark; view.show_icon_and_title = true;
       } else if (mark) view.title = `${mark} ${view.title}`;
       // 0.72.0: SuperNotify's health as a badge on top of Home
       if (key === "home" && !hide.has("badge")) view.badges = [{ type: "custom:supernotify-status-badge", ...(extra.badge || {}) }];
@@ -1614,22 +913,24 @@ if (!window.customStrategies.some((x) => x && x.type === "supernotify")) {
  * 0.72.0: SuperNotify inside Home Assistant's own cards. Shared by the badge and the tile features.
  */
 const SN_NATIVE_STR = {
-  en: { all_good: "All good", paused: "Paused", until: "until", resume: "Resume", test: "Send a test",
+  en: { all_good: "All good", paused: "Paused", resume: "Resume", test: "Send a test",
     sure: "Tap again to send", sent: "Sent", last: "Last", none: "No notification yet", ago: "ago",
-    min: "min", h: "h", err: "transports with errors", off: "channels off", ch_err: "channels failed" },
-  it: { all_good: "Tutto ok", paused: "In pausa", until: "fino alle", resume: "Riprendi", test: "Manda una prova",
+    h: "h", err: "transports with errors", off: "channels off", ch_err: "channels failed" },
+  it: { all_good: "Tutto ok", paused: "In pausa", resume: "Riprendi", test: "Manda una prova",
     sure: "Tocca di nuovo per inviare", sent: "Inviata", last: "Ultima", none: "Nessuna notifica ancora", ago: "fa",
-    min: "min", h: "h", err: "transport con errori", off: "canali spenti", ch_err: "canali falliti" },
+    h: "h", err: "transport con errori", off: "canali spenti", ch_err: "canali falliti" },
 };
 function snNativeT(hass) {
-  const l = String((hass && (hass.locale && hass.locale.language || hass.language)) || "en").slice(0, 2);
-  return SN_NATIVE_STR[l] || SN_NATIVE_STR.en;
+  return SN_NATIVE_STR[snLang(null, hass)] || SN_NATIVE_STR.en;
 }
-/** The entity a card feature is on: new API (context.entity_id) or old (stateObj). */
+/** The entity a card feature is on (context.entity_id: HA 2026.2 always sets it). */
 function snFeatureEntity(el) {
-  return (el.context && el.context.entity_id) || (el.stateObj && el.stateObj.entity_id) || "";
+  return (el.context && el.context.entity_id) || "";
 }
-/** customCardFeatures.supported: (stateObj) on older HA, (hass, context) on newer. */
+/**
+ * customCardFeatures.supported: HA 2026.2 still calls it with (stateObj) - only `isSupported`
+ * gets (hass, context) - so both shapes are read.
+ */
 function snFeatureSupports(test) {
   return (a, b) => {
     const id = (b && b.entity_id) || (a && a.entity_id) || "";
@@ -1637,24 +938,22 @@ function snFeatureSupports(test) {
   };
 }
 const SN_CU_KEY = "supernotify-catchup-seen"; // 0.76.0: last OK on "while you were paused"
-/** 0.74.0: supernotify.snooze exists (SuperNotify after 2.12.1-beta2): open to any user. */
+/** 0.74.0: supernotify.snooze is loaded (open to any user); false only while SuperNotify is not running. */
 function snHasSnoozeAction(hass) {
   const svc = hass && hass.services && hass.services.supernotify;
   return !!(svc && svc.snooze);
 }
-/** supernotify.snooze: command snooze | silence | resume, scope, name, person, minutes. */
+/**
+ * supernotify.snooze / silence / unsnooze (SuperNotify 2.13): `command` snooze | silence | resume
+ * picks the action, then scope, name, person, minutes.
+ */
 async function snSnoozeCall(hass, data) {
   const d = { reason: "Dashboard" };
   for (const [k, v] of Object.entries(data || {})) if (v !== undefined && v !== null && v !== "") d[k] = v;
   if (d.command === "resume") delete d.reason;
-  const svc = (hass.services && hass.services.supernotify) || {};
-  let service = "snooze";
-  // 0.75.1: SuperNotify 2.13.0 has three actions - snooze (minutes), silence, unsnooze - and no `command`
-  if (svc.unsnooze) {
-    service = d.command === "resume" ? "unsnooze" : d.command === "silence" ? "silence" : "snooze";
-    delete d.command;
-    if (service !== "snooze") delete d.minutes;
-  }
+  const service = d.command === "resume" ? "unsnooze" : d.command === "silence" ? "silence" : "snooze";
+  delete d.command;
+  if (service !== "snooze") delete d.minutes;
   return hass.callWS({ type: "call_service", domain: "supernotify", service, service_data: d, return_response: true });
 }
 /**
@@ -1674,23 +973,29 @@ function snPauseSubjects(doc) {
 /**
  * 0.81.0: the automations and scripts that sent an archived notification - the logbook entries in
  * its context, as the why card reads them. Cached per notification; [] when unknown.
+ * 1.0.0: one cache for the pause panel and the archive's "sent by": snSenderEvents keeps the logbook
+ * entries (automation / script), snSenders gives their entity ids.
  */
 const SN_SENDERS = new Map();
-function snSenders(hass, doc) {
+function snSenderEvents(hass, doc) {
   const ctx = (doc && snIsObj(doc.original_context)) ? doc.original_context : {};
   if (!hass || !hass.callWS || !ctx.id) return Promise.resolve([]);
   if (SN_SENDERS.has(doc.id)) return SN_SENDERS.get(doc.id);
+  while (SN_SENDERS.size >= 60) SN_SENDERS.delete(SN_SENDERS.keys().next().value); // 1.0.0: bounded, like the details
   const t = Date.parse(doc.created || "") || Date.now();
   const p = hass.callWS({ type: "logbook/get_events", start_time: new Date(t - 120000).toISOString(),
     end_time: new Date(t + 5000).toISOString(), context_id: ctx.id })
-    .then((ev) => [...new Set((ev || []).map((e) => e.entity_id || "").filter((id) => /^(automation|script)\./.test(id)))])
+    .then((ev) => (ev || []).filter((e) => /^(automation|script)\./.test(e.entity_id || "")))
     .catch(() => []);
   SN_SENDERS.set(doc.id, p);
   return p;
 }
+function snSenders(hass, doc) {
+  return snSenderEvents(hass, doc).then((ev) => [...new Set(ev.map((e) => e.entity_id))]);
+}
 /** A name as SuperNotify's spoken_name() has it: case, underscores and extra spaces ignored. */
 function snSpoken(name) {
-  return String(name || "").replace(/_/g, " ").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+  return snSquash(String(name || "").replace(/_/g, " ").toLowerCase());
 }
 /** The active tag pauses on this entity (from enquire_snoozes, see snLiveSnoozes). */
 function snPausesOn(snoozes, entityId) {
@@ -1700,10 +1005,30 @@ function snPausesOn(snoozes, entityId) {
 }
 /** person.* linked to the logged-in user, or null. */
 function snMyPerson(hass) {
-  const uid = hass && hass.user && hass.user.id;
-  if (!uid) return null;
-  return Object.keys(hass.states).find((e) => e.startsWith("person.") &&
-    (hass.states[e].attributes || {}).user_id === uid) || null;
+  return snPersonOfUser(hass, hass && hass.user && hass.user.id);
+}
+/**
+ * 1.0.0 (perf): person.* of a Home Assistant user, or null - the people listed once per states
+ * object for the page instead of a scan of every entity at each look.
+ */
+const snPeopleW = new WeakMap();
+function snPersonOfUser(hass, uid) {
+  if (!uid || !hass || !hass.states) return null;
+  const st = hass.states;
+  const raw = snRawStates(st);
+  let by = snPeopleW.get(raw);
+  if (!by) {
+    by = new Map();
+    for (const e of Object.keys(raw)) {
+      if (!e.startsWith("person.")) continue;
+      const u = (raw[e].attributes || {}).user_id;
+      if (u && !by.has(u)) by.set(u, e);
+    }
+    snPeopleW.set(raw, by);
+  }
+  const pid = by.get(uid) || null;
+  if (st !== raw) { void st[SN_SCAN]; if (pid) void st[pid]; } // a tracked card depends on them, as before
+  return pid;
 }
 /**
  * 0.74.0: delivery rows that count as "channels off". Once SuperNotify gives its switches the
@@ -1730,47 +1055,75 @@ function snHandTag(a, T, raw) {
   return raw ? `<span class="tag" style="border-style:dashed;font-weight:600" title="${snEsc(T.hand_tip)}">✏️ ${snEsc(T.hand)}</span>` : `✏️ ${T.hand}`;
 }
 /** SuperNotify's health: [{k: crit|off|pause, n, text, title}] worst first, [] = all good. */
-function snNativeHealth(hass, snoozes, opts) {
-  opts = opts || {};
-  const ignore = new Set((opts.ignore || []).map((x) => String(x).toLowerCase()));
-  const T = snNativeT(hass);
-  const out = [];
+/**
+ * 1.0.0: what is wrong with the channels (overview health strip and the badge / features): transports with
+ * errors, channels whose last send failed (SuperNotify >= 2.14), channels switched off by hand among `offRows`
+ * (rows of snEntityRows, or {id, name, state}: an unavailable switch is then not "off"; null: not looked at).
+ * `ignore`: the channel names left out.
+ */
+function snHealthFacts(hass, ignore, offRows) {
+  const ign = new Set((ignore || []).map((x) => String(x).toLowerCase()));
   const tr = snEntityRows(hass, "transport").filter((t) => {
     const st = hass.states[t.id];
     return st && st.state !== "unavailable" && +((st.attributes || {}).error_count || 0) > 0;
   });
+  return { tr, chErr: snChannelsFailed(hass, ign), off: offRows ? snChannelsOff(hass, offRows, ign) : [] };
+}
+function snNativeHealth(hass, snoozes, opts) {
+  opts = opts || {};
+  const T = snNativeT(hass);
+  const out = [];
+  const { tr, chErr, off } = snHealthFacts(hass, opts.ignore, opts.channels_off !== false && snEntityRows(hass, "delivery"));
   if (tr.length) out.push({ k: "crit", n: tr.length, text: `${tr.length} ${T.err}`,
     title: tr.map((t) => (t.a.last_error_message ? `${t.name}: ${t.a.last_error_message}` : t.name)).join(" · ") });
   // 0.89.0: channels whose last send failed (SuperNotify >= 2.14)
-  const chErr = snChannelsFailed(hass, ignore);
   if (chErr.length) out.push({ k: "crit", n: chErr.length, text: `${chErr.length} ${T.ch_err || T.err}`,
     title: chErr.map((d) => snDeliveryAlias(hass, d.name) || d.name).join(", ") });
-  const off = opts.channels_off === false ? [] : snChannelsOff(hass, snEntityRows(hass, "delivery"), ignore);
   if (off.length) out.push({ k: "off", n: off.length, text: `${off.length} ${T.off}`,
     title: off.map((d) => snDeliveryAlias(hass, d.name) || d.name).join(", ") });
   const live = snLiveSnoozes(snoozes || []);
   if (live.length) {
-    const end = live.map((x) => x._end).filter(Boolean).sort((a, b) => b - a)[0];
-    const hm = end ? snSnzUntil(end, hass) : "";
-    out.push({ k: "pause", n: live.length, text: hm ? `${T.paused} ${T.until} ${hm}` : T.paused,
+    out.push({ k: "pause", n: live.length, text: snPauseText(hass, live, T),
       title: snSnoozeLabels(hass, live, snT({}, hass), 4) });
   }
   return out;
 }
-/** Pause for everyone (non-critical) or resume, as the control card does. */
+/** "Paused until 18:30" for live pauses (snLiveSnoozes), as in snNativeHealth. */
+function snPauseText(hass, live, T) {
+  const end = live.map((x) => x._end).filter(Boolean).sort((a, b) => b - a)[0];
+  const hm = end ? snSnzUntil(end, hass) : "";
+  return hm ? `${T.paused} ${T.until} ${hm}` : T.paused;
+}
+/** 1.0.0: supernotify.clear_snoozes - every pause ends (one copy for the tile, the panel, the overview, the feature). */
+function snClearSnoozes(hass) {
+  return hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
+}
+
+/** 1.0.0: the supernotify.unsnooze data that ends this pause (snSnoozeCall with command resume). */
+function snResumeData(s) {
+  const scope = String(s.target_type || "NONCRITICAL").toLowerCase();
+  const data = { command: "resume", scope };
+  if (!["noncritical", "everything"].includes(scope)) data.name = Array.isArray(s.target) ? s.target.join("_") : (s.target || "");
+  if (String(s.recipient_type || "").toUpperCase() === "USER" && s.recipient) data.person = s.recipient;
+  return data;
+}
+
+/** 1.0.0: a message through one SuperNotify channel only (the announce channel). */
+function snAnnounce(hass, delivery, message) {
+  return hass.callService("notify", "supernotify", { message, data: { delivery_selection: "fixed", delivery: { [delivery]: {} } } });
+}
+
+/** 1.0.0: an administrator - or a user Home Assistant does not say is not one (no user object). */
+function snIsAdmin(hass) {
+  return !hass || !hass.user || hass.user.is_admin !== false;
+}
+
+/** Pause for everyone (non-critical, supernotify.snooze: any user) or resume, as the control card does. */
 async function snNativePause(hass, minutes) {
-  const admin = !(hass.user && hass.user.is_admin === false);
-  if (minutes && snHasSnoozeAction(hass)) {
+  if (minutes) {
     await snSnoozeCall(hass, { command: "snooze", scope: "noncritical", minutes });
-  } else if (minutes) {
-    if (admin) await hass.callApi("POST", "events/mobile_app_notification_action", { action: `SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_${minutes}` });
-    else {
-      const it = String(hass.language || "en").startsWith("it");
-      await hass.callWS({ type: "conversation/process", language: it ? "it" : "en",
-        text: it ? `metti in pausa le mie notifiche per ${minutes} minuti` : `pause my notifications for ${minutes} minutes` });
-    }
   } else {
-    await hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
+    await snClearSnoozes(hass);
   }
   snEnquireBust(800);
 }
@@ -1785,6 +1138,14 @@ const SN_NATIVE_CSS = `:host { display: block; }
   .txt { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--secondary-text-color);
     height: var(--feature-height, 42px); overflow: hidden; white-space: nowrap; }
   .txt b { color: var(--primary-text-color); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }`;
+
+// 1.0.0 (perf): SuperNotify's own entity ids, once per states object (every badge used to list them)
+const snSnIdsW = new WeakMap();
+function snSupernotifyIds(states) {
+  let ids = snSnIdsW.get(states);
+  if (!ids) { ids = Object.keys(states).filter((id) => id.includes(".supernotify")); snSnIdsW.set(states, ids); }
+  return ids;
+}
 
 /** Badge: SuperNotify's health in one pill, for any view. */
 class SupernotifyStatusBadge extends HTMLElement {
@@ -1801,7 +1162,7 @@ class SupernotifyStatusBadge extends HTMLElement {
     }
     if (prev && hass && prev.states && hass.states && prev.language === hass.language && this._snIds &&
         snCount(prev.states) === snCount(hass.states) && this._snIds.every((id) => prev.states[id] === hass.states[id])) return;
-    if (hass && hass.states) this._snIds = Object.keys(hass.states).filter((id) => id.includes(".supernotify"));
+    if (hass && hass.states) this._snIds = snSupernotifyIds(hass.states);
     this._draw();
   }
   connectedCallback() {
@@ -1861,12 +1222,18 @@ if (!window.customBadges.some((x) => x && x.type === "supernotify-status-badge")
 class SnFeature extends HTMLElement {
   static getStubConfig() { return { type: this.featureType }; }
   setConfig(config) { if (!config) throw new Error("Invalid configuration"); this._config = config; }
-  set hass(hass) { this._hass = hass; this._draw(); }
+  // 1.0.0 (perf): HA sets hass, context and stateObj together - one draw for the three
+  set hass(hass) { this._hass = hass; this._queueDraw(); }
   get hass() { return this._hass; }
-  set context(c) { this._context = c; this._draw(); }
+  set context(c) { this._context = c; this._queueDraw(); }
   get context() { return this._context; }
-  set stateObj(s) { this._stateObj = s; this._draw(); }
+  set stateObj(s) { this._stateObj = s; this._queueDraw(); }
   get stateObj() { return this._stateObj; }
+  _queueDraw() {
+    if (this._drawQ) return;
+    this._drawQ = true;
+    queueMicrotask(() => { this._drawQ = false; this._draw(); });
+  }
   _root() { if (!this.shadowRoot) this.attachShadow({ mode: "open" }); return this.shadowRoot; }
 }
 
@@ -1891,7 +1258,7 @@ class SupernotifyPauseFeature extends SnFeature {
     const live = snLiveSnoozes(this._snz || []);
     const lbl = (m) => (m % 60 === 0 ? `${m / 60} ${T.h}` : `${m} ${T.min}`);
     const html = live.length
-      ? `<button class="on" data-m="0">${snEsc(T.resume)} · ${snEsc(snNativeHealth(hass, this._snz).find((x) => x.k === "pause").text)}</button>`
+      ? `<button class="on" data-m="0">${snEsc(T.resume)} · ${snEsc(snPauseText(hass, live, T))}</button>`
       : mins.map((m) => `<button data-m="${+m}" aria-label="${snEsc(T.paused + " " + lbl(+m))}">${snEsc(lbl(+m))}</button>`).join("");
     if (html === this._html) return;
     this._html = html;
@@ -1935,7 +1302,7 @@ class SupernotifyTestFeature extends SnFeature {
       const T2 = snT({}, hass);
       const d = new Date();
       hass.callService("notify", "send_message", { entity_id: id, title: T2.rc_test_title,
-        message: `${T2.rc_test_msg} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` })
+        message: `${T2.rc_test_msg} ${snHm(d)}` })
         .then(() => { this._state = "sent"; this._draw(); this._t = setTimeout(() => { this._state = null; this._draw(); }, 4000); })
         .catch(() => { this._state = null; this._draw(); });
       snEnquireBust(1500);
@@ -2014,7 +1381,6 @@ function snDryHtml(hass, T, doc, noDupeCheck) {
   const esc = snEsc;
   const n = snIsObj(doc) && (doc.deliveries || doc.outcome || doc.id) ? snArchiveDetail(doc) : null;
   if (!n) return `<h4>🔍 ${T.dry_title}</h4><div class="dNo">${T.dry_empty}</div>`;
-  const st = hass.states;
   const chan = (name) => {
     const alias = snDeliveryAlias(hass, name);
     return alias && !snSame(alias, name) ? `${esc(alias)} <span class="dNo">${snTech(name, alias)}</span>` : esc(alias || name);
@@ -2027,8 +1393,7 @@ function snDryHtml(hass, T, doc, noDupeCheck) {
   const tgText = (tg) => {
     const vals = Object.values(tg || {}).flat();
     if (!vals.length) return "";
-    const shown = vals.slice(0, 3).map((v) => esc((st[v] && st[v].attributes && st[v].attributes.friendly_name) || short(v)));
-    return shown.join(", ") + (vals.length > 3 ? ` +${vals.length - 3}` : "");
+    return snJoinMax(vals.map((v) => esc(snFname(hass, v, short(v)))), 3);
   };
   const order = { ok: 0, err: 1, supp: 2, skip: 3 };
   const dl = [...(n.dl || [])].sort((a, b) => (order[a.r] ?? 4) - (order[b.r] ?? 4) || a.n.localeCompare(b.n));
@@ -2053,24 +1418,29 @@ function snDryHtml(hass, T, doc, noDupeCheck) {
   const scen = (n.sc && (n.sc.sel || n.sc.on)) || [];
   if (scen.length) meta.push(`${T.dry_scen}: ${esc(scen.map((x) => snScenarioName(hass, x)).join(", "))}`);
   if (n.occ && n.occ.home && n.occ.home.length)
-    meta.push(`${T.dry_home}: ${esc(n.occ.home.map((p) => (st[p] && st[p].attributes.friendly_name) || short(p)).join(", "))}`);
+    meta.push(`${T.dry_home}: ${esc(n.occ.home.map((p) => snFname(hass, p, short(p))).join(", "))}`);
   h += `<div class="dMeta">${meta.join(" · ")}</div>`;
   if (noDupeCheck) h += `<div class="dMeta">ℹ️ ${T.dry_no_dupe}</div>`;
   h += `<details class="dMeta"><summary>${T.dry_raw}</summary><pre>${esc(JSON.stringify(doc, null, 2))}</pre></details>`;
   return h;
 }
 
-/* ── 0.66.0: dry runs from any card ── */
+/* ── 0.66.0: dry runs from any card (`dry_run: false` in a card's config turns them off) ── */
 function snDryAvailable(hass, config) {
   if (config && config.dry_run === false) return false;
   const svc = hass && hass.services && hass.services.supernotify;
-  return !!(svc && svc.notify && svc.notify.response);
+  return !!(svc && svc.notify);
 }
 
-/** supernotify.notify with dry_run: simulate (nothing is sent, no duplicate check) -> the notification. */
-async function snDryRun(hass, data) {
-  const r = await hass.callWS({ type: "call_service", domain: "supernotify", service: "notify",
-    service_data: { priority: "medium", ...data, dry_run: "simulate", force_resend: true }, return_response: true });
+/**
+ * supernotify.notify with dry_run: simulate (nothing is sent) -> the notification. 1.0.0: the one copy for every
+ * card, with a 30 s limit (snWS). No duplicate check (force_resend) unless `opts.dupeCheck`; priority medium
+ * unless the data says otherwise or `opts.prio === null` (the composer sends its own payload as it is).
+ */
+async function snDryRun(hass, data, opts = {}) {
+  const sd = { ...(opts.prio === null ? {} : { priority: "medium" }), ...data, dry_run: "simulate" };
+  if (!opts.dupeCheck) sd.force_resend = true;
+  const r = await snWS(hass, { type: "call_service", domain: "supernotify", service: "notify", service_data: sd, return_response: true }, 30000);
   return (r && r.response) || {};
 }
 
@@ -2086,7 +1456,7 @@ function snDrySending(doc) {
 /** One condition of a scenario, in words. */
 function snCondText(hass, c, T) {
   if (!c || typeof c !== "object") return String(c);
-  const name = (id) => (hass.states[id] && hass.states[id].attributes && hass.states[id].attributes.friendly_name) || String(id);
+  const name = (id) => snFname(hass, id, String(id));
   const ents = [].concat(c.entity_id || []).map(name).join(", ");
   const t = c.condition;
   if (t === "state") return T.c_state.replace("{e}", ents).replace("{s}", [].concat(c.state).join(T.c_or_join));
@@ -2132,7 +1502,7 @@ function snTpl(hass, tpl, onDone) {
 }
 
 /** enquire_active_scenarios with trace: true, shared by the cards: one read every 30 s. */
-const snTrace = { map: null, t: 0, busy: false, v: 0 };
+const snTrace = { map: null, t: 0, busy: false };
 function snTraceEnsure(hass, onDone) {
   if (!hass || !hass.callWS || snTrace.busy || Date.now() - snTrace.t < 30000) return snTrace.map;
   const svc = hass.services && hass.services.supernotify;
@@ -2142,7 +1512,7 @@ function snTraceEnsure(hass, onDone) {
     const t = (r && r.response && r.response.trace) || [];
     const map = {};
     for (const list of [t[0] || [], t[1] || []]) for (const sc of list) if (sc && sc.name) map[sc.name] = sc;
-    snTrace.map = map; snTrace.v++;
+    snTrace.map = map;
     if (onDone) onDone();
   }).catch(() => { snTrace.map = snTrace.map || {}; }).finally(() => { snTrace.busy = false; });
   return snTrace.map;
@@ -2213,15 +1583,25 @@ function snEffectShort(effects) {
     else if (e.vol === 0) bits.push(`🔇 ${e.alias}`);
     else if (e.vol !== null) bits.push(`🔉 ${e.alias} ${e.vol}%`);
   }
-  return bits.length > 3 ? bits.slice(0, 3).join(", ") + ` +${bits.length - 3}` : bits.join(", ");
+  return snJoinMax(bits, 3);
+}
+
+/** 1.0.0: the last result at a trace path ({result, state...}) of a scenario's trace, or null. */
+function snTraceResult(sc, path) {
+  const v = ((sc.trace && sc.trace.trace) || {})[path];
+  const last = Array.isArray(v) && v.length ? v[v.length - 1] : null;
+  return last && last.result ? last.result : null;
+}
+/** 1.0.0: a scenario's conditions as a list. */
+function snConds(sc) {
+  return Array.isArray(sc.conditions) ? sc.conditions : sc.conditions ? [sc.conditions] : [];
 }
 
 /** The conditions of a scenario with their result now, on one line (null until the trace is read). */
 function snScenarioCondLine(hass, T, sc) {
   if (!sc) return null;
-  const tr = (sc.trace && sc.trace.trace) || {};
-  const res = (p) => { const v = tr[p]; const last = Array.isArray(v) && v.length ? v[v.length - 1] : null; return last && last.result ? last.result.result : undefined; };
-  const conds = Array.isArray(sc.conditions) ? sc.conditions : sc.conditions ? [sc.conditions] : [];
+  const res = (p) => { const r = snTraceResult(sc, p); return r ? r.result : undefined; };
+  const conds = snConds(sc);
   if (!conds.length) return { text: T.sc_no_cond, parts: [] };
   // and/or/not spelled out, nested ones in brackets ("at least one of these: A or (all of these: B, C)")
   const full = (c, depth) => {
@@ -2247,8 +1627,7 @@ function snScenarioCondLine(hass, T, sc) {
 function snScenarioWhyHtml(hass, T, sc, active) {
   const esc = snEsc;
   if (!sc) return "";
-  const tr = (sc.trace && sc.trace.trace) || {};
-  const res = (p) => { const v = tr[p]; const last = Array.isArray(v) && v.length ? v[v.length - 1] : null; return last && last.result ? last.result : null; };
+  const res = (p) => snTraceResult(sc, p);
   const line = (c, path, depth) => {
     const r = res(path);
     const ok = r ? r.result === true : null;
@@ -2258,7 +1637,7 @@ function snScenarioWhyHtml(hass, T, sc, active) {
       : (ok === false && now && now.state != null ? ` <span class="wq">(${esc(T.sc_now)}: ${esc(now.state)})</span>` : "");
     return `<div class="wl ${ok === true ? "y" : ok === false ? "n" : "q"}" style="padding-left:${depth * 16}px">${icon} ${esc(snCondText(hass, c, T))}${extra}</div>`;
   };
-  const conds = Array.isArray(sc.conditions) ? sc.conditions : sc.conditions ? [sc.conditions] : [];
+  const conds = snConds(sc);
   let h = `<div class="wh">${esc(active ? T.sc_yes : T.sc_no)}</div>`;
   if (sc.enabled === false) h += `<div class="wl n">✖ ${esc(T.sc_off_sw)}</div>`;
   if (!conds.length) h += `<div class="wl q">${esc(T.sc_no_cond)}</div>`;
@@ -2342,9 +1721,8 @@ function snScenarioKey(s) {
 function snWhen(v) {
   const d = v ? new Date(v) : null;
   if (!d || isNaN(d)) return "";
-  const p2 = (n) => String(n).padStart(2, "0");
-  const hm = `${p2(d.getHours())}:${p2(d.getMinutes())}`;
-  return d.toDateString() === new Date().toDateString() ? hm : `${p2(d.getDate())}/${p2(d.getMonth() + 1)} ${hm}`;
+  const hm = snHm(d);
+  return d.toDateString() === new Date().toDateString() ? hm : `${snPad2(d.getDate())}/${snPad2(d.getMonth() + 1)} ${hm}`;
 }
 
 const SN_OPT_LABELS = {
@@ -2376,8 +1754,7 @@ function snValText(v, T) {
 /** The expanded detail of a channel or transport row: label / value lines, then the attributes link. */
 function snDetailHtml(rows, T, config, hass) {
   const esc = snEsc;
-  const lang = (config && config.language) || (hass && hass.language) || "en";
-  const L = SN_OPT_LABELS[String(lang).slice(0, 2)] || SN_OPT_LABELS.en;
+  const L = SN_OPT_LABELS[snLang(config, hass)] || SN_OPT_LABELS.en;
   const lines = rows.filter((r) => r && r[1] !== undefined && r[1] !== null && r[1] !== "").map(([k, v, opt, cls]) =>
     `<div class="dr${cls ? " " + cls : ""}"><span class="dk">${esc(opt ? (L[k] || k.replace(/_/g, " ")) : k)}</span><span class="dv">${esc(snValText(v, T))}</span></div>`);
   return `<div class="det">${lines.join("")}<button class="dmore">${esc(T.det_more)} ›</button></div>`;
@@ -2402,9 +1779,16 @@ function snDetailCss(p) {
     .row[aria-expanded="true"] .chev { align-self: flex-start; padding-top: 2px; }`;
 }
 
+/**
+ * 1.0.0: the language of the texts - the card's `language:`, else Home Assistant's, without the region
+ * (zh-Hans -> zh). Numbers and dates keep following hass.locale where a card formats them (_loc).
+ */
+function snLang(config, hass) {
+  return String((config && config.language) || (hass && hass.language) || "en").split("-")[0];
+}
+
 function snT(config, hass) {
-  const lang = ((config && config.language) || (hass && hass.language) || "en").split("-")[0];
-  return SN_STRINGS[lang] || SN_STRINGS.en;
+  return SN_STRINGS[snLang(config, hass)] || SN_STRINGS.en;
 }
 
 /**
@@ -2422,63 +1806,64 @@ function snIntro(config, dark) {
 }
 
 /**
- * Toggle a SuperNotify delivery/transport/recipient binary_sensor.
- *
- * SuperNotify >= 2.4.0-beta1 exposes these as plain states set with
- * hass.states.async_set() (see hass_api.py expose_entity), not as a real
- * entity platform — there is no turn_on/turn_off service for them. What
- * DOES react is DeliveryRegistry/PeopleRegistry.handle_entity_state_change,
- * subscribed via async_track_state_change_event: it fires on ANY state
- * change to that entity_id, from any source. So the one thing a card can
- * do from the browser is write the new state through the REST API
- * (POST /api/states/<entity_id>) — same mechanism Developer Tools > States
- * uses. Attributes are included so the row doesn't blank out until the
- * next expose_entities() refresh.
- */
-function snSetBinaryState(hass, entityId, on) {
-  const cur = hass.states[entityId];
-  const attributes = (cur && cur.attributes) || {};
-  return hass.callApi("POST", `states/${entityId}`, {
-    state: on ? "on" : "off",
-    attributes,
-  });
-}
-
-/**
- * Turn an entity on/off. SuperNotify >= 2.7.0 exposes scenarios and
- * recipients as real `switch` entities: those go through the switch service
- * (the only way that actually enables/disables them). Anything else (the
- * delivery/transport binary_sensors, or older SuperNotify) keeps the raw
- * state write above.
+ * Turn an entity on/off. Scenarios, recipients, deliveries and transports are `switch` entities
+ * (the switch service enables/disables them). The one state write left is a manual scenario's
+ * binary_sensor (SupernotifyScenarioManualBinarySensor): SuperNotify applies a state written to it
+ * back to the scenario, and HA has no service for that, so it goes through POST /api/states.
  */
 function snToggle(hass, entityId, on) {
   if (/\.supernotify_scenario_/.test(entityId)) setTimeout(() => snEnquireBust(), 800);
   if (entityId && entityId.startsWith("switch.")) {
     return hass.callService("switch", on ? "turn_on" : "turn_off", { entity_id: entityId });
   }
-  return snSetBinaryState(hass, entityId, on);
+  const cur = hass.states[entityId];
+  return hass.callApi("POST", `states/${entityId}`, { state: on ? "on" : "off", attributes: (cur && cur.attributes) || {} });
 }
 
 /**
- * Human name from a SuperNotify friendly_name. Since 2.7.0 entity names are
- * translated and type-first ("SuperNotify Recipient Lorenzo abilitato",
- * "SuperNotify Condizione scenario Morning"): strip the integration name,
- * the type prefix and the "enabled" suffix. Returns "" when nothing is left
- * or the name is just the technical one.
+ * 1.0.0: snToggle for a switch <input>: when the call fails (a non-admin gets 401
+ * on POST /api/states) the switch goes back where it was and says why in its
+ * tooltip, instead of staying moved with an unhandled rejection.
  */
-/* ════════════════════════════════════════════════════════════════════════
- * One palette for every card (0.49.0)
- *
- * The 13 cards each carried their own copy, with diverging values. Light
- * values pass WCAG AA (4.5:1) as text on the card background: the HA blue
- * #03a9f4 is only 2.6:1, so text, chips and filled buttons use #0277bd
- * (4.8:1, white text on it too). Warning text is #a04f00 (5.8:1), success
- * #17733d (5.9:1, 0.59.1: also >= 4.9:1 on the green tints), error #c62828 (5.6:1), secondary text #5b6b7c (5.5:1).
- * Dark theme: text on a blue fill is dark (white on #03a9f4 is 2.6:1).
- * `style: theme` takes everything from the Home Assistant theme.
- * warnSoft / warnLine / warnInk: a tinted surface for "on but limited"
- * states (an active snooze), instead of white text on orange.
- * ════════════════════════════════════════════════════════════════════════ */
+/**
+ * 1.0.0 (perf): one click and one change listener on a list of rows (#rows), set once, instead of an
+ * onclick on every row and a listener on every switch after every redraw. `onRow(row, e)` for a tap on a
+ * row (not on its switch), `onSwitch(label, input)` when a switch is moved, `onOther(e)` first, true = handled.
+ */
+function snRowsDelegate(rows, onRow, onSwitch, onOther) {
+  rows._snRow = onRow; rows._snSw = onSwitch; rows._snOther = onOther;
+  if (rows._snDeleg) return;
+  rows._snDeleg = true;
+  rows.addEventListener("click", (e) => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest(".sw")) return;
+    if (rows._snOther && rows._snOther(e)) return;
+    const row = t.closest(".row");
+    if (row && rows.contains(row) && rows._snRow) rows._snRow(row, e);
+  });
+  rows.addEventListener("change", (e) => {
+    const input = e.target;
+    const label = input && input.closest && input.closest(".sw");
+    if (label && rows.contains(label) && rows._snSw) rows._snSw(label, input);
+  }, true); // capture: a change event that does not bubble still gets here
+}
+
+function snToggleSafe(hass, entityId, input) {
+  const was = !input.checked;
+  const box = input.closest(".sw") || input;
+  let p;
+  try { p = snToggle(hass, entityId, input.checked); } catch (e) { p = Promise.reject(e); }
+  return Promise.resolve(p).then(() => {
+    if (box.dataset.snErr) { box.removeAttribute("title"); delete box.dataset.snErr; }
+  }, (e) => {
+    input.checked = was;
+    const msg = `✖ ${(e && (e.message || e.body && e.body.message || e.code)) || e}`;
+    box.title = msg; box.dataset.snErr = "1";
+    console.warn("supernotify: toggle failed", entityId, e);
+  });
+}
+
 /* ════════════════════════════════════════════════════════════════════════
  * Home Assistant icons instead of emoji (0.50.0)
  *
@@ -2546,10 +1931,6 @@ function snIconify(html, cfg) {
 }
 
 /**
- * Singular or plural (0.54.0): T[key + "_1"] when n is 1 and the language has a singular,
- * else T[key]. snPl() gives "1 channel off" / "3 channels off".
- */
-/**
  * Message text for a card (0.56.1): markdown links become their text, **bold**, `code` and
  * heading marks go, so "[Clock Weather Card Update](https://github.com/...)" reads as
  * "Clock Weather Card Update" instead of the raw link.
@@ -2574,7 +1955,7 @@ function snSame(a, b) {
 }
 function snTech(name, shown) {
   if (!name || snSame(name, shown)) return "";
-  return `<span class="tech sn-tech" style="font-family:ui-monospace,'Roboto Mono',monospace;font-size:11px;font-weight:400">${String(name).replace(/&/g, "&amp;").replace(/</g, "&lt;")}</span>`;
+  return `<span class="tech sn-tech" style="font-family:ui-monospace,'Roboto Mono',monospace;font-size:11px;font-weight:400">${snEsc(name)}</span>`;
 }
 
 /**
@@ -2604,6 +1985,10 @@ function snNotifTitle(n) {
   return "";
 }
 
+/**
+ * Singular or plural (0.54.0): T[key + "_1"] when n is 1 and the language has a singular,
+ * else T[key]. snPl() gives "1 channel off" / "3 channels off".
+ */
 function snW(T, key, n) {
   return (+n === 1 && T[key + "_1"]) || T[key] || key;
 }
@@ -2612,6 +1997,45 @@ function snPl(T, key, n) {
 }
 
 /** Readable name of a time band: config name, else the translated standard one, else the key. */
+/**
+ * 1.0.0: the time bands of a card's `bands:` (control and bands card): key, start / volume entities, name,
+ * icon, start as "HH:MM" and in minutes (null when its input_datetime has no readable time), sorted by start
+ * from 04:00 (a band starting after midnight comes last; no start: at the end).
+ */
+const SN_BAND_ICONS = { early_morning: "🌅", morning: "🌤️", afternoon: "☀️", evening: "🌇", night: "🌙", late_night: "🌃" };
+function snBands(hass, cfgBands, T) {
+  const st = (id) => { const s = hass && hass.states[id]; return s ? s.state : undefined; };
+  return Object.entries(cfgBands || {}).map(([key, b]) => {
+    const [h, m] = (st(b.start) || "").split(":");
+    const ok = h !== undefined && m !== undefined;
+    return { key, start: b.start, volume: b.volume, name: snBandName(T, key, b.name), icon: b.icon || SN_BAND_ICONS[key] || "🕐",
+      hhmm: ok ? `${h.padStart(2, "0")}:${m}` : "", min: ok ? +h * 60 + +m : null };
+  }).sort((x, y) => {
+    // Sort by start time, never by config order: Home Assistant
+    // reserialises the card config with its keys sorted alphabetically,
+    // so the order written in YAML does not survive a save. Bands with
+    // no readable start time go last.
+    // the day starts at 04:00, so a band starting after midnight (late night) comes last
+    if (x.min === null) return y.min === null ? 0 : 1;
+    if (y.min === null) return -1;
+    const d = (m) => (m - 240 + 1440) % 1440;
+    return d(x.min) - d(y.min);
+  });
+}
+
+/** 1.0.0: the band in force now (from its start to the next band's start, across midnight), or null. */
+function snActiveBand(list) {
+  const now = new Date();
+  const t = now.getHours() * 60 + now.getMinutes();
+  const valid = list.filter((b) => b.min !== null).sort((a, b) => a.min - b.min);
+  for (let i = 0; i < valid.length; i++) {
+    const s = valid[i].min, e = valid[(i + 1) % valid.length].min;
+    const hit = s < e ? t >= s && t < e : t >= s || t < e;
+    if (hit) return valid[i];
+  }
+  return null;
+}
+
 function snBandName(T, key, custom) {
   return custom || (T && T["band_" + key]) || String(key).replace(/_/g, " ");
 }
@@ -2635,25 +2059,24 @@ const SN_FORM_LABELS = {
     archive_days: "Archive cleanup: older than (days)", media_days: "Picture cleanup: older than (days)",
     occupancy: "Who is home (from SuperNotify)", repairs: "SuperNotify repairs in the health list",
     snooze_announce: "Say pauses out loud (announce channel)", snooze_via: "Pauses go through", o_event: "the push buttons event (admin)", o_voice: "the voice commands", o_action: "SuperNotify's snooze action",
-    status: "Status row (who is home, time band, quiet)", catch_up: "After a pause: what it held back", show_off: "Also offer channels that are off", daily: "Daily counts from the archive when available",
+    status: "Status row (who is home, time band, quiet)", catch_up: "After a pause: what it held back", show_off: "Also offer channels that are off",
     snooze_minutes: "Snooze length (minutes)", snooze_panel: "Snooze tile opens the pause panel", announce_delivery: "Channel for announcements",
     last_notification: "Show the last notification", last_channels: "One chip per channel in the last notification",
     repeat_entity: "Repeat-last button (optional)", tile_layout: "Tiles", tile_columns: "Tile columns (empty = automatic)",
     update_entity: "SuperNotify update entity", cards_update_entity: "Cards update entity",
-    sent_today_entity: "Daily counter (utility meter, optional)", count_entity: "SuperNotify counter (long-term statistics)", health: "Health on top", stats: "Numbers",
+    health: "Health on top",
     poll_seconds: "Refresh every (seconds)", group: "Group by how a channel starts",
     hide_defaults: "Hide automatic DEFAULT_ channels", limit: "Notifications in the list",
     expand: "Open the folded parts", max_height: "Maximum height (CSS, e.g. 70vh)",
     group_repeats: "Group repeats of the same notification", auto_select: "Open the latest notification",
     priority_filters: "Critical and High filters (whole archive)",
     help: "\"?\" button with the legend", kpis: "Number boxes on top", versions: "Version boxes at the bottom",
-    source: "Archive source", entity: "Archive sensor (bridge only)", trigger_entity: "Refresh when this changes",
+    trigger_entity: "Refresh when this changes",
     dry_run: "Show \"Try without sending\"", dry_run_dupe_check: "Simulate the duplicate check too",
     days: "Days shown by default", manifest_url: "Automations manifest URL",
     o_supernotify: "SuperNotify", o_theme: "Home Assistant theme", o_mdi: "Home Assistant icons", o_emoji: "Emoji",
-    o_row: "Icon on the left", o_stacked: "Tall, icon on top", o_three: "Sent, failures, channels", o_full: "All five",
-    o_auto: "Automatic", o_sensor: "Sensor bridge (before SuperNotify 2.10)",
-    o_archive: "SuperNotify archive (2.12.1+)", o_history: "History of the helpers",
+    o_row: "Icon on the left", o_stacked: "Tall, icon on top",
+    o_auto: "Automatic",
   },
   it: {
     price_per_kwh: "Prezzo al kWh (per il costo)", price_entity: "Entità del prezzo (al posto del prezzo fisso)",
@@ -2664,25 +2087,24 @@ const SN_FORM_LABELS = {
     archive_days: "Pulizia archivio: piu' vecchie di (giorni)", media_days: "Pulizia foto: piu' vecchie di (giorni)",
     occupancy: "Chi è in casa (da SuperNotify)", repairs: "Riparazioni di SuperNotify nella salute",
     snooze_announce: "Annuncia le pause a voce (canale annunci)", snooze_via: "Le pause passano da", o_event: "l'evento dei pulsanti push (admin)", o_voice: "i comandi vocali", o_action: "l'azione snooze di SuperNotify",
-    status: "Riga di stato (chi è in casa, fascia, silenzio)", catch_up: "Dopo una pausa: cosa ha trattenuto", show_off: "Mostra anche i canali spenti", daily: "Conteggi giornalieri dall'archivio quando ci sono",
+    status: "Riga di stato (chi è in casa, fascia, silenzio)", catch_up: "Dopo una pausa: cosa ha trattenuto", show_off: "Mostra anche i canali spenti",
     snooze_minutes: "Durata dello snooze (minuti)", snooze_panel: "Il riquadro pausa apre il pannello delle pause", announce_delivery: "Canale per gli annunci",
     last_notification: "Mostra l'ultima notifica", last_channels: "Un chip per canale nell'ultima notifica",
     repeat_entity: "Pulsante ripeti ultima (facoltativo)", tile_layout: "Tile", tile_columns: "Colonne delle tile (vuoto = automatico)",
     update_entity: "Entità di aggiornamento di SuperNotify", cards_update_entity: "Entità di aggiornamento delle card",
-    sent_today_entity: "Contatore giornaliero (utility meter, facoltativo)", count_entity: "Contatore di SuperNotify (statistiche a lungo termine)", health: "Stato in alto", stats: "Numeri",
+    health: "Stato in alto",
     poll_seconds: "Aggiorna ogni (secondi)", group: "Raggruppa per come parte il canale",
     hide_defaults: "Nascondi i canali automatici DEFAULT_", limit: "Notifiche nell'elenco",
     expand: "Apri le parti chiuse", max_height: "Altezza massima (CSS, es. 70vh)",
     group_repeats: "Raggruppa le notifiche ripetute", auto_select: "Apri l'ultima notifica",
     priority_filters: "Filtri Critiche e Alte (tutto l'archivio)",
     help: "Pulsante «?» con la legenda", kpis: "Riquadri dei numeri in alto", versions: "Riquadri delle versioni in fondo",
-    source: "Sorgente dell'archivio", entity: "Sensore archivio (solo ponte)", trigger_entity: "Aggiorna quando cambia",
+    trigger_entity: "Aggiorna quando cambia",
     dry_run: "Mostra \"Prova senza inviare\"", dry_run_dupe_check: "Simula anche il controllo doppioni",
     days: "Giorni mostrati di default", manifest_url: "URL del manifest delle automazioni",
     o_supernotify: "SuperNotify", o_theme: "Tema di Home Assistant", o_mdi: "Icone di Home Assistant", o_emoji: "Emoji",
-    o_row: "Icona a sinistra", o_stacked: "Alte, icona sopra", o_three: "Inviate, fallimenti, canali", o_full: "Tutti e cinque",
-    o_auto: "Automatica", o_sensor: "Ponte con sensore (prima di SuperNotify 2.10)",
-    o_archive: "Archivio di SuperNotify (2.12.1+)", o_history: "Cronologia degli helper",
+    o_row: "Icona a sinistra", o_stacked: "Alte, icona sopra",
+    o_auto: "Automatica",
   },
 };
 
@@ -2699,27 +2121,25 @@ function snForm(kind) {
     sel("style", [["supernotify", "o_supernotify"], ["theme", "o_theme"]]),
     sel("icons", [["", "o_mdi"], ["emoji", "o_emoji"]]),
     bool("show_version"), txt("intro", true)] };
-  const archive = [num("limit", 5, 500), sel("source", [["", "o_auto"], ["sensor", "o_sensor"]]),
-    ent("entity", "sensor"), ent("trigger_entity", "sensor")];
+  const archive = [num("limit", 5, 500), ent("trigger_entity", "sensor")];
   const S = {
     control: [ent("dnd_entity", ["input_boolean", "switch"]), ent("quiet_entity", ["binary_sensor", "input_boolean"]),
       ent("presence_entity", "person"), bool("occupancy", true), num("snooze_minutes", 5, 240, 5), bool("snooze_panel", true),
       sel("snooze_via", [["", "o_auto"], ["action", "o_action"], ["event", "o_event"], ["voice", "o_voice"]]), bool("snooze_announce", false), txt("announce_delivery"),
       bool("last_notification"), bool("last_channels"), ent("repeat_entity", ["input_button", "button", "script"]),
       sel("tile_layout", [["", "o_row"], ["stacked", "o_stacked"]]), num("tile_columns", 1, 6), bool("status", true), bool("catch_up", true)],
-    overview: [ent("update_entity", "update"), ent("cards_update_entity", "update"), ent("sent_today_entity", "sensor"),
+    overview: [ent("update_entity", "update"), ent("cards_update_entity", "update"),
       ent("quiet_entity", ["binary_sensor", "input_boolean"]), ent("repeat_entity", ["input_button", "button", "script"]),
       bool("health", true), bool("help", true),
-      sel("stats", [["", "o_three"], ["full", "o_full"]]), bool("last_notification"), bool("occupancy", true),
+      bool("last_notification"), bool("occupancy", true),
       bool("repairs", true), num("poll_seconds", 10, 600, 10)],
     deliveries: [txt("title"), bool("group", true), bool("hide_defaults", true)],
     transports: [], recipients: [], simulator: [bool("dry_run")], bands: [],
-    scenarios: [num("poll_seconds", 10, 600, 10)],
-    composer: [ent("update_entity", "update"), bool("dry_run"), bool("dry_run_dupe_check"), bool("show_off")],
+    scenarios: [], // 1.0.0: poll_seconds is ignored (snActive keeps the active scenarios current)
+    composer: [bool("dry_run"), bool("dry_run_dupe_check"), bool("show_off")],
     automations: [txt("manifest_url")],
-    stats: [num("days", 2, 90), sel("source", [["", "o_auto"], ["archive", "o_archive"], ["history", "o_history"]]), ent("sent_today_entity", "sensor"), ent("count_entity", "sensor"), ent("update_entity", "update"), ent("cards_update_entity", "update"), bool("daily", true), bool("kpis", true), bool("versions", true)],
+    stats: [num("days", 2, 90), ent("update_entity", "update"), ent("cards_update_entity", "update"), bool("kpis", true), bool("versions", true)],
     archive: [...archive, bool("group_repeats", true), bool("priority_filters", true), bool("auto_select", true), bool("expand"), txt("max_height")],
-    why: [...archive, bool("group_repeats", true), bool("auto_select", true), bool("expand"), txt("max_height")],
     tools: [num("archive_days", 1, 365), num("media_days", 1, 365)],
     appliances: [num("price_per_kwh", 0, 5, 0.001), ent("price_entity", ["sensor", "input_number"]), txt("device"), bool("illustrations", true), bool("animations", true), bool("robot_dock", true), bool("show_new", true)],
   };
@@ -2729,6 +2149,19 @@ function snForm(kind) {
   };
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+ * One palette for every card (0.49.0)
+ *
+ * The 13 cards each carried their own copy, with diverging values. Light
+ * values pass WCAG AA (4.5:1) as text on the card background: the HA blue
+ * #03a9f4 is only 2.6:1, so text, chips and filled buttons use #0277bd
+ * (4.8:1, white text on it too). Warning text is #a04f00 (5.8:1), success
+ * #17733d (5.9:1, 0.59.1: also >= 4.9:1 on the green tints), error #c62828 (5.6:1), secondary text #5b6b7c (5.5:1).
+ * Dark theme: text on a blue fill is dark (white on #03a9f4 is 2.6:1).
+ * `style: theme` takes everything from the Home Assistant theme.
+ * warnSoft / warnLine / warnInk: a tinted surface for "on but limited"
+ * states (an active snooze), instead of white text on orange.
+ * ════════════════════════════════════════════════════════════════════════ */
 function snPalette(dark, style) {
   if (style === "theme") {
     return {
@@ -2756,6 +2189,13 @@ function snPalette(dark, style) {
         dot: "#c3cdd8" };
 }
 
+/**
+ * Human name from a SuperNotify friendly_name. Since 2.7.0 entity names are
+ * translated and type-first ("SuperNotify Recipient Lorenzo abilitato",
+ * "SuperNotify Condizione scenario Morning"): strip the integration name,
+ * the type prefix and the "enabled" suffix. Returns "" when nothing is left
+ * or the name is just the technical one.
+ */
 function snCleanName(fn, techName) {
   if (!fn) return "";
   const n = String(fn)
@@ -2776,12 +2216,12 @@ function snCleanName(fn, techName) {
 function snScenarioActive(hass, bsId) {
   if (!hass) return false;
   const sw = hass.states[bsId.replace(/^binary_sensor\./, "switch.")];
-  // 0.60.0: SuperNotify 2.12.0 can leave the scenario binary_sensors at their startup value
-  // (seen on a real install: 10 hours unchanged while the time-of-day scenarios moved on), so
-  // the answer of enquire_active_scenarios, refreshed every 30 s, wins when it is known
+  // 0.60.0: without `scenario_control: {refresh: true}` the scenario binary_sensors are "unknown",
+  // so the answer of enquire_active_scenarios, refreshed every 30 s, wins when it is known (with
+  // refresh on, snActive holds the live sensors' answer instead, see snLiveScenarioNames)
   snActiveEnsure(hass);
   if (snActive.names) {
-    const name = bsId.replace(/^(binary_sensor|switch)\.supernotify_scenario_/, "");
+    const name = snScenarioKey(bsId);
     return snActive.names.has(name) && (!sw || sw.state !== "off");
   }
   if (!hass.states[bsId] || hass.states[bsId].state !== "on") return false;
@@ -2801,7 +2241,7 @@ function snActiveSet(next) {
 
 /**
  * 0.89.0: with `scenario_control: {refresh: true}` SuperNotify keeps the scenario binary_sensors
- * live (2.13+: "unknown" when it is off). Live = at least one scenario with conditions reads on/off
+ * live ("unknown" when it is off). Live = at least one scenario with conditions reads on/off
  * - a manual scenario is on/off anyway, so it does not count. The set of "on" names, or null.
  * Worked out once per hass.states object.
  */
@@ -2820,10 +2260,7 @@ function snLiveScenarioNames(hass) {
   }
   snActive.states = raw;
   snActive.ids = null;
-  // a 2.12 SuperNotify could leave them at their startup value (0.60.0): only from 2.13 on, as said
-  // by its update entity - when that cannot be told, ask SuperNotify as before
-  if (snSupernotifyAtLeast(hass, "2.13.0") !== true) { snActive.live = false; return null; }
-  const ids = Object.keys(hass.states).filter((e) => e.startsWith("binary_sensor.supernotify_scenario_"));
+  const ids = snScenarioSensorIds(hass);
   snActive.ids = ids;
   const isLive = ids.some((e) => ["on", "off"].includes(hass.states[e].state) && !snIsManualScenario(hass, e));
   snActive.live = isLive;
@@ -2842,35 +2279,23 @@ function snActiveEnsure(hass) {
   snEnquire(hass, "enquire_active_scenarios").then((r) => {
     const list = (r && r.response && r.response.scenarios) || [];
     if (snActive.live) return; // the sensors came alive meanwhile
-    snActiveSet(new Set(list.map((x) => String(x).replace(/^(binary_sensor|switch)\.supernotify_scenario_/, ""))));
+    snActiveSet(new Set(list.map(snScenarioKey)));
   }).catch(() => {}).finally(() => { snActive.busy = false; });
 }
 
 /**
- * SuperNotify >= 2.7.0: a scenario without conditions has a *manual*
- * binary_sensor (translation_key "scenario_manual") whose state is the control
- * - writing it on/off makes the scenario apply or not. The entity registry
- * entry (hass.entities) says so; the translated friendly_name is the fallback.
+ * A scenario without conditions has a *manual* binary_sensor (translation_key "scenario_manual")
+ * whose state is the control - writing it on/off makes the scenario apply or not. The entity
+ * registry entry (hass.entities) says so.
  */
 function snIsManualScenario(hass, bsId) {
   const reg = hass && hass.entities && hass.entities[bsId];
-  if (reg && reg.translation_key) return reg.translation_key === "scenario_manual";
-  const st = hass && hass.states[bsId];
-  const fn = st && st.attributes && st.attributes.friendly_name;
-  return !!fn && /^(SuperNotify\s+)?(Scenario manuale|Scenario Manual)\s/i.test(fn);
+  return !!reg && reg.translation_key === "scenario_manual";
 }
 
-/**
- * Delivery `alias:` (surfaced as friendly_name on the delivery binary_sensor).
- * The engine's auto-generated "<name> Delivery Configuration" is not an alias.
- * Returns null when no alias is configured.
- */
+/** The switch of a delivery; null when there is none. */
 function snDeliveryEntity(hass, deliveryName) {
-  for (const dom of ["switch", "binary_sensor"]) {
-    const st = hass && hass.states[`${dom}.supernotify_delivery_${deliveryName}`];
-    if (st) return st;
-  }
-  return null;
+  return (hass && hass.states[`switch.supernotify_delivery_${deliveryName}`]) || null;
 }
 
 /**
@@ -2879,17 +2304,11 @@ function snDeliveryEntity(hass, deliveryName) {
  * Returns null when no alias is configured.
  */
 function snDeliveryAlias(hass, deliveryName) {
-  // SuperNotify >= PR #207: the switch carries the translated, alias-based name
-  // ("SuperNotify Delivery Notifica sul telefono abilitata"); older versions put
-  // the raw alias in the binary_sensor friendly_name.
-  for (const dom of ["switch", "binary_sensor"]) {
-    const st = hass && hass.states[`${dom}.supernotify_delivery_${deliveryName}`];
-    const fn = st && st.attributes && st.attributes.friendly_name;
-    if (!fn || fn === st.entity_id || /Delivery Configuration$/i.test(fn)) continue;
-    const clean = snCleanName(fn, deliveryName);
-    if (clean) return clean;
-  }
-  return null;
+  // the switch carries the translated, alias-based name ("SuperNotify Delivery Notifica sul telefono abilitata")
+  const st = hass && hass.states[`switch.supernotify_delivery_${deliveryName}`];
+  const fn = st && st.attributes && st.attributes.friendly_name;
+  if (!fn || fn === st.entity_id || /Delivery Configuration$/i.test(fn)) return null;
+  return snCleanName(fn, deliveryName) || null;
 }
 
 // 0.92.0 (perf): the binary_sensor.supernotify_scenario_* ids, once per states object for the page.
@@ -2908,11 +2327,9 @@ function snScenarioSensorIds(hass) {
 }
 
 /**
- * One row per SuperNotify delivery / transport / recipient. SuperNotify >= PR #207
- * (and >= 2.7.0 for recipients) has a real switch.* plus, on older installs, a
- * deprecated binary_sensor.* mirror: merge them by name, switch preferred, so the
- * rows are not doubled. `name` is the model name (the `name` attribute when there is
- * one: switch entity_ids are slugified).
+ * One row per SuperNotify delivery / transport / recipient / scenario: its switch.* (the deprecated
+ * binary_sensor.* mirror some installs still have is left out). `name` is the model name (the
+ * `name` attribute when there is one: switch entity_ids are slugified).
  */
 // 0.92.0 (perf): rows worked out once per states object for the whole page (cards, badge, health
 // checks used to rescan all entities several times per update each).
@@ -2925,19 +2342,15 @@ function snEntityRows(hass, kind) {
   if (!per) { per = new Map(); snRowsW.set(raw, per); }
   let rows = per.get(kind);
   if (!rows) {
-    const byName = new Map();
-    const re = new RegExp(`^(switch|binary_sensor)\\.supernotify_${kind}_(.+)$`);
+    rows = [];
+    const re = new RegExp(`^switch\\.supernotify_${kind}_(.+)$`);
     for (const id of Object.keys(raw)) {
       const m = id.match(re);
       if (!m) continue;
       const s = raw[id];
       const a = s.attributes || {};
-      const name = kind === "recipient" ? m[2] : String(a.name || m[2]);
-      const prev = byName.get(name);
-      if (prev && prev.isSwitch) continue;
-      byName.set(name, { id, name, on: s.state === "on", a, isSwitch: m[1] === "switch" });
+      rows.push({ id, name: kind === "recipient" ? m[1] : String(a.name || m[1]), on: s.state === "on", a });
     }
-    rows = [...byName.values()];
     per.set(kind, rows);
   }
   if (st !== raw) {
@@ -2945,7 +2358,8 @@ function snEntityRows(hass, kind) {
     void st[SN_SCAN];
     for (const r of rows) void st[r.id];
   }
-  return rows.map((r) => ({ ...r }));
+  // 1.0.0 (perf): a new array (callers sort it), the same row objects - no caller writes to a row
+  return rows.slice();
 }
 
 /**
@@ -2981,25 +2395,6 @@ function snChannelsFailed(hass, ignore) {
 }
 
 /**
- * The SuperNotify "Reset overrides" button (SuperNotify >= 2.8.0), or null.
- * Its entity_id follows the language HA was set up in (translation_key
- * "reset_overrides": button.supernotify_ripristina_override in Italian), so it
- * is found in the entity registry by platform + translation_key, with the
- * English id as the fallback when the registry is not available.
- */
-function snResetOverridesButton(hass) {
-  if (!hass) return null;
-  const reg = hass.entities || {};
-  for (const id of Object.keys(reg)) {
-    const e = reg[id];
-    if (id.startsWith("button.") && e && e.platform === "supernotify"
-        && e.translation_key === "reset_overrides" && hass.states[id]) return id;
-  }
-  const id = "button.supernotify_reset_overrides";
-  return hass.states[id] ? id : null;
-}
-
-/**
  * Who switched each channel on or off, for one archived notification. SuperNotify 2.8
  * (PR #210) archives it for every notification, and the index script returns it as `prov`;
  * before that it was inside the debug trace, and only with `debug: true`.
@@ -3009,21 +2404,12 @@ function snProvOf(n) {
   return prov && Object.keys(prov).length ? prov : null;
 }
 
-/**
- * Ask a supernotify-why-card on the page to show one notification (archive id or
- * its 8-char prefix). Returns false when there is no such card to answer.
- */
 /* ════════════════════════════════════════════════════════════════════════
- * Archive through SuperNotify's own action (2.10.0+, supernotify.enquire_archive)
+ * Archive through SuperNotify's own action (supernotify.enquire_archive)
  *
- * Before 2.10 the archive reached the dashboard through a bridge: a command_line
- * sensor (sensor.supernotify_archivio) running tools/sn_archive_index.py, plus
- * shell_command.sn_archive_detail for one notification. When Home Assistant has
- * supernotify.enquire_archive, the archive and why cards read the archive from it
- * instead, and build the same compact rows and the same detail the script used to
- * print (snArchiveItem / snArchiveDetail below are a port of its _item_of and
- * detail_of), so the rest of both cards is unchanged. The bridge still works: it
- * is used when the action is missing, or when a card sets `source: sensor`.
+ * The archive and why cards read the archive from it and build compact rows and the
+ * detail of one notification (snArchiveItem / snArchiveDetail below). 1.0.0: the
+ * command_line sensor + shell_command bridge of before SuperNotify 2.10 is gone.
  *
  * One store is shared by every card on the page:
  *   - the first card asks for the latest `limit` notifications (whole files, about
@@ -3048,8 +2434,12 @@ const SN_ARCHIVE_REASONS = {
  * SuppressionReason.is_rule, plus a channel switched off, plus no target, which on 2.11
  * only stays quiet for an implicit channel: a requested one is counted in `missed`).
  */
-const SN_ARCHIVE_ROUTINE = new Set(["pausa", "transport spento", "scenario", "priorita", "condizione",
-  "presenza", "spento", "nessun target"]);
+// 1.0.0: ONE set of SuperNotify codes for the list and the detail (the detail had its own,
+// with DUPE: a channel skipped as a duplicate was routine there and a problem in the list).
+// NO_TARGET: the detail still counts it as a problem when the channel was asked for by name.
+const SN_ARCHIVE_ROUTINE_CODES = new Set(["SNOOZE", "SNOOZED", "PRIORITY", "DELIVERY_CONDITION", "OCCUPANCY",
+  "DELIVERY_DISABLED", "SCENARIO", "TRANSPORT_DISABLED", "NO_SCENARIO", "DUPE", "NO_TARGET"]);
+const SN_ARCHIVE_ROUTINE = new Set([...SN_ARCHIVE_ROUTINE_CODES].map((k) => SN_ARCHIVE_REASONS[k]));
 
 /** True when an archive row deserves a look: failures, missed channels, odd skips, odd outcomes. */
 function snArchiveProblem(r) {
@@ -3102,9 +2492,19 @@ function snArchiveTitle(doc, message) {
   return snCut(String(message || "").split("\n")[0], 120);
 }
 
+/** 1.0.0: runs of white space as one space, none at the ends. */
+function snSquash(s) {
+  return String(s).split(/\s+/).filter(Boolean).join(" ");
+}
+
 function snArchiveShort(value, limit = SN_ARCHIVE_DETAIL_VALUE) {
-  const text = String(value).split(/\s+/).filter(Boolean).join(" ");
+  const text = snSquash(value);
   return snLen(text) <= limit ? text : snCut(text, limit - 1) + "…";
+}
+
+/** A skip reason as the list shows it: the short word of SN_ARCHIVE_REASONS, or the code cut short ("" for none). */
+function snArchiveReason(raw) {
+  return raw ? SN_ARCHIVE_REASONS[String(raw).toUpperCase()] || snCut(raw, 18).toLowerCase() : "";
 }
 
 /** A channel that delivered is just its pool index; skipped or failed is [index, "s"|"e", reason?]. */
@@ -3122,12 +2522,7 @@ function snArchiveChannels(doc, chan) {
         if (snIsObj(env) && env.skip_reason) { raw = env.skip_reason; break; }
       }
     }
-    if (raw) {
-      const key = String(raw).toUpperCase();
-      out.push([idx, "s", SN_ARCHIVE_REASONS[key] || snCut(raw, 18).toLowerCase()]);
-    } else {
-      out.push([idx, "s"]);
-    }
+    out.push(raw ? [idx, "s", snArchiveReason(raw)] : [idx, "s"]);
   }
   return out;
 }
@@ -3152,15 +2547,10 @@ function snArchiveSpokenBy(doc) {
         }
       }
       said = said || call.message;
-      if (said) return { text: snCut(String(said).split(/\s+/).filter(Boolean).join(" "), SN_ARCHIVE_SPOKEN_CHARS), name };
+      if (said) return { text: snCut(snSquash(said), SN_ARCHIVE_SPOKEN_CHARS), name };
     }
   }
   return null;
-}
-
-function snArchiveSpoken(doc) {
-  const r = snArchiveSpokenBy(doc);
-  return r ? r.text : null;
 }
 
 function snArchiveWhispered(doc) {
@@ -3188,19 +2578,22 @@ function snArchiveAppliance(doc) {
 const snAppliances = {
   names: null,  // entry_id -> title
   loading: null,
+  /**
+   * 1.0.0: the Autonotify config entries, read now ([] when they cannot be read) - the one read for the
+   * dashboard strategy, the appliances card (snAppl.ensure) and the names here, which it keeps current.
+   */
+  read(hass) {
+    return Promise.resolve()
+      .then(() => snWS(hass, { type: "config_entries/get", domain: "appliance_autonotify" }))
+      .then((list) => (Array.isArray(list) ? list : []), () => [])
+      .then((list) => {
+        this.names = Object.fromEntries(list.filter((e) => e && e.entry_id).map((e) => [e.entry_id, e.title || ""]));
+        return list;
+      });
+  },
   load(hass) {
     if (this.names) return Promise.resolve(this.names);
-    if (!this.loading) {
-      this.loading = Promise.resolve()
-        .then(() => hass.callWS({ type: "config_entries/get", domain: "appliance_autonotify" }))
-        .then((list) => {
-          const out = {};
-          for (const e of Array.isArray(list) ? list : []) if (e && e.entry_id) out[e.entry_id] = e.title || "";
-          this.names = out;
-        })
-        .catch(() => { this.names = {}; })
-        .then(() => this.names);
-    }
+    if (!this.loading) this.loading = this.read(hass).then(() => this.names);
     return this.loading;
   },
   label(entry) {
@@ -3209,21 +2602,31 @@ const snAppliances = {
   },
 };
 
-/** One row of the archive index, in the format of tools/sn_archive_index.py. */
-function snArchiveItem(doc, chan, scen) {
-  const message = String(doc.message || "").trim();
-  const title = snArchiveTitle(doc, message);
+/**
+ * 1.0.0: what an index row of a full document and of a summary have in common - id, time, title, the
+ * message without the title, priority and outcome. Returns the row and the flattened body.
+ */
+function snArchiveItemHead(src, title, message, light) {
   let body = message;
   if (title && body.startsWith(title)) body = body.slice(title.length);
-  body = body.split(/\s+/).filter(Boolean).join(" ");
+  body = snSquash(body);
   // the full id travels in `fid`, for the detail; `id` stays the 8 characters shown
-  const item = { id: String(doc.id || "").slice(0, 8), fid: String(doc.id || ""), t: snArchiveStamp(doc), ti: title };
+  const item = { id: String(src.id || "").slice(0, 8), fid: String(src.id || ""), t: snArchiveStamp(src), ti: title };
+  if (light) item.light = true;
   if (body) {
     item.m = snCut(body, SN_ARCHIVE_MESSAGE_CHARS);
     if (snLen(body) > SN_ARCHIVE_MESSAGE_CHARS) item.mt = true;
   }
-  if (doc.priority && doc.priority !== "medium") item.p = doc.priority;
-  if (doc.outcome && doc.outcome !== "success") item.o = doc.outcome;
+  if (src.priority && src.priority !== "medium") item.p = src.priority;
+  if (src.outcome && src.outcome !== "success") item.o = src.outcome;
+  return { item, body };
+}
+
+/** One row of the archive index (the compact format the archive card lists). */
+function snArchiveItem(doc, chan, scen) {
+  const message = String(doc.message || "").trim();
+  const title = snArchiveTitle(doc, message);
+  const { item, body } = snArchiveItemHead(doc, title, message);
   for (const [key, field] of [["d", "delivered"], ["f", "failed"], ["s", "skipped"], ["mi", "missed"]]) {
     const val = parseInt(doc[field] || 0, 10);
     if (val) item[key] = val;
@@ -3275,20 +2678,8 @@ function snArchiveLightRow(sum) {
 function snArchiveItemSummary(row, chan, scen) {
   const message = String(row.message || "").trim();
   const title = row.title ? snCut(row.title, 120) : snCut(message.split("\n")[0], 120);
-  let body = message;
-  if (title && body.startsWith(title)) body = body.slice(title.length);
-  body = body.split(/\s+/).filter(Boolean).join(" ");
-  const item = { id: String(row.id || "").slice(0, 8), fid: String(row.id || ""), t: snArchiveStamp(row), ti: title, light: true };
-  if (body) {
-    item.m = snCut(body, SN_ARCHIVE_MESSAGE_CHARS);
-    if (snLen(body) > SN_ARCHIVE_MESSAGE_CHARS) item.mt = true;
-  }
-  if (row.priority && row.priority !== "medium") item.p = row.priority;
-  if (row.outcome && row.outcome !== "success") item.o = row.outcome;
-  const reason = (raw) => {
-    const key = String(raw || "").toUpperCase();
-    return raw ? SN_ARCHIVE_REASONS[key] || snCut(raw, 18).toLowerCase() : "";
-  };
+  const { item } = snArchiveItemHead(row, title, message, true);
+  const reason = snArchiveReason;
   const c = [];
   let d = 0, f = 0, sk = 0;
   for (const [name, res] of Object.entries(row.deliveries || {})) {
@@ -3315,21 +2706,33 @@ function snArchiveItemSummary(row, chan, scen) {
  * the days that have some are read, as summaries, and their rows kept here - a finished day is
  * never read again. `counts` is null until known, or when this SuperNotify has no daily.
  */
+/**
+ * 1.0.0: a JSON value kept in this browser (localStorage). load() gives `def()` when nothing is kept, the
+ * storage is not available (private mode) or the value is broken / fails `ok`; save() ignores a full storage.
+ */
+function snStore(key, def, ok = (c) => c != null) {
+  return {
+    load() {
+      try {
+        const c = JSON.parse(window.localStorage.getItem(key) || "null");
+        if (ok(c)) return c;
+      } catch (e) { /* private mode or a broken cache */ }
+      return def();
+    },
+    save(c) {
+      try { window.localStorage.setItem(key, JSON.stringify(c)); } catch (e) { /* full or private */ }
+    },
+  };
+}
+const snDaysOk = (c) => !!(c && c.v === 1 && c.days && typeof c.days === "object");
+
 const SN_PRIO_KEY = "supernotify-archive-prio";
 const snArchivePrio = {
   counts: null, days: 0, ver: 0, busy: null, at: 0,
 
-  _load() {
-    try {
-      const c = JSON.parse(window.localStorage.getItem(SN_PRIO_KEY) || "null");
-      if (c && c.v === 1 && c.days && typeof c.days === "object") return c;
-    } catch (e) { /* private mode or a broken cache */ }
-    return { v: 1, days: {} };
-  },
-
-  _save(c) {
-    try { window.localStorage.setItem(SN_PRIO_KEY, JSON.stringify(c)); } catch (e) { /* full or private */ }
-  },
+  _store: snStore(SN_PRIO_KEY, () => ({ v: 1, days: {} }), snDaysOk),
+  _load() { return this._store.load(); },
+  _save(c) { this._store.save(c); },
 
   /** Read again at most every `minMs` (default 5 min), or now with force. */
   refresh(hass, force, minMs = 300000) {
@@ -3339,7 +2742,7 @@ const snArchivePrio = {
     this.busy = (async () => {
       if (snStatsDaily.busy) await snStatsDaily.busy.catch(() => {});
       const from = new Date(Date.now() - SN_PRIO_DAYS * 86400000);
-      const fromKey = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}-${String(from.getDate()).padStart(2, "0")}`;
+      const fromKey = snDayKey(from);
       const all = await snStatsDaily.get(hass, from.getTime());
       if (!all) { this.counts = null; return; }
       const days = all.filter((d) => d && d.date >= fromKey); // the stats card may have read a longer window
@@ -3368,8 +2771,8 @@ const snArchivePrio = {
           c.days = { all: { n: counts, rows } };
           c.one = true;
           c.sig = sig;
+          this._save(c); // 1.0.0 (perf): written only when the rows were read again
         }
-        this._save(c);
         this.counts = counts;
         this.days = days.length;
         this.ver += 1;
@@ -3405,8 +2808,7 @@ const snArchivePrio = {
   /** The kept rows of one priority, newest first. */
   rows(p) {
     const c = this._load();
-    return Object.values(c.days).flatMap((d) => d.rows || []).filter((x) => x.priority === p)
-      .sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
+    return Object.values(c.days).flatMap((d) => d.rows || []).filter((x) => x.priority === p).sort(snByCreatedDesc);
   },
 };
 
@@ -3517,7 +2919,7 @@ function snArchiveTrace(doc) {
   return Object.keys(out).length ? out : null;
 }
 
-/** The detail of one notification, in the format of sn_archive_index.py --detail. */
+/** The detail of one notification, in the format the why engine reads. */
 function snArchiveDetail(doc) {
   const message = String(doc.message || "").trim();
   const out = {
@@ -3581,60 +2983,6 @@ function snArchiveDetail(doc) {
   return out;
 }
 
-/** True when this card should read the archive through supernotify.enquire_archive. */
-/**
- * Shared read of the supernotify enquire_* services (0.57.0). Cards on the same dashboard ask
- * for the same data (last notification, active scenarios, snoozes) and their timers start
- * together, so one call is shared: a request in flight, or answered less than SN_ENQ_TTL ms
- * ago, is reused. Every caller gets its own copy of the answer. snEnquireBust() forgets
- * everything after an action that changes the data (snooze, clear, send) and tells the other
- * cards to read again ("supernotify-refresh" on window).
- */
-/**
- * Daily counts (0.69.0) from the long-term statistics of a total_increasing counter, by default
- * SuperNotify's own sensor.supernotify_notifications: Home Assistant compiles them for every such
- * sensor, so no utility_meter is needed. Returns { byDay: {YYYY-MM-DD: n}, today, yesterday } or
- * null when the counter has no statistics (yet). Today = live state minus the counter at the end
- * of the last complete day, so it does not wait for the hourly compile. Cached 5 minutes.
- */
-const SN_DAILY = new Map();
-function snDayKey(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function snDailyCounts(hass, id, days, force) {
-  if (!hass || !id || !hass.callWS) return Promise.resolve(null);
-  const key = id + "|" + days;
-  const hit = SN_DAILY.get(key);
-  if (hit && !force && Date.now() - hit.t < 300000) return hit.p;
-  const start = new Date(Date.now() - days * 86400000);
-  start.setHours(0, 0, 0, 0);
-  const p = Promise.resolve(snWS(hass, {
-    type: "recorder/statistics_during_period",
-    start_time: start.toISOString(), end_time: new Date().toISOString(),
-    statistic_ids: [id], period: "day", types: ["change", "state"],
-  })).then((r) => {
-    const rows = (r && r[id]) || [];
-    if (!rows.length) return null;
-    const todayKey = snDayKey(new Date());
-    const byDay = {};
-    let before = null;
-    rows.forEach((x) => {
-      const k = snDayKey(new Date(x.start));
-      byDay[k] = Math.round(+x.change || 0);
-      if (k !== todayKey && x.state != null) before = +x.state;
-    });
-    const live = hass.states[id];
-    const lv = live && !["unknown", "unavailable"].includes(live.state) ? +live.state : NaN;
-    if (before != null && Number.isFinite(lv) && lv >= before) {
-      byDay[todayKey] = Math.max(byDay[todayKey] || 0, Math.round(lv - before));
-    }
-    const y = new Date(); y.setDate(y.getDate() - 1);
-    return { byDay, today: byDay[todayKey] != null ? byDay[todayKey] : null, yesterday: byDay[snDayKey(y)] ?? null };
-  }).catch(() => null);
-  SN_DAILY.set(key, { t: Date.now(), p });
-  return p;
-}
-
 /**
  * 0.76.1: hass.callWS with a time limit. A read sent while the page was still connecting could stay
  * unanswered, and a card waiting on it never asked again; now it fails after `ms` and the next
@@ -3646,17 +2994,22 @@ function snWS(hass, msg, ms) {
     Promise.resolve(hass.callWS(msg)).then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
   });
 }
+/**
+ * Shared read of the supernotify enquire_* services (0.57.0). Cards on the same dashboard ask
+ * for the same data (last notification, active scenarios, snoozes) and their timers start
+ * together, so one call is shared: a request in flight, or answered less than SN_ENQ_TTL ms
+ * ago, is reused. Every caller gets its own copy of the answer. snEnquireBust() forgets
+ * everything after an action that changes the data (snooze, clear, send) and tells the other
+ * cards to read again ("supernotify-refresh" on window).
+ */
 const SN_ENQ = new Map();
 const SN_ENQ_TTL = 2500;
-const snEnqStats = { calls: 0, shared: 0 };
 function snEnquire(hass, service, data) {
   snLiveEnsure(hass);
   const key = service + "|" + JSON.stringify(data || {});
   const now = Date.now();
   let hit = SN_ENQ.get(key);
-  if (hit && now - hit.t < SN_ENQ_TTL) snEnqStats.shared++;
-  else {
-    snEnqStats.calls++;
+  if (!(hit && now - hit.t < SN_ENQ_TTL)) {
     const p = snWS(hass, {
       type: "call_service", domain: "supernotify", service,
       service_data: data || {}, return_response: true,
@@ -3665,7 +3018,8 @@ function snEnquire(hass, service, data) {
     SN_ENQ.set(key, hit);
     p.catch(() => { if (SN_ENQ.get(key) === hit) SN_ENQ.delete(key); });
   }
-  return hit.p.then((r) => (r == null ? r : JSON.parse(JSON.stringify(r))));
+  // every caller its own copy (some add to what they get); 1.0.0 (perf): structuredClone
+  return hit.p.then((r) => (r == null ? r : typeof structuredClone === "function" ? structuredClone(r) : JSON.parse(JSON.stringify(r))));
 }
 /**
  * Live updates (0.61.0): SuperNotify (>= 2.10.3) fires `supernotify_notification` once a
@@ -3695,11 +3049,25 @@ function snEnquireBust(delay) {
   if (delay) setTimeout(fire, delay); else fire();
 }
 
-function snArchiveNative(hass, config) {
-  if (config && config.source === "sensor") return false;
-  const svc = hass && hass.services && hass.services.supernotify;
-  return !!(svc && svc.enquire_archive);
+/** 1.0.0 (perf): what identifies a list of archived notifications - ids and creation times. */
+function snArchiveSig(list) {
+  let s = "";
+  for (const d of list) s += `${d.id}|${d.created}\n`;
+  return s;
 }
+
+/** Newest first, by the ISO creation time. */
+function snByCreatedDesc(a, b) {
+  return String(b.created || "").localeCompare(String(a.created || ""));
+}
+
+// 1.0.0: the two lists of snArchiveStore (full documents / light summaries) - their fields and what they ask
+const SN_ARCHIVE_SLOTS = {
+  full: { list: "docs", limit: "limit", stamp: "stamp", fetched: "fetched", loading: "loading", at: "loadingAt", run: "run",
+    max: 100, def: 40, data: {}, err: true },
+  light: { list: "light", limit: "lightLimit", stamp: "lightStamp", fetched: "lightFetched", loading: "lightLoading", at: "lightAt",
+    run: "lightRun", max: SN_ARCHIVE_LIGHT_MAX, def: SN_ARCHIVE_LIGHT, data: { verbosity: "summary" }, row: snArchiveLightRow },
+};
 
 const snArchiveStore = {
   docs: [],            // archived notifications, newest first
@@ -3718,7 +3086,6 @@ const snArchiveStore = {
   lightStamp: undefined,
   lightFetched: null,
   lightLoading: null,
-  lightOk: null,       // false when this SuperNotify has no verbosity summary (before 2.12.1)
   extra: new Map(),    // full documents read one by one (a notification opened from the light list)
 
   /** A notification just finished (live event): read the newest entries now. */
@@ -3742,40 +3109,18 @@ const snArchiveStore = {
    * the newest few. Only what the list draws is kept (no provenance, no presence).
    */
   ensureLight(hass, limit, trigger) {
-    if (this.lightOk === false) return;
-    if (trigger) this.trigger = trigger;
-    const st = hass.states[trigger || this.trigger || "sensor.supernotify_notifications"];
-    const stamp = (st ? st.last_updated : "none") + "|" + this.pokes;
-    const want = Math.max(1, Math.min(SN_ARCHIVE_LIGHT_MAX, limit || SN_ARCHIVE_LIGHT));
-    if (this.lightLoading && Date.now() - (this.lightAt || 0) < 20000) return;
-    let data = null;
-    if (!this.lightFetched || want > this.lightLimit) data = { verbosity: "summary", limit: want };
-    else if (stamp !== this.lightStamp) data = { verbosity: "summary", limit: SN_ARCHIVE_REFRESH };
-    if (!data) return;
-    this.lightLimit = Math.max(this.lightLimit, want);
-    this.lightStamp = stamp;
-    const run = (this.lightRun || 0) + 1;
-    this.lightRun = run;
-    this.lightAt = Date.now();
-    this.lightLoading = this._call(hass, data).then((resp) => {
-      if (run !== this.lightRun) return;
-      const got = (resp.notifications || []).filter(snIsObj).map(snArchiveLightRow);
-      const seen = new Set(got.map((d) => d.id));
-      const merged = got.concat(this.light.filter((d) => !seen.has(d.id)));
-      merged.sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
-      this.light = merged.slice(0, this.lightLimit);
-      this.lightOk = true;
-      this.lightFetched = new Date();
-    }).catch(() => {
-      // before 2.12.1 there is no summary: the cards read full documents as before
-      if (run === this.lightRun && !this.lightFetched) this.lightOk = false;
-    }).finally(() => {
-      if (run !== this.lightRun) return;
-      this.lightLoading = null;
-      this.index = null;
-      this.version += 1;
-      window.dispatchEvent(new CustomEvent("supernotify-archive"));
-    });
+    this._sync(hass, "light", limit, trigger);
+  },
+
+  /**
+   * 1.0.0 (perf): the store changed - one "supernotify-archive" for the readings that end together
+   * (the full and the light list answer in the same tick), not one each.
+   */
+  _changed() {
+    this.version += 1;
+    if (this._fireQ) return;
+    this._fireQ = true;
+    queueMicrotask(() => { this._fireQ = false; window.dispatchEvent(new CustomEvent("supernotify-archive")); });
   },
 
   async _call(hass, data) {
@@ -3789,45 +3134,58 @@ const snArchiveStore = {
   /** Keep the store current for this card: first load, then only the newest few. */
   ensure(hass, limit, trigger) {
     snLiveEnsure(hass);
+    this._sync(hass, "full", limit, trigger);
+  },
+
+  /**
+   * 1.0.0: one reading for both lists (SN_ARCHIVE_SLOTS says which fields): first `limit`, then only the newest
+   * few when the trigger entity or a live event says something changed.
+   */
+  _sync(hass, slot, limit, trigger) {
+    const k = SN_ARCHIVE_SLOTS[slot];
     if (trigger) this.trigger = trigger;
     const st = hass.states[trigger || this.trigger || "sensor.supernotify_notifications"];
     const stamp = (st ? st.last_updated : "none") + "|" + this.pokes;
-    const want = Math.max(1, Math.min(100, limit || 40));
+    const want = Math.max(1, Math.min(k.max, limit || k.def));
     // 0.74.1: a reading that never answered (e.g. made while the page was still connecting)
     // is given up after 20 s, so the next update tries again
-    if (this.loading && Date.now() - (this.loadingAt || 0) < 20000) return;
+    if (this[k.loading] && Date.now() - (this[k.at] || 0) < 20000) return;
     let data = null;
-    if (!this.fetched || want > this.limit) data = { limit: want };
-    else if (stamp !== this.stamp) data = { limit: SN_ARCHIVE_REFRESH };
+    if (!this[k.fetched] || want > this[k.limit]) data = { ...k.data, limit: want };
+    else if (stamp !== this[k.stamp]) data = { ...k.data, limit: SN_ARCHIVE_REFRESH };
     if (!data) return;
-    this.limit = Math.max(this.limit, want);
-    this.stamp = stamp;
-    const run = (this.run || 0) + 1;
-    this.run = run;
-    this.loadingAt = Date.now();
-    this.loading = this._call(hass, data).then((resp) => {
-      if (run !== this.run) return; // a newer reading replaced this one
-      const got = (resp.notifications || []).filter(snIsObj);
+    this[k.limit] = Math.max(this[k.limit], want);
+    this[k.stamp] = stamp;
+    const run = (this[k.run] || 0) + 1;
+    this[k.run] = run;
+    this[k.at] = Date.now();
+    let changed = !this[k.fetched];
+    const err0 = this.error;
+    this[k.loading] = this._call(hass, data).then((resp) => {
+      if (run !== this[k.run]) return; // a newer reading replaced this one
+      let got = (resp.notifications || []).filter(snIsObj);
+      if (k.row) got = got.map(k.row);
       const seen = new Set(got.map((d) => d.id));
-      const merged = got.concat(this.docs.filter((d) => !seen.has(d.id)));
-      merged.sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
-      this.docs = merged.slice(0, this.limit);
-      this.index = null;
-      this.error = null;
-      this.fetched = new Date();
+      const merged = got.concat(this[k.list].filter((d) => !seen.has(d.id)));
+      merged.sort(snByCreatedDesc);
+      const next = merged.slice(0, this[k.limit]);
+      // 1.0.0 (perf): index and event only when the set of notifications changed (not after another card's read)
+      if (changed || snArchiveSig(next) !== snArchiveSig(this[k.list])) { this[k.list] = next; changed = true; }
+      if (k.err) this.error = null;
+      this[k.fetched] = new Date();
     }).catch((e) => {
-      if (run === this.run) this.error = (e && e.message) || String(e);
+      // the light list: the next update asks again
+      if (k.err && run === this[k.run]) this.error = (e && e.message) || String(e);
     }).finally(() => {
-      if (run !== this.run) return;
-      this.loading = null;
-      this.version += 1;
-      window.dispatchEvent(new CustomEvent("supernotify-archive"));
+      if (run !== this[k.run]) return;
+      this[k.loading] = null;
+      if (changed || (k.err && this.error !== err0)) { this.index = null; this._changed(); }
     });
   },
 
   /** The compact index the cards already know, built from the store. */
   getIndex() {
-    if (!this.fetched && !this.error) return { items: [], chan: [], scen: [], loading: true, native: true };
+    if (!this.fetched && !this.error) return { items: [], chan: [], scen: [], loading: true };
     if (!this.index) {
       const chan = snArchivePool();
       const scen = snArchivePool();
@@ -3844,14 +3202,18 @@ const snArchiveStore = {
         try { items.push(full ? snArchiveItem(full, chan, scen) : snArchiveItemSummary(row, chan, scen)); } catch (e) { /* skip */ }
       }
       items.sort((a, b) => (b.t || 0) - (a.t || 0));
-      this.index = { items, chan: chan.names, scen: scen.names, native: true,
+      this.index = { items, chan: chan.names, scen: scen.names,
         generated: this.fetched ? this.fetched.toISOString() : null };
     }
     return { ...this.index, error: this.error && !this.docs.length ? this.error : null };
   },
 
-  /** The archived notification whose id starts with this, from the store or from the action. */
-  async doc(hass, id) {
+  /**
+   * The archived notification whose id starts with this, from the store or from the action.
+   * 1.0.0 (perf): `quiet` (the appliances card) - a document read from the action is not kept
+   * here, so the archive card's list is not rebuilt for reads it does not show.
+   */
+  async doc(hass, id, quiet) {
     const wanted = String(id || "").toLowerCase();
     const found = this.docs.find((d) => String(d.id || "").toLowerCase().startsWith(wanted))
       || [...this.extra.values()].find((d) => String(d.id || "").toLowerCase().startsWith(wanted));
@@ -3861,6 +3223,7 @@ const snArchiveStore = {
     try {
       const resp = await this._call(hass, { id: row ? row.id : wanted, verbosity: "standard" });
       if (!(snIsObj(resp) && resp.id)) return null;
+      if (quiet) return resp;
       this.extra.set(String(resp.id), resp);
       if (this.extra.size > 60) this.extra.delete(this.extra.keys().next().value);
       this.index = null;
@@ -3917,14 +3280,21 @@ function snTrackedHass(hass, tr) {
     has(t, k) { if (typeof k === "string") tr.keys.add(k); return k in t; },
     ownKeys(t) { tr.scanned = true; return Reflect.ownKeys(t); },
   });
+  // 1.0.0 (perf): one bound copy of each function per hass object, shared by every card
+  let bound = snBoundW.get(hass);
+  if (!bound) { bound = new Map(); snBoundW.set(hass, bound); }
   return new Proxy(hass, {
     get(t, k) {
       if (k === "states") return states;
       const v = t[k];
-      return typeof v === "function" ? v.bind(t) : v;
+      if (typeof v !== "function") return v;
+      let b = bound.get(k);
+      if (!b || b.f !== v) { b = { f: v, b: v.bind(t) }; bound.set(k, b); }
+      return b.b;
     },
   });
 }
+const snBoundW = new WeakMap();
 
 function snChanged(tr, hass) {
   const p = tr.snap;
@@ -3948,40 +3318,21 @@ function snSnap(tr, hass) {
   };
 }
 
-/**
- * SuperNotify version from its HACS update entity: true / false against `min`
- * ("2.11.1"), null when it cannot be told (no update entity, unparsable).
- */
-function snSupernotifyAtLeast(hass, min, entity) {
-  const st = hass && hass.states && hass.states[entity || "update.supernotify_update"];
-  const raw = st && st.attributes && st.attributes.installed_version;
-  const parse = (v) => {
-    const m = String(v || "").match(/(\d+)\.(\d+)(?:\.(\d+))?/);
-    return m ? [+m[1], +m[2], +(m[3] || 0)] : null;
-  };
-  const have = parse(raw);
-  const want = parse(min);
-  if (!have || !want) return null;
-  for (let i = 0; i < 3; i++) if (have[i] !== want[i]) return have[i] > want[i];
-  return true;
-}
-
 /** A camera's friendly name, or its entity_id without "camera.". */
 function snCameraName(hass, id) {
-  const st = hass && hass.states && hass.states[id];
-  return (st && st.attributes && st.attributes.friendly_name) || String(id || "").replace(/^camera\./, "");
+  return snFname(hass, id, String(id || "").replace(/^camera\./, ""));
 }
 
-/** A scenario's readable name from its switch / binary_sensor, as the why-card shows it. */
+/** A scenario's readable name from its switch, as the why-card shows it. */
 function snScenarioName(hass, name) {
-  for (const dom of ["switch", "binary_sensor"]) {
-    const st = hass && hass.states && hass.states[`${dom}.supernotify_scenario_${name}`];
-    const c = st && snCleanName(st.attributes.friendly_name, name);
-    if (c) return c;
-  }
-  return name;
+  const st = hass && hass.states && hass.states[`switch.supernotify_scenario_${name}`];
+  return (st && snCleanName(st.attributes.friendly_name, name)) || name;
 }
 
+/**
+ * Ask a supernotify-archive-card (or its alias supernotify-why-card) on the page to show one
+ * notification (archive id or its 8-char prefix). Returns false when there is no such card to answer.
+ */
 function snWhyOpen(id) {
   if (!id || !window.__snWhyCards) return false;
   window.dispatchEvent(new CustomEvent("supernotify-why", { detail: { id } }));
@@ -3993,16 +3344,11 @@ function snAgo(date, T) {
   const m = Math.floor((Date.now() - date.getTime()) / 60000);
   if (m < 1) return T.ago_now;
   if (m < 60) return `${m} ${T.ago_min}`;
-  const hh = String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
+  const hh = snHm(date);
   if (m < 1440) return `${Math.floor(m / 60)} ${T.ago_h} · ${hh}`;
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")} ${hh}`;
+  return `${snPad2(date.getDate())}/${snPad2(date.getMonth() + 1)} ${hh}`;
 }
 
-/**
- * Shared CSS for the small pill on/off switch used by the toggle-able
- * delivery/transport/recipient rows (same look as automations-card's
- * enable/disable switch).
- */
 /**
  * Lists that flow into as many columns as fit the card's own width: one on a
  * phone or in a narrow dashboard section, two or three in a wide one. Headings,
@@ -4016,6 +3362,11 @@ const SN_FLOW_CSS = `
   .flow > .badge, .flow > .tag, .flow > .err { grid-column: 1 / -1; }
 `;
 
+/**
+ * Shared CSS for the small pill on/off switch used by the toggle-able
+ * delivery/transport/recipient rows (same look as automations-card's
+ * enable/disable switch).
+ */
 const SN_SWITCH_CSS = `
   .sw { position: relative; width: 40px; height: 22px; flex: none; }
   .sw input { opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
@@ -4026,6 +3377,140 @@ const SN_SWITCH_CSS = `
   .sw input:checked + .sl { background: var(--sn-sw-on, #03a9f4); }
   .sw input:checked + .sl::after { left: 21px; }
 `;
+
+/** The on/off pill of a list row (delivery, transport, recipient, scenario): SN_SWITCH_CSS draws it. */
+function snSwitchHtml(p, id, on, label, title) {
+  return `<label class="sw" data-id="${snEsc(id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
+          <input type="checkbox" ${on ? "checked" : ""} aria-label="${snEsc(label)}"${title ? ` title="${title}"` : ""}>
+          <span class="sl"></span>
+        </label>`;
+}
+
+/** 1.0.0: the CSS the deliveries, transports and recipients lists share (each card adds its own after it). */
+function snListCss(p) {
+  return `:host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
+               cursor: pointer; border-radius: 8px; }
+        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
+               border-top: 1px solid ${p.line}; pointer-events: none; }
+        .row:hover { background: ${p.soft}; }
+        .em { font-size: 22px; flex-shrink: 0; }
+        .mid { flex: 1; min-width: 0; }
+        .mid b { font-size: 14px; }
+        .mid .sub { font-size: 11.5px; color: ${p.muted}; }
+        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
+               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
+               white-space: nowrap; }
+        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750;
+                 flex-shrink: 0; }
+        .b-off { background: ${p.soft}; color: ${p.muted}; }
+        ${SN_SWITCH_CSS}
+        ${SN_FLOW_CSS}
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }`;
+}
+
+/**
+ * 1.0.0: base of the deliveries, transports and recipients cards - one row per `switch.supernotify_<kind>_*`
+ * (on first, then by name), an on/off switch on each, one listener on #rows, the list rebuilt only when its
+ * HTML changed, a tap that opens the row's detail. A card says what differs: static snKind / snEntity /
+ * snEmpty / snSize, _css(p), _body(list, T, p) (rows with data-i), _onRow(item, node, e), _onOther(e), _after(rows, T).
+ */
+class SnListCard extends SnCard {
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { style: "supernotify", ...(config || {}) };
+    this._rendered = false;
+  }
+
+  getCardSize() {
+    return this.constructor.snSize;
+  }
+
+  _list() {
+    const out = snEntityRows(this._hass, this.constructor.snEntity);
+    // enabled first, then alphabetical — like the prototype list
+    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
+    return out;
+  }
+
+  /** A link from another card (0.65.0): open these rows. */
+  _focus(d) {
+    if (!d || !d.ids) return;
+    this._open = new Set(d.ids);
+    this._update();
+    snFlash(this, '.row[aria-expanded="true"]');
+  }
+
+  _css() {
+    return "";
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    this.shadowRoot.innerHTML = snIconify(`
+      <style>
+        ${snListCss(p)}
+        ${this._css(p)}
+      </style>
+      <ha-card>
+        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
+        ${snVer(this._config, this.constructor.snKind, p)}
+      </ha-card>`, this._config);
+    this._update();
+  }
+
+  _update() {
+    if (!this.shadowRoot) return;
+    const T = snT(this._config, this._hass);
+    const p = this._palette();
+    const list = this._list();
+    const rows = this.shadowRoot.getElementById("rows");
+    if (!list.length) {
+      rows.innerHTML = snIconify(`<span class="badge b-off">${T[this.constructor.snEmpty]}</span>`, this._config);
+      this._rowsHtml = null;
+      return;
+    }
+    const html = snIconify(this._body(list, T, p), this._config);
+    // 1.0.0 (perf): rebuilt only when it changed; one listener on #rows for every row and switch
+    this._items = list;
+    const key = this._key(html);
+    if (key != null && key === this._rowsHtml && rows.firstChild) return;
+    this._rowsHtml = key;
+    rows.innerHTML = html;
+    snRowsDelegate(rows, (node, e) => {
+      const it = this._items[+node.dataset.i];
+      if (it) this._onRow(it, node, e);
+    }, (label, input) => { this._rowsHtml = null; snToggleSafe(this._hass, label.dataset.id, input); }, (e) => this._onOther(e));
+    this._after(rows, T);
+  }
+
+  _key(html) {
+    return html;
+  }
+
+  _onOther() {
+    return false;
+  }
+
+  _after() {}
+
+  // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
+  _onRow(it, node, e) {
+    if (e.target.closest(".dmore")) { this._moreInfo(it.id); return; }
+    if (e.target.closest(".det") || e.target.closest(".dres")) return;
+    this._open = this._open || new Set();
+    if (this._open.has(it.id)) this._open.delete(it.id); else this._open.add(it.id);
+    this._update();
+  }
+}
 
 /**
  * 0.39.0 (bundle 0.88.0): strings of the new overview - status band, numbers from the archive,
@@ -4074,6 +3559,18 @@ const SN_OV_STRINGS = {
 Object.assign(SN_STRINGS.en, SN_OV_STRINGS.en);
 Object.assign(SN_STRINGS.it, SN_OV_STRINGS.it);
 
+/**
+ * 1.0.0: what an update entity says (overview health and versions, stats card): installed and latest version,
+ * an update waiting, a restart asked for, the release notes. Null without the entity.
+ */
+function snVersionInfo(hass, id) {
+  const st = id && hass && hass.states[id];
+  if (!st) return null;
+  const a = st.attributes || {};
+  return { a, upd: st.state === "on", inst: a.installed_version || "", latest: a.latest_version || "", url: a.release_url,
+    restart: /restart/i.test(a.release_summary || "") };
+}
+
 /** 0.39.0: compare two dotted versions ("0.88.0" < "0.88.1"): -1, 0 or 1. */
 function snVerCmp(a, b) {
   const x = String(a).split(/[.-]/).map((n) => parseInt(n, 10) || 0), y = String(b).split(/[.-]/).map((n) => parseInt(n, 10) || 0);
@@ -4087,8 +3584,7 @@ function snVerCmp(a, b) {
  * complete days the archive has, at most 30.
  */
 function snOvDays(days, now) {
-  const pad = (x) => String(x).padStart(2, "0");
-  const key = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const key = snDayKey;
   const t0 = new Date(now); t0.setHours(0, 0, 0, 0);
   const y0 = new Date(t0); y0.setDate(y0.getDate() - 1);
   const kToday = key(t0), kY = key(y0);
@@ -4145,12 +3641,14 @@ class SupernotifyControlCard extends SnCard {
 
   _onHass(hass, fresh, changed) {
     super._onHass(hass, fresh, changed);
+    const boot = !this._booted;
     if (this._config.last_notification) {
       const cnt = this._st("sensor.supernotify_notifications");
-      if (cnt !== this._lastCount) { this._lastCount = cnt; this._refreshLast(); }
+      if (cnt !== this._lastCount) { this._lastCount = cnt; if (!boot) this._refreshLast(); }
     }
-    // first hass after connect: connectedCallback may have run without hass
-    if (!this._booted) { this._booted = true; this._refreshSnoozes(); this._refreshLast(); }
+    // first hass after connect: connectedCallback may have run without hass.
+    // 1.0.0: each read once (the last notification was read twice) and who is home too
+    if (boot) { this._booted = true; this._refreshSnoozes(); this._refreshLast(); this._refreshOcc(); }
   }
 
   getCardSize() {
@@ -4198,7 +3696,7 @@ class SupernotifyControlCard extends SnCard {
   }
 
   async _refreshOcc() {
-    if (!this._hass || this._config.presence_entity || this._config.occupancy === false) return;
+    if (!this._hass || this._config.presence_entity || this._config.occupancy === false || this._config.status === false) return;
     try {
       const r = await snEnquire(this._hass, "enquire_occupancy");
       const o = snOccupancy(this._hass, r && r.response);
@@ -4270,10 +3768,10 @@ class SupernotifyControlCard extends SnCard {
     const el = this.shadowRoot && this.shadowRoot.getElementById("cu");
     if (!el) return;
     const held = this._cu;
-    if (!held || !held.length) { el.hidden = true; el.innerHTML = ""; return; }
+    if (!held || !held.length) { el.hidden = true; el.innerHTML = ""; this._cuHtml = ""; return; }
     const T = snT(this._config, this._hass);
     const esc = snEsc;
-    const hm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    const hm = snHm;
     const nAll = held.filter((h) => h.all).length;
     const nSome = held.length - nAll;
     const groups = {};
@@ -4282,10 +3780,19 @@ class SupernotifyControlCard extends SnCard {
     const span = `${T.cu_from} ${hm(held[0].t)} ${T.cu_to} ${hm(held[held.length - 1].t)}`;
     const rows = held.slice(-30).reverse().map((h) => `<div class="sr"><span class="sl">${esc(snTitleShow(h.ti) || "—")}</span><span class="su">${hm(h.t)}${h.all ? "" : " · " + esc(T.cu_part.replace("{n} ", ""))}</span></div>`).join("");
     el.hidden = false;
-    el.innerHTML = snIconify(`<div class="sh"><b>😴 ${esc(T.cu_title)}</b><button class="sb" id="cuOk">${esc(T.cu_ok)}</button></div>
+    const html = snIconify(`<div class="sh"><b>😴 ${esc(T.cu_title)}</b><button class="sb" id="cuOk">${esc(T.cu_ok)}</button></div>
       <div class="sk">${esc(T.cu_held.replace("{n}", held.length))}${nSome ? ` (${esc(T.cu_part.replace("{n}", nSome))})` : ""} · ${esc(span)}</div>
       <div class="su">${esc(top)}</div>
       <details><summary class="su">${esc(T.cu_list)}</summary><div class="slist">${rows}</div></details>`, this._config);
+    // 1.0.0: redrawn on every update before - the open list folded back while being read
+    if (html !== this._cuHtml) {
+      const det = el.querySelector("details");
+      const open = !!(det && det.open);
+      el.innerHTML = html;
+      this._cuHtml = html;
+      const d2 = el.querySelector("details");
+      if (open && d2) d2.open = true;
+    }
     el.querySelector("#cuOk").onclick = () => {
       try { window.localStorage.setItem(SN_CU_KEY, String(Date.now())); } catch (e) { /* private mode */ }
       this._cu = null;
@@ -4293,17 +3800,12 @@ class SupernotifyControlCard extends SnCard {
     };
   }
 
-  // ── helpers ────────────────────────────────────────────────────────────
-  _st(entityId) {
-    const s = this._hass && this._hass.states[entityId];
-    return s ? s.state : undefined;
-  }
+  // ── helpers (_st: SnCard) ─────────────────────────────────────────────
   _on(entityId) {
     return this._st(entityId) === "on";
   }
   _friendly(entityId, fallback) {
-    const s = this._hass && this._hass.states[entityId];
-    return (s && s.attributes.friendly_name) || fallback || entityId;
+    return snFname(this._hass, entityId, fallback || entityId);
   }
   // 0.60.0: any domain (input_boolean, switch, light, fan...) - the visual editor also offers switch.*
   _toggle(entityId) {
@@ -4315,26 +3817,7 @@ class SupernotifyControlCard extends SnCard {
 
   _activeBand() {
     const bands = this._config.bands;
-    if (!bands) return null;
-    const now = new Date();
-    const t = now.getHours() * 60 + now.getMinutes();
-    const entries = Object.entries(bands)
-      .map(([name, b]) => {
-        const raw = this._st(b.start) || "";
-        const [h, m] = raw.split(":");
-        if (h === undefined || m === undefined) return null;
-        return { name: snBandName(snT(this._config, this._hass), name, b.name), min: +h * 60 + +m, volume: b.volume };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.min - b.min);
-    if (!entries.length) return null;
-    for (let i = 0; i < entries.length; i++) {
-      const s = entries[i].min;
-      const e = entries[(i + 1) % entries.length].min;
-      const hit = s < e ? t >= s && t < e : t >= s || t < e;
-      if (hit) return entries[i];
-    }
-    return null;
+    return bands ? snActiveBand(snBands(this._hass, bands, snT(this._config, this._hass))) : null;
   }
 
   _activeScenarios() {
@@ -4346,7 +3829,7 @@ class SupernotifyControlCard extends SnCard {
     // force, each one resumable); `snooze_panel: false` keeps the one-tap behaviour below
     if (this._config.snooze_panel !== false) {
       this._snzOpen = !this._snzOpen;
-      this._renderSnz();
+      this._renderSnz(true);
       if (this._snzOpen) {
         const el = this.shadowRoot.getElementById("snzp");
         if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -4386,12 +3869,7 @@ class SupernotifyControlCard extends SnCard {
       input.focus();
       return;
     }
-    const delivery = {};
-    delivery[this._config.announce_delivery || "alexa_announce"] = {};
-    this._hass.callService("notify", "supernotify", {
-      message,
-      data: { delivery_selection: "fixed", delivery },
-    });
+    snAnnounce(this._hass, this._config.announce_delivery || "alexa_announce", message);
     input.value = "";
     this._toast(snT(this._config, this._hass).announced);
   }
@@ -4412,6 +3890,7 @@ class SupernotifyControlCard extends SnCard {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
+    this._snzHtml = this._cuHtml = null; // 1.0.0: fresh elements, draw them again
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
@@ -4542,7 +4021,7 @@ class SupernotifyControlCard extends SnCard {
         <div id="groups"></div>
         ${snVer(this._config, "control", p)}
         <div class="toast" id="toast"></div>
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     const abtn = this.shadowRoot.getElementById("announceBtn");
     if (abtn) {
       abtn.addEventListener("click", () => this._announce());
@@ -4575,24 +4054,13 @@ class SupernotifyControlCard extends SnCard {
     if (c.last_notification_strip) {
       try { msg = msg.replace(new RegExp(c.last_notification_strip, "m"), "").trim(); } catch (e) { /* bad regex: ignore */ }
     }
-    if (!n && !title) { el.innerHTML = snIconify(`<div class="lm" style="opacity:.7">${T.no_notif}</div>`, this && this._config); return; }
+    if (!n && !title) { el.innerHTML = snIconify(`<div class="lm" style="opacity:.7">${T.no_notif}</div>`, this._config); return; }
     const prio = n && n.priority
       ? `<span class="lb" style="color:${snPrioColor(this._palette(), n.priority) || "inherit"}">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "";
     let when = "";
     if (n && n.created) { const d = new Date(n.created); if (!isNaN(d)) when = `<span class="lb mut">🕐 ${esc(snAgo(d, T))}</span>`; }
-    const chips = [];
-    const { ok: okNames, err: errNames, skipped } = snLastDeliveries(this._hass, n);
-    if (c.last_channels) {
-      for (const l of okNames) chips.push(`<span class="lb ok">✔ ${esc(l)}</span>`);
-      for (const l of errNames) chips.push(`<span class="lb err">✖ ${esc(l)}</span>`);
-    }
     // 0.52.0: counts with the channel names in the tooltip (`last_channels: true` = one chip each)
-    if (!c.last_channels) {
-      if (okNames.length) chips.push(`<span class="lb ok" title="${esc(okNames.join(", "))}">✔ ${snPl(T, "ln_delivered", okNames.length)}</span>`);
-      if (errNames.length) chips.push(`<span class="lb err" title="${esc(errNames.join(", "))}">✖ ${snPl(T, "ln_failed", errNames.length)}</span>`);
-    }
-    if (n && +n.missed > 0) chips.push(`<span class="lb mis">⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
-    if (skipped) chips.push(`<span class="lb mut">${snPl(T, "skipped_n", skipped)}</span>`);
+    const chips = snLastChips(this._hass, n, T, { ok: "lb ok", err: "lb err", mis: 'class="lb mis"', skip: "lb mut" }, c.last_channels);
     const rep = c.repeat_entity
       ? `<button class="rep" id="repBtn">🔁 ${T.repeat}</button>` : "";
     const why = n && n.id && window.__snWhyCards
@@ -4600,20 +4068,24 @@ class SupernotifyControlCard extends SnCard {
     el.innerHTML = snIconify(`
       <div class="lh"><span class="lt">${esc(snTitleShow(title)) || "📨 " + T.last_notif}</span>${prio}${when}</div>
       ${msg ? `<div class="lm">${esc(msg)}</div>` : ""}
-      <div class="lf">${chips.join("")}${why}${rep}</div>`, this && this._config);
+      <div class="lf">${chips.join("")}${why}${rep}</div>`, this._config);
     const wb = el.querySelector("#whyBtn");
     if (wb) wb.onclick = () => snWhyOpen(n.id);
     const btn = el.querySelector("#repBtn");
     if (btn) btn.onclick = () => {
-      const [dom] = c.repeat_entity.split(".");
-      const svc = dom === "input_button" ? "press" : dom === "script" ? "turn_on" : "press";
-      this._hass.callService(dom, svc, { entity_id: c.repeat_entity });
+      snRepeat(this._hass, c.repeat_entity);
       this._toast("🔁 " + T.repeat);
     };
   }
 
   _renderStatus() {
     const c = this._config;
+    // 1.0.0: status: false - out before anything below asks SuperNotify for scenarios / occupancy
+    if (c.status === false) {
+      const bar0 = this.shadowRoot && this.shadowRoot.getElementById("statusbar");
+      if (bar0) { bar0.innerHTML = ""; bar0.style.display = "none"; }
+      return;
+    }
     const p = this._palette();
     const T = snT(c, this._hass);
     const segs = [];
@@ -4645,8 +4117,7 @@ class SupernotifyControlCard extends SnCard {
     if (act !== null) segs.push(seg("🎬 " + T.act_scen, String(act.length))
       .replace('<div class="sseg"', snCardReach("scenarios") ? '<div class="sseg go" data-go="scenarios"' : '<div class="sseg"'));
     const bar = this.shadowRoot.getElementById("statusbar");
-    if (c.status === false) { bar.innerHTML = ""; bar.style.display = "none"; return; } // 0.74.0
-    bar.innerHTML = snIconify(segs.join(""), this && this._config);
+    bar.innerHTML = snIconify(segs.join(""), this._config);
     // 0.65.0: who is home -> recipients card, active scenarios -> scenarios card
     bar.querySelectorAll("[data-go]").forEach((g) => {
       g.onclick = () => g.dataset.go === "recipients"
@@ -4714,7 +4185,7 @@ class SupernotifyControlCard extends SnCard {
         `<div class="ctile ${d.cls}" data-i="${i}" role="button" tabindex="0">
            ${this._icon(d.icon)}<span class="tx"><b>${d.name}</b><span class="ts">${d.sub}</span></span>
          </div>`)
-      .join(""), this && this._config);
+      .join(""), this._config);
     el.querySelectorAll(".ctile").forEach((node) => {
       const d = defs[+node.dataset.i];
       node.onclick = () => d.act();
@@ -4729,15 +4200,19 @@ class SupernotifyControlCard extends SnCard {
    * SUPERNOTIFY_<SNOOZE|SILENCE|NORMAL>_<EVERYONE|USER>_<target>[_<minutes>] (snoozer.py).
    * USER = the person whose user_id is the one logged in. NORMAL resumes one pause.
    */
-  _renderSnz() {
+  _renderSnz(force) {
     const el = this.shadowRoot && this.shadowRoot.getElementById("snzp");
     if (!el) return;
-    if (!this._snzOpen) { el.hidden = true; el.innerHTML = ""; return; }
+    if (!this._snzOpen) { el.hidden = true; el.innerHTML = ""; this._snzHtml = ""; return; }
+    // 1.0.0: an update must not redraw the panel under the user (an open <select> closed).
+    // Only a focused <select>: a button keeps the focus after a click and would freeze the list.
+    const act = this.shadowRoot.activeElement;
+    if (!force && !el.hidden && act && act.tagName === "SELECT" && el.contains(act)) return;
     el.hidden = false;
     const T = snT(this._config, this._hass);
     const esc = snEsc;
     const st = this._snz || (this._snz = { what: "NONCRITICAL", target: "", who: "EVERYONE", min: this._config.snooze_minutes || 30 });
-    const me = this._myPerson();
+    const me = snMyPerson(this._hass);
     const dels = snEntityRows(this._hass, "delivery").filter((d) => !/^default_/i.test(d.name));
     if (st.what === "DELIVERY" && !st.target && dels.length) st.target = dels[0].name;
     if (st.what === "PRIORITY" && !st.target) st.target = "low";
@@ -4760,30 +4235,30 @@ class SupernotifyControlCard extends SnCard {
     const myUser = this._hass && this._hass.user && this._hass.user.id;
     const canResume = (s) => String(s.recipient_type || "").toUpperCase() !== "USER" ||
       (s.recipient && this._hass.states[s.recipient] && (this._hass.states[s.recipient].attributes || {}).user_id === myUser);
-    const pad = (n) => String(n).padStart(2, "0");
     const voice = this._snzVoice();
     const rows = live.map((s, i) => `<div class="sr"><div class="sm"><span class="sl">${esc(snSnoozeLabel(this._hass, s, T))}</span>
         <span class="su">${s._end ? `${esc(T.until)} ${esc(snSnzUntil(s._end, this._hass))}` : esc(T.snz_until_resumed)}${snSnoozeReason(s, T) ? ` · ${esc(snSnoozeReason(s, T))}` : ""}</span></div>
         ${canResume(s) && !voice ? `<button class="sb" data-r="${i}">${esc(T.snz_resume)}</button>` : ""}</div>`).join("");
-    el.innerHTML = snIconify(`<div class="sh"><b>${esc(T.snz_title)}</b><button class="sx" id="snzX" aria-label="${esc(T.snz_close)}">✕</button></div>
+    const html = snIconify(`<div class="sh"><b>${esc(T.snz_title)}</b><button class="sx" id="snzX" aria-label="${esc(T.snz_close)}">✕</button></div>
       ${voice ? `<div class="sk">${esc(T.snz_voice_info)}</div>` : `<div class="sk">${esc(T.snz_what)}</div><div class="srow">${whatRow}</div>${sub ? `<div class="srow">${sub}</div>` : ""}
       <div class="sk">${esc(T.snz_who)}</div><div class="srow">${whoRow}</div>`}
       <div class="sk">${esc(T.snz_len)}</div><div class="srow">${lenRow}</div>
       <div class="sgo"><button class="sp" id="snzGo">😴 ${esc(T.snz_go)}</button>${voice ? `<button class="sb" id="snzMine">${esc(T.snz_resume_mine)}</button>` : ""}</div>
       ${live.length ? `<div class="sk">${esc(T.snz_active)}</div><div class="slist">${rows}</div>
         <div class="sgo"><button class="sb" id="snzAll">${esc(T.snz_resume_all)}</button></div>` : ""}`, this._config);
+    if (html !== this._snzHtml) { el.innerHTML = html; this._snzHtml = html; } // 1.0.0: only when it changed
     el.querySelectorAll(".sc").forEach((b) => {
       b.onclick = () => {
         const g = b.dataset.g, v = b.dataset.v;
         if (g === "min") st.min = +v;
         else st[g] = v;
         if (g === "what") st.target = "";
-        this._renderSnz();
+        this._renderSnz(true);
       };
     });
     const sel = el.querySelector("#snzT");
     if (sel) sel.onchange = () => { st.target = sel.value; };
-    el.querySelector("#snzX").onclick = () => { this._snzOpen = false; this._renderSnz(); };
+    el.querySelector("#snzX").onclick = () => { this._snzOpen = false; this._renderSnz(true); };
     el.querySelector("#snzGo").onclick = async () => {
       const kind = +st.min > 0 ? "snooze" : "silence";
       await this._snzSpeak(this._snzText(kind, voice ? { ...st, mine: true } : st));
@@ -4845,9 +4320,7 @@ class SupernotifyControlCard extends SnCard {
         }
         await this._hass.callService(m[1], m[2], payload);
       } else {
-        const delivery = {};
-        delivery[name] = {};
-        await this._hass.callService("notify", "supernotify", { message: text, data: { delivery_selection: "fixed", delivery } });
+        await snAnnounce(this._hass, name, text);
       }
     } catch (e) { /* the pause goes on anyway */ }
   }
@@ -4865,7 +4338,7 @@ class SupernotifyControlCard extends SnCard {
     else if (st.what === "PRIORITY") what = T.sa_w_pr.replace("{x}", String(T["prio_" + st.target] || st.target || "").toLowerCase());
     else what = T.sa_w_nc;
     if (!st.mine && st.who === "USER") {
-      const me = this._myPerson && this._myPerson();
+      const me = snMyPerson(this._hass);
       const nm = me && this._hass.states[me] && this._hass.states[me].attributes.friendly_name;
       if (nm) what += " " + T.sa_for.replace("{x}", nm);
     }
@@ -4878,7 +4351,7 @@ class SupernotifyControlCard extends SnCard {
 
   async _snzSay(cmd, min) {
     const T = snT(this._config, this._hass);
-    const it = String((this._config.language || this._hass.language || "en")).startsWith("it");
+    const it = snLang(this._config, this._hass) === "it";
     const text = cmd === "resume" ? (it ? "riattiva le mie notifiche" : "resume my notifications")
       : cmd === "silence" ? (it ? "silenzia le mie notifiche fino a nuovo ordine" : "silence my notifications until I say")
       : (it ? `metti in pausa le mie notifiche per ${min} minuti` : `pause my notifications for ${min} minutes`);
@@ -4895,14 +4368,14 @@ class SupernotifyControlCard extends SnCard {
 
   /** A link from another card (0.65.0): { snz: true } opens the pause panel. */
   _focus(d) {
-    if (d && d.snz && this._config.snooze_panel !== false) { this._snzOpen = true; this._renderSnz(); }
+    if (d && d.snz && this._config.snooze_panel !== false) { this._snzOpen = true; this._renderSnz(true); }
   }
 
   /** clear_snoozes, said out loud with snooze_announce (0.64.0: one copy for tile and panel). */
   async _resumeAll() {
     const T = snT(this._config, this._hass);
     try {
-      await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
+      await snClearSnoozes(this._hass);
       this._toast(T.cleared);
       this._snzSpeak(this._snzText("resume_all"));
     } catch (e) {
@@ -4923,7 +4396,7 @@ class SupernotifyControlCard extends SnCard {
     const scope = String(st.what || "NONCRITICAL").toLowerCase();
     const d = { scope };
     if (!["noncritical", "everything"].includes(scope)) d.name = st.target;
-    if (st.who === "USER") d.person = st.person || this._myPerson();
+    if (st.who === "USER") d.person = st.person || snMyPerson(this._hass);
     if (st.resume) d.command = "resume";
     else if (+st.min > 0) { d.command = "snooze"; d.minutes = +st.min; }
     else d.command = "silence";
@@ -4958,14 +4431,6 @@ class SupernotifyControlCard extends SnCard {
       this._toast(`✖ ${(e && e.message) || e}`);
     }
     snEnquireBust(800);
-  }
-
-  /** person.* linked to the logged-in user, for "only me" pauses. */
-  _myPerson() {
-    const uid = this._hass && this._hass.user && this._hass.user.id;
-    if (!uid) return null;
-    return Object.keys(this._hass.states).find((e) => e.startsWith("person.") &&
-      (this._hass.states[e].attributes || {}).user_id === uid) || null;
   }
 
   _collapseKey() {
@@ -5017,7 +4482,7 @@ class SupernotifyControlCard extends SnCard {
         return `<div class="mgroup ${foldable ? "clk" : ""} ${isFold ? "fold" : ""}" data-g="${gi}" role="${foldable ? "button" : ""}"
                      ${foldable ? `aria-expanded="${!isFold}" tabindex="0"` : ""}>${g.name || ""}${counter}${chev}</div><div>${pills}</div>`;
       })
-      .join(""), this && this._config);
+      .join(""), this._config);
     el.querySelectorAll(".mpill").forEach((node) => {
       node.onclick = () => this._toggle(node.dataset.e);
     });
@@ -5041,12 +4506,11 @@ window.customCards.push({
 
 /* ════════════════════════════════════════════════════════════════════════
  * supernotify-overview-card — dashboard overview
- * Stats (sent, failures, active scenarios, deliveries) and last notification.
- * Transport status lives in supernotify-transports-card only (since 0.18.0).
- * Data from entities exposed by SuperNotify plus
- * enquire_* services called over WebSocket. Active scenarios prefer the
- * reactive binary_sensor.supernotify_scenario_* state (SuperNotify >= 2.4.0,
- * Live Scenarios) over the polled enquire_active_scenarios count.
+ * A status band (what to look at, with its button, and the versions), today's
+ * numbers (from the archive when SuperNotify has enquire_archive, else from the
+ * counters), the channels on, the pauses, the last notification with Repeat and
+ * Why, who is home, and the active scenarios with what they change. Data from
+ * SuperNotify's entities and its enquire_* actions.
  * ════════════════════════════════════════════════════════════════════════ */
 
 class SupernotifyOverviewCard extends SnCard {
@@ -5075,27 +4539,20 @@ class SupernotifyOverviewCard extends SnCard {
     const T = snT(this._config, this._hass);
     const c = this._config;
     const chips = [];
-    const upd = c.update_entity && this._hass.states[c.update_entity];
-    if (upd) {
-      const a = upd.attributes || {};
-      if (upd.state === "on") chips.push({ k: "warn", t: `⬆ ${T.h_update} ${a.latest_version || ""}`, href: a.release_url });
-      else if (/restart/i.test(a.release_summary || "")) chips.push({ k: "warn", t: `🔄 ${T.h_restart}` });
-      else chips.push({ k: "ok", t: `✔ SuperNotify ${a.installed_version || ""} ${T.h_uptodate}` });
+    const v = snVersionInfo(this._hass, c.update_entity);
+    if (v) {
+      if (v.upd) chips.push({ k: "warn", t: `⬆ ${T.h_update} ${v.latest}`, href: v.url });
+      else if (v.restart) chips.push({ k: "warn", t: `🔄 ${T.h_restart}` });
+      else chips.push({ k: "ok", t: `✔ SuperNotify ${v.inst} ${T.h_uptodate}` });
     }
     const failures = this._failures().n || 0;
     if (failures > 0) chips.push({ k: "crit", t: `✖ ${snPl(T, "h_failures", failures)}` });
-    const trErr = this._scan("transport").filter((t) => {
-      const st = this._hass.states[t.id];
-      return st && st.state !== "unavailable" && +((st.attributes || {}).error_count || 0) > 0;
-    });
+    // 0.74.0: channels switched off by hand; 0.89.0: a channel whose last send failed, with when and to see it
+    const { tr: trErr, chErr, off: delsOff } = snHealthFacts(this._hass, c.ignore, this._scan("delivery"));
     if (trErr.length) chips.push({ k: "crit", go: ["transports", { ids: trErr.map((t) => t.id) }], t: `⚠️ ${snPl(T, "h_transport_err", trErr.length)}`, title: trErr.map((t) => {
       const a = (this._hass.states[t.id] || {}).attributes || {};
       return a.last_error_message ? `${t.name}: ${a.last_error_message}` : t.name;
     }).join(" · ") });
-    const ign = new Set((c.ignore || []).map((x) => String(x).toLowerCase()));
-    const delsOff = snChannelsOff(this._hass, this._scan("delivery"), ign); // 0.74.0: switched off by hand
-    // 0.89.0: a channel whose last send failed (SuperNotify >= 2.14), with when and to see it
-    const chErr = snChannelsFailed(this._hass, ign);
     if (chErr.length) chips.push({ k: "crit", go: ["deliveries", { ids: chErr.map((d) => d.id) }], t: `✖ ${snPl(T, "h_ch_err", chErr.length)}`,
       title: chErr.map((d) => `${snDeliveryAlias(this._hass, d.name) || d.name}: ${snLastSendText(d.a, T)}`).join(" · ") });
     if (delsOff.length) chips.push({ k: "off", go: ["deliveries", { ids: delsOff.map((d) => d.id) }], t: `🔕 ${snPl(T, "h_channels_off", delsOff.length)}`, title: delsOff.map((d) => snDeliveryAlias(this._hass, d.name) || d.name).join(", ") });
@@ -5140,11 +4597,11 @@ class SupernotifyOverviewCard extends SnCard {
     if (this._onCards) window.removeEventListener("supernotify-cards", this._onCards);
   }
 
-  // SuperNotify >= 2.4.0 (Live Scenarios): binary_sensor.supernotify_scenario_*
-  // reports a real, reactive on/off state — read it directly instead of
-  // waiting for the next enquire_active_scenarios poll. Returns null on
-  // older versions (state stuck at "unknown"), so the caller falls back
-  // to the polled count from _refresh().
+  // binary_sensor.supernotify_scenario_* reports a real, reactive on/off state
+  // with `scenario_control: {refresh: true}` — read it directly instead of
+  // waiting for the next enquire_active_scenarios poll. Returns null when
+  // refresh is off (state "unknown"), so the caller falls back to the polled
+  // count from _refresh().
   _activeScenarios() {
     return snActiveScenarioIds(this._hass);
   }
@@ -5173,18 +4630,6 @@ class SupernotifyOverviewCard extends SnCard {
 
   /** A link from this card: show it in the card of that kind (0.65.0). */
   _focus() { /* nothing to show in the overview */ }
-
-  /** Scenario name for a chip: entity ids (reactive path) become the translated alias. */
-  _scenLabel(s) {
-    const m = String(s).match(/^binary_sensor\.supernotify_scenario_(.+)$/);
-    if (!m) return s;
-    for (const dom of ["switch", "binary_sensor"]) {
-      const st = this._hass.states[`${dom}.supernotify_scenario_${m[1]}`];
-      const clean = st && snCleanName(st.attributes.friendly_name, m[1]);
-      if (clean) return clean;
-    }
-    return m[1];
-  }
 
   setConfig(config) {
     if (!config) throw new Error("Invalid configuration");
@@ -5221,21 +4666,20 @@ class SupernotifyOverviewCard extends SnCard {
     const P = this._parts();
     const top = P.has("status") || P.has("numbers");
     try {
+      // 1.0.0 (perf): the active scenarios are snActive's (shared, kept current) - read here only when
+      // it has no answer yet, as a fallback for the first drawing
       const [act, last, snz, occ, rep] = await Promise.all([
-        P.has("scenarios") ? this._ws("enquire_active_scenarios") : {},
+        P.has("scenarios") && this._activeScenarios() === null ? this._ws("enquire_active_scenarios") : {},
         P.has("last") ? this._ws("enquire_last_notification") : {},
         top ? this._ws("enquire_snoozes") : {},
         P.has("occupancy") ? this._ws("enquire_occupancy").catch(() => ({})) : {},
         P.has("status") && this._config.repairs !== false ? snRepairsFetch(this._hass) : [],
       ]);
-      this._active = act.scenarios || [];
+      if (act.scenarios) this._active = act.scenarios;
       this._last = last && Object.keys(last).length ? last : null;
       this._snoozes = snz.snoozes || [];
       this._occ = snOccupancy(this._hass, occ);
       this._repairs = rep || [];
-      const meter = this._config.sent_today_entity && this._hass.states[this._config.sent_today_entity];
-      // without the archive's daily totals: the meter, else SuperNotify's own counter
-      this._daily = !P.has("numbers") || meter || this._d30 ? null : await snDailyCounts(this._hass, "sensor.supernotify_notifications", 2);
     } catch (e) {
       this._active = this._active || null;
       this._last = this._last || null;
@@ -5245,12 +4689,11 @@ class SupernotifyOverviewCard extends SnCard {
   }
 
   // 0.60.0: sensor.supernotify_failures only counts crashes inside SuperNotify, never a channel
-  // that failed; with the native archive count the failed channel sends of today instead
+  // that failed: the failed channel sends of today, from the archive, instead
   _failures() {
-    // 0.86.0: the whole of today from verbosity daily (a few KB); 40 full documents covered only
-    // the last hours on a busy installation. 0.39.0: the last 30 days in the same call - today,
-    // yesterday, the average, duplicates and channel failures for the numbers.
-    if (this._hass && snArchiveNative(this._hass, this._config) && !this._ftNo) {
+    // 0.86.0: the whole of today from verbosity daily (a few KB). 0.39.0: the last 30 days in the
+    // same call - today, yesterday, the average, duplicates and channel failures for the numbers.
+    if (this._hass) {
       const trig = this._hass.states[this._config.trigger_entity || "sensor.supernotify_notifications"];
       const stamp = trig ? trig.last_updated : "";
       if (!this._ftBusy && (this._ftStamp !== stamp || Date.now() - (this._ftAt || 0) > 300000)
@@ -5260,45 +4703,18 @@ class SupernotifyOverviewCard extends SnCard {
         this._ftAt = Date.now();
         const from = new Date(); from.setHours(0, 0, 0, 0); from.setDate(from.getDate() - 30);
         // 0.39.1: the 30 days through the store shared with the stats card, kept in this browser - a
-        // finished day is not read again, so after the first time only today is asked for (30 days
-        // take seconds on a busy archive). Until the store has answered once, today alone first:
-        // it tells whether this SuperNotify has `daily` at all, without marking the store as without.
-        const d0 = new Date(); d0.setHours(0, 0, 0, 0);
-        const store = () => snStatsDaily.get(this._hass, from.getTime());
-        (snStatsDaily.ok === true ? store() : snWS(this._hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
-          service_data: { verbosity: "daily", after: d0.toISOString() }, return_response: true }, 30000).then((r) => {
-          const today = r && r.response && r.response.days;
-          if (!Array.isArray(today)) throw new Error("no days");
-          return store().then((all) => (Array.isArray(all) ? all : today), () => today);
-        })).then((days) => {
+        // finished day is not read again, so after the first time only today is asked for
+        snStatsDaily.get(this._hass, from.getTime()).then((days) => {
           if (!Array.isArray(days)) throw new Error("no days");
           const d30 = snOvDays(days.filter(snIsObj), new Date());
           const changed = JSON.stringify(d30) !== JSON.stringify(this._d30);
           this._d30 = d30;
           this._failToday = d30.failToday;
           if (changed && this._rendered) this._update();
-        }).catch(() => {
-          // no daily in this SuperNotify: count from the documents, as before
-          if (this._failToday == null) { this._ftNo = true; if (this._rendered) this._update(); }
-        }).finally(() => { this._ftBusy = false; });
-      }
-      if (this._failToday != null) return { n: this._failToday, today: true };
-      return { n: null, today: true };
-    }
-    if (this._hass && snArchiveNative(this._hass, this._config)) {
-      snArchiveStore.ensure(this._hass, 40, this._config.trigger_entity);
-      if (snArchiveStore.fetched) {
-        const d0 = new Date(); d0.setHours(0, 0, 0, 0);
-        let n = 0;
-        for (const doc of snArchiveStore.docs) {
-          const t = doc && doc.created ? new Date(doc.created) : null;
-          if (t && t >= d0) n += +doc.failed || 0;
-        }
-        return { n, today: true };
+        }).catch(() => { /* asked again on the next notification or in 5 minutes */ }).finally(() => { this._ftBusy = false; });
       }
     }
-    const v = this._st("sensor.supernotify_failures");
-    return { n: v != null && v !== "unknown" && v !== "unavailable" ? +v || 0 : null, today: false };
+    return { n: this._failToday != null ? this._failToday : null, today: true };
   }
 
   _render() {
@@ -5318,15 +4734,10 @@ class SupernotifyOverviewCard extends SnCard {
         ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
         .part + .part { margin-top: 14px; }
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
-        /* 0.56.1: no hole in the grid - 4 numbers 2+2, 5 numbers 3+2 (one row when the card is wide) */
+        /* 0.56.1: no hole in the grid - 4 numbers 2+2 (one row when the card is wide) */
         .stats[data-n="4"] { grid-template-columns: repeat(2, 1fr); }
-        .stats[data-n="5"] { grid-template-columns: repeat(6, 1fr); }
-        .stats[data-n="5"] .stat { grid-column: span 2; }
-        .stats[data-n="5"] .stat:nth-child(n+4) { grid-column: span 3; }
         @container (min-width: 620px) {
           .stats[data-n="4"] { grid-template-columns: repeat(4, 1fr); }
-          .stats[data-n="5"] { grid-template-columns: repeat(5, 1fr); }
-          .stats[data-n="5"] .stat, .stats[data-n="5"] .stat:nth-child(n+4) { grid-column: auto; }
         }
         .stat { border: 0; border-radius: 10px; padding: 12px 14px; background: ${p.soft}; min-width: 0; }
         .stat .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.35;
@@ -5341,10 +4752,6 @@ class SupernotifyOverviewCard extends SnCard {
         .sec .sp { flex: 1; }
         .sec .lnk { text-transform: none; letter-spacing: 0; font-weight: 650; font-size: 12px; color: ${p.brandD};
                     border: 0; background: none; font-family: inherit; cursor: pointer; padding: 4px 0; }
-        .row { display: flex; align-items: center; justify-content: space-between;
-               gap: 10px; padding: 8px 2px; border-bottom: 1px solid ${p.line};
-               font-size: 13.5px; }
-        .row:last-child { border-bottom: 0; }
         .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750; }
         .b-ok { background: rgba(46,158,91,.14); color: ${p.ok}; }
         .b-off { background: ${p.soft}; color: ${p.muted}; }
@@ -5441,8 +4848,9 @@ class SupernotifyOverviewCard extends SnCard {
           ${P.has("scenarios") ? `<div><div class="sec" id="scenH">${T.act_scen}</div><div id="scen">—</div></div>` : ""}
         </div>` : ""}
         ${snVer(this._config, "overview", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this._healthHtml = this._statsHtml = null; // fresh elements: draw them again
+    this._lastHtml = this._occHtml = this._scenHtml = this._scenHeadHtml = null;
     this._update();
   }
 
@@ -5508,7 +4916,7 @@ class SupernotifyOverviewCard extends SnCard {
     if (hb && hb.innerHTML !== helpHtml) hb.innerHTML = helpHtml;
     if (html === this._healthHtml) return;
     this._healthHtml = html;
-    healthEl.innerHTML = snIconify(html, this && this._config);
+    healthEl.innerHTML = snIconify(html, this._config);
     healthEl.querySelectorAll("a[data-nav]").forEach((a) => {
       a.onclick = (e) => { e.preventDefault(); snNavigate(a.getAttribute("href")); };
     });
@@ -5527,13 +4935,11 @@ class SupernotifyOverviewCard extends SnCard {
     const T = snT(this._config, this._hass);
     const c = this._config;
     const one = (id, name, fallback) => {
-      const st = id && this._hass.states[id];
-      if (!st) return fallback ? { html: `<span><span class="vok">✔</span> ${esc(name)} ${esc(fallback)}</span>`, upd: false } : null;
-      const a = st.attributes || {};
-      const upd = st.state === "on";
-      const txt = upd ? `<span class="vup">⬆</span> ${esc(name)} ${esc(a.installed_version || "")} → ${esc(a.latest_version || "")}`
-        : `<span class="vok">✔</span> ${esc(name)} ${esc(a.installed_version || "")}`;
-      return { html: a.release_url ? `<a href="${esc(a.release_url)}" target="_blank" rel="noopener">${txt}</a>` : `<span>${txt}</span>`, upd };
+      const v = snVersionInfo(this._hass, id);
+      if (!v) return fallback ? { html: `<span><span class="vok">✔</span> ${esc(name)} ${esc(fallback)}</span>`, upd: false } : null;
+      const txt = v.upd ? `<span class="vup">⬆</span> ${esc(name)} ${esc(v.inst)} → ${esc(v.latest)}`
+        : `<span class="vok">✔</span> ${esc(name)} ${esc(v.inst)}`;
+      return { html: v.url ? `<a href="${esc(v.url)}" target="_blank" rel="noopener">${txt}</a>` : `<span>${txt}</span>`, upd: v.upd };
     };
     // the cards: the version running in this browser (HACS may not know a manual install)
     const cst = c.cards_update_entity && this._hass.states[c.cards_update_entity];
@@ -5553,16 +4959,8 @@ class SupernotifyOverviewCard extends SnCard {
     const live = snLiveSnoozes(this._snoozes);
     b.disabled = true;
     try {
-      if (live.length === 1) {
-        const s = live[0];
-        const scope = String(s.target_type || "NONCRITICAL").toLowerCase();
-        const data = { command: "resume", scope };
-        if (!["noncritical", "everything"].includes(scope)) data.name = Array.isArray(s.target) ? s.target.join("_") : (s.target || "");
-        if (String(s.recipient_type || "").toUpperCase() === "USER" && s.recipient) data.person = s.recipient;
-        await snSnoozeCall(this._hass, data);
-      } else {
-        await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
-      }
+      if (live.length === 1) await snSnoozeCall(this._hass, snResumeData(live[0]));
+      else await snClearSnoozes(this._hass);
     } catch (e) {
       b.disabled = false;
       b.textContent = `✖ ${(e && e.message) || e}`;
@@ -5573,15 +4971,14 @@ class SupernotifyOverviewCard extends SnCard {
     setTimeout(() => this._refresh(), 600);
   }
 
-  /** The numbers: today, delivered, channels, silence from the archive (0.39.0); else as before. */
+  /** The numbers: today, delivered, channels, silence from the archive (0.39.0). */
   _updNumbers() {
     const statsEl = this.shadowRoot.getElementById("stats");
     if (!statsEl) return;
     const esc = snEsc;
     const p = this._palette();
     const T = snT(this._config, this._hass);
-    const fail = this._failures();
-    const failures = fail.n;
+    this._failures(); // keeps the archive's daily totals current
     const dels = this._scan("delivery");
     const delsOn = dels.filter((d) => d.state === "on").length;
     const snz = snLiveSnoozes(this._snoozes);
@@ -5602,10 +4999,10 @@ class SupernotifyOverviewCard extends SnCard {
       lastEnd ? `${esc(T.until)} ${esc(snSnzUntil(lastEnd, this._hass))}` : ""].filter(Boolean).join(" · ");
     const silStat = stat(T.ov_k_silence, snz.length ? `${snz.length}<small> ${esc(snW(T, "ov_pauses", snz.length))}</small>` : `<small>${esc(T.ov_no_pause)}</small>`,
       silSub, snz.length || quiet === "on" ? p.warn : undefined);
-    // the archive's answer is on its way: the new boxes with a dash, not the old numbers for a moment
-    if (!d && this._failToday == null && !this._ftNo && snArchiveNative(this._hass, this._config)) {
+    // the archive's answer is on its way: the boxes with a dash
+    if (!d) {
       html = stat(T.ov_k_today, "—", "") + stat(T.ov_k_delivered, "—", "") + chStat + silStat;
-    } else if (d) {
+    } else {
       const fail30 = d.fail30 ? ` · ${esc(T.ov_in_30).replace("{n}", fmt(d.fail30))}` : "";
       html = stat(T.ov_k_today, `${fmt(d.today)}<small> ${esc(T.ov_notif)}</small>`,
           [d.yesterday != null ? `${esc(T.yesterday)} ${fmt(d.yesterday)}` : "", d.avg != null ? `${esc(T.ov_avg30)} ${fmt(d.avg, 1)}` : ""].filter(Boolean).join(" · "))
@@ -5613,31 +5010,10 @@ class SupernotifyOverviewCard extends SnCard {
           (d.failToday ? `<span class="bad">✖ ${esc(snPl(T, "ov_ch_failed", d.failToday))}</span>` : `${esc(T.ov_no_fail)}`) + fail30
           + (d.noDel ? ` · ${esc(snPl(T, "ov_nodel", d.noDel))}` : ""), d.success ? p.ok : undefined)
         + chStat + silStat;
-    } else {
-      // no daily totals in this SuperNotify: the numbers of before
-      const act = this._activeScenarios() !== null ? this._activeScenarios() : this._active;
-      let sentStat;
-      const sent = this._st("sensor.supernotify_notifications");
-      const todayId = this._config.sent_today_entity;
-      const todayState = todayId ? this._hass.states[todayId] : null;
-      if (todayState && !["unknown", "unavailable"].includes(todayState.state)) {
-        const yd = todayState.attributes && todayState.attributes.last_period;
-        sentStat = stat("📨 " + T.sent_today, esc(Math.round(+todayState.state)), yd != null ? T.yesterday + ": " + esc(Math.round(+yd)) : "");
-      } else if (this._daily && this._daily.today != null) {
-        const yd = this._daily.yesterday;
-        sentStat = stat("📨 " + T.sent_today, esc(this._daily.today), yd != null ? T.yesterday + ": " + esc(yd) : "");
-      } else {
-        sentStat = stat("📨 " + T.sent, sent != null ? esc(sent) : "—", T.since_startup);
-      }
-      html = sentStat
-        + stat("⚠️ " + T.failures, failures != null ? esc(failures) : "—", fail.today ? T.fail_today : "", +failures > 0 ? p.crit : p.ok)
-        + (this._config.stats === "full" ? stat("🎬 " + T.act_scen, act ? act.length : "—", "") : "")
-        + stat("📤 " + T.deliveries, dels.length ? `${delsOn}/${dels.length}` : "—", T.enabled_total)
-        + (this._config.stats !== "full" ? "" : stat("😴 " + T.snoozed, snz.length, lastEnd ? T.until + " " + esc(snSnzUntil(lastEnd, this._hass)) : "", snz.length ? p.warn : undefined));
     }
     if (html === this._statsHtml) return;
     this._statsHtml = html;
-    statsEl.innerHTML = snIconify(html, this && this._config);
+    statsEl.innerHTML = snIconify(html, this._config);
     statsEl.dataset.n = statsEl.children.length;
     const goch = statsEl.querySelector("[data-goch]");
     if (goch) goch.onclick = () => snGo("deliveries", { ids: off.map((x) => x.id) });
@@ -5652,7 +5028,7 @@ class SupernotifyOverviewCard extends SnCard {
     const T = snT(this._config, this._hass);
     const c = this._config;
     const head = this.shadowRoot.getElementById("lastH");
-    if (!this._last) { lastEl.textContent = "—"; if (head) head.textContent = T.last_notif; return; }
+    if (!this._last) { lastEl.textContent = "—"; this._lastHtml = null; if (head) head.textContent = T.last_notif; return; }
     const n = this._last;
     const title = snPlainMsg(snNotifTitle(n));
     const msg = snPlainMsg(n.message).slice(0, 600);
@@ -5660,29 +5036,26 @@ class SupernotifyOverviewCard extends SnCard {
     const d = n.created ? new Date(n.created) : null;
     if (head) head.textContent = d && !isNaN(d) ? `${T.last_notif} · ${snAgo(d, T)}` : T.last_notif;
     const meta = n.priority ? `<span style="color:${prioCol || p.muted};font-weight:600">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "";
-    const { ok: okN, err: errN, skipped } = snLastDeliveries(this._hass, n);
-    const chips = [];
-    if (okN.length) chips.push(`<span class="badge b-ok" title="${esc(okN.join(", "))}">✔ ${snPl(T, "ln_delivered", okN.length)}</span>`);
-    else if (+n.delivered > 0) chips.push(`<span class="badge b-ok">✔ ${snPl(T, "ln_delivered", +n.delivered)}</span>`);
-    if (errN.length || +n.failed > 0) chips.push(`<span class="badge b-crit" title="${esc(errN.join(", "))}">✖ ${snPl(T, "ln_failed", errN.length || +n.failed)}</span>`);
-    if (+n.missed > 0) chips.push(`<span class="badge" style="background:${p.warnSoft};color:${p.warnInk}">⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
-    if (skipped) chips.push(`<span class="badge b-off">${snPl(T, "skipped_n", skipped)}</span>`);
+    const chips = snLastChips(this._hass, n, T, { ok: "badge b-ok", err: "badge b-crit",
+      mis: `class="badge" style="background:${p.warnSoft};color:${p.warnInk}"`, skip: "badge b-off" }, false, true);
     const rep = c.repeat_entity ? `<button class="act" id="repBtn">🔁 ${esc(T.repeat)}</button>` : "";
     // Why: the archive card on this page, else the archive card of another view
     const whyHere = n.id && window.__snWhyCards;
     const why = n.id && (whyHere || snCardReach("archive")) ? `<button class="whyb" id="whyBtn">${esc(T.ln_why)} ›</button>` : "";
-    lastEl.innerHTML = snIconify(`${title ? `<div class="lt">${esc(snTitleShow(title))}</div>` : ""}
+    const html = snIconify(`${title ? `<div class="lt">${esc(snTitleShow(title))}</div>` : ""}
       <div class="lmm${title ? "" : " solo"}">${esc(msg || "—")}</div>
       ${meta ? `<div class="t">${meta}</div>` : ""}
       <div class="lf">${chips.join("")}</div>
-      ${rep || why ? `<div class="lf lb">${rep}${why}</div>` : ""}`, this && this._config);
+      ${rep || why ? `<div class="lf lb">${rep}${why}</div>` : ""}`, this._config);
+    // 1.0.0 (perf): the same notification drawn the same way - nothing to rebuild
+    if (html === this._lastHtml && lastEl.firstElementChild) return;
+    this._lastHtml = html;
+    lastEl.innerHTML = html;
     const wb = lastEl.querySelector("#whyBtn");
     if (wb) wb.onclick = () => { if (!snWhyOpen(n.id)) snGo("archive", { id: n.id }); };
     const rb = lastEl.querySelector("#repBtn");
     if (rb) rb.onclick = () => {
-      const [dom] = c.repeat_entity.split(".");
-      const svc = dom === "script" ? "turn_on" : "press";
-      this._hass.callService(dom, svc, { entity_id: c.repeat_entity });
+      snRepeat(this._hass, c.repeat_entity);
       rb.textContent = `✔ ${T.repeat}`;
       setTimeout(() => { if (rb.isConnected) rb.textContent = `🔁 ${T.repeat}`; }, 2500);
     };
@@ -5695,10 +5068,14 @@ class SupernotifyOverviewCard extends SnCard {
     const p = this._palette();
     const T = snT(this._config, this._hass);
     const o = this._occ;
-    occEl.innerHTML = o ? snIconify(`<div style="display:flex;flex-wrap:wrap;align-items:flex-start">`
+    const html = o ? snIconify(`<div style="display:flex;flex-wrap:wrap;align-items:flex-start">`
       + `<span class="badge ${o.home.length ? "b-ok" : "b-off"}" style="padding:7px 12px;margin:0 6px 6px 0">${esc(T["occ_" + o.state] || o.state)}</span>`
       + o.home.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1">🏠 ${esc(n)}</span>`).join("")
-      + o.away.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1" style="color:${p.muted}">🚶 ${esc(n)}</span>`).join("") + `</div>`, this && this._config) : "—";
+      + o.away.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1" style="color:${p.muted}">🚶 ${esc(n)}</span>`).join("") + `</div>`, this._config) : "—";
+    // 1.0.0 (perf): rebuilt only when it changed
+    if (html === this._occHtml && occEl.firstChild) return;
+    this._occHtml = html;
+    occEl.innerHTML = html;
     if (o && snCardReach("recipients")) occEl.querySelectorAll("[data-gor]").forEach((c) => { c.onclick = () => snGo("recipients", { persons: o.ids }); });
   }
 
@@ -5712,11 +5089,20 @@ class SupernotifyOverviewCard extends SnCard {
     const act = reactiveAct !== null ? reactiveAct : this._active;
     const head = this.shadowRoot.getElementById("scenH");
     const reach = snCardReach("scenarios");
-    if (head) head.innerHTML = `<span>${esc(T.act_scen)}${act && act.length ? ` · ${act.length}` : ""}</span><span class="sp"></span>`
+    const headHtml = `<span>${esc(T.act_scen)}${act && act.length ? ` · ${act.length}` : ""}</span><span class="sp"></span>`
       + (reach ? `<button class="lnk" id="allScen">${esc(T.ov_all_scen)} ›</button>` : "");
-    const all = head && head.querySelector("#allScen");
-    if (all) all.onclick = () => snGo("scenarios", {});
-    if (!act || !act.length) { el.innerHTML = `<span class="badge b-off">${T.none}</span>`; return; }
+    // 1.0.0 (perf): head and rows rebuilt only when they changed
+    if (head && headHtml !== this._scenHeadHtml) {
+      this._scenHeadHtml = headHtml;
+      head.innerHTML = headHtml;
+      const all = head.querySelector("#allScen");
+      if (all) all.onclick = () => snGo("scenarios", {});
+    }
+    if (!act || !act.length) {
+      const none = `<span class="badge b-off">${T.none}</span>`;
+      if (none !== this._scenHtml) { this._scenHtml = none; el.innerHTML = none; }
+      return;
+    }
     const muted = new Set(), off = new Set();
     const rows = act.map((s) => {
       const r = this._scenRow(s);
@@ -5730,7 +5116,10 @@ class SupernotifyOverviewCard extends SnCard {
     const bits = [];
     if (muted.size) bits.push(T.ov_eff_mute.replace("{x}", [...muted].join(", ")));
     if (off.size) bits.push(T.ov_eff_off.replace("{x}", [...off].join(", ")));
-    el.innerHTML = snIconify(`<div>${rows}</div><div class="effnow">${esc(T.ov_eff_now)}: <b>${esc(bits.length ? bits.join(" · ") : T.ov_eff_none)}</b></div>`, this && this._config);
+    const html = snIconify(`<div>${rows}</div><div class="effnow">${esc(T.ov_eff_now)}: <b>${esc(bits.length ? bits.join(" · ") : T.ov_eff_none)}</b></div>`, this._config);
+    if (html === this._scenHtml && el.firstChild) return;
+    this._scenHtml = html;
+    el.innerHTML = html;
     if (reach) el.querySelectorAll("[data-gos]").forEach((c) => { c.onclick = () => snGo("scenarios", { names: [c.dataset.gos] }); });
   }
 
@@ -5748,23 +5137,7 @@ class SupernotifyOverviewCard extends SnCard {
     const cl = snScenarioCondLine(this._hass, T, tr && tr[key]);
     const tip = [cl ? `${T.sc_when}: ${cl.text}` : "", eff].filter(Boolean).join("\n");
     return { effects, html: `<div class="scr${snCardReach("scenarios") ? " go" : ""}" data-gos="${esc(key)}"${tip ? ` title="${esc(tip)}"` : ""}>`
-      + `<b>${esc(this._scenLabel(s))}</b><span class="eff">${esc(eff || T.ov_eff_none)}</span></div>` };
-  }
-
-  /** Kept for other callers (0.78.0): a scenario as a chip. */
-  _scenChip(s) {
-    const esc = snEsc;
-    const T = snT(this._config, this._hass);
-    const key = snScenarioKey(s);
-    const st = this._hass.states[`switch.supernotify_scenario_${key}`] || this._hass.states[`binary_sensor.supernotify_scenario_${key}`];
-    const redraw = () => { if (this.shadowRoot) this._update(); };
-    const actNames = [...(snActive.names || [key])];
-    const eff = st ? snEffectShort(snScenarioEffects(this._hass, st.attributes || {}, key, actNames, redraw)) : "";
-    const tr = snTraceEnsure(this._hass, redraw);
-    const cl = snScenarioCondLine(this._hass, T, tr && tr[key]);
-    const tip = [cl ? `${T.sc_when}: ${cl.text}` : "", eff].filter(Boolean).join("\n");
-    const p = this._palette();
-    return `<span class="chip${snCardReach("scenarios") ? " go" : ""}" data-gos="${esc(key)}"${tip ? ` title="${esc(tip)}"` : ""}>🎬 ${esc(this._scenLabel(s))}${eff ? `<span style="color:${p.muted};font-weight:500"> · ${esc(eff)}</span>` : ""}</span>`;
+      + `<b>${esc(key !== String(s) ? snScenarioName(this._hass, key) : s)}</b><span class="eff">${esc(eff || T.ov_eff_none)}</span></div>` };
   }
 }
 
@@ -5817,44 +5190,15 @@ class SupernotifyBandsCard extends SnCard {
   }
 
   _bands() {
-    // Preserve config order (chronological, cyclic: last crosses midnight).
-    const DEFAULT_ICONS = { early_morning: "🌅", morning: "🌤️", afternoon: "☀️",
-      evening: "🌇", night: "🌙", late_night: "🌃" };
-    return Object.entries(this._config.bands).map(([key, b]) => {
-      const raw = this._st(b.start) || "";
-      const [h, m] = raw.split(":");
-      return {
-        key, start: b.start, volume: b.volume,
-        name: snBandName(snT(this._config, this._hass), key, b.name),
-        icon: b.icon || DEFAULT_ICONS[key] || "🕐",
-        hhmm: h !== undefined && m !== undefined ? `${h.padStart(2, "0")}:${m}` : "",
-        min: h !== undefined && m !== undefined ? +h * 60 + +m : null,
-        vol: b.volume ? Math.round(+this._st(b.volume) || 0) : null,
-      };
-    }).sort((x, y) => {
-      // Sort by start time, never by config order: Home Assistant
-      // reserialises the card config with its keys sorted alphabetically,
-      // so the order written in YAML does not survive a save. Bands with
-      // no readable start time go last.
-      // the day starts at 04:00, so a band starting after midnight (late night) comes last
-      if (x.min === null) return y.min === null ? 0 : 1;
-      if (y.min === null) return -1;
-      const d = (m) => (m - 240 + 1440) % 1440;
-      return d(x.min) - d(y.min);
-    });
+    // the volume of each band too (the slider)
+    const list = snBands(this._hass, this._config.bands, snT(this._config, this._hass));
+    for (const b of list) b.vol = b.volume ? Math.round(+this._st(b.volume) || 0) : null;
+    return list;
   }
 
   _activeKey(bands) {
-    const now = new Date();
-    const t = now.getHours() * 60 + now.getMinutes();
-    const valid = bands.filter((b) => b.min !== null).slice()
-      .sort((a, b) => a.min - b.min);
-    for (let i = 0; i < valid.length; i++) {
-      const s = valid[i].min, e = valid[(i + 1) % valid.length].min;
-      const hit = s < e ? t >= s && t < e : t >= s || t < e;
-      if (hit) return valid[i].key;
-    }
-    return null;
+    const b = snActiveBand(bands);
+    return b ? b.key : null;
   }
 
   _setStart(entity, hhmm) {
@@ -5914,9 +5258,6 @@ class SupernotifyBandsCard extends SnCard {
         .row.mute input[type=range] { accent-color: ${p.muted}; }
         .hint { font-size: 11.5px; line-height: 1.45; color: ${p.muted};
                 border-top: 1px dashed ${p.line}; margin-top: 10px; padding-top: 8px; }
-        .fld { display: flex; flex-direction: column; gap: 2px; }
-        .fld .k { font-size: 10px; letter-spacing: .05em; text-transform: uppercase;
-                  font-weight: 800; color: ${p.muted}; }
         input[type=time] { border: 1.5px solid ${p.line}; border-radius: 8px;
                  padding: 6px 8px; font-size: 13px; background: ${p.panel}; color: ${p.ink}; }
         input[type=time]:focus { outline: none; border-color: ${p.brand}; }
@@ -5930,7 +5271,7 @@ class SupernotifyBandsCard extends SnCard {
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         <div class="hint">🔇 ${snT(this._config, this._hass).mute_hint}</div>
         ${snVer(this._config, "bands", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this._update();
   }
 
@@ -5962,7 +5303,7 @@ class SupernotifyBandsCard extends SnCard {
         <input type="range" class="volwrap" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}" aria-label="${b.name} - ${T.volume}" title="${T.volume}">
         <span class="pct"><span data-l="${b.key}">${b.vol != null ? b.vol : "\u2014"}</span>%</span>
       </div>`;
-      }).join(""), this && this._config);
+      }).join(""), this._config);
       rows.dataset.sig = sig;
       this._bind(rows);
     }
@@ -6017,6 +5358,12 @@ class SupernotifyBandsCard extends SnCard {
         this._dragging = false;
         this._setVolume(inp.dataset.e, inp.value);
       };
+      // 1.0.0: released on the same value there is no change event: the card stayed frozen
+      const stop = () => { if (this._dragging) { this._dragging = false; this._update(); } };
+      inp.addEventListener("pointerup", stop);
+      inp.addEventListener("pointercancel", stop);
+      inp.addEventListener("blur", stop);
+      inp.addEventListener("keyup", stop);
     });
   }
 }
@@ -6032,10 +5379,12 @@ window.customCards.push({
 });
 
 /* ════════════════════════════════════════════════════════════════════════
- * supernotify-deliveries-card — delivery dashboard
- * Auto-discovers the delivery entities SuperNotify exposes and renders
- * them prototype-style: transport icon, name, selection/action/target
- * tags and enabled badge. Tap a row for the full attributes (more-info).
+ * supernotify-deliveries-card — the channels (deliveries)
+ * One row per delivery entity, grouped by when it starts (on its own, when
+ * named, with a scenario, as a fallback): transport icon, alias, what is going
+ * on with it now and how its last send went, tags (fallback, action, fixed
+ * targets) and an on/off switch. A tap opens the detail, with a dry run of
+ * that channel alone when SuperNotify can simulate.
  * ════════════════════════════════════════════════════════════════════════ */
 
 // Transports that resolve area_id/floor_id/label_id natively, because they
@@ -6064,12 +5413,12 @@ const SN_TRANSPORT_ICONS = {
   generic: "⚙️", notify_entity: "🔔", media: "📺", mqtt: "📡",
 };
 
-function snSelectionLabel(sel, T) {
-  return { default: T.implicit, explicit: T.explicit, scenario: T.by_scenario,
-    fallback: T.fallback, fallback_on_error: T.fallback_err }[sel];
-}
+class SupernotifyDeliveriesCard extends SnListCard {
+  static snKind = "deliveries";
+  static snEntity = "delivery";
+  static snEmpty = "no_deliveries";
+  static snSize = 8;
 
-class SupernotifyDeliveriesCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("deliveries");
@@ -6085,81 +5434,27 @@ class SupernotifyDeliveriesCard extends SnCard {
     this._rendered = false;
   }
 
-  getCardSize() {
-    return 8;
+  // one row per delivery switch
+  _list() {
+    return super._list().filter((d) => !(this._config.hide_defaults && /^default_/i.test(d.name)));
   }
 
-  _deliveries() {
-    // one row per delivery: switch.* (SuperNotify >= PR #207) preferred over the
-    // binary_sensor.* that older versions expose
-    const out = snEntityRows(this._hass, "delivery")
-      .filter((d) => !(this._config.hide_defaults && /^default_/i.test(d.name)));
-    // enabled first, then alphabetical — like the prototype list
-    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
-    return out;
-  }
-
-  _render() {
-    if (!this._hass) return;
-    this._rendered = true;
-    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    const p = this._palette();
-    this.shadowRoot.innerHTML = snIconify(`
-      <style>
-        :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
-               cursor: pointer; border-radius: 8px; }
-        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
-               border-top: 1px solid ${p.line}; pointer-events: none; }
-        .row:hover { background: ${p.soft}; }
-        .row:last-child { border-bottom: 0; }
-        .em { font-size: 22px; flex-shrink: 0; }
-        .mid { flex: 1; min-width: 0; }
-        .mid b { font-size: 14px; }
-        .mid .tr { font-size: 11.5px; color: ${p.muted}; }
-        .tech { font-family: ui-monospace, 'Roboto Mono', monospace; font-size: 11px; }
-        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
-        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
-               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
-               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
-        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750;
-                 flex-shrink: 0; }
-        .b-on { background: rgba(46,158,91,.14); color: ${p.ok}; }
-        .b-off { background: ${p.soft}; color: ${p.muted}; }
-        ${SN_SWITCH_CSS}
-        ${SN_FLOW_CSS}
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
-        .tag.always { border-color: ${p.ok}; color: ${p.ok};
-                      background: rgba(46,158,91,.12); }
-        .incsum { font-size: 11.5px; line-height: 1.5; color: ${p.muted};
-                  background: ${p.soft}; border-radius: 9px;
-                  padding: 7px 10px; margin-bottom: 10px; }
-        .incsum b { color: ${p.ink}; }
-        .incsum { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-        .incsum .rstb { flex: none; }
-        .tag.off { color: #c62828; border-color: rgba(198,40,40,.35); background: rgba(198,40,40,.08); }
+  _css(p) {
+    return `.mid .tr { font-size: 11.5px; color: ${p.muted}; margin-top: 2px; }
+        .tag { background: transparent; color: ${p.muted};
+               overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
         .chd { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 0 4px 6px; }
         .cht { font-size: 17px; font-weight: 700; } .chn { font-size: 13px; color: ${p.muted}; }
         .grp h3 { margin: 14px 4px 2px; font-size: 11.5px; font-weight: 700; letter-spacing: .05em;
                   text-transform: uppercase; color: ${p.muted}; }
-        .grp .row:last-child { border-bottom: 0; }
         .row.dim .em, .row.dim .mid b { opacity: .6; }
         ${snDetailCss(p)}
         ${snDryCss(p)}
         .dprobe { margin: 6px 0 2px; border: 1.5px solid ${p.brand}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
                   padding: 7px 14px; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; min-height: 36px; }
         .dres { cursor: default; }
-        .mid .tr { margin-top: 2px; }
         .st.warn { color: ${p.warn}; font-weight: 600; } .st.crit { color: ${p.crit}; font-weight: 600; }
-        .st.ok { color: ${p.ok}; font-weight: 600; }
-        .tag { color: ${p.muted}; background: transparent; }
-      </style>
-      <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        ${snVer(this._config, "deliveries", p)}
-      </ha-card>`, this && this._config);
-    this._update();
+        .st.ok { color: ${p.ok}; font-weight: 600; }`;
   }
 
   // Which group a delivery belongs to, from its inclusion list (SuperNotify 2.5: `inclusion`,
@@ -6176,20 +5471,28 @@ class SupernotifyDeliveriesCard extends SnCard {
   // Active scenarios that switch this delivery off / on right now (scenario entity attribute
   // `delivery: {<name>: {enabled: …}}`, the same source as the why-card).
   _scenarioEffect(name) {
-    const off = [], on = [];
+    return this._scenarioEffects().get(name) || { off: [], on: [] };
+  }
+
+  /** 1.0.0 (perf): every delivery's {off, on} at once - the active scenarios looked at once, not once per row. */
+  _scenarioEffects() {
+    const out = new Map();
     // 0.92.0 (perf): the scenario sensors listed once per states object, not once per row
     for (const id of snScenarioSensorIds(this._hass)) {
       const m = id.match(/^binary_sensor\.supernotify_scenario_(.+)$/);
       if (!m || !snScenarioActive(this._hass, id)) continue;
-      let dl = null;
-      for (const dom of ["switch", "binary_sensor"]) {
-        const st = this._hass.states[`${dom}.supernotify_scenario_${m[1]}`];
-        if (st && st.attributes && st.attributes.delivery && typeof st.attributes.delivery === "object") { dl = st.attributes.delivery; break; }
+      const sw = this._hass.states[`switch.supernotify_scenario_${m[1]}`];
+      const dl = sw && sw.attributes && typeof sw.attributes.delivery === "object" ? sw.attributes.delivery : null;
+      if (!dl) continue;
+      let label = null;
+      for (const name of Object.keys(dl)) {
+        if (dl[name] === undefined) continue;
+        if (!out.has(name)) out.set(name, { off: [], on: [] });
+        label = label || snScenarioName(this._hass, m[1]);
+        (dl[name] && dl[name].enabled === false ? out.get(name).off : out.get(name).on).push(label);
       }
-      if (!dl || dl[name] === undefined) continue;
-      (dl[name] && dl[name].enabled === false ? off : on).push(snScenarioName(this._hass, m[1]));
     }
-    return { off, on };
+    return out;
   }
 
   /** 0.66.0: a dry run through this channel only - SuperNotify says if it would send, to whom, or why not. */
@@ -6207,30 +5510,18 @@ class SupernotifyDeliveriesCard extends SnCard {
     this._update();
   }
 
-  /** A link from another card (0.65.0): open these rows. */
-  _focus(d) {
-    if (!d || !d.ids) return;
-    this._open = new Set(d.ids);
-    this._update();
-    snFlash(this, '.row[aria-expanded="true"]');
-  }
-
-  _update() {
-    if (!this.shadowRoot) return;
+  _body(dels, T, p) {
     const esc = snEsc;
-    const T = snT(this._config, this._hass);
-    const p = this._palette();
-    const dels = this._deliveries();
-    const rows = this.shadowRoot.getElementById("rows");
-    if (!dels.length) {
-      rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_deliveries}</span>`, this && this._config);
-      return;
-    }
     const nOn = dels.filter((d) => d.on).length;
+    // 1.0.0 (perf): worked out once for all the rows - position, scenario effects, "fallback for"
+    const idxOf = new Map(dels.map((d, i) => [d, i]));
+    const fx = this._scenarioEffects();
+    const fbFor = new Map();
+    for (const o of dels) if (Array.isArray(o.a.fallback)) for (const n of o.a.fallback) { if (!fbFor.has(n)) fbFor.set(n, []); fbFor.get(n).push(o); }
     const head = `<div class="chd"><span class="cht">${esc(this._config.title || T.ch_title)}</span>`
       + `<span class="chn">${esc(T.ch_count.replace("{on}", nOn).replace("{tot}", dels.length))}</span></div>`;
     const rowHtml = (d) => {
-      const i = dels.indexOf(d);
+      const i = idxOf.get(d);
       const tr = d.a.transport || "";
       const em = SN_TRANSPORT_ICONS[tr] || "📤";
       const alias = snDeliveryAlias(this._hass, d.name) || "";
@@ -6240,16 +5531,16 @@ class SupernotifyDeliveriesCard extends SnCard {
       if (!d.on) { state = snOverridden(d.a) === false ? T.off_config : T.off_manual; }
       else if (d.a.transport_enabled === false) { state = `⛔ ${T.transport_off}`; cls = "crit"; }
       else {
-        const fx = this._scenarioEffect(d.name);
-        if (fx.off.length) { state = `${T.paused_by} ${fx.off.join(", ")}`; cls = "warn"; }
-        else if (fx.on.length && this._group(d) === "scen") { state = `${T.on_by} ${fx.on.join(", ")}`; cls = "ok"; }
+        const f = fx.get(d.name) || { off: [], on: [] };
+        if (f.off.length) { state = `${T.paused_by} ${f.off.join(", ")}`; cls = "warn"; }
+        else if (f.on.length && this._group(d) === "scen") { state = `${T.on_by} ${f.on.join(", ")}`; cls = "ok"; }
       }
       const tags = [];
       if (snOverridden(d.a) && d.on) tags.push(snHandTag(d.a, T)); // 0.75.0: switched on by hand
       // 0.77.0: per-delivery fallback (SuperNotify `fallback:` list on the switch)
       const fbName = (n) => snDeliveryAlias(this._hass, n) || n;
       if (Array.isArray(d.a.fallback) && d.a.fallback.length) tags.push(`🛟 ${T.fb_list} ${d.a.fallback.map(fbName).join(", ")}`);
-      const fbOf = dels.filter((o) => Array.isArray(o.a.fallback) && o.a.fallback.includes(d.name)).map((o) => fbName(o.name));
+      const fbOf = (fbFor.get(d.name) || []).map((o) => fbName(o.name));
       if (fbOf.length) tags.push(`🛟 ${T.fb_for} ${fbOf.join(", ")}`);
       if (d.a.action) tags.push(`⚙️ ${d.a.action}`);
       const tgt = d.a.target;
@@ -6278,17 +5569,14 @@ class SupernotifyDeliveriesCard extends SnCard {
         [T.det_debug, d.a.debug ? true : undefined],
       ], T, this._config, this._hass) + (snDryAvailable(this._hass, this._config)
         ? `<button class="dprobe" data-n="${esc(d.name)}">▶ ${esc(T.dl_probe)}</button>${this._probe && this._probe[d.name] ? `<div class="dryBox dres">${this._probe[d.name]}</div>` : ""}` : "") : "";
-      return `<div class="row${d.on ? "" : " dim"}" data-i="${i}" aria-expanded="${open ? "true" : "false"}">
+      return `<div class="row${d.on ? "" : " dim"}" data-i="${i}" aria-expanded="${open ? "true" : "false"}" data-sn-a11y="row" tabindex="0" role="button">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(alias || d.name)}</b>
           <div class="tr">${meta}</div>
           ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
           ${det}
         </div><span class="chev" aria-hidden="true">${open ? "▴" : "▾"}</span>
-        <label class="sw" data-id="${esc(d.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
-          <input type="checkbox" ${d.on ? "checked" : ""} aria-label="${esc(alias || d.name)}">
-          <span class="sl"></span>
-        </label>
+        ${snSwitchHtml(p, d.id, d.on, alias || d.name)}
       </div>`;
     };
     let body;
@@ -6302,28 +5590,13 @@ class SupernotifyDeliveriesCard extends SnCard {
       }).join("");
     }
     // 0.65.0: "undo the changes made by hand" lives in the tools card (all or one kind)
-    rows.innerHTML = snIconify(head + body, this && this._config);
-    // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
-    rows.querySelectorAll(".row").forEach((node) => {
-      node.onclick = (e) => {
-        if (e.target.closest(".sw")) return;
-        const id = dels[+node.dataset.i].id;
-        if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
-        const pb = e.target.closest(".dprobe");
-        if (pb) { this._runProbe(pb.dataset.n); return; }
-        if (e.target.closest(".det") || e.target.closest(".dres")) return;
-        this._open = this._open || new Set();
-        if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
-        this._update();
-      };
-    });
-    rows.querySelectorAll(".sw").forEach((label) => {
-      label.addEventListener("click", (e) => e.stopPropagation());
-      const input = label.querySelector("input");
-      input.addEventListener("change", () => {
-        snToggle(this._hass, label.dataset.id, input.checked);
-      });
-    });
+    return head + body;
+  }
+
+  _onRow(d, node, e) {
+    const pb = e.target.closest(".dprobe");
+    if (pb) { this._runProbe(pb.dataset.n); return; }
+    super._onRow(d, node, e);
   }
 }
 
@@ -6338,98 +5611,38 @@ window.customCards.push({
 });
 
 /* ════════════════════════════════════════════════════════════════════════
- * supernotify-transports-card — transport adaptors dashboard (NEW, 2026-09-08)
- * Auto-discovers binary_sensor.supernotify_transport_* (SuperNotify >= 2.2.0
- * exposed these read-only; >= 2.4.0-beta1 they're genuinely toggle-able —
- * see DeliveryRegistry.handle_entity_state_change in delivery.py). One row
- * per transport adaptor: icon, name/alias, error tag if it has ever failed,
- * live on/off switch. Tap a row for full attributes (more-info).
+ * supernotify-transports-card — the transport adaptors
+ * One row per transport entity (switch, or the older binary_sensor): icon,
+ * name, how many channels use it, an error tag when it has failed, and an
+ * on/off switch. A tap opens the detail (last error, delivery defaults).
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyTransportsCard extends SnCard {
+class SupernotifyTransportsCard extends SnListCard {
+  static snKind = "transports";
+  static snEntity = "transport";
+  static snEmpty = "no_transports";
+  static snSize = 6;
+
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("transports");
   }
 
-  static getStubConfig() {
-    return {};
-  }
-
-  setConfig(config) {
-    this._config = { style: "supernotify", ...(config || {}) };
-    this._rendered = false;
-  }
-
-  getCardSize() {
-    return 6;
-  }
-
-  /** A link from another card (0.65.0): open these rows. */
-  _focus(d) {
-    if (!d || !d.ids) return;
-    this._open = new Set(d.ids);
-    this._update();
-    snFlash(this, '.row[aria-expanded="true"]');
-  }
-
-  _transports() {
-    const out = snEntityRows(this._hass, "transport");
-    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
-    return out;
-  }
-
-  _render() {
-    if (!this._hass) return;
-    this._rendered = true;
-    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    const p = this._palette();
-    this.shadowRoot.innerHTML = snIconify(`
-      <style>
-        :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
-               cursor: pointer; border-radius: 8px; }
-        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
-               border-top: 1px solid ${p.line}; pointer-events: none; }
-        .row:hover { background: ${p.soft}; }
-        .row:last-child { border-bottom: 0; }
-        .em { font-size: 22px; flex-shrink: 0; }
-        .mid { flex: 1; min-width: 0; }
-        .mid b { font-size: 14px; }
-        .mid .sub { font-size: 11.5px; color: ${p.muted}; }
-        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
-        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
-               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
-               white-space: nowrap; }
-        .tag.err { color: ${p.crit}; border-color: ${p.crit}; background: rgba(226,60,60,.08); }
-        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750; }
-        .b-off { background: ${p.soft}; color: ${p.muted}; }
-        ${SN_SWITCH_CSS}
-        ${SN_FLOW_CSS}
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
+  _css(p) {
+    return `.tag.err { color: ${p.crit}; border-color: ${p.crit}; background: rgba(226,60,60,.08); }
         ${snDetailCss(p)}
-        .det { background: ${p.panel}; border: 1px solid ${p.line}; }
-      </style>
-      <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        ${snVer(this._config, "transports", p)}
-      </ha-card>`, this && this._config);
-    this._update();
+        .det { background: ${p.panel}; border: 1px solid ${p.line}; }`;
   }
 
-  _update() {
-    if (!this.shadowRoot) return;
+  _body(trs, T, p) {
     const esc = snEsc;
-    const T = snT(this._config, this._hass);
-    const p = this._palette();
-    const trs = this._transports();
-    const rows = this.shadowRoot.getElementById("rows");
-    if (!trs.length) {
-      rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_transports}</span>`, this && this._config);
-      return;
+    // 1.0.0 (perf): channels per transport counted once, not once per row
+    const usedBy = new Map();
+    for (const d of snEntityRows(this._hass, "delivery")) {
+      const tr = d.a && d.a.transport;
+      if (tr) usedBy.set(tr, (usedBy.get(tr) || 0) + 1);
     }
-    rows.innerHTML = snIconify(trs.map((t, i) => {
+    return trs.map((t, i) => {
       const em = SN_TRANSPORT_ICONS[t.name] || "🔌";
       const tags = [];
       if (snHandTag(t.a, T, true)) tags.push(snHandTag(t.a, T, true)); // 0.75.0
@@ -6438,7 +5651,7 @@ class SupernotifyTransportsCard extends SnCard {
       let alias = snCleanName(t.a.friendly_name, t.name);
       if (/Transport Adaptor$/i.test(alias)) alias = "";
       const label = alias || SN_TRANSPORT_LABELS[t.name] || t.name;
-      const used = snEntityRows(this._hass, "delivery").filter((d) => d.a && d.a.transport === t.name).length;
+      const used = usedBy.get(t.name) || 0;
       const use = used ? `${T.tr_used} ${snPl(T, "channels", used)}` : T.tr_unused;
       const open = this._open && this._open.has(t.id);
       const dd = t.a.delivery_defaults || {};
@@ -6456,38 +5669,16 @@ class SupernotifyTransportsCard extends SnCard {
         ...Object.entries(dd.options || {}).map(([k, v]) => [k, v, true]),
         [T.det_data, dd.data && Object.keys(dd.data).length ? dd.data : undefined],
       ], T, this._config, this._hass) : "";
-      return `<div class="row" data-i="${i}" aria-expanded="${open ? "true" : "false"}">
+      return `<div class="row" data-i="${i}" aria-expanded="${open ? "true" : "false"}" data-sn-a11y="row" tabindex="0" role="button">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(label)}</b>
           <div class="sub">${[snTech(t.name, label), esc(use)].filter(Boolean).join(" · ")}</div>
           ${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}
           ${det}
         </div><span class="chev" aria-hidden="true">${open ? "▴" : "▾"}</span>
-        <label class="sw" data-id="${esc(t.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
-          <input type="checkbox" ${t.on ? "checked" : ""} aria-label="${esc(t.name)}">
-          <span class="sl"></span>
-        </label>
+        ${snSwitchHtml(p, t.id, t.on, t.name)}
       </div>`;
-    }).join(""), this && this._config);
-    // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
-    rows.querySelectorAll(".row").forEach((node) => {
-      node.onclick = (e) => {
-        if (e.target.closest(".sw")) return;
-        const id = trs[+node.dataset.i].id;
-        if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
-        if (e.target.closest(".det")) return;
-        this._open = this._open || new Set();
-        if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
-        this._update();
-      };
-    });
-    rows.querySelectorAll(".sw").forEach((label) => {
-      label.addEventListener("click", (e) => e.stopPropagation());
-      const input = label.querySelector("input");
-      input.addEventListener("change", () => {
-        snToggle(this._hass, label.dataset.id, input.checked);
-      });
-    });
+    }).join("");
   }
 }
 
@@ -6502,38 +5693,22 @@ window.customCards.push({
 });
 
 /* ════════════════════════════════════════════════════════════════════════
- * supernotify-recipients-card — recipients dashboard
- * Auto-discovers the recipient entities SuperNotify exposes: name, home
- * state from the linked person entity, contact tags (email, phone, mobile
- * devices, delivery overrides) and enabled badge. Tap for full attributes.
+ * supernotify-recipients-card — the recipients
+ * One row per recipient entity: name, home or away from the linked person,
+ * contact tags (email, phone, mobile devices that open on a tap, delivery
+ * overrides), when it was last notified, a test send through notify.recipient_*
+ * and an on/off switch. A tap on the row opens Home Assistant's dialog.
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyRecipientsCard extends SnCard {
+class SupernotifyRecipientsCard extends SnListCard {
+  static snKind = "recipients";
+  static snEntity = "recipient"; // one row per recipient switch
+  static snEmpty = "no_recipients";
+  static snSize = 4;
+
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("recipients");
-  }
-
-  static getStubConfig() {
-    return {};
-  }
-
-  setConfig(config) {
-    this._config = { style: "supernotify", ...(config || {}) };
-    this._rendered = false;
-  }
-
-  getCardSize() {
-    return 4;
-  }
-
-  _recipients() {
-    // SuperNotify >= 2.7.0 has both switch.* (the real control) and a
-    // deprecated binary_sensor.* mirror per recipient: one row each,
-    // switch preferred; binary_sensor only on older versions.
-    const out = snEntityRows(this._hass, "recipient");
-    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
-    return out;
   }
 
   /** A link from another card (0.65.0): outline these people. */
@@ -6542,40 +5717,14 @@ class SupernotifyRecipientsCard extends SnCard {
     if (ps.length) snFlash(this, ps.map((n) => `.row[data-person="${CSS.escape(n)}"]`).join(","));
   }
 
-  _render() {
-    if (!this._hass) return;
-    this._rendered = true;
-    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    const p = this._palette();
-    this.shadowRoot.innerHTML = snIconify(`
-      <style>
-        :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
-               cursor: pointer; border-radius: 8px; }
-        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
-               border-top: 1px solid ${p.line}; pointer-events: none; }
-        .row:hover { background: ${p.soft}; }
-        .row:last-child { border-bottom: 0; }
-        .em { font-size: 24px; flex-shrink: 0; }
-        .mid { flex: 1; min-width: 0; }
-        .mid b { font-size: 14px; text-transform: capitalize; }
-        .mid .sub { font-size: 11.5px; color: ${p.muted}; }
-        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
-        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
-               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
-               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+  _css(p) {
+    return `.em { font-size: 24px; }
+        .mid b { text-transform: capitalize; }
+        .tag { overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
         .tag.warn { color: #c77700; }
-        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750;
-                 flex-shrink: 0; }
-        .b-on { background: rgba(46,158,91,.14); color: ${p.ok}; }
-        .b-off { background: ${p.soft}; color: ${p.muted}; }
-        ${SN_SWITCH_CSS}
-        ${SN_FLOW_CSS}
         .gear { font-size: 17px; opacity: .5; flex-shrink: 0; cursor: pointer;
                 transition: opacity .15s; padding: 2px; }
         .gear:hover { opacity: 1; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
         .last { margin-top: 5px; font-size: 11.5px; color: ${p.muted}; cursor: pointer; }
         .last b { color: ${p.ink}; text-transform: none; }
         .last.none { cursor: default; opacity: .7; }
@@ -6584,27 +5733,14 @@ class SupernotifyRecipientsCard extends SnCard {
         .dv { font-size: 12px; } .dv b { font-size: 12.5px; text-transform: none; margin-right: 6px; } .dv span { color: ${p.muted}; }
         .tst { margin-top: 7px; border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
                padding: 4px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 30px; }
-        .tst.arm { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }
-      </style>
-      <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        ${snVer(this._config, "recipients", p)}
-      </ha-card>`, this && this._config);
-    this._update();
+        .tst.arm { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }`;
   }
 
-  _update() {
-    if (!this.shadowRoot) return;
+  _body(recs, T, p) {
     const esc = snEsc;
-    const T = snT(this._config, this._hass);
-    const p = this._palette();
-    const recs = this._recipients();
-    const rows = this.shadowRoot.getElementById("rows");
-    if (!recs.length) {
-      rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_recipients}</span>`, this && this._config);
-      return;
-    }
-    rows.innerHTML = snIconify(recs.map((r, i) => {
+    // 1.0.0 (perf): the archive index read once for every row (it was asked once per recipient)
+    this._lastIdx = null;
+    return recs.map((r, i) => {
       const personId = r.a.entity_id;
       const pState = personId ? (this._hass.states[personId] || {}).state : undefined;
       const home = pState === "home";
@@ -6620,10 +5756,11 @@ class SupernotifyRecipientsCard extends SnCard {
       if (hand) tags.unshift(hand);
       const alias = snCleanName(r.a.friendly_name, r.name);
       const last = this._lastNotified(r.name);
+      const hasNotify = !!this._hass.states[`notify.recipient_${r.name}`];
       const lastHtml = last
         ? `<div class="last" data-why="${esc(last.id || "")}" data-ent="${esc(last.entity)}">🔔 ${esc(T.last_notified)}: <b>${esc(snAgo(last.when, T))}</b>${last.title ? ` · ${esc(last.title)}` : ""}</div>`
-        : (this._hass.states[`notify.recipient_${r.name}`] ? `<div class="last none">🔕 ${esc(T.never_notified)}</div>` : "");
-      return `<div class="row" data-i="${i}" data-person="${esc(r.a.entity_id || r.a.person || "")}">
+        : (hasNotify ? `<div class="last none">🔕 ${esc(T.never_notified)}</div>` : "");
+      return `<div class="row" data-sn-a11y="row" tabindex="0" role="button" data-i="${i}" data-person="${esc(r.a.entity_id || r.a.person || "")}">
         <span class="em">👤</span>
         <div class="mid"><b>${esc(alias || r.name)}</b>
           <span class="sub">${esc(personId || "")}${pState !== undefined ? ` · <span style="white-space:nowrap">${home ? "🏠 " + T.home : "🚗 " + T.away}</span>` : ""}</span>
@@ -6634,97 +5771,106 @@ class SupernotifyRecipientsCard extends SnCard {
             return `<div class="dv"><b>${esc(d.device_name || d.mobile_app_id || "?")}</b><span>${esc([model, os, d.app_version ? "app " + d.app_version : ""].filter(Boolean).join(" · "))}</span></div>`;
           }).join("")}</div>` : ""}
           ${lastHtml}
-          ${this._hass.states[`notify.recipient_${r.name}`] ? `<button class="tst${this._armed === r.name ? " arm" : ""}" data-tst="${esc(r.name)}">${this._armed === r.name ? "✉️ " + esc(T.rc_test_confirm) : "✉️ " + esc(T.rc_test)}</button>` : ""}
+          ${hasNotify ? `<button class="tst${this._armed === r.name ? " arm" : ""}" data-tst="${esc(r.name)}">${this._armed === r.name ? "✉️ " + esc(T.rc_test_confirm) : "✉️ " + esc(T.rc_test)}</button>` : ""}
         </div>
         <span class="gear" title="${esc(T.details)}" aria-label="${esc(T.details)}">⚙️</span>
-        <label class="sw" data-id="${esc(r.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
-          <input type="checkbox" ${r.on ? "checked" : ""} aria-label="${esc(alias || r.name)}">
-          <span class="sl"></span>
-        </label>
+        ${snSwitchHtml(p, r.id, r.on, alias || r.name)}
       </div>`;
-    }).join(""), this && this._config);
-    rows.querySelectorAll(".row").forEach((node) => {
-      node.onclick = (e) => {
-        if (e.target.closest(".sw") || e.target.closest(".devb") || e.target.closest(".tst")) return;
-        this._moreInfo(recs[+node.dataset.i].id);
-      };
-    });
-    rows.querySelectorAll(".sw").forEach((label) => {
-      label.addEventListener("click", (e) => e.stopPropagation());
-      const input = label.querySelector("input");
-      input.addEventListener("change", () => {
-        snToggle(this._hass, label.dataset.id, input.checked);
-      });
-    });
+    }).join("");
+  }
+
+  // 1.0.0 (perf): rebuilt only when it changed (the "sent" mark and an error line are part of what is shown)
+  _key(html) {
+    return this._sentErr ? null : `${html}|${this._sent || ""}`;
+  }
+
+  // a tap on the row opens HA's dialog
+  _onRow(r, node, e) {
+    if (e.target.closest(".devb") || e.target.closest(".tst") || e.target.closest(".last[data-ent]")) return;
+    this._moreInfo(r.id);
+  }
+
+  _onOther(e) {
     // 0.62.0: the person's devices (model, system, app version) on request
-    rows.querySelectorAll(".devb").forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        this._openDev = this._openDev || new Set();
-        const n = b.dataset.dev;
-        if (this._openDev.has(n)) this._openDev.delete(n); else this._openDev.add(n);
-        this._update();
-      };
-    });
+    const dv = e.target.closest(".devb");
+    if (dv) {
+      e.stopPropagation();
+      this._openDev = this._openDev || new Set();
+      const n = dv.dataset.dev;
+      if (this._openDev.has(n)) this._openDev.delete(n); else this._openDev.add(n);
+      this._update();
+      return true;
+    }
     // 0.62.0: test message through the whole pipeline (scenarios, snoozes, dupe check), two taps
-    rows.querySelectorAll(".tst").forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const n = b.dataset.tst;
-        if (this._armed !== n) {
-          this._armed = n;
-          clearTimeout(this._armT);
-          this._armT = setTimeout(() => { this._armed = null; this._update(); }, 4000);
-          this._update();
-          return;
-        }
-        this._armed = null;
+    const b = e.target.closest(".tst");
+    if (b) {
+      e.stopPropagation();
+      const n = b.dataset.tst;
+      if (this._armed !== n) {
+        this._armed = n;
         clearTimeout(this._armT);
-        const T2 = snT(this._config, this._hass);
-        const when = new Date();
-        this._hass.callService("notify", "send_message", {
-          entity_id: `notify.recipient_${n}`, title: T2.rc_test_title,
-          message: `${T2.rc_test_msg} ${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`,
-        }).then(() => { this._sent = n; this._update(); setTimeout(() => { this._sent = null; this._update(); }, 4000); })
-          .catch((err) => { this._sentErr = `${n}: ${(err && err.message) || err}`; this._update(); });
-        snEnquireBust(1500);
-      };
-    });
+        this._armT = setTimeout(() => { this._armed = null; this._update(); }, 4000);
+        this._update();
+        return true;
+      }
+      this._armed = null;
+      clearTimeout(this._armT);
+      const T2 = snT(this._config, this._hass);
+      const when = new Date();
+      this._hass.callService("notify", "send_message", {
+        entity_id: `notify.recipient_${n}`, title: T2.rc_test_title,
+        message: `${T2.rc_test_msg} ${snHm(when)}`,
+      }).then(() => {
+        this._sent = n; this._update();
+        clearTimeout(this._sentT);
+        this._sentT = setTimeout(() => { this._sent = null; this._update(); }, 4000);
+      }).catch((err) => { this._sentErr = `${n}: ${(err && err.message) || err}`; this._update(); });
+      snEnquireBust(1500);
+      return true;
+    }
+    const ln = e.target.closest(".last[data-ent]");
+    if (ln) {
+      e.stopPropagation();
+      if (!snWhyOpen(ln.dataset.why)) this._moreInfo(ln.dataset.ent);
+      return true;
+    }
+    return false;
+  }
+
+  _after(rows, T) {
+    const esc = snEsc;
     if (this._sent || this._sentErr) {
       const tb = this._sent && rows.querySelector(`.tst[data-tst="${this._sent}"]`);
       if (tb) tb.textContent = "✔ " + T.rc_test_sent;
-      if (this._sentErr) { rows.insertAdjacentHTML("afterbegin", `<div class="tag warn">${esc(this._sentErr)}</div>`); this._sentErr = null; }
+      if (this._sentErr) { rows.insertAdjacentHTML("afterbegin", `<div class="tag warn">${esc(this._sentErr)}</div>`); this._sentErr = null; this._rowsHtml = null; }
     }
-    rows.querySelectorAll(".last[data-ent]").forEach((node) => {
-      node.onclick = (e) => {
-        e.stopPropagation();
-        if (!snWhyOpen(node.dataset.why)) this._moreInfo(node.dataset.ent);
-      };
-    });
+  }
+
+  // 1.0.0: no redraw of a card that left the page (the two-tap test button, the "sent" mark)
+  disconnectedCallback() {
+    clearTimeout(this._armT); this._armed = null;
+    clearTimeout(this._sentT); this._sent = null;
   }
 
   /**
    * SuperNotify 2.7.0 stamps notify.recipient_<name> (state = ISO time, with the
    * notification's context) on every delivery that reaches the recipient. The
    * archive index gives the title: the notification created closest to that time,
-   * within 2 minutes. The index is the enquire_archive store on SuperNotify 2.10+,
-   * sensor.supernotify_archivio before that.
+   * within 2 minutes. The index is the enquire_archive store.
    */
   _lastNotified(name) {
     const entity = `notify.recipient_${name}`;
     const st = this._hass.states[entity];
     const when = st && st.state ? new Date(st.state) : null;
     if (!when || isNaN(when.getTime())) return null;
-    let items;
-    if (snArchiveNative(this._hass, this._config)) {
-      // 0.86.0: title and time are all it needs - the light list, the newest few in full
+    // 0.86.0: title and time are all it needs - the light list, the newest few in full
+    // 1.0.0 (perf): asked once per redraw for all the rows (_update clears _lastIdx)
+    if (!this._lastIdx) {
       snArchiveStore.ensure(this._hass, SN_ARCHIVE_FULL_RECENT, this._config.trigger_entity);
       snArchiveStore.ensureLight(this._hass, SN_ARCHIVE_LIGHT, this._config.trigger_entity);
-      items = snArchiveStore.getIndex().items || [];
-    } else {
-      const idx = this._hass.states[this._config.archive_entity || "sensor.supernotify_archivio"];
-      items = (idx && idx.attributes && idx.attributes.items) || [];
+      this._lastIdx = snArchiveStore.getIndex().items || [];
     }
+    const items = this._lastIdx;
     const ts = when.getTime() / 1000;
     let best = null;
     for (const it of items) {
@@ -6748,9 +5894,9 @@ window.customCards.push({
 /* ════════════════════════════════════════════════════════════════════════
  * supernotify-scenarios-card — scenarios dashboard
  * Auto-discovers the scenario entities SuperNotify exposes. "Active now"
- * badge: on SuperNotify >= 2.4.0 (Live Scenarios) it reads the real,
+ * badge: with `scenario_control: {refresh: true}` it reads the real,
  * reactive on/off state of binary_sensor.supernotify_scenario_* directly —
- * instant, no polling. On older versions, where that state stays
+ * instant, no polling. With refresh off, where that state stays
  * "unknown", it falls back to the enquire_active_scenarios response
  * service (polled every poll_seconds). Per-delivery override tags
  * (enabled/disabled) come from entity attributes. Optional groups
@@ -6759,14 +5905,20 @@ window.customCards.push({
 
 const SN_SCENARIO_ICONS = {
   critical_panic: "🚨", high_priority: "⬆️", alexa_low_whisper: "🔉",
-  notifiche_vocali_solo_ufficio: "👤", notifiche_vocali_off: "🔇",
   phone_notifications_off: "📵", screen_notifications_off: "🖥️",
-  cn_dnd_orario: "🔔", dnd_globale: "🔕", dnd_workdays: "💼", dnd_holidays: "🏖️",
+  dnd_workdays: "💼", dnd_holidays: "🏖️",
   xmas: "🎄", halloween: "👻", alone_night: "🌙", multi_home: "👨‍👩‍👧",
   early_morning: "🌅", morning: "🌤️", afternoon: "☀️", evening: "🌇",
-  night: "🌙", late_night: "🌃", emergency: "🚨", presenza_ingresso: "🚪",
+  night: "🌙", late_night: "🌃", emergency: "🚨",
   alarm_disarmed: "🛡️", alarm_armed: "🔒",
 };
+
+// 1.0.0: `icons: {scenario_name: "🔔"}` in the scenarios / simulator card config sets an icon
+// for a scenario of your own; the built-in list only knows SuperNotify's examples
+function snScenarioIcon(config, name) {
+  const own = config && config.icons;
+  return (own && own[name]) || SN_SCENARIO_ICONS[name] || "🎬";
+}
 
 class SupernotifyScenariosCard extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
@@ -6779,51 +5931,58 @@ class SupernotifyScenariosCard extends SnCard {
   }
 
   setConfig(config) {
-    this._config = { poll_seconds: 60, style: "supernotify", groups: null, ...(config || {}) };
+    this._config = { style: "supernotify", groups: null, ...(config || {}) };
     this._rendered = false;
   }
 
   _onHass(hass, fresh, changed) {
     super._onHass(hass, fresh, changed);
-    // connectedCallback may have run before hass: first data now, not at the first poll
+    // connectedCallback may have run before hass: first data now
     if (!this._booted) { this._booted = true; this._refresh(); }
+    // 1.0.0: without the old poll the condition lines must still follow the clock - the shared trace is read
+    // again at most every 30 s (snTraceEnsure), and snChanged brings a redraw at least once a minute
+    else if (changed) this._loadTrace();
   }
 
   getCardSize() {
     return 10;
   }
 
+  // 1.0.0 (perf): no poll of its own - the active scenarios come from snActive (shared by every card,
+  // read every 30 s and after a change; a change of the list redraws the card through snChanged).
+  // `poll_seconds` is still accepted and ignored.
   connectedCallback() {
-    const s = (this._config && this._config.poll_seconds) || 60;
-    this._pollTimer = setInterval(() => this._refresh(), s * 1000);
     this._refresh();
     this._onRefresh = this._onRefresh || (() => this._refresh());
     window.addEventListener("supernotify-refresh", this._onRefresh);
   }
 
   disconnectedCallback() {
-    clearInterval(this._pollTimer);
     if (this._onRefresh) window.removeEventListener("supernotify-refresh", this._onRefresh);
   }
 
-  async _refresh() {
+  _refresh() {
     if (!this._hass) return;
-    try {
-      const r = await snEnquire(this._hass, "enquire_active_scenarios");
-      this._active = (r && r.response && r.response.scenarios) || [];
-    } catch (e) { /* retry on next poll */ }
+    snActiveEnsure(this._hass);
+    // before snActive's first answer: drawn again when it comes (the same shared request, no second call)
+    const svc = this._hass.services && this._hass.services.supernotify;
+    if (!snActive.names && snActive.busy && !(svc && !svc.enquire_active_scenarios)) {
+      snEnquire(this._hass, "enquire_active_scenarios").catch(() => {}).then(() => { if (this._rendered) this._update(); });
+    }
     this._loadTrace();
     if (this._rendered) this._update();
   }
 
   _scenarios() {
-    // One entry per scenario. SuperNotify >= 2.7.0: switch.* = enabled (and
-    // the full attributes), binary_sensor.* = conditions hold, or - for a
-    // scenario without conditions - the manual on/off state (bsId + manual).
-    // Older versions: binary_sensor only.
+    // One entry per scenario: switch.* = enabled (and the full attributes),
+    // binary_sensor.* = conditions hold, or - for a scenario without
+    // conditions - the manual on/off state (bsId + manual).
     const byName = new Map();
     if (!this._hass) return [];
-    for (const id of Object.keys(this._hass.states)) {
+    // 1.0.0 (perf): the scenario sensors and switches listed once per states object (snScenarioSensorIds,
+    // snEntityRows), not a scan of every entity of the house (the rows are sorted when drawn)
+    const ids = snScenarioSensorIds(this._hass).concat(snEntityRows(this._hass, "scenario").map((r) => r.id));
+    for (const id of ids) {
       const m = id.match(/^(switch|binary_sensor)\.supernotify_scenario_(.+)$/);
       if (!m) continue;
       const s = this._hass.states[id];
@@ -6843,11 +6002,11 @@ class SupernotifyScenariosCard extends SnCard {
     return [...byName.values()];
   }
 
-  // SuperNotify >= 2.4.0 (Live Scenarios): binary_sensor.supernotify_scenario_*
-  // now reports a real on/off state, recomputed reactively — no need to wait
-  // for the next enquire_active_scenarios poll. Returns null (not an empty
-  // array) when every scenario is still "unknown"/"unavailable", so the
-  // caller can fall back to the polled list on older SuperNotify versions.
+  // binary_sensor.supernotify_scenario_* reports a real on/off state, recomputed
+  // reactively with `scenario_control: {refresh: true}` — no need to wait for the
+  // next enquire_active_scenarios poll. Returns null (not an empty array) when
+  // every scenario is "unknown"/"unavailable" (refresh off), so the caller can
+  // fall back to the polled list.
   _reactiveActive(all) {
     snActiveEnsure(this._hass);
     if (snActive.names) return all.filter((s) => snActive.names.has(s.name) && s.enabled).map((s) => s.name);
@@ -6871,10 +6030,17 @@ class SupernotifyScenariosCard extends SnCard {
     try {
       const act = [...(snActive.names || [])];
       const msg = { message: T.probe_msg };
-      const base = await snDryRun(this._hass, msg);
-      const other = isAct
-        ? await snDryRun(this._hass, { ...msg, constrain_scenarios: act.filter((n) => n !== name).length ? act.filter((n) => n !== name) : ["__none__"] })
-        : await snDryRun(this._hass, { ...msg, apply_scenarios: [name] });
+      // 1.0.0 (perf): the two dry runs together; the one without changes kept 30 s while the active scenarios stay
+      const bc = this._diffBase;
+      const baseP = bc && bc.v === snActive.v && bc.msg === msg.message && Date.now() - bc.at < 30000 ? bc.p : snDryRun(this._hass, msg);
+      if (baseP !== (bc && bc.p)) {
+        const ent = { v: snActive.v, msg: msg.message, at: Date.now(), p: baseP };
+        this._diffBase = ent;
+        baseP.catch(() => { if (this._diffBase === ent) this._diffBase = null; });
+      }
+      const [base, other] = await Promise.all([baseP, isAct
+        ? snDryRun(this._hass, { ...msg, constrain_scenarios: act.filter((n) => n !== name).length ? act.filter((n) => n !== name) : ["__none__"] })
+        : snDryRun(this._hass, { ...msg, apply_scenarios: [name] })]);
       const a = snDrySending(base), b = snDrySending(other);
       const add = [...b].filter((x) => !a.has(x)), rem = [...a].filter((x) => !b.has(x));
       const nm = (x) => snEsc(snDeliveryAlias(this._hass, x) || x);
@@ -6926,7 +6092,6 @@ class SupernotifyScenariosCard extends SnCard {
         .row.act { background: ${p.okSoft}; }
         .row.act .badge { background: ${p.panel}; }
         .row:hover { background: ${p.soft}; }
-        .row:last-child { border-bottom: 0; }
         .em { font-size: 20px; flex-shrink: 0; width: 26px; text-align: center; }
         .mid { flex: 1; min-width: 0; }
         .mid b { font-size: 13.5px; }
@@ -6946,7 +6111,6 @@ class SupernotifyScenariosCard extends SnCard {
         .b-act { background: rgba(46,158,91,.16); color: ${p.ok}; }
         .b-dis { background: rgba(226,60,60,.10); color: ${p.crit}; }
         .row.dis .mid { opacity: .55; }
-        .mlbl { font-size: 10.5px; color: ${p.muted}; flex-shrink: 0; }
         .apb { flex-shrink: 0; border: 1.5px solid ${p.brand}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
                padding: 6px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 32px; }
         .apb.on { background: ${p.ok}; border-color: ${p.ok}; color: #fff; }
@@ -6965,15 +6129,16 @@ class SupernotifyScenariosCard extends SnCard {
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         ${snVer(this._config, "scenarios", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this._update();
   }
 
   _rowHtml(s, i, active) {
     const esc = snEsc;
-    const T = snT(this._config, this._hass);
+    // 1.0.0 (perf): strings and palette from _update (once per drawing, not per row)
+    const T = this._rT || snT(this._config, this._hass);
     const isAct = active.includes(s.name);
-    const em = SN_SCENARIO_ICONS[s.name] || "🎬";
+    const em = snScenarioIcon(this._config, s.name);
     const tags = [];
     // 0.78.0: what the scenario does to each channel (volume, options, who undoes it)
     const redraw = () => { if (this._rendered) this._update(); };
@@ -6988,14 +6153,13 @@ class SupernotifyScenariosCard extends SnCard {
     if (ags.length) tags.push(`<span class="tag">🔘 ${esc(ags.join(", "))}</span>`);
     if (s.a.media) tags.push(`<span class="tag">📷 ${T.media}</span>`);
     if (s.manual) tags.unshift(`<span class="tag">✋ ${T.manual}</span>`);
-    if (snHandTag(s.a, T, true)) tags.unshift(snHandTag(s.a, T, true)); // 0.75.0
+    const hand = snHandTag(s.a, T, true);
+    if (hand) tags.unshift(hand); // 0.75.0
     const alias = snCleanName(s.a.friendly_name, s.name);
-    const p = this._palette();
-    // SuperNotify >= 2.7.0: live switch; older versions: read-only badge.
+    const p = this._rP || this._palette();
+    // the scenario switch; a read-only badge if the switch is missing.
     const ctl = s.swId
-      ? `<label class="sw" data-id="${esc(s.swId)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
-          <input type="checkbox" ${s.enabled ? "checked" : ""} aria-label="${esc(alias || s.name)}" title="${T.enabled_lbl}">
-          <span class="sl"></span></label>`
+      ? snSwitchHtml(p, s.swId, s.enabled, alias || s.name, T.enabled_lbl)
       : (s.enabled === false ? `<span class="badge b-dis">${T.disabled}</span>` : "");
     // Manual scenario (no conditions): its binary_sensor state IS the control.
     const man = s.manual && s.bsId
@@ -7019,12 +6183,18 @@ class SupernotifyScenariosCard extends SnCard {
 
   _update() {
     if (!this.shadowRoot) return;
+    this._rT = snT(this._config, this._hass);
+    this._rP = this._palette();
+    try { this._update0(); } finally { this._rT = this._rP = null; }
+  }
+
+  _update0() {
     const all = this._scenarios();
     const reactive = this._reactiveActive(all);
     const active = reactive !== null ? reactive : (this._active || []);
     const rows = this.shadowRoot.getElementById("rows");
     if (!all.length) {
-      rows.innerHTML = snIconify(`<span class="tag">${snT(this._config, this._hass).no_scenarios}</span>`, this && this._config);
+      rows.innerHTML = snIconify(`<span class="tag">${snT(this._config, this._hass).no_scenarios}</span>`, this._config);
       return;
     }
     const sortFn = (x, y) => {
@@ -7050,7 +6220,7 @@ class SupernotifyScenariosCard extends SnCard {
     } else {
       html = all.slice().sort(sortFn).map((s) => this._rowHtml(s, all.indexOf(s), active)).join("");
     }
-    rows.innerHTML = snIconify(html, this && this._config);
+    rows.innerHTML = snIconify(html, this._config);
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
         if (e.target.closest(".sw") || e.target.closest(".apb")) return;
@@ -7069,15 +6239,8 @@ class SupernotifyScenariosCard extends SnCard {
     rows.querySelectorAll(".apb").forEach((b) => {
       b.onclick = (e) => { e.stopPropagation(); snToggle(this._hass, b.dataset.id, b.dataset.on !== "1"); };
     });
-    rows.querySelectorAll(".sw").forEach((label) => {
-      label.addEventListener("click", (e) => e.stopPropagation());
-      const input = label.querySelector("input");
-      input.addEventListener("change", () => {
-        // switch.* -> switch service; the manual binary_sensor -> state write,
-        // which SuperNotify applies back to the scenario.
-        snToggle(this._hass, label.dataset.id, input.checked);
-      });
-    });
+    // the scenario switches: one listener on #rows (switch.* -> switch service)
+    snRowsDelegate(rows, null, (label, input) => snToggleSafe(this._hass, label.dataset.id, input));
   }
 }
 
@@ -7145,11 +6308,16 @@ class SupernotifySimulatorCard extends SnCard {
 
   async _refresh() {
     if (!this._hass) return;
+    // 1.0.0 (perf): asked once at a time - _render and the first hass both asked at start
+    if (this._refBusy) return;
+    this._refBusy = true;
     try {
+      // the dry run needs only the scenario names (by_scenario); the baseline (implicit) feeds the estimate alone
+      const dry = snDryAvailable(this._hass, this._config);
       const [act, byScen, impl] = await Promise.all([
-        this._ws("enquire_active_scenarios"),
+        this._sel === null ? this._ws("enquire_active_scenarios") : {},
         this._ws("enquire_deliveries_by_scenario"),
-        this._ws("enquire_implicit_deliveries"),
+        dry ? {} : this._ws("enquire_implicit_deliveries"),
       ]);
       this._byScen = byScen || {};
       this._implicit = [];
@@ -7159,6 +6327,12 @@ class SupernotifySimulatorCard extends SnCard {
       if (this._sel === null) this._sel = new Set(act.scenarios || []);
       this._simulate();
     } catch (e) { /* supernotify may still be loading */ }
+    finally { this._refBusy = false; }
+  }
+
+  // 1.0.0: a dry run scheduled while the card was on the page is not sent once it has left
+  disconnectedCallback() {
+    clearTimeout(this._dryT);
   }
 
   _render() {
@@ -7205,35 +6379,28 @@ class SupernotifySimulatorCard extends SnCard {
         <div id="chips"></div>
         <div class="sec">${snT(this._config, this._hass).sim_fire}</div>
         <div id="result">—</div>
-        <div class="hint" id="simHint">${snT(this._config, this._hass)[this._dryMode() ? "sim_hint_dry" : "sim_hint"]}</div>
+        <div class="hint" id="simHint">${snT(this._config, this._hass)[snDryAvailable(this._hass, this._config) ? "sim_hint_dry" : "sim_hint"]}</div>
         ${snVer(this._config, "simulator", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this._refresh();
   }
 
   /**
-   * 0.65.0: with SuperNotify 2.12+ the simulator asks SuperNotify itself - supernotify.notify with
-   * dry_run: simulate, the picked scenarios applied and nothing else considered - the same dry run
-   * as the composer's "Try without sending". Older versions keep the estimate below.
-   * `dry_run: false` in the card config forces the estimate.
+   * 0.65.0: the simulator asks SuperNotify itself - supernotify.notify with dry_run: simulate, the
+   * picked scenarios applied and nothing else considered - the same dry run as the composer's
+   * "Try without sending". `dry_run: false` in the card config keeps the estimate below.
    */
-  _dryMode() {
-    if (this._config.dry_run === false) return false;
-    const svc = this._hass && this._hass.services && this._hass.services.supernotify;
-    return !!(svc && svc.notify && svc.notify.response);
-  }
-
   async _dry() {
     const res = this.shadowRoot.getElementById("result");
     const T = snT(this._config, this._hass);
     const sel = [...(this._sel || [])];
-    const data = { message: T.sim_msg, priority: this._prio || "medium", dry_run: "simulate", force_resend: true,
+    const data = { message: T.sim_msg, priority: this._prio || "medium",
       apply_scenarios: sel, constrain_scenarios: sel.length ? sel : ["__simulator_none__"] };
     const ticket = (this._dryTicket = (this._dryTicket || 0) + 1);
     try {
-      const r = await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "notify", service_data: data, return_response: true });
+      const doc = await snDryRun(this._hass, data);
       if (ticket !== this._dryTicket) return;
-      res.innerHTML = snIconify(`<div class="dryBox">${snDryHtml(this._hass, T, (r && r.response) || {}, false)}</div>`, this._config);
+      res.innerHTML = snIconify(`<div class="dryBox">${snDryHtml(this._hass, T, doc, false)}</div>`, this._config);
     } catch (e) {
       if (ticket === this._dryTicket) res.textContent = `✖ ${T.dry_err}: ${(e && (e.message || e.code)) || e}`;
     }
@@ -7245,8 +6412,8 @@ class SupernotifySimulatorCard extends SnCard {
     const chips = this.shadowRoot.getElementById("chips");
     const names = Object.keys(this._byScen || {}).sort();
     chips.innerHTML = snIconify(names.map((n) =>
-      `<span class="chip ${this._sel.has(n) ? "sel" : ""}" data-n="${esc(n)}" title="${esc(n)}">${SN_SCENARIO_ICONS[n] || "🎬"} ${esc(snScenarioName(this._hass, n))}</span>`
-    ).join("") || "—", this && this._config);
+      `<span class="chip ${this._sel.has(n) ? "sel" : ""}" data-n="${esc(n)}" title="${esc(n)}">${snScenarioIcon(this._config, n)} ${esc(snScenarioName(this._hass, n))}</span>`
+    ).join("") || "—", this._config);
     chips.querySelectorAll(".chip").forEach((node) => {
       node.onclick = () => {
         const n = node.dataset.n;
@@ -7254,7 +6421,7 @@ class SupernotifySimulatorCard extends SnCard {
         this._simulate();
       };
     });
-    if (this._dryMode()) {
+    if (snDryAvailable(this._hass, this._config)) {
       const T0 = snT(this._config, this._hass);
       chips.insertAdjacentHTML("beforeend", `<select class="sprio" id="sprio" aria-label="${esc(T0.sim_prio)}">${["minimum", "low", "medium", "high", "critical"].map((pr) =>
         `<option value="${pr}"${(this._prio || "medium") === pr ? " selected" : ""}>${esc(T0["prio_" + pr] || pr)}</option>`).join("")}</select>`);
@@ -7302,7 +6469,7 @@ class SupernotifySimulatorCard extends SnCard {
     }
     res.innerHTML = snIconify(
       (goRows.length ? `<div class="sh go">${esc(T.sim_go)} · ${goRows.length}</div>${goRows.join("")}` : `<span class='hint'>${T.sim_none}</span>`) +
-      (stopRows.length ? `<div class="sh">${esc(T.sim_stop)} · ${stopRows.length}</div>${stopRows.join("")}` : ""), this && this._config);
+      (stopRows.length ? `<div class="sh">${esc(T.sim_stop)} · ${stopRows.length}</div>${stopRows.join("")}` : ""), this._config);
   }
 }
 
@@ -7359,25 +6526,12 @@ class SupernotifyComposerCard extends SnCard {
     return 8;
   }
 
-  // Dry run (SuperNotify 2.12, issue #218): supernotify.notify with `dry_run: simulate`
-  // does everything a real notification does except calling the integrations, so
-  // the button shows on 2.12 or later. `dry_run: true|false` in the card config
-  // forces it, e.g. when there is no update.supernotify_update entity to read.
-  _dryAvailable() {
-    const c = this._config;
-    if (c.dry_run === true || c.dry_run === false) return c.dry_run;
-    // What Home Assistant is RUNNING decides, not what HACS downloaded: the action's
-    // description carries `response` only when supernotify.notify can answer (2.12+).
-    // update.supernotify_update already says 2.12 after the download, before the restart.
-    const svc = this._hass && this._hass.services && this._hass.services.supernotify;
-    if (svc && svc.notify) return !!svc.notify.response;
-    return snSupernotifyAtLeast(this._hass, "2.12.0", c.update_entity) === true;
-  }
-
+  // Dry run (issue #218): supernotify.notify with `dry_run: simulate` does everything a real
+  // notification does except calling the integrations. `dry_run: false` hides the button.
   _syncDry() {
     const b = this.shadowRoot && this.shadowRoot.getElementById("dry");
     if (!b) return;
-    const has = this._dryAvailable();
+    const has = snDryAvailable(this._hass, this._config);
     b.style.display = has ? "" : "none";
     if (!has) this.shadowRoot.getElementById("dryBox").style.display = "none";
   }
@@ -7403,6 +6557,9 @@ class SupernotifyComposerCard extends SnCard {
     const p = this._palette();
     const T = snT(this._config, this._hass);
     const esc = snEsc;
+    // 1.0.0 (perf): the channels and the scenarios listed once for the whole drawing
+    const dlv = this._deliveries();
+    const scenN = this._scenNames();
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; container-type: inline-size; }
@@ -7469,7 +6626,7 @@ class SupernotifyComposerCard extends SnCard {
               <option value="critical">${T.prio_critical}</option>
             </select>
             <label>${T.channels_lbl}</label>
-            <div id="chips">${this._deliveries().map((d) => `<span class="chip" data-d="${esc(d.name)}" title="${esc(d.name)}">${esc(snDeliveryAlias(this._hass, d.name) || d.name)}</span>`).join("")}</div>
+            <div id="chips">${dlv.map((d) => `<span class="chip" data-d="${esc(d.name)}" title="${esc(d.name)}">${esc(snDeliveryAlias(this._hass, d.name) || d.name)}</span>`).join("")}</div>
             <label>${T.target_lbl}</label>
             <div id="targetSel"></div>
             <input type="text" id="customTarget" placeholder="${T.custom_target_ph}" style="margin-top:6px">
@@ -7480,8 +6637,8 @@ class SupernotifyComposerCard extends SnCard {
             <details class="adv" id="adv"><summary>${T.adv_title}</summary>
               <label>${T.adv_spoken}</label>
               <textarea id="spk" rows="2" placeholder="${T.adv_spoken_ph}"></textarea>
-              ${this._scenNames().length ? [["apply_scenarios", T.adv_apply], ["require_scenarios", T.adv_require], ["constrain_scenarios", T.adv_constrain]].map(([k, l]) =>
-                `<label>${l}</label><div class="chips achips" data-k="${k}">${this._scenNames().map((n) =>
+              ${scenN.length ? [["apply_scenarios", T.adv_apply], ["require_scenarios", T.adv_require], ["constrain_scenarios", T.adv_constrain]].map(([k, l]) =>
+                `<label>${l}</label><div class="chips achips" data-k="${k}">${scenN.map((n) =>
                   `<button class="chip" data-s="${esc(n)}">${esc(snScenarioName(this._hass, n))}</button>`).join("")}</div>`).join("") : ""}
               <label>${T.adv_html}</label>
               <textarea id="mhtml" rows="2" placeholder="&lt;b&gt;…&lt;/b&gt;"></textarea>
@@ -7515,7 +6672,7 @@ class SupernotifyComposerCard extends SnCard {
         <div class="dryBox" id="dryBox" style="display:none"></div>
         <div class="toast" id="toast"></div>
         ${snVer(this._config, "composer", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     const sr = this.shadowRoot;
     const upd = () => {
       sr.getElementById("pvT").textContent = sr.getElementById("t").value || T.no_title;
@@ -7562,7 +6719,7 @@ class SupernotifyComposerCard extends SnCard {
       };
     });
     this._deliveryTransport = {};
-    this._deliveries().forEach((d) => { this._deliveryTransport[d.name] = d.transport; });
+    dlv.forEach((d) => { this._deliveryTransport[d.name] = d.transport; });
     sr.querySelectorAll("#chips .chip").forEach((node) => {
       node.onclick = () => {
         const d = node.dataset.d;
@@ -7646,20 +6803,12 @@ class SupernotifyComposerCard extends SnCard {
     const T = snT(this._config, this._hass);
     const payload = this._payload();
     if (!payload.message) {
-      // SuperNotify 2.11.1: supernotify.notify works without text, e.g. only a camera
-      // snapshot or a channel with a preset message. Older versions need the text.
+      // supernotify.notify works without text, e.g. only a camera snapshot or a channel with a preset message
       const other = payload.camera_entity_id || (payload.delivery && Object.keys(payload.delivery).length);
-      const ok = snSupernotifyAtLeast(this._hass, "2.11.1", this._config.update_entity);
-      if (ok === false) { this._toast(other ? T.need_2111 : T.write_first); return; }
       if (!other) { this._toast(T.write_or_pick); return; }
     }
     if (payload.priority === "critical" && !confirm(T.critical_confirm))
       return;
-    // a dry run with the duplicate check left this content in SuperNotify's dupe cache:
-    // without force_resend the real one would be dropped as a duplicate of the simulation
-    const k = this._dryKey;
-    if (k && k.key === JSON.stringify(payload) && Date.now() - k.at < 3600000) payload.force_resend = true;
-    this._dryKey = null;
     try {
       await this._hass.callService("supernotify", "notify", payload);
       snEnquireBust(1500);
@@ -7741,37 +6890,21 @@ class SupernotifyComposerCard extends SnCard {
     return payload;
   }
 
-  // Dry run: the notification as SuperNotify would send it now, without sending it.
-  // By default it also carries force_resend, so it skips the duplicate check: in 2.12.0-beta1
-  // a simulated notification is written into the duplicate cache, and the real one sent right
-  // after (same text, within the dupe TTL) would be dropped as a duplicate. With
-  // `dry_run_dupe_check: true` the simulation does check for duplicates, and the next Send of
-  // the same content carries force_resend instead.
+  // Dry run: the notification as SuperNotify would send it now, without sending it. SuperNotify
+  // keeps simulations in their own duplicate cache, so the dry run checks duplicates like a real
+  // send would and the real Send after it is not held back; `dry_run_dupe_check: false` skips the
+  // check (force_resend).
   async _dryRun() {
     const T = snT(this._config, this._hass);
     const box = this.shadowRoot.getElementById("dryBox");
-    if (!this._dryAvailable()) return;
-    const payload = this._payload();
-    // 0.70.0: SuperNotify 2.12.1 keeps simulations in their own duplicate cache - the dry run
-    // checks duplicates like a real send would, and the real Send after it is not held back
-    const sep = snSupernotifyAtLeast(this._hass, "2.12.1", this._config.update_entity) === true;
-    const dupeCheck = this._config.dry_run_dupe_check != null ? !!this._config.dry_run_dupe_check : sep;
-    const data = { ...payload, dry_run: "simulate" };
-    if (!dupeCheck) data.force_resend = true;
+    if (!snDryAvailable(this._hass, this._config)) return;
+    const dupeCheck = this._config.dry_run_dupe_check !== false;
     box.style.display = "";
     box.textContent = "…";
     try {
-      const res = await this._hass.callWS({
-        type: "call_service", domain: "supernotify", service: "notify",
-        service_data: data, return_response: true,
-      });
-      if (dupeCheck && !sep) this._dryKey = { key: JSON.stringify(payload), at: Date.now() };
-      this._renderDry((res && res.response) || {}, !dupeCheck);
+      this._renderDry(await snDryRun(this._hass, this._payload(), { dupeCheck, prio: null }), !dupeCheck);
     } catch (e) {
-      const msg = String((e && (e.message || e.code)) || e);
-      box.textContent = /does not return responses/i.test(msg)
-        ? `✖ ${T.dry_restart}`
-        : `✖ ${T.dry_err}: ${msg}`;
+      box.textContent = `✖ ${T.dry_err}: ${(e && (e.message || e.code)) || e}`;
     }
   }
 
@@ -7779,7 +6912,7 @@ class SupernotifyComposerCard extends SnCard {
   // archive keeps), read through snArchiveDetail like the why-card does.
   _renderDry(doc, noDupeCheck) {
     const box = this.shadowRoot.getElementById("dryBox");
-    box.innerHTML = snIconify(snDryHtml(this._hass, snT(this._config, this._hass), doc, noDupeCheck), this && this._config);
+    box.innerHTML = snIconify(snDryHtml(this._hass, snT(this._config, this._hass), doc, noDupeCheck), this._config);
   }
 
   _toast(msg) {
@@ -7865,10 +6998,6 @@ class SupernotifyAutomationsCard extends SnCard {
     if (this._hass) this._render();
   }
 
-  _esc(s) {
-    return snEsc(s);
-  }
-
   _rel(iso) {
     const T = snT(this._config, this._hass);
     if (!iso) return T.never;
@@ -7912,7 +7041,6 @@ class SupernotifyAutomationsCard extends SnCard {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
-    const T = snT(this._config, this._hass);
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
@@ -7937,14 +7065,8 @@ class SupernotifyAutomationsCard extends SnCard {
         .nm { font-size: 13.5px; font-weight: 650; overflow: hidden;
           text-overflow: ellipsis; white-space: nowrap; }
         .sub { font-size: 11px; color: ${p.muted}; }
-        .sw { position: relative; width: 40px; height: 22px; flex: none; }
-        .sw input { opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-        .sw .sl { position: absolute; inset: 0; border-radius: 999px; background: ${p.line};
-          pointer-events: none; transition: background .15s; }
-        .sw .sl::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px;
-          height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
-        .sw input:checked + .sl { background: ${p.brand}; }
-        .sw input:checked + .sl::after { left: 21px; }
+        :host { --sn-sw-line: ${p.line}; --sn-sw-on: ${p.brand}; }
+        ${SN_SWITCH_CSS}
         .empty { padding: 18px 8px; color: ${p.muted}; font-size: 13px; }
         .err { padding: 14px; border: 1.5px dashed ${p.line}; border-radius: 12px;
           color: ${p.muted}; font-size: 13px; }
@@ -7955,7 +7077,7 @@ class SupernotifyAutomationsCard extends SnCard {
         ${snIntro(this._config, this._dark)}
         <div id="body"></div>
         <div class="ver" id="foot">${this._config && this._config.show_version ? `supernotify-automations-card v${SN_CARD_VERSIONS.automations}` : ""}</div>
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this._renderBody();
   }
 
@@ -7963,24 +7085,23 @@ class SupernotifyAutomationsCard extends SnCard {
     const el = this.shadowRoot.getElementById("body");
     const T = snT(this._config, this._hass);
     if (this._err) {
-      el.innerHTML = snIconify(`<div class="err">⚠️ ${this._esc(T.aut_err)}<br>
-        <span style="opacity:.7">${this._esc(this._config.manifest_url)} — ${this._esc(this._err)}</span></div>`, this && this._config);
+      el.innerHTML = snIconify(`<div class="err">⚠️ ${snEsc(T.aut_err)}<br>
+        <span style="opacity:.7">${snEsc(this._config.manifest_url)} — ${snEsc(this._err)}</span></div>`, this._config);
       return;
     }
     if (!this._manifest) {
-      el.innerHTML = snIconify(`<div class="empty">…</div>`, this && this._config);
+      el.innerHTML = snIconify(`<div class="empty">…</div>`, this._config);
       return;
     }
     const items = this._items();
-    const cats = this._cats(items);
     el.innerHTML = snIconify(`
       <div class="top">
-        <input type="search" id="q" placeholder="${this._esc(T.aut_search)}"
-          value="${this._esc(this._q)}" aria-label="${this._esc(T.aut_search)}">
+        <input type="search" id="q" placeholder="${snEsc(T.aut_search)}"
+          value="${snEsc(this._q)}" aria-label="${snEsc(T.aut_search)}">
         <span class="tot">${snPl(T, "aut_count", items.length)}${this._config.show_version ? ` · v${SN_CARD_VERSIONS.automations}` : ""}</span>
       </div>
       <div class="chips" id="chips"></div>
-      <div id="list" class="flow"></div>`, this && this._config);
+      <div id="list" class="flow"></div>`, this._config);
     const q = el.querySelector("#q");
     q.addEventListener("input", () => { this._q = q.value; this._renderList(); });
     this._renderChips();
@@ -8000,10 +7121,10 @@ class SupernotifyAutomationsCard extends SnCard {
     const cats = this._cats(items);
     const offCount = items.filter((a) => !(a.st && a.st.state === "on")).length;
     const chip = (label, val, n) =>
-      `<span class="chip ${this._cat === val ? "sel" : ""}" data-c="${this._esc(val || "")}">${this._esc(label)} · ${n}</span>`;
+      `<span class="chip ${this._cat === val ? "sel" : ""}" data-c="${snEsc(val || "")}">${snEsc(label)} · ${n}</span>`;
     el.innerHTML = snIconify(chip(T.aut_all, null, items.length) +
       cats.map((c) => chip(c, c, items.filter((a) => a.c === c).length)).join("") +
-      `<span class="chip warn ${this._onlyDisabled ? "sel" : ""}" id="offOnly">🔕 ${this._esc(T.aut_disabled_only)} · ${offCount}</span>`, this && this._config);
+      `<span class="chip warn ${this._onlyDisabled ? "sel" : ""}" id="offOnly">🔕 ${snEsc(T.aut_disabled_only)} · ${offCount}</span>`, this._config);
     el.querySelectorAll(".chip[data-c]").forEach((ch) => {
       ch.addEventListener("click", () => {
         const v = ch.dataset.c || null;
@@ -8030,26 +7151,26 @@ class SupernotifyAutomationsCard extends SnCard {
     const order = this._cats(all);
     const rows = this._filtered(all).sort((x, y) => order.indexOf(x.c) - order.indexOf(y.c));
     if (!rows.length) {
-      el.innerHTML = snIconify(`<div class="empty">${this._esc(T.aut_none)}</div>`, this && this._config);
+      el.innerHTML = snIconify(`<div class="empty">${snEsc(T.aut_none)}</div>`, this._config);
       return;
     }
     let html = "", lastCat = null;
     for (const a of rows) {
       if (a.c !== lastCat && !this._cat) {
-        html += `<div class="grp">${this._esc(a.c)}</div>`;
+        html += `<div class="grp">${snEsc(a.c)}</div>`;
         lastCat = a.c;
       }
       const on = a.st && a.st.state === "on";
       const lt = a.st && a.st.attributes.last_triggered;
       html += `
-        <div class="row ${on ? "" : "off"}" data-e="${this._esc(a.e)}">
-          <div class="who"><div class="nm">${this._esc(a.n)}</div>
-            <div class="sub"><span class="lt">${this._esc(this._rel(lt))}</span> · ${this._esc(a.s)}</div></div>
+        <div class="row ${on ? "" : "off"}" data-e="${snEsc(a.e)}">
+          <div class="who"><div class="nm">${snEsc(a.n)}</div>
+            <div class="sub"><span class="lt">${snEsc(this._rel(lt))}</span> · ${snEsc(a.s)}</div></div>
           <label class="sw"><input type="checkbox" ${on ? "checked" : ""}
-            aria-label="${this._esc(a.n)}"><span class="sl"></span></label>
+            aria-label="${snEsc(a.n)}"><span class="sl"></span></label>
         </div>`;
     }
-    el.innerHTML = snIconify(html, this && this._config);
+    el.innerHTML = snIconify(html, this._config);
     el.querySelectorAll(".row").forEach((row) => {
       const inp = row.querySelector("input");
       inp.addEventListener("change", () => this._toggle(row.dataset.e, inp.checked));
@@ -8083,135 +7204,23 @@ window.customCards.push({
 });
 
 
-/**
- * 0.70.0: the stats card reads SuperNotify's own archive (2.12.1+: enquire_archive with
- * verbosity summary) instead of the "last notification" helpers and the automations that
- * wrote them. A month of archive is a few MB and takes seconds to read, so each notification
- * is kept as a small row in this browser (localStorage) and only the days not yet seen are
- * asked for, one day per call: the first opening reads the window once, the next ones only
- * what came after. Row: [time ms, priority, outcome, day band, [channels sent], [channels
- * failed], id]. The day band is the first applied scenario named like a band of the day
- * (`period_scenarios`, default the bands card's keys).
- */
-const SN_STATS_KEY = "supernotify-stats-archive";
 const SN_STATS_KEEP = 92;  // days kept in the browser
 const SN_BAND_KEYS = ["early_morning", "morning", "afternoon", "evening", "night", "late_night"];
-const snStatsArchive = {
-  rows: null, from: 0, upto: 0, sig: "", busy: null, error: null,
-
-  _open(sig) {
-    if (this.rows && this.sig === sig) return;
-    this.rows = []; this.from = 0; this.upto = 0; this.sig = sig;
-    try {
-      const c = JSON.parse(window.localStorage.getItem(SN_STATS_KEY) || "null");
-      if (c && c.v === 1 && c.sig === sig && Array.isArray(c.rows)) {
-        this.rows = c.rows; this.from = +c.from || 0; this.upto = +c.upto || 0;
-      }
-    } catch (e) { /* private mode or a broken cache: read again */ }
-  },
-
-  _save() {
-    try {
-      window.localStorage.setItem(SN_STATS_KEY, JSON.stringify({ v: 1, sig: this.sig, from: this.from, upto: this.upto, rows: this.rows }));
-    } catch (e) { /* full or private: the rows stay in memory for this page */ }
-  },
-
-  row(n, bands) {
-    const ok = [], ko = [];
-    for (const [name, r] of Object.entries((n && n.deliveries) || {})) {
-      if (!r || typeof r !== "object") continue;
-      if (+r.success > 0) ok.push(name);
-      if (+r.failed > 0 || +r.error > 0 || +r.errors > 0) ko.push(name);
-    }
-    // older archive files keep scenarios as an object keyed by name (seen on 2.12.1-beta1)
-    const sc = n && n.scenarios;
-    const names = Array.isArray(sc) ? sc : sc && typeof sc === "object" ? Object.keys(sc) : sc ? [String(sc)] : [];
-    const band = names.find((x) => bands.includes(x)) || "";
-    return [Date.parse(n.created) || 0, String(n.priority || "").toLowerCase(), String(n.outcome || "").toLowerCase(), band, ok, ko, String(n.id || "").slice(0, 8)];
-  },
-
-  async _ask(hass, after, before) {
-    const data = { verbosity: "summary", after: new Date(after).toISOString(), limit: 5000 };
-    if (before) data.before = new Date(before).toISOString();
-    const r = await snWS(hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
-      service_data: data, return_response: true }, 60000);
-    return ((r && r.response && r.response.notifications) || []).filter(snIsObj);
-  },
-
-  /** Rows from startMs to now; progress(done, total) while whole days are read. */
-  ensure(hass, startMs, bands, progress) {
-    if (this.busy) return this.busy;
-    this._open(bands.join(","));
-    this.busy = (async () => {
-      this.error = null;
-      const now = Date.now();
-      const seen = new Set(this.rows.map((r) => r[6]));
-      const add = (list) => {
-        for (const n of list) {
-          let r;
-          try { r = this.row(n, bands); } catch (e) { continue; } // one odd file never stops the rest
-          if (!r[0] || seen.has(r[6])) continue;
-          seen.add(r[6]); this.rows.push(r);
-        }
-      };
-      try {
-        // days before what this browser already has (all of them the first time)
-        const end = this.from && this.from <= now ? this.from : now;
-        if (!this.from || startMs < this.from) {
-          const days = [];
-          for (let t = end; t > startMs; ) {
-            const d = new Date(t - 1); d.setHours(0, 0, 0, 0);
-            const a = Math.max(startMs, d.getTime());
-            days.push([a, t]); t = a;
-          }
-          let done = 0;
-          for (const [a, b] of days) {
-            add(await this._ask(hass, a, b));
-            this.from = a;
-            if (!this.upto) this.upto = end;
-            if (progress) progress(++done, days.length);
-          }
-          if (!this.upto) this.upto = end;
-        }
-        // what came after the last reading
-        if (this.upto < now) {
-          add(await this._ask(hass, this.upto - 120000));
-          this.upto = now;
-        }
-      } catch (e) {
-        this.error = (e && e.message) || String(e);
-      }
-      const keep = now - SN_STATS_KEEP * 86400000;
-      this.rows = this.rows.filter((r) => r[0] >= keep).sort((x, y) => x[0] - y[0]);
-      if (this.from < keep) this.from = keep;
-      this._save();
-      return this.rows;
-    })().finally(() => { this.busy = null; });
-    return this.busy;
-  },
-};
+// 1.0.0: the notification-by-notification rows of before `verbosity: daily` are no longer read: free their space
+try { window.localStorage.removeItem("supernotify-stats-archive"); } catch (e) { /* private mode */ }
 
 /**
- * 0.74.0: enquire_archive `verbosity: daily` (SuperNotify after 2.12.1-beta2): totals per local
- * day, so the whole window is one call of a few KB. `ok` is null until the first answer, false
- * when this SuperNotify does not know `daily` - then the card reads notification by notification.
+ * 0.74.0: enquire_archive `verbosity: daily`: totals per local day, so the whole window is one
+ * call of a few KB.
  */
 const SN_DAILY_KEY = "supernotify-stats-daily";
 const snStatsDaily = {
-  ok: null, busy: null,
+  busy: null,
 
   // 0.75.2: kept in this browser - {v, from: first day covered (ms), at: last reading (ms), days: {date: totals}}
-  _load() {
-    try {
-      const c = JSON.parse(window.localStorage.getItem(SN_DAILY_KEY) || "null");
-      if (c && c.v === 1 && c.days && typeof c.days === "object") return c;
-    } catch (e) { /* private mode or a broken cache */ }
-    return { v: 1, from: 0, at: 0, days: {} };
-  },
-
-  _save(c) {
-    try { window.localStorage.setItem(SN_DAILY_KEY, JSON.stringify(c)); } catch (e) { /* full or private */ }
-  },
+  _store: snStore(SN_DAILY_KEY, () => ({ v: 1, from: 0, at: 0, days: {} }), snDaysOk),
+  _load() { return this._store.load(); },
+  _save(c) { this._store.save(c); },
 
   async _ask(hass, afterMs) {
     const r = await snWS(hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
@@ -8221,9 +7230,22 @@ const snStatsDaily = {
     return days.filter(snIsObj);
   },
 
+  // 1.0.0 (perf): the last answer, used again for 60 s while sensor.supernotify_notifications does not
+  // change - the overview, the archive's priority counts and the stats card each asked on their own
+  memo: null,
+
+  _days(c, startMs) {
+    const s0 = new Date(startMs);
+    const startKey = snDayKey(s0);
+    return Object.keys(c.days).filter((k) => k >= startKey).sort().map((k) => c.days[k]);
+  },
+
   get(hass, startMs) {
-    if (this.ok === false) return Promise.resolve(null);
     if (this.busy) return this.busy;
+    const trig = hass && hass.states && hass.states["sensor.supernotify_notifications"];
+    const stamp = trig ? trig.last_updated : "";
+    const m = this.memo;
+    if (m && m.stamp === stamp && Date.now() - m.at < 60000 && m.c.from && m.c.from <= startMs) return Promise.resolve(this._days(m.c, startMs));
     this.busy = (async () => {
       const c = this._load();
       // a finished day does not change: once the window is covered, read again only from the
@@ -8233,64 +7255,43 @@ const snStatsDaily = {
         const d = new Date(c.at); d.setHours(0, 0, 0, 0);
         after = Math.max(startMs, d.getTime());
       }
-      try {
-        const got = await this._ask(hass, after);
-        this.ok = true;
-        for (const d of got) if (d.date) c.days[d.date] = d;
-        if (after === startMs && (!c.from || startMs < c.from)) c.from = startMs;
-        c.at = Date.now();
-        const keep = new Date(Date.now() - SN_STATS_KEEP * 86400000);
-        const keepKey = `${keep.getFullYear()}-${String(keep.getMonth() + 1).padStart(2, "0")}-${String(keep.getDate()).padStart(2, "0")}`;
-        for (const k of Object.keys(c.days)) if (k < keepKey) delete c.days[k];
-        if (c.from < keep.getTime()) c.from = keep.getTime();
-        this._save(c);
-      } catch (e) {
-        if (this.ok === null) { this.ok = false; return null; }
-        throw e;
-      }
-      const s0 = new Date(startMs);
-      const startKey = `${s0.getFullYear()}-${String(s0.getMonth() + 1).padStart(2, "0")}-${String(s0.getDate()).padStart(2, "0")}`;
-      return Object.keys(c.days).filter((k) => k >= startKey).sort().map((k) => c.days[k]);
+      const got = await this._ask(hass, after);
+      for (const d of got) if (d.date) c.days[d.date] = d;
+      if (after === startMs && (!c.from || startMs < c.from)) c.from = startMs;
+      c.at = Date.now();
+      const keep = new Date(Date.now() - SN_STATS_KEEP * 86400000);
+      const keepKey = snDayKey(keep);
+      for (const k of Object.keys(c.days)) if (k < keepKey) delete c.days[k];
+      if (c.from < keep.getTime()) c.from = keep.getTime();
+      this._save(c);
+      this.memo = { at: Date.now(), stamp, c };
+      return this._days(c, startMs);
     })().finally(() => { this.busy = null; });
     return this.busy;
   },
 };
 
 /* ════════════════════════════════════════════════════════════════════════
- * supernotify-stats-card — usage analytics (NEW, 2026-09-10)
- * Everything is derived from entities that already exist, no extra sensor:
- *   • daily series   → long-term statistics of the daily utility_meter
- *                      (sent_today_entity, default sensor.supernotify_inviate_oggi),
- *                      so it survives recorder purges; from 0.69.0 the days it has
- *                      nothing for (or all, without a meter) come from the
- *                      statistics of SuperNotify's own counter (count_entity);
- *   • per-notification detail (hour, weekday, priority, day period, channels)
- *                    → recorder history of the "last notification" helpers
- *                      written by the user's logging automation: one change of
- *                      input_datetime.supernotify_last_time = one notification,
- *                      joined with the value the other helpers had at that time;
- *   • channels       → input_text.supernotify_last_channels, written AFTER
- *                      delivery by the "Log canali consegnati" automation as
- *                      "a, b, ✖c" (✖ = that channel errored). Older values
- *                      like "auto (scenari)" are counted as "unknown";
- *   • versions       → HACS update entities (update.supernotify_update and
- *                      update.supernotify_cards_update): installed vs latest,
- *                      release link, brand icon.
- * Charts are inline SVG, no libraries. Palette follows the other cards.
+ * supernotify-stats-card — usage analytics
+ * Per day, hour, weekday, channel (with errors), priority and day period, plus
+ * insights and the installed vs latest versions (HACS update entities).
+ * The numbers come from SuperNotify's archive: enquire_archive `verbosity: daily`,
+ * the totals of the whole window in one call (snStatsDaily).
+ * Charts are inline SVG, no libraries.
  * ════════════════════════════════════════════════════════════════════════ */
 
 const SN_STATS_STRINGS = {
   en: {
-    st_title: "Usage", st_days: "days", st_days_short: "d",
-    st_hist_note: "hours, channels and priorities over the last {n} days of history", st_total: "Notifications", st_avg: "per day",
+    st_title: "Usage", st_days_short: "d",
+    st_total: "Notifications", st_avg: "per day",
     st_today: "Today", st_vs_avg: "vs. average", st_peak_hour: "Peak hour", st_top_channel: "Top channel",
     st_errors: "Channel errors", st_of_sends: "of channel sends", st_daily: "Per day", st_hourly: "By hour of day",
     st_weekday: "By weekday", st_channels: "Channels — most used", st_priority: "Priority", st_period: "Day period",
     st_insights: "Insights", st_no_data: "No history yet — data appears after the first notifications.",
-    st_unknown: "unknown", st_loading: "loading…", st_versions: "Versions",
+    st_loading: "loading…",
     st_installed: "installed", st_latest: "latest", st_uptodate: "up to date", st_update: "update available",
-    st_restart: "restart required", st_cards: "cards", st_logged: "logged",
-    st_reading: "reading the archive: day {n} of {of}…", st_from_archive: "from SuperNotify's archive",
+    st_restart: "restart required", st_logged: "logged",
+    st_from_archive: "from SuperNotify's archive",
     st_archive_err: "archive partly read",
     st_wd: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
     st_i_share: "{p}% of all channel sends go through {c}.",
@@ -8305,16 +7306,16 @@ const SN_STATS_STRINGS = {
     st_more: "more", st_less: "fewer", st_up: "up", st_down: "down",
   },
   it: {
-    st_title: "Utilizzo", st_days: "giorni", st_days_short: "gg",
-    st_hist_note: "ore, canali e priorità sugli ultimi {n} giorni di cronologia", st_total: "Notifiche", st_avg: "al giorno",
+    st_title: "Utilizzo", st_days_short: "gg",
+    st_total: "Notifiche", st_avg: "al giorno",
     st_today: "Oggi", st_vs_avg: "vs. media", st_peak_hour: "Ora di punta", st_top_channel: "Canale principale",
     st_errors: "Errori canale", st_of_sends: "degli invii per canale", st_daily: "Per giorno", st_hourly: "Per ora del giorno",
     st_weekday: "Per giorno della settimana", st_channels: "Canali — più usati", st_priority: "Priorità", st_period: "Periodo del giorno",
     st_insights: "Osservazioni", st_no_data: "Ancora nessuna cronologia — i dati compaiono dopo le prime notifiche.",
-    st_unknown: "sconosciuto", st_loading: "caricamento…", st_versions: "Versioni",
+    st_loading: "caricamento…",
     st_installed: "installata", st_latest: "ultima", st_uptodate: "aggiornato", st_update: "aggiornamento disponibile",
-    st_restart: "riavvio richiesto", st_cards: "card", st_logged: "registrate",
-    st_reading: "lettura dell'archivio: giorno {n} di {of}…", st_from_archive: "dall'archivio di SuperNotify",
+    st_restart: "riavvio richiesto", st_logged: "registrate",
+    st_from_archive: "dall'archivio di SuperNotify",
     st_archive_err: "archivio letto in parte",
     st_wd: ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
     st_i_share: "{c} assorbe il {p}% degli invii per canale.",
@@ -8348,18 +7349,11 @@ class SupernotifyStatsCard extends SnCard {
     this._config = {
       style: "supernotify",
       days: 14,
-      time_entity: "input_datetime.supernotify_last_time",
-      priority_entity: "input_text.supernotify_last_priority",
-      channels_entity: "input_text.supernotify_last_channels",
-      period_entity: "input_text.supernotify_last_day_period",
-      sent_today_entity: "sensor.supernotify_inviate_oggi",
-      count_entity: "sensor.supernotify_notifications",
       update_entity: "update.supernotify_update",
       cards_update_entity: "update.supernotify_cards_update",
       refresh_minutes: 10,
       top_channels: 8,
       periods: [7, 14, 30],
-      source: "",                 // 0.70.0: "" automatic, "archive" or "history"
       period_scenarios: SN_BAND_KEYS,
       kpis: true,                 // 0.33.0: false = no number boxes (the overview shows them)
       versions: true,             // 0.33.0: false = no version boxes (the overview's status band has them)
@@ -8393,7 +7387,7 @@ class SupernotifyStatsCard extends SnCard {
       const c = this._config || {};
       const k = [hass.states[c.update_entity], hass.states[c.cards_update_entity], hass.language];
       const p = this._verKey;
-      if (!p || k.some((x, i) => x !== p[i])) { this._verKey = k; this._updateVersions(); }
+      if (!p || k.some((x, i) => x !== p[i])) this._updateVersions();
     }
     if (first) this._load();
   }
@@ -8443,77 +7437,14 @@ class SupernotifyStatsCard extends SnCard {
     const now = new Date();
     const start = new Date(now.getTime() - days * 86400000);
     start.setHours(0, 0, 0, 0);
-    if (this._fromArchive()) {
-      const bands = (Array.isArray(c.period_scenarios) ? c.period_scenarios : SN_BAND_KEYS).map(String);
-      if (c.daily !== false) {
-        let dd = null;
-        this._error = null;
-        try { dd = await snStatsDaily.get(this._hass, start.getTime()); } catch (e) { this._error = (e && e.message) || String(e); }
-        if (seq !== this._seq) return;
-        if (dd || this._error) {
-          this._data = this._compute({}, {}, start, now, days, this._dailyEvents(dd || [], bands, start.getTime()));
-          this._data.archive = true;
-          this._data.daily = true;
-          this._loading = false;
-          if (this._rendered) this._draw();
-          return;
-        }
-      }
-      const rows = await snStatsArchive.ensure(this._hass, start.getTime(), bands, (n, of) => {
-        const w = this.shadowRoot && this.shadowRoot.getElementById("win");
-        if (w && !this._data) w.textContent = this._t("st_reading", { n, of });
-      });
-      if (seq !== this._seq) return;
-      this._error = snStatsArchive.error;
-      this._data = this._compute({}, {}, start, now, days, this._archiveEvents(rows, start.getTime()));
-      this._data.archive = true;
-      this._loading = false;
-      if (this._rendered) this._draw();
-      return;
-    }
-    const ids = [c.time_entity, c.priority_entity, c.channels_entity, c.period_entity].filter(Boolean);
-    let hist = {};
-    let stats = {};
-    try {
-      [hist, stats] = await Promise.all([
-        snWS(this._hass, {
-          type: "history/history_during_period",
-          start_time: start.toISOString(), end_time: now.toISOString(),
-          entity_ids: ids, minimal_response: true, no_attributes: true, significant_changes_only: false,
-        }),
-        c.sent_today_entity
-          ? snWS(this._hass, {
-              type: "recorder/statistics_during_period",
-              start_time: start.toISOString(), end_time: now.toISOString(),
-              statistic_ids: [c.sent_today_entity], period: "day", types: ["change"],
-            }).catch(() => ({}))
-          : Promise.resolve({}),
-      ]);
-      // 0.69.0: SuperNotify's own counter, for the days the meter has nothing for
-      this._native = c.count_entity ? await snDailyCounts(this._hass, c.count_entity, days, force) : null;
-    } catch (e) {
-      this._error = String(e && (e.message || e));
-    }
+    const bands = (Array.isArray(c.period_scenarios) ? c.period_scenarios : SN_BAND_KEYS).map(String);
+    let dd = null;
+    this._error = null;
+    try { dd = await snStatsDaily.get(this._hass, start.getTime()); } catch (e) { this._error = (e && e.message) || String(e); }
     if (seq !== this._seq) return;          // a newer window was picked meanwhile
-    this._data = this._compute(hist || {}, stats || {}, start, now, days);
+    this._data = this._compute(start, now, days, this._dailyEvents(dd || [], bands, start.getTime()));
     this._loading = false;
     if (this._rendered) this._draw();
-  }
-
-  /** 0.70.0: archive (SuperNotify 2.12.1+) or the helpers' history. */
-  _fromArchive() {
-    const c = this._config;
-    if (c.source === "archive") return true;
-    if (c.source === "history") return false;
-    const svc = this._hass && this._hass.services && this._hass.services.supernotify;
-    return !!(svc && svc.enquire_archive) && snSupernotifyAtLeast(this._hass, "2.12.1", c.update_entity) === true;
-  }
-
-  /** Archive rows as the events _compute counts; duplicates left out (nothing was sent). */
-  _archiveEvents(rows, startMs) {
-    return rows.filter((r) => r[0] >= startMs && r[2] !== "dupe").map((r) => ({
-      t: r[0], p: r[1], dp: r[3] || null, ch: r[4].length || r[5].length ? { ok: r[4], ko: r[5] } : null,
-    }));
   }
 
   /**
@@ -8530,66 +7461,24 @@ class SupernotifyStatsCard extends SnCard {
       if (day.getTime() + 86400000 <= startMs) continue;
       const count = +d.count || 0;
       const sent = Math.max(0, count - (+((d.outcome || {}).dupe) || 0));
-      out.push({ dk: this._dayKey(day), dn: sent, dd: +((d.outcome || {}).dupe) || 0, noch: true });
+      out.push({ dk: snDayKey(day), dn: sent, dd: +((d.outcome || {}).dupe) || 0 });
       (Array.isArray(d.hour) ? d.hour : []).forEach((n, h) => {
-        if (+n > 0) out.push({ t: new Date(y, m - 1, dd, h, 30).getTime(), w: +n, nd: true, noch: true });
+        if (+n > 0) out.push({ t: new Date(y, m - 1, dd, h, 30).getTime(), w: +n, nd: true });
       });
-      for (const [p, n] of Object.entries(d.priority || {})) if (+n > 0 && p !== "unknown") out.push({ p, w: +n, noch: true });
-      for (const [sc, n] of Object.entries(d.scenarios || {})) if (+n > 0 && bands.includes(sc)) out.push({ dp: sc, w: +n, noch: true });
+      for (const [p, n] of Object.entries(d.priority || {})) if (+n > 0 && p !== "unknown") out.push({ p, w: +n });
+      for (const [sc, n] of Object.entries(d.scenarios || {})) if (+n > 0 && bands.includes(sc)) out.push({ dp: sc, w: +n });
       const ok = {}, ko = {};
       for (const [name, r] of Object.entries(d.deliveries || {})) {
         if (!snIsObj(r)) continue;
         if (+r.success > 0) ok[name] = +r.success;
         if (+r.failed > 0) ko[name] = +r.failed;
       }
-      out.push({ cw: { known: sent, ok, ko } });
+      out.push({ cw: { ok, ko } });
     }
     return out;
   }
 
-  /** The helpers' history as events: one change of time_entity = one notification. */
-  _historyEvents(hist, startMs) {
-    const c = this._config;
-    const spine = this._rows(hist, c.time_entity).filter((r) => r.t >= startMs && r.s && r.s !== "unknown");
-    const prio = this._rows(hist, c.priority_entity);
-    const chan = this._rows(hist, c.channels_entity);
-    const per = this._rows(hist, c.period_entity);
-    return spine.map((ev, i) => {
-      // channels: value written for THIS notification — the last change before
-      // the next notification (the post-delivery automation writes it a moment
-      // after the spine), else the carried-over value (unchanged string).
-      const next = i + 1 < spine.length ? spine[i + 1].t : Infinity;
-      let cv = null;
-      for (const r of chan) {
-        if (r.t <= ev.t + 2000) { cv = r.s; continue; }
-        if (r.t < next) { cv = r.s; continue; }
-        break;
-      }
-      return { t: ev.t, p: (this._valueAt(prio, ev.t, 2000) || "").toLowerCase(), dp: this._valueAt(per, ev.t, 2000), ch: this._parseChannels(cv) };
-    });
-  }
-
-  // history rows: {s: state, lu: seconds}. The first row is the state at
-  // start_time (its lu is older than start) — used only as the carry-in value.
-  _rows(hist, id) {
-    const raw = (id && hist[id]) || [];
-    return raw.map((r) => ({ s: r.s, t: (r.lu || r.lc || 0) * 1000 })).sort((a, b) => a.t - b.t);
-  }
-
-  _valueAt(rows, t, slackMs) {
-    // last row with time <= t + slack
-    let v = null;
-    for (const r of rows) {
-      if (r.t <= t + slackMs) v = r.s; else break;
-    }
-    return v;
-  }
-
-  _compute(hist, stats, start, now, days, events) {
-    const c = this._config;
-    const startMs = start.getTime();
-    const spine = events || this._historyEvents(hist, startMs);
-
+  _compute(start, now, days, spine) {
     const perHour = new Array(24).fill(0);
     const perWd = new Array(7).fill(0);
     const perDayHist = {};
@@ -8598,13 +7487,11 @@ class SupernotifyStatsCard extends SnCard {
     const periodCount = {};
     const chanOk = {};
     const chanKo = {};
-    let chanKnown = 0;
-    let chanUnknown = 0;
     let night = 0;
 
     let spineCount = 0;
-    // 0.74.0: an event may carry a weight `w` (daily totals); `nd` = not a day count of its own,
-    // `dk`/`dn` = a day's count, `noch` = says nothing about channels, `cw` = channel totals
+    // 0.74.0: an event carries a weight `w` (daily totals); `nd` = not a day count of its own,
+    // `dk`/`dn` = a day's count, `cw` = channel totals
     spine.forEach((ev) => {
       const w = ev.w == null ? 1 : +ev.w;
       if (ev.t != null) {
@@ -8612,7 +7499,7 @@ class SupernotifyStatsCard extends SnCard {
         perHour[d.getHours()] += w;
         perWd[(d.getDay() + 6) % 7] += w;
         if (!ev.nd) {
-          const key = this._dayKey(d);
+          const key = snDayKey(d);
           perDayHist[key] = (perDayHist[key] || 0) + w;
         }
         if (d.getHours() >= 23 || d.getHours() < 7) night += w;
@@ -8625,38 +7512,17 @@ class SupernotifyStatsCard extends SnCard {
       const dp = ev.dp;
       if (dp) periodCount[dp] = (periodCount[dp] || 0) + w;
       if (ev.cw) {
-        chanKnown += ev.cw.known;
         for (const [n, k] of Object.entries(ev.cw.ok)) chanOk[n] = (chanOk[n] || 0) + k;
         for (const [n, k] of Object.entries(ev.cw.ko)) chanKo[n] = (chanKo[n] || 0) + k;
-        return;
       }
-      if (ev.noch) return;
-      const parsed = ev.ch;
-      if (!parsed) { chanUnknown++; return; }
-      chanKnown++;
-      parsed.ok.forEach((n) => { chanOk[n] = (chanOk[n] || 0) + 1; });
-      parsed.ko.forEach((n) => { chanKo[n] = (chanKo[n] || 0) + 1; });
     });
 
-    // daily series: prefer long-term statistics (complete + independent from
-    // purge), fall back to the spine count when the meter has no stats.
-    const statRows = (c.sent_today_entity && stats[c.sent_today_entity]) || [];
     const perDay = [];
     const dayCursor = new Date(start);
-    const todayKey = this._dayKey(now);
-    const statByKey = {};
-    statRows.forEach((r) => { statByKey[this._dayKey(new Date(r.start))] = Math.round(+r.change || 0); });
-    // today: long-term statistics are compiled hourly, so prefer the live
-    // state of the daily meter (it resets at midnight = today's count).
-    const liveToday = !events && c.sent_today_entity && this._hass.states[c.sent_today_entity];
-    const liveVal = liveToday && !["unknown", "unavailable"].includes(liveToday.state) ? Math.round(+liveToday.state) : null;
-    const nativeByKey = (this._native && this._native.byDay) || {};
+    const todayKey = snDayKey(now);
     while (dayCursor <= now) {
-      const k = this._dayKey(dayCursor);
-      let v = statByKey[k];
-      if (k === todayKey && liveVal != null && (v == null || liveVal >= v)) v = liveVal;
-      if (v == null) v = nativeByKey[k];
-      if (v == null) v = perDayHist[k] || 0;
+      const k = snDayKey(dayCursor);
+      const v = perDayHist[k] || 0;
       perDay.push({ key: k, d: new Date(dayCursor), n: v, today: k === todayKey, dupes: perDayDupe[k] || 0 });
       dayCursor.setDate(dayCursor.getDate() + 1);
     }
@@ -8677,36 +7543,16 @@ class SupernotifyStatsCard extends SnCard {
     const errors = channels.reduce((a, x) => a + x.ko, 0);
     const wdCount = perWd.slice(0, 5).reduce((a, b) => a + b, 0);
     const weCount = perWd[5] + perWd[6];
-    // normalise on the days that actually have recorded events (recorder
-    // history can start later than the window, e.g. after a DB purge)
+    // normalise on the days that have notifications (the archive can start later than the window)
     const daysWithData = perDay.filter((x) => perDayHist[x.key]);
     const wdDays = daysWithData.filter((x) => (x.d.getDay() + 6) % 7 < 5).length;
     const weDays = daysWithData.filter((x) => (x.d.getDay() + 6) % 7 >= 5).length;
 
     return {
-      days, histDays: daysWithData.length, spineCount, perHour, perWd, perDay, prioCount, periodCount, channels, sends, errors,
-      chanKnown, chanUnknown, total, avg, today, peakHour, night, m7, mp7,
+      days, spineCount, perHour, perWd, perDay, prioCount, periodCount, channels, sends, errors,
+      total, avg, today, peakHour, night, m7, mp7,
       wdPerDay: wdDays ? wdCount / wdDays : null, wePerDay: weDays ? weCount / weDays : null,
     };
-  }
-
-  _parseChannels(s) {
-    if (!s || typeof s !== "string") return null;
-    const t = s.trim();
-    if (!t || /^auto\b/i.test(t) || /^nessun/i.test(t) || t === "unknown" || t === "—") return null;
-    const ok = [];
-    const ko = [];
-    t.split(",").map((x) => x.trim()).filter(Boolean).forEach((x) => {
-      const clean = x.replace(/…$/, "");
-      if (/^[✖✗]/.test(clean)) ko.push(clean.replace(/^[✖✗]\s*/, ""));
-      else ok.push(clean);
-    });
-    if (!ok.length && !ko.length) return null;
-    return { ok, ko };
-  }
-
-  _dayKey(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
   // ── render ────────────────────────────────────────────────────────────
@@ -8784,7 +7630,7 @@ class SupernotifyStatsCard extends SnCard {
         <div id="body"><div class="empty">${T.st_loading}</div></div>
         <div class="ver" id="ver"></div>
         ${this._config && this._config.show_version ? `<div class="foot">supernotify-stats-card v${SN_CARD_VERSIONS.stats}</div>` : ""}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this.shadowRoot.querySelectorAll(".pb").forEach((b) => { b.onclick = () => this._setDays(+b.dataset.d); });
     this._updateVersions();
     if (this._data) this._draw();
@@ -8792,10 +7638,6 @@ class SupernotifyStatsCard extends SnCard {
 
   _fmt(n, dec) {
     return Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: dec == null ? 0 : dec });
-  }
-
-  _esc(s) {
-    return snEsc(s);
   }
 
   _t(key, vars) {
@@ -8812,15 +7654,8 @@ class SupernotifyStatsCard extends SnCard {
     const d = this._data;
     const T = snT(this._config, this._hass);
     const p = this._palette();
-    const esc = (s) => this._esc(s);
-    // daily series = long-term statistics (whole window); hours / channels /
-    // priorities = recorder history, which may keep fewer days than the window
-    const completeDays = Math.max(1, d.days);
-    sr.getElementById("win").textContent = d.archive
-      ? (this._error ? `${T.st_archive_err}: ${this._error}` : T.st_from_archive)
-      : d.histDays && d.histDays < completeDays
-        ? this._t("st_hist_note", { n: d.histDays })
-        : "";
+    const esc = snEsc;
+    sr.getElementById("win").textContent = this._error ? `${T.st_archive_err}: ${this._error}` : T.st_from_archive;
     const body = sr.getElementById("body");
     // 0.33.0: without the number boxes the header says the period, the total and the daily average
     const ttl = sr.getElementById("sttl");
@@ -8829,7 +7664,7 @@ class SupernotifyStatsCard extends SnCard {
         this._t("st_per_day", { n: this._fmt(d.avg, 0) })].join(" · ");
     }
     if (!d.total && !d.spineCount) {
-      body.innerHTML = snIconify(`<div class="empty">${T.st_no_data}${this._error ? ` <small>(${esc(this._error)})</small>` : ""}</div>`, this && this._config);
+      body.innerHTML = snIconify(`<div class="empty">${T.st_no_data}${this._error ? ` <small>(${esc(this._error)})</small>` : ""}</div>`, this._config);
       return;
     }
     const top = d.channels[0];
@@ -8863,9 +7698,6 @@ class SupernotifyStatsCard extends SnCard {
         <span class="tr"><span class="ok" style="width:${(ch.ok / maxCh) * 100}%"></span><span class="ko" style="width:${(ch.ko / maxCh) * 100}%"></span></span>
         <span class="ct">${tot}</span><span class="ke">${ch.ko ? `✖ ${ch.ko}` : ""}</span></div>`;
     }).join("");
-    const chNote = d.chanUnknown
-      ? `<div class="empty" style="font-size:11px">${d.chanKnown}/${d.chanKnown + d.chanUnknown} ${T.st_total.toLowerCase()} · ${d.chanUnknown} ${T.st_unknown}</div>`
-      : "";
     // priority chips
     const prioOrder = ["critical", "high", "medium", "low", "minimum"];
     const prioTot = Object.values(d.prioCount).reduce((a, b) => a + b, 0) || 1;
@@ -8893,13 +7725,13 @@ class SupernotifyStatsCard extends SnCard {
         <div><div class="sec"><span>${T.st_weekday}${weDiff != null && weDiff !== 0 ? ` · ${this._t("st_weekend_d", { p: `${weDiff > 0 ? "+" : "−"}${Math.abs(weDiff)}` })}` : ""}</span><span class="n">${this._fmt(d.spineCount)} ${T.st_logged}</span></div><div class="bars">${wd}</div></div>
       </div>
       <div class="sec"><span>${T.st_channels}</span><span class="n">${this._fmt(d.sends)}</span></div>
-      ${chRows || `<div class="empty">${T.st_no_data}</div>`}${chNote}
+      ${chRows || `<div class="empty">${T.st_no_data}</div>`}
       <div class="grid2">
         <div><div class="sec"><span>${T.st_priority}</span></div><div class="tl">${prioChips}</div></div>
         <div><div class="sec"><span>${T.st_period}</span></div><div class="tl">${perChips}</div></div>
       </div>
       <details class="insd"><summary>💡 ${ins.length} ${T.st_insights.toLowerCase()}</summary>
-      <ul class="ins">${ins.map((s) => `<li>${s}</li>`).join("")}</ul></details>`, this && this._config);
+      <ul class="ins">${ins.map((s) => `<li>${s}</li>`).join("")}</ul></details>`, this._config);
   }
 
   // Channel names are DELIVERY names; look the transport up on the delivery
@@ -8938,7 +7770,7 @@ class SupernotifyStatsCard extends SnCard {
       const fill = it.hi ? p.brandD : p.brand;
       s += `<rect x="${x}" y="${H - padB - h}" width="${bw}" height="${h}" rx="3" fill="${fill}" opacity="${it.hi ? 1 : 0.8}"/>`;
       if (it.v && (n <= 16 || it.hi)) s += `<text class="val" x="${x + bw / 2}" y="${H - padB - h - 3}" text-anchor="middle">${it.v}</text>`;
-      if (it.l) s += `<text x="${x + bw / 2}" y="${H - 4}" text-anchor="middle">${this._esc(it.l)}</text>`;
+      if (it.l) s += `<text x="${x + bw / 2}" y="${H - 4}" text-anchor="middle">${snEsc(it.l)}</text>`;
     });
     return s + "</svg>";
   }
@@ -8947,7 +7779,7 @@ class SupernotifyStatsCard extends SnCard {
     const T = snT(this._config, this._hass);
     const out = [];
     const top = d.channels[0];
-    if (top && d.sends) out.push(this._t("st_i_share", { p: Math.round(((top.ok + top.ko) / d.sends) * 100), c: this._esc(this._aliasFor(top.name) || top.name) }));
+    if (top && d.sends) out.push(this._t("st_i_share", { p: Math.round(((top.ok + top.ko) / d.sends) * 100), c: snEsc(this._aliasFor(top.name) || top.name) }));
     if (d.spineCount) {
       out.push(this._t("st_i_peak", { h: String(d.peakHour).padStart(2, "0"), n: d.perHour[d.peakHour], d: d.days }));
       const np = Math.round((d.night / d.spineCount) * 100);
@@ -8967,7 +7799,7 @@ class SupernotifyStatsCard extends SnCard {
     if (d.sends) {
       if (d.errors) {
         const worst = d.channels.slice().sort((a, b) => b.ko - a.ko)[0];
-        out.push(this._t("st_i_errors", { n: d.errors, d: d.days, c: this._esc(worst ? (this._aliasFor(worst.name) || worst.name) : "—") }));
+        out.push(this._t("st_i_errors", { n: d.errors, d: d.days, c: snEsc(worst ? (this._aliasFor(worst.name) || worst.name) : "—") }));
       } else out.push(this._t("st_i_noerr", { d: d.days }));
     }
     return out;
@@ -8976,38 +7808,36 @@ class SupernotifyStatsCard extends SnCard {
   _updateVersions() {
     const sr = this.shadowRoot;
     if (!sr || !this._hass) return;
+    this._verKey = [this._hass.states[this._config.update_entity], this._hass.states[this._config.cards_update_entity], this._hass.language];
     const el = sr.getElementById("ver");
     if (!el) return;
     if (this._config.versions === false) { el.innerHTML = ""; return; }
     const T = snT(this._config, this._hass);
     const box = (id, fallbackName, fallbackVer, emoji) => {
-      const st = this._hass.states[id];
-      if (!st) {
+      const v = snVersionInfo(this._hass, id);
+      if (!v) {
         if (!fallbackVer) return "";
-        return `<div class="vbox"><span class="ic">${emoji}</span><div><b>${this._esc(fallbackName)}</b><div class="sm">v${this._esc(fallbackVer)}</div></div></div>`;
+        return `<div class="vbox"><span class="ic">${emoji}</span><div><b>${snEsc(fallbackName)}</b><div class="sm">v${snEsc(fallbackVer)}</div></div></div>`;
       }
-      const a = st.attributes || {};
-      const inst = a.installed_version || "—";
-      const latest = a.latest_version || "—";
-      const upd = st.state === "on";
-      const restart = /restart/i.test(a.release_summary || "");
+      const { a, upd, restart } = v;
+      const inst = v.inst || "—";
+      const latest = v.latest || "—";
       const name = (a.title || a.friendly_name || fallbackName || "").replace(/\s*update$/i, "");
       const icon = a.entity_picture
-        ? `<img src="${this._esc(a.entity_picture)}" alt="">`
+        ? `<img src="${snEsc(a.entity_picture)}" alt="">`
         : `<span class="ic">${emoji}</span>`;
       const badge = upd
         ? `<span class="badge b-upd">⬆ ${T.st_update}</span>`
         : `<span class="badge b-ok">✔ ${restart ? T.st_restart : T.st_uptodate}</span>`;
       const sub = upd
-        ? `${T.st_installed} ${this._esc(inst)} → ${T.st_latest} <b>${this._esc(latest)}</b>`
-        : `${this._esc(inst)} · ${T.st_latest} ${this._esc(latest)}`;
-      const href = a.release_url ? ` href="${this._esc(a.release_url)}" target="_blank" rel="noopener"` : "";
-      return `<a class="vbox"${href}>${icon}<div><b>${this._esc(name)}</b><div class="sm">${sub}</div></div>${badge}</a>`;
+        ? `${T.st_installed} ${snEsc(inst)} → ${T.st_latest} <b>${snEsc(latest)}</b>`
+        : `${snEsc(inst)} · ${T.st_latest} ${snEsc(latest)}`;
+      const href = a.release_url ? ` href="${snEsc(a.release_url)}" target="_blank" rel="noopener"` : "";
+      return `<a class="vbox"${href}>${icon}<div><b>${snEsc(name)}</b><div class="sm">${sub}</div></div>${badge}</a>`;
     };
-    this._verKey = [this._hass.states[this._config.update_entity], this._hass.states[this._config.cards_update_entity], this._hass.language];
     el.innerHTML =
       snIconify(box(this._config.update_entity, "SuperNotify", null, "🔔") +
-      box(this._config.cards_update_entity, "SuperNotify Cards", VERSION, "🃏"), this && this._config);
+      box(this._config.cards_update_entity, "SuperNotify Cards", VERSION, "🃏"), this._config);
   }
 }
 
@@ -9028,7 +7858,7 @@ class SupernotifyArchiveCard extends SnCard {
    * (on top when narrow) the list: a status mark, the title, one line that says how it went;
    * repeats of the same notification in a row folded into one "×N" line. On the right (below
    * when narrow) the full detail of the selected notification - the "why" that used to be a
-   * separate supernotify-why-card (SnWhyEngine, mixed in below) - with a verdict on top and the
+   * separate supernotify-why-card (now SnWhyDetail, mixed in below) - with a verdict on top and the
    * pause bar at the bottom. supernotify-why-card is now an alias of this card, so dashboards
    * that have both keep working.
    */
@@ -9044,8 +7874,6 @@ class SupernotifyArchiveCard extends SnCard {
 
   setConfig(config) {
     this._config = {
-      entity: "sensor.supernotify_archivio",
-      service: "shell_command.sn_archive_detail", // detail with the sensor index (before 2.10)
       style: "supernotify",
       ...(config || {}),
     };
@@ -9064,24 +7892,14 @@ class SupernotifyArchiveCard extends SnCard {
   static snTracked = false;
 
   _onHass(hass, fresh) {
-    if (snArchiveNative(hass, this._config)) {
-      // the store redraws this card through the "supernotify-archive" event
-      // 0.86.0: the newest 20 in full, the list as summaries (~1 KB each); before 2.12.1 (no
-      // summary) the list is `limit` full documents, as before
-      const light = snArchiveStore.lightOk !== false;
-      snArchiveStore.ensure(hass, light ? SN_ARCHIVE_FULL_RECENT : this._config.limit, this._config.trigger_entity);
-      if (light) snArchiveStore.ensureLight(hass, this._config.limit, this._config.trigger_entity);
-      if (this._config.priority_filters !== false) snArchivePrio.refresh(hass);
-      if (fresh) this._render();
-      else if (this._storeVer !== snArchiveStore.version || (this._waitStore && snArchiveStore.fetched)) this._renderList();
-      this._storeVer = snArchiveStore.version;
-      return;
-    }
-    const st = hass.states[this._config.entity];
-    const stamp = st ? st.last_updated : "none";
+    // the store redraws this card through the "supernotify-archive" event
+    // 0.86.0: the newest 20 in full, the list as summaries (~1 KB each)
+    snArchiveStore.ensure(hass, SN_ARCHIVE_FULL_RECENT, this._config.trigger_entity);
+    snArchiveStore.ensureLight(hass, this._config.limit, this._config.trigger_entity);
+    if (this._config.priority_filters !== false) snArchivePrio.refresh(hass);
     if (fresh) this._render();
-    else if (stamp !== this._stamp) this._renderList();
-    this._stamp = stamp;
+    else if (this._storeVer !== snArchiveStore.version || (this._waitStore && snArchiveStore.fetched)) this._renderList();
+    this._storeVer = snArchiveStore.version;
   }
 
   /** 0.86.0: critical or high over the whole archive, as an index of its own. */
@@ -9100,10 +7918,16 @@ class SupernotifyArchiveCard extends SnCard {
   }
 
   connectedCallback() {
+    // 1.0.0 (perf): events that come together (store, priority counts) redraw the list once
     this._onArchive = () => {
-      if (!this._rendered) return;
-      this._storeVer = snArchiveStore.version;
-      this._renderList();
+      if (!this._rendered || this._listQ) return;
+      this._listQ = true;
+      queueMicrotask(() => {
+        this._listQ = false;
+        if (!this._rendered || !this.isConnected) return;
+        this._storeVer = snArchiveStore.version;
+        this._renderList();
+      });
     };
     window.addEventListener("supernotify-archive", this._onArchive);
     this._onArchive();   // catch up with a fetch that finished before the card was in the page
@@ -9136,7 +7960,7 @@ class SupernotifyArchiveCard extends SnCard {
 
   /** 0.80.0: can a row be paused from here - supernotify.snooze and the archive's own documents. */
   _canPause() {
-    return !!(this._hass && snHasSnoozeAction(this._hass) && snArchiveNative(this._hass, this._config)
+    return !!(this._hass && snHasSnoozeAction(this._hass)
       && this._config.pause !== false);
   }
 
@@ -9180,11 +8004,10 @@ class SupernotifyArchiveCard extends SnCard {
     if (!subs.length) return `<div class="pzn">⏸ ${esc(t(this._config.pause_sender ? "pz_none_any" : "pz_none"))}</div>`;
     const st = this._pz[r.id] || (this._pz[r.id] = { who: "all", subj: subs[0] });
     if (!subs.includes(st.subj)) st.subj = subs[0];
-    const fname0 = (id) => ((this._hass.states[id] || {}).attributes || {}).friendly_name || id;
+    const fname0 = (id) => snFname(this._hass, id, id);
     // 0.81.0: a sender reads "automation: name" / "script: name"
     const fname = (id) => /^automation\./.test(id) ? `${t("pz_auto")}: ${fname0(id)}`
       : /^script\./.test(id) ? `${t("pz_script")}: ${fname0(id)}` : fname0(id);
-    const pad = (n) => String(n).padStart(2, "0");
     const live = this._snz ? snPausesOn(this._snz, st.subj) : [];
     const subjRow = subs.length > 1 ? `<div class="pzr"><span class="pzk">${esc(t("pz_what"))}</span>${subs.map((s) =>
       `<button class="pzc${s === st.subj ? " on" : ""}" data-subj="${esc(s)}">${esc(fname(s))}</button>`).join("")}</div>` : "";
@@ -9254,9 +8077,7 @@ class SupernotifyArchiveCard extends SnCard {
         e.stopPropagation();
         const s = live[+b.dataset.resume];
         if (!s) return;
-        const data = { command: "resume", scope: "tag", name: s.target };
-        if (String(s.recipient_type || "").toUpperCase() === "USER" && s.recipient) data.person = s.recipient;
-        run(data, t("pz_resumed"));
+        run(snResumeData(s), t("pz_resumed")); // a tag pause: scope tag, name = the entity
       };
     });
   }
@@ -9271,9 +8092,9 @@ class SupernotifyArchiveCard extends SnCard {
 
   _loc() { return (this._config.language || (this._hass && this._hass.language) || undefined); }
 
-  _lang() { return ((this._config.language || (this._hass && this._hass.language) || "en").split("-")[0]); }
+  _lang() { return snLang(this._config, this._hass); }
 
-  /** The detail (SnWhyEngine) reads the why strings. */
+  /** The detail (SnWhyDetail) reads the why strings. */
   _T() { return SN_WHY_STRINGS[this._lang()] || SN_WHY_STRINGS.en; }
 
   /** The list and the pause bar read the archive strings. */
@@ -9283,33 +8104,46 @@ class SupernotifyArchiveCard extends SnCard {
   _ta(k) { const T = this._TA(); return T[k] != null ? T[k] : SN_ARCH_STRINGS.en[k] != null ? SN_ARCH_STRINGS.en[k] : k; }
 
   /**
-   * L'indice pubblicato negli attributi di sensor.supernotify_archivio dal
-   * sensore command_line che lancia tools/sn_archive_index.py:
-   *   chan: ["mobile_push", …]   tabella dei nomi di canale
-   *   scen: ["dnd_globale", …]   tabella dei nomi di scenario
-   *   items: [{ id, t (epoch s), ti (titolo), m (messaggio), mt (troncato),
-   *             p (priorita', assente = medium), o (esito, assente = success),
-   *             d/f/s (consegnati/falliti/saltati, assenti se 0),
-   *             c: [indice | [indice,"e"] | [indice,"s",motivo]],
-   *             sc: [indici scenario], ms (durata) }]
-   * With SuperNotify 2.10+ the same index is built in the card from
-   * supernotify.enquire_archive (snArchiveStore), and the sensor is not needed.
+   * The compact index built from supernotify.enquire_archive (snArchiveStore):
+   *   chan: ["mobile_push", …]   channel names
+   *   scen: ["dnd_globale", …]   scenario names
+   *   items: [{ id, t (epoch s), ti (title), m (message), mt (cut),
+   *             p (priority, none = medium), o (outcome, none = success),
+   *             d/f/s (delivered/failed/skipped, none when 0),
+   *             c: [index | [index,"e"] | [index,"s",reason]],
+   *             sc: [scenario indexes], ms (duration) }]
    */
   _index() {
-    if (this._hass && snArchiveNative(this._hass, this._config)) return snArchiveStore.getIndex();
-    const st = this._hass && this._hass.states[this._config.entity];
-    if (!st) return null;
-    const a = st.attributes || {};
-    return { items: a.items || [], chan: a.chan || [], scen: a.scen || [],
-      total: a.total_files, oldest: a.oldest, generated: a.generated, error: a.error };
+    return this._hass ? snArchiveStore.getIndex() : null;
   }
 
   /** The index row of a notification (the index keeps 8 characters of the id). */
   _row(id) {
     if (!id) return null;
     const idx = this._index();
-    const items = [...((idx && idx.items) || []), ...((this._pIdx && this._pIdx.idx.items) || [])];
-    return items.find((r) => r.id === id) || items.find((r) => String(r.fid || "").startsWith(id) || String(id).startsWith(r.id)) || null;
+    // 1.0.0 (perf): the two lists looked at in turn, not copied into a new array at each call
+    const lists = [(idx && idx.items) || [], (this._pIdx && this._pIdx.idx.items) || []];
+    for (const l of lists) { const r = l.find((x) => x.id === id); if (r) return r; }
+    for (const l of lists) {
+      const r = l.find((x) => String(x.fid || "").startsWith(id) || String(id).startsWith(x.id));
+      if (r) return r;
+    }
+    return null;
+  }
+
+  /** 1.0.0 (perf): Intl formatters kept per language and 12/24 h (one per row was made before). */
+  _fmt(kind) {
+    const loc = this._loc();
+    const h12 = snH12(this._hass);
+    const key = `${kind}|${loc}|${h12}`;
+    const c = this._fmtC || (this._fmtC = new Map());
+    let f = c.get(key);
+    if (!f) {
+      const opt = kind === "hm" ? { hour: "2-digit", minute: "2-digit", hour12: h12 } : { weekday: "long", day: "numeric", month: "long" };
+      try { f = new Intl.DateTimeFormat(loc, opt); } catch (e) { f = new Intl.DateTimeFormat(undefined, opt); }
+      c.set(key, f);
+    }
+    return f;
   }
 
   /** Canali di una riga, nel formato dell'indice, espansi in oggetti leggibili. */
@@ -9317,7 +8151,7 @@ class SupernotifyArchiveCard extends SnCard {
     return (row.c || []).map((c) => {
       if (typeof c === "number") return { name: idx.chan[c] || "?", state: "ok" };
       const [i, e, r] = c;
-      // the index keeps short Italian reasons (tools/sn_archive_index.py): shown in the UI language
+      // the index keeps short Italian reasons (SN_ARCHIVE_REASONS): shown in the UI language
       const T = this._TA();
       return { name: idx.chan[i] || "?", state: e === "e" ? "err" : "skip", reason: (r && T.reasons && T.reasons[r]) || r };
     });
@@ -9329,17 +8163,25 @@ class SupernotifyArchiveCard extends SnCard {
     const diff = Math.round((today - day) / 86400000);
     if (diff === 0) return T.today;
     if (diff === 1) return T.yesterday;
-    return day.toLocaleDateString(this._loc(), { weekday: "long", day: "numeric", month: "long" });
+    return this._fmt("day").format(day);
   }
 
   /** ok | err | warn | none: how a notification went, from its index row. */
   _status(r) {
+    // 1.0.0 (perf): worked out once per row while the list is drawn (_renderList)
+    const m = this._stMap;
+    if (m) { let v = m.get(r); if (v === undefined) { v = this._status0(r); m.set(r, v); } return v; }
+    return this._status0(r);
+  }
+
+  _status0(r) {
     const c = r.c || [];
     if (r.f || c.some((x) => Array.isArray(x) && x[1] === "e")) return "err";
     const sent = r.d || c.some((x) => typeof x === "number");
     // nothing went out and every channel was held back by a routine rule (a pause, nobody home,
     // the priority): that is not a problem, it is a quiet notification
-    if (!sent && !r.mi && c.length && c.every((x) => Array.isArray(x) && x[1] === "s" && SN_ARCHIVE_ROUTINE.has(x[2] || ""))) return "none";
+    // (a notification dropped as a duplicate keeps its warning, as in the detail's verdict)
+    if (!sent && !r.mi && r.o !== "dupe" && c.length && c.every((x) => Array.isArray(x) && x[1] === "s" && SN_ARCHIVE_ROUTINE.has(x[2] || ""))) return "none";
     if (snArchiveProblem(r)) return "warn";
     if (!sent) return "none";
     return "ok";
@@ -9351,7 +8193,7 @@ class SupernotifyArchiveCard extends SnCard {
     const name = (n) => snDeliveryAlias(this._hass, n) || n;
     const chans = this._channels(r, idx);
     const okN = chans.filter((c) => c.state === "ok").map((c) => name(c.name));
-    const list = (a) => a.length > 3 ? `${a.slice(0, 3).join(", ")} +${a.length - 3}` : a.join(", ");
+    const list = (a) => snJoinMax(a, 3);
     const st = this._status(r);
     if (st === "err") {
       const bad = chans.filter((c) => c.state === "err").map((c) => name(c.name));
@@ -9545,8 +8387,8 @@ class SupernotifyArchiveCard extends SnCard {
             </div>
           </div>
         </div>
-        ${snVer(this._config, this._snKind || "archive", p)}
-      </ha-card>`, this && this._config);
+        ${snVer(this._config, "archive", p)}
+      </ha-card>`, this._config);
     const q = this.shadowRoot.getElementById("q");
     q.addEventListener("input", () => { this._q = q.value.toLowerCase(); this._renderList(); });
     const help = this.shadowRoot.getElementById("help");
@@ -9560,10 +8402,12 @@ class SupernotifyArchiveCard extends SnCard {
     if (this._sel) this._showDetail();
   }
 
-  /** Kept for callers of the old card: the filter chips are drawn with the list. */
-  _renderChips() { this._renderList(); }
-
   _renderList() {
+    this._stMap = new Map();
+    try { this._renderList0(); } finally { this._stMap = null; }
+  }
+
+  _renderList0() {
     const el = this.shadowRoot && this.shadowRoot.getElementById("list");
     if (!el) return;
     const esc = snEsc;
@@ -9572,11 +8416,7 @@ class SupernotifyArchiveCard extends SnCard {
     const meta = this.shadowRoot.getElementById("meta");
     const sum = this.shadowRoot.getElementById("sum");
     const chipsEl = this.shadowRoot.getElementById("chips");
-    if (!idx) {
-      meta.textContent = ""; sum.innerHTML = ""; chipsEl.innerHTML = "";
-      el.innerHTML = snIconify(`<div class="empty"><b>${esc(ta("no_sensor"))}</b> — <code>${esc(this._config.entity)}</code><br>${esc(ta("no_sensor_hint"))}</div>`, this._config);
-      return;
-    }
+    if (!idx) return;
     if (idx.error) {
       el.innerHTML = snIconify(`<div class="empty">⚠️ ${esc(idx.error)}</div>`, this._config);
       return;
@@ -9613,7 +8453,7 @@ class SupernotifyArchiveCard extends SnCard {
     }
     // 0.86.0: critical and high - over the whole archive when SuperNotify has the daily totals,
     // else over the list; shown when there is at least one (or when it is the filter in use)
-    const wide = idx.native && snArchivePrio.counts;
+    const wide = snArchivePrio.counts;
     if (this._config.priority_filters !== false) {
       for (const p of ["critical", "high"]) {
         const n = wide ? snArchivePrio.counts[p] : all.filter((r) => r.p === p).length;
@@ -9642,17 +8482,14 @@ class SupernotifyArchiveCard extends SnCard {
       }
       return true;
     });
-    const gen = idx.generated ? new Date(idx.generated).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) }) : "";
-    const old = idx.oldest ? new Date(idx.oldest).toLocaleDateString(this._loc()) : "";
+    const hmF = this._fmt("hm");
+    const gen = idx.generated ? hmF.format(new Date(idx.generated)) : "";
     const T = this._TA();
     meta.innerHTML = snIconify(prioF && wide
       ? esc(ta("prio_scope").replace("{d}", snArchivePrio.days || SN_PRIO_DAYS))
-      : idx.native
-      ? `${all.length} ${T.recent}` + (gen ? ` · ${T.read_at} ${gen}` : "")
-      : (idx.total ? `${all.length} ${T.of} ${idx.total} ${T.in_archive}` : `${all.length} ${T.in_archive}`) +
-        (old ? ` · ${T.since}: ${old}` : "") + (gen ? ` · ${T.updated} ${gen}` : ""), this._config);
+      : `${all.length} ${T.recent}` + (gen ? ` · ${T.read_at} ${gen}` : ""), this._config);
     // 0.44.0: the summary rows have no tag - Autonotify is recognised on the full documents alone
-    if (this._filter === "appliance" && idx.native && snArchiveStore.lightOk) {
+    if (this._filter === "appliance") {
       meta.insertAdjacentText("beforeend", ` · ${ta("ap_scope").replace("{n}", SN_ARCHIVE_FULL_RECENT)}`);
     }
     if (!rows.length) {
@@ -9668,7 +8505,7 @@ class SupernotifyArchiveCard extends SnCard {
       if (this._groups && g && g.key === key) g.items.push(r);
       else groups.push({ key, items: [r] });
     }
-    const hm = (t) => new Date(t * 1000).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
+    const hm = (t) => hmF.format(new Date(t * 1000));
     const icon = (st) => st === "ok"
       ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L19 7"/></svg>`
       : st === "none"
@@ -9684,7 +8521,8 @@ class SupernotifyArchiveCard extends SnCard {
       const wh = (r.w ? ` · <span class="tg wh">\u{1F92B} ${esc(T.wh)}</span>` : "")
         + (r.apl ? ` · <span class="tg apl">${esc(snAppliances.label(r.apl))}</span>` : "");
       const span = n > 1 ? `${hm(g.items[n - 1].t)} – ${hm(r.t)} · ` : "";
-      return `<div class="it row${sub ? " sub" : ""}${st === "none" ? " quiet" : ""}${this._sel === r.id ? " sel" : ""}" data-id="${esc(r.id)}" title="${esc(stTip[st])}">
+      // 1.0.0: the attributes snA11yScan gave a row with its own onclick (the list now has one listener)
+      return `<div class="it row${sub ? " sub" : ""}${st === "none" ? " quiet" : ""}${this._sel === r.id ? " sel" : ""}" data-id="${esc(r.id)}" title="${esc(stTip[st])}" data-sn-a11y="row" tabindex="0" role="button">
         <span class="ic ${st}">${icon(st)}</span>
         <div class="bd"><div class="l1"><span class="ti">${esc(snTitleShow(r.ti || r.m || "—"))}</span>${many}${prio}</div>
           <div class="l2">${sub ? "" : span}${this._sub(r, lidx)}${wh}</div></div>
@@ -9700,17 +8538,22 @@ class SupernotifyArchiveCard extends SnCard {
       if (g.items.length > 1 && this._openGroups.has(r.id)) g.items.slice(1).forEach((x) => parts.push(line(x, null, true)));
     }
     el.innerHTML = snIconify(parts.join(""), this._config);
-    el.querySelectorAll(".it").forEach((node) => {
-      node.onclick = () => this._select(node.dataset.id, true);
-    });
-    el.querySelectorAll(".rep").forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const id = b.dataset.g;
-        if (this._openGroups.has(id)) this._openGroups.delete(id); else this._openGroups.add(id);
-        this._renderList();
-      };
-    });
+    // 1.0.0 (perf): one listener on the list for every row and ×N button, set once
+    if (!el._snDeleg) {
+      el._snDeleg = true;
+      el.addEventListener("click", (e) => {
+        const b = e.target.closest && e.target.closest(".rep");
+        if (b && el.contains(b)) {
+          e.stopPropagation();
+          const id = b.dataset.g;
+          if (this._openGroups.has(id)) this._openGroups.delete(id); else this._openGroups.add(id);
+          this._renderList();
+          return;
+        }
+        const node = e.target.closest && e.target.closest(".it");
+        if (node && el.contains(node)) this._select(node.dataset.id, true);
+      });
+    }
     // open the latest notification by itself, once, so the detail is never an empty box
     if (!this._sel && !this._autoDone && this._config.auto_select !== false) {
       this._autoDone = true;
@@ -9730,12 +8573,7 @@ class SupernotifyArchiveCard extends SnCard {
     this._sel = id;
     // 0.44.0: read before the detail rebuilds the index from the full document
     const wasLight = !!(this._row(id) || {}).light;
-    // a sensor index without the detail service: nothing to wait for, draw now
-    if (!this._cache.has(id) && this._hass && !snArchiveNative(this._hass, this._config)) {
-      const [dom, svc] = String(this._config.service || "").split(".");
-      const ss = this._hass.services && this._hass.services[dom];
-      if (!ss || !ss[svc]) this._cache.set(id, { ok: false, error: "no_service" });
-    }
+    snDetailCached(this._cache, id); // 1.0.0: a transient error kept here is dropped, so it is asked again
     if (this.shadowRoot) {
       this.shadowRoot.querySelectorAll("#list .it").forEach((n) => n.classList.toggle("sel", n.dataset.id === id));
     }
@@ -9744,7 +8582,7 @@ class SupernotifyArchiveCard extends SnCard {
       this._loading = id;
       this._showDetail();
       const res = await this._fetch(id);
-      this._cache.set(id, res);
+      snDetailPut(this._cache, id, res);
       this._loading = null;
     }
     if (this._sel === id) this._showDetail();
@@ -9767,13 +8605,8 @@ class SupernotifyArchiveCard extends SnCard {
     const det = this.shadowRoot && this.shadowRoot.getElementById("det");
     if (!det) return;
     const res = this._cache.get(this._sel);
-    if (this._loading !== this._sel && res && !res.ok && res.error === "no_service") {
-      // a sensor index without the detail service: what the index row knows
-      det.innerHTML = snIconify(this._rowDetail(this._row(this._sel)), this._config);
-    } else {
-      this._renderDetail();
-      if (this._loading !== this._sel && res && res.ok) { this._verdict(det, res.n || {}); this._said(det); }
-    }
+    this._renderDetail();
+    if (this._loading !== this._sel && res && res.ok) { this._verdict(det, res.n || {}); this._said(det); }
     this._renderPauses();
   }
 
@@ -9846,52 +8679,23 @@ class SupernotifyArchiveCard extends SnCard {
     const hd = det.querySelector(".hd");
     if (hd && hd.nextSibling) det.insertBefore(box, hd.nextSibling); else det.appendChild(box);
   }
-
-  /** Detail from the index row alone (sensor index, no detail service): channels, scenarios, counts. */
-  _rowDetail(r) {
-    if (!r) return `<div class="empty">${snEsc(this._T().pick)}</div>`;
-    const T = this._TA();
-    const esc = snEsc;
-    const idx = this._index() || { chan: [], scen: [] };
-    const d = new Date(r.t * 1000);
-    const when = d.toLocaleString(this._loc(), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
-    const chans = this._channels(r, idx).map((c) =>
-      `<span class="tg ${c.state}" title="${esc(c.name)}">${c.state === "ok" ? "✔" : c.state === "err" ? "✖" : "⊘"} ${esc(snDeliveryAlias(this._hass, c.name) || c.name)}` +
-      `${c.reason ? " · " + esc(c.reason) : ""}</span>`).join("");
-    const scen = (r.sc || []).map((s) => esc(idx.scen && idx.scen[s] ? snScenarioName(this._hass, idx.scen[s]) : "?")).join(", ");
-    const prio = (T.prio && T.prio[r.p || "medium"]) || r.p || "";
-    return `<div class="hd"><div class="meta">${esc(when)}${prio ? ` · ${esc(prio)}` : ""}</div>
-        <b class="ttl">${esc(snTitleShow(r.ti || "—"))}</b>
-        ${r.m ? `<div class="msg">${esc(snPlainMsg(r.m))}${r.mt ? "…" : ""}</div>` : ""}</div>
-      ${r.sp ? `<div class="note said">${this._saidHtml(r)}</div>` : ""}
-      <div class="tags">${chans}</div>
-      ${scen ? `<div class="note"><b>${esc(T.scenarios)}:</b> ${scen}</div>` : ""}
-      <div class="note">${r.d ? `<b>${r.d}</b> ${snW(T, "delivered", r.d)} ` : ""}${r.f ? `· <b>${r.f}</b> ${snW(T, "failed", r.f)} ` : ""}${r.s ? `· <b>${r.s}</b> ${snW(T, "skipped", r.s)} ` : ""}${r.mi ? `· ⚠ <b>${r.mi}</b> ${snW(T, "missed", r.mi)} ` : ""}
-        ${r.ms ? `· ${T.dur} ${r.ms} ms` : ""}${r.mt ? ` · ${T.truncated}` : ""}</div>
-      <div class="note">ℹ️ ${esc(this._ta("no_detail"))}</div>`;
-  }
 }
 
 
 const SN_ARCH_STRINGS = {
   en: {
-    title: "Notification history", search: "Search title or message…",
-    f_all: "All", f_problems: "Problems only", f_today: "Today",
+    search: "Search title or message…",
+    f_all: "All", f_today: "Today",
     f_whisper: "Whispered", wh: "whispered", said: "Alexa said", said_by: "{ch} said",
     f_appliance: "Appliances", ap_scope: "among the latest {n} read in full - older ones are not recognised",
-    none: "no notification matches", no_sensor: "sensor not found",
-    no_sensor_hint: "Update SuperNotify to 2.10 or later, which has the supernotify.enquire_archive action, or add the command_line sensor that indexes the archive (see README).",
+    none: "no notification matches",
     loading: "reading the archive…", recent: "latest notifications", read_at: "read at",
-    of: "of", in_archive: "in the archive", since: "oldest", updated: "index updated",
     today: "Today", yesterday: "Yesterday",
-    delivered: "delivered", failed: "failed", skipped: "skipped", missed: "missed",
-    prio: { critical: "Critical", high: "High", low: "Low", minimum: "Minimum", medium: "Medium" },
+    failed: "failed", missed: "missed",
     reasons: { doppione: "duplicate", "nessun target": "no target", errore: "error", condizione: "condition",
       scenario: "scenario", presenza: "presence", priorita: "priority", spento: "off", pausa: "snoozed",
       "transport spento": "transport off", "nessuna azione": "no action", "dati non validi": "invalid data",
       sconosciuto: "unknown" },
-    scenarios: "Scenarios in force", truncated: "message truncated in the index",
-    dur: "took", id: "id", why: "Why? - full detail",
     pz_title: "Pause notifications about {x}", pz_all: "for everyone", pz_me: "only for me", pz_only: "only for",
     pz_all_tip: "Nobody gets notifications about this entity until the pause ends",
     pz_me_tip: "You stop getting them; channels with fixed targets (speakers, dashboard) still play",
@@ -9908,25 +8712,19 @@ const SN_ARCH_STRINGS = {
     v_none: "It went out on no channel", v_ok: "Arrived on {n} channels", v_ok1: "Arrived on 1 channel",
     v_partial: "Arrived on {n} channels of {of}", v_failed: "It did not arrive", v_skipped: "skipped by a rule", v_dupe: "Dropped: the same text had just gone out",
     f_critical: "Critical", f_high: "High", prio_scope: "in the whole archive (last {d} days)",
-    no_detail: "The full detail needs SuperNotify 2.10 or later (enquire_archive) or the shell_command sn_archive_detail.",
     help_t: "How to read it",
     help: "<b>Left</b>: one line per notification - ✔ arrived, <b>!</b> a channel failed or something to look at, ⊘ it went out on no channel (a pause, nobody home, a rule). <b>×N</b> = the same notification N times in a row: tap it to see each one. <b>Right</b>: the notification you tap - the scenarios in force, who was home, every channel with why it went out or not, and the pause.",
   },
   it: {
-    title: "Storico notifiche", search: "Cerca nel titolo o nel messaggio…",
-    f_all: "Tutte", f_problems: "Solo con problemi", f_today: "Oggi",
+    search: "Cerca nel titolo o nel messaggio…",
+    f_all: "Tutte", f_today: "Oggi",
     f_whisper: "Sussurrate", wh: "sussurrata", said: "Alexa ha detto", said_by: "{ch} ha detto",
     f_appliance: "Elettrodomestici", ap_scope: "tra le ultime {n} lette per intero: le più vecchie non vengono riconosciute",
-    none: "nessuna notifica corrisponde", no_sensor: "sensore non trovato",
-    no_sensor_hint: "Aggiorna SuperNotify alla 2.10 o successiva, che ha l'azione supernotify.enquire_archive, oppure aggiungi il sensore command_line che indicizza l'archivio (vedi README).",
+    none: "nessuna notifica corrisponde",
     loading: "lettura dell'archivio…", recent: "notifiche più recenti", read_at: "lette alle",
-    of: "di", in_archive: "nell'archivio", since: "più vecchia", updated: "indice aggiornato",
     today: "Oggi", yesterday: "Ieri",
-    delivered: "consegnati", delivered_1: "consegnato", failed: "falliti", failed_1: "fallito",
-    skipped: "saltati", skipped_1: "saltato", missed: "mancati", missed_1: "mancato",
-    prio: { critical: "Critica", high: "Alta", low: "Bassa", minimum: "Minima", medium: "Media" },
-    scenarios: "Scenari in vigore", truncated: "messaggio troncato nell'indice",
-    dur: "in", id: "id", why: "Perché? - dettaglio completo",
+    failed: "falliti", failed_1: "fallito",
+    missed: "mancati", missed_1: "mancato",
     pz_title: "Metti in pausa le notifiche su {x}", pz_all: "per tutti", pz_me: "solo per me", pz_only: "solo per",
     pz_all_tip: "Nessuno riceve notifiche su questa entità finché la pausa non finisce",
     pz_me_tip: "Smetti di riceverle tu; i canali con destinazione fissa (altoparlanti, dashboard) suonano comunque",
@@ -9943,7 +8741,6 @@ const SN_ARCH_STRINGS = {
     v_none: "Non è partita su nessun canale", v_ok: "Arrivata su {n} canali", v_ok1: "Arrivata su 1 canale",
     v_partial: "Arrivata su {n} canali su {of}", v_failed: "Non è arrivata", v_skipped: "saltati per una regola", v_dupe: "Scartata: lo stesso testo era appena partito",
     f_critical: "Critiche", f_high: "Alte", prio_scope: "in tutto l'archivio (ultimi {d} giorni)",
-    no_detail: "Il dettaglio completo richiede SuperNotify 2.10 o successivo (enquire_archive) o lo shell_command sn_archive_detail.",
     help_t: "Come si legge",
     help: "<b>A sinistra</b>: una riga per notifica - ✔ arrivata, <b>!</b> un canale ha fallito o c'è qualcosa da guardare, ⊘ non è partita su nessun canale (una pausa, nessuno in casa, una regola). <b>×N</b> = la stessa notifica N volte di fila: toccala per vederle una per una. <b>A destra</b>: la notifica che tocchi - gli scenari in vigore, chi era in casa, ogni canale col perché è partito o no, e la pausa.",
   },
@@ -9952,267 +8749,46 @@ const SN_ARCH_STRINGS = {
 
 
 /* ════════════════════════════════════════════════════════════════════════
- * supernotify-why-card — "Why?" for one notification
+ * "Why?" - the detail of one notification in supernotify-archive-card
  *
- * The question it answers: why did this notification go out (or not) on
- * this channel, to these targets? Everything comes from what SuperNotify
- * archived for that notification:
- *   - with SuperNotify 2.10+, both the list and the detail come from the
- *     supernotify.enquire_archive action, through the store shared with
- *     supernotify-archive-card (snArchiveStore / snArchiveDetail);
- *   - before that, or with `source: sensor`: the list is the archive index in
- *     sensor.supernotify_archivio, and the detail is fetched on demand
- *     through shell_command.sn_archive_detail, which runs
- *     tools/sn_archive_index.py --detail <id> and returns its JSON as the
- *     service response (so it never weighs on any entity's attributes).
- * Channels that did not start at all are not in the archive: for those the
- * reason is reconstructed from the current configuration (delivery switch,
- * transport, inclusion, the scenarios in force, the call's own overrides)
- * and labelled as such. When the archive holds the full selection trace
- * (SuperNotify diagnostics), that is shown too and wins.
- * Other cards open a notification here with snWhyOpen(id).
+ * Why did this notification go out (or not) on each channel, to which targets.
+ * The detail comes from SuperNotify's archive: the enquire_archive action
+ * (through snArchiveStore / snArchiveDetail). Channels that did not start are
+ * not in the archive: their reason is rebuilt from the current configuration
+ * and labelled as such; the selection trace, when archived, wins.
+ * supernotify-why-card is an alias of the archive card; other cards open a
+ * notification with snWhyOpen(id).
  * ════════════════════════════════════════════════════════════════════════ */
+/**
+ * 1.0.0: the detail cache of the archive / why cards. A transient error (timeout, lost
+ * connection) was kept for good and never asked again, and the Map had no limit: a cached
+ * error that is not final is dropped on the next look, and the oldest entries go past 60.
+ */
+function snDetailCached(cache, id) {
+  const r = cache.get(id);
+  if (r && !r.ok && !r.final) { cache.delete(id); return false; }
+  return cache.has(id);
+}
+function snDetailPut(cache, id, res) {
+  cache.delete(id);
+  cache.set(id, res);
+  while (cache.size > 60) cache.delete(cache.keys().next().value);
+}
 
-/* 0.85.0: the why card's code is now the detail engine of supernotify-archive-card (mixed in
- * below); supernotify-why-card is an alias of the archive card. */
-class SnWhyEngine extends SnCard {
-  // visual editor (0.55.0): Home Assistant draws the form, see snForm()
-  static getConfigForm() {
-    return snForm("why");
-  }
-
-  static getStubConfig() {
-    return {};
-  }
-
-  setConfig(config) {
-    this._config = {
-      entity: "sensor.supernotify_archivio",
-      service: "shell_command.sn_archive_detail",
-      limit: 15,
-      style: "supernotify",
-      ...(config || {}),
-    };
-    this._cache = this._cache || new Map();
-    this._rendered = false;
-  }
-
-  static snTracked = false;
-
-  _onHass(hass, fresh) {
-    if (snArchiveNative(hass, this._config)) {
-      snArchiveStore.ensure(hass, Math.max(this._config.limit, 40), this._config.trigger_entity);
-      if (fresh) this._render();
-      else if (this._storeVer !== snArchiveStore.version || (this._waitStore && snArchiveStore.fetched)) this._renderList();
-      this._storeVer = snArchiveStore.version;
-      return;
-    }
-    const st = hass.states[this._config.entity];
-    const stamp = st ? st.last_updated : "none";
-    if (fresh) this._render();
-    else if (stamp !== this._stamp) this._renderList();
-    this._stamp = stamp;
-  }
-
-  // Sections dashboards (0.47.0): the size HA gives the card by default; a card's own
-  // `grid_options:` in the dashboard still wins.
-  getGridOptions() {
-    return { columns: "full", min_columns: 6 };
-  }
-
-  getCardSize() { return 12; }
-
-  connectedCallback() {
-    this._onArchive = () => {
-      if (!this._rendered) return;
-      this._storeVer = snArchiveStore.version;
-      this._renderList();
-    };
-    window.addEventListener("supernotify-archive", this._onArchive);
-    this._onArchive();
-    window.__snWhyCards = (window.__snWhyCards || 0) + 1;
-    this._onWhy = (e) => {
-      const id = e.detail && e.detail.id;
-      if (!id) return;
-      this._select(String(id).slice(0, 8));
-      this.scrollIntoView({ behavior: "smooth", block: "start" });
-    };
-    window.addEventListener("supernotify-why", this._onWhy);
-  }
-
-  disconnectedCallback() {
-    window.removeEventListener("supernotify-archive", this._onArchive);
-    window.__snWhyCards = Math.max(0, (window.__snWhyCards || 1) - 1);
-    window.removeEventListener("supernotify-why", this._onWhy);
-  }
-
-  _T() {
-    const lang = ((this._config.language || (this._hass && this._hass.language) || "en").split("-")[0]);
-    return SN_WHY_STRINGS[lang] || SN_WHY_STRINGS.en;
-  }
-
-  _loc() { return this._config.language || (this._hass && this._hass.language) || undefined; }
-
-  _index() {
-    if (this._hass && snArchiveNative(this._hass, this._config)) return snArchiveStore.getIndex();
-    const st = this._hass && this._hass.states[this._config.entity];
-    if (!st) return null;
-    const a = st.attributes || {};
-    return { items: a.items || [], chan: a.chan || [] };
-  }
-
-  _render() {
-    if (!this._hass) return;
-    this._rendered = true;
-    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    const p = this._palette();
-    const T = this._T();
-    this.shadowRoot.innerHTML = snIconify(`
-      <style>
-        :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; font-size: 13px; }
-        h3 { margin: 0 0 8px; font-size: 15px; }
-        .list { max-height: 230px; overflow-y: auto; border: 1px solid ${p.line}; border-radius: 10px; }
-        .it { display: flex; gap: 8px; align-items: center; padding: 7px 10px; cursor: pointer;
-              border-bottom: 1px solid ${p.line}; }
-        .it:last-child { border-bottom: 0; }
-        .it:hover { background: ${p.soft}; }
-        .it.sel { background: ${p.soft}; box-shadow: inset 3px 0 0 ${p.brand}; }
-        .it .hm { color: ${p.muted}; font-variant-numeric: tabular-nums; flex-shrink: 0; font-size: 12px; }
-        .it .ti { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-        .d-ok { background: ${p.ok}; } .d-warn { background: ${p.warn}; } .d-err { background: ${p.crit}; }
-        .det { margin-top: 12px; }
-        .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800;
-               color: ${p.muted}; margin: 14px 0 6px; }
-        .hd .meta { color: ${p.muted}; font-size: 12.5px; } .hd .ttl { display: block; font-size: 18px; margin-top: 3px; }
-        .det { container-type: inline-size; }
-        @container (min-width: 620px) { .path { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; } }
-        .path { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px;
-                background: ${p.line}; border: 1px solid ${p.line}; border-radius: 10px; overflow: hidden; margin: 14px 0; }
-        .step { background: ${p.panel}; padding: 10px 12px; }
-        .step .sk { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: ${p.muted}; }
-        .step .sb { margin-top: 4px; line-height: 1.4; } .step .sm { margin-top: 3px; font-size: 11.5px; color: ${p.muted}; }
-        .c-ok { color: ${p.ok}; } .c-pb { color: ${p.warn}; }
-        .pb { border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
-        .pb.warn { background: ${p.warnSoft}; color: ${p.warnInk}; border: 1px solid ${p.warnLine}; }
-        .pb.crit { background: rgba(226,60,60,.08); color: ${p.ink}; border: 1px solid rgba(198,40,40,.35); }
-        .pb.crit .pbt { color: ${p.crit}; }
-        .pbt { font-size: 15px; font-weight: 700; } .pbw { margin-top: 4px; line-height: 1.45; }
-        .pbf { margin-top: 6px; line-height: 1.45; font-size: 12.5px; opacity: .9; }
-        details.fold { border: 1px dashed ${p.line}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
-        details.fold summary { cursor: pointer; font-weight: 600; color: ${p.muted}; }
-        details.fold[open] summary { margin-bottom: 8px; }
-        .ch.quiet { }
-        .msg { margin-top: 6px; line-height: 1.45; }
-        .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-        .chip { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD}; border-radius: 7px;
-                padding: 2px 8px; font-size: 11.5px; font-weight: 650; }
-        .chip.strong { border-color: ${p.brand}; }
-        .chip.off { color: ${p.crit}; }
-        .ch { border: 1px solid ${p.line}; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
-        .ch .r1 { display: flex; gap: 8px; align-items: baseline; }
-        .ch .st { flex-shrink: 0; font-weight: 800; }
-        .st.ok { color: ${p.ok}; } .st.skip, .st.supp { color: ${p.muted}; } .st.err { color: ${p.crit}; }
-        .ch .nm { font-weight: 700; } .ch .al { color: ${p.muted}; font-size: 12px; }
-        .tech { font-family: ui-monospace, 'Roboto Mono', monospace; font-size: 11px; }
-        .ch .why { margin-top: 3px; } .ch .src { margin-top: 3px; color: ${p.muted}; font-size: 12px; }
-        .ch .tg { margin-top: 4px; font-size: 12px; color: ${p.muted}; word-break: break-word; }
-        .ch.not { border-style: dashed; }
-        .note { color: ${p.muted}; font-size: 11.5px; margin-top: 4px; line-height: 1.45; }
-        .trace { font-size: 12px; } .trace code { font-size: 11px; }
-        .trace .stg { display: flex; gap: 6px; padding: 2px 0; }
-        .trace .stg span:first-child { color: ${p.muted}; min-width: 190px; font-family: monospace; font-size: 11px; }
-        .empty { color: ${p.muted}; padding: 10px; text-align: center; }
-        .err { color: ${p.crit}; }
-        code { background: ${p.soft}; padding: 1px 4px; border-radius: 4px; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
-      </style>
-      <ha-card>
-        ${snIntro(this._config, this._dark)}
-        <h3>🔎 ${T.title}</h3>
-        <div class="list" id="list"></div>
-        <div class="det" id="det"${this._config.max_height ? ` style="max-height:${String(this._config.max_height).replace(/[<>"]/g, "")};overflow-y:auto;padding-right:4px"` : ""}><div class="empty">${T.pick}</div></div>
-        ${snVer(this._config, "why", p)}
-      </ha-card>`, this && this._config);
-    this._renderList();
-    if (this._sel) this._renderDetail();
-  }
-
-  _outcomeClass(r) {
-    const c = r.c || [];
-    if (r.f || c.some((x) => Array.isArray(x) && x[1] === "e")) return "d-err";
-    if (!r.d) return "d-warn";
-    // routine skips (snooze, presence, priority, no target on an implicit channel...) are
-    // fine; missed channels, odd skip reasons, dupes and fallbacks are worth a look
-    return snArchiveProblem(r) ? "d-warn" : "d-ok";
-  }
-
-  _renderList() {
-    const el = this.shadowRoot && this.shadowRoot.getElementById("list");
-    if (!el) return;
-    const T = this._T();
-    const esc = snEsc;
-    const idx = this._index();
-    if (!idx) {
-      el.innerHTML = snIconify(`<div class="empty">${T.no_sensor} <code>${esc(this._config.entity)}</code></div>`, this && this._config);
-      return;
-    }
-    if (idx.error) { el.innerHTML = snIconify(`<div class="empty">⚠️ ${esc(idx.error)}</div>`, this && this._config); return; }
-    this._waitStore = !!idx.loading; // 0.74.1
-    if (idx.loading) { el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this && this._config); return; }
-    const items = idx.items.slice(0, this._config.limit);
-    if (!items.length) { el.innerHTML = snIconify(`<div class="empty">${T.none}</div>`, this && this._config); return; }
-    el.innerHTML = snIconify(items.map((r) => {
-      const d = new Date(r.t * 1000);
-      const hm = d.toLocaleString(this._loc(), { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
-      return `<div class="it${this._sel === r.id ? " sel" : ""}" data-id="${esc(r.id)}">
-        <span class="dot ${this._outcomeClass(r)}"></span><span class="hm">${esc(hm)}</span>
-        <span class="ti">${esc(snTitleShow(r.ti) || r.m || "—")}</span></div>`;
-    }).join(""), this && this._config);
-    el.querySelectorAll(".it").forEach((n) => { n.onclick = () => this._select(n.dataset.id); });
-    // open the latest notification by itself, once, so the card is never an empty box
-    if (!this._sel && !this._autoDone && this._config.auto_select !== false) {
-      this._autoDone = true;
-      this._select(items[0].id);
-    }
-  }
-
-  async _select(id) {
-    this._sel = id;
-    this._renderList();
-    if (!this._cache.has(id)) {
-      this._loading = id;
-      this._renderDetail();
-      this._cache.set(id, await this._fetch(id));
-      this._loading = null;
-    }
-    if (this._sel === id) this._renderDetail();
-  }
-
+/**
+ * The detail of one notification in supernotify-archive-card (and its alias supernotify-why-card):
+ * why each channel went out or not. Mixed into the archive card below; a method the card has
+ * itself is not replaced.
+ */
+const SnWhyDetail = {
   async _fetch(id) {
-    if (snArchiveNative(this._hass, this._config)) {
-      try {
-        const doc = await snArchiveStore.doc(this._hass, id);
-        return doc ? { ok: true, n: snArchiveDetail(doc) } : { ok: false, error: this._T().gone };
-      } catch (e) {
-        return { ok: false, error: (e && e.message) || String(e) };
-      }
-    }
-    const [domain, service] = String(this._config.service).split(".");
-    const svc = this._hass.services && this._hass.services[domain];
-    if (!svc || !svc[service]) return { ok: false, error: "no_service" };
     try {
-      const r = await snWS(this._hass, {
-        type: "call_service", domain, service, service_data: { id }, return_response: true,
-      });
-      const out = r && r.response && r.response.stdout;
-      if (!out) return { ok: false, error: (r && r.response && r.response.stderr) || "empty" };
-      return JSON.parse(out);
+      const doc = await snArchiveStore.doc(this._hass, id);
+      return doc ? { ok: true, n: snArchiveDetail(doc) } : { ok: false, error: this._T().gone, final: true };
     } catch (e) {
       return { ok: false, error: (e && e.message) || String(e) };
     }
-  }
+  },
 
   // -- configuration lookups, for the channels that did not start ---------
 
@@ -10220,31 +8796,16 @@ class SnWhyEngine extends SnCard {
     const m = new Map();
     for (const d of snEntityRows(this._hass, "delivery")) m.set(d.name, d);
     return m;
-  }
+  },
 
   _scenarioDeliveries(name) {
-    for (const dom of ["switch", "binary_sensor"]) {
-      const st = this._hass.states[`${dom}.supernotify_scenario_${name}`];
-      if (st && st.attributes && st.attributes.delivery && typeof st.attributes.delivery === "object") {
-        return st.attributes.delivery;
-      }
-    }
-    return {};
-  }
-
-  _scenarioLabel(name) {
-    for (const dom of ["switch", "binary_sensor"]) {
-      const st = this._hass.states[`${dom}.supernotify_scenario_${name}`];
-      const c = st && snCleanName(st.attributes.friendly_name, name);
-      if (c) return c;
-    }
-    return name;
-  }
+    const st = this._hass.states[`switch.supernotify_scenario_${name}`];
+    return (st && st.attributes && st.attributes.delivery && typeof st.attributes.delivery === "object") ? st.attributes.delivery : {};
+  },
 
   _personLabel(pid) {
-    const st = this._hass.states[pid];
-    return (st && st.attributes && st.attributes.friendly_name) || String(pid).replace(/^person\./, "");
-  }
+    return snFname(this._hass, pid, String(pid).replace(/^person\./, ""));
+  },
 
   /**
    * Label for a source in the trace's delivery_provenance: default / call /
@@ -10254,12 +8815,12 @@ class SnWhyEngine extends SnCard {
     const [kind, name] = String(src).split(/:(.*)/s);
     if (kind === "default") return T.src_default;
     if (kind === "call") return T.src_call;
-    if (kind === "scenario") return `${T.src_scen} ${this._scenarioLabel(name)}`;
+    if (kind === "scenario") return `${T.src_scen} ${snScenarioName(this._hass, name)}`;
     if (kind === "recipient") return `${T.src_recipient} ${name}`;
     // 0.76.2: SuperNotify 2.13.0 per-delivery fallback
     if (kind === "fallback" && T.src_fallback) return T.src_fallback.replace("{x}", snDeliveryAlias(this._hass, name) || name);
     return String(src);
-  }
+  },
 
   /** Which scenarios in force switch a delivery on, and which switch it off. */
   _scenarioSources(dname, scen) {
@@ -10270,12 +8831,12 @@ class SnWhyEngine extends SnCard {
       if (cfg && cfg.enabled === false) off.push(s); else on.push(s);
     }
     return { on, off };
-  }
+  },
 
   _inclusion(row) {
     const r = row && (row.a.inclusion ?? row.a.selection);
     return Array.isArray(r) ? r : r ? [r] : ["default"];
-  }
+  },
 
   /** Best reconstruction of why a delivery never started, from the current configuration. */
   _whyNotStarted(dname, row, n, scen, T) {
@@ -10294,7 +8855,7 @@ class SnWhyEngine extends SnCard {
     if (row && !row.on) return T.r_disabled;
     if (row && row.a.transport_enabled === false) return T.r_transport_off;
     const src = this._scenarioSources(dname, scen);
-    if (src.off.length) return `${T.r_scen_off}: ${src.off.map((s) => this._scenarioLabel(s)).join(", ")}`;
+    if (src.off.length) return `${T.r_scen_off}: ${src.off.map((s) => snScenarioName(this._hass, s)).join(", ")}`;
     const inc = this._inclusion(row);
     if (!inc.includes("default") && !src.on.length && !ov) {
       if (inc.includes("scenario")) return T.r_only_scen;
@@ -10303,27 +8864,25 @@ class SnWhyEngine extends SnCard {
     }
     if (n.p && row && Array.isArray(row.a.priority) && !row.a.priority.includes(n.p)) return T.r_priority;
     return T.r_unknown;
-  }
+  },
 
   _reasonText(code, T) {
     if (!code) return "";
     const key = String(code).toUpperCase();
     return (T.reasons && T.reasons[key]) || String(code);
-  }
+  },
 
   _renderDetail() {
     const el = this.shadowRoot && this.shadowRoot.getElementById("det");
     if (!el) return;
     const T = this._T();
     const esc = snEsc;
-    if (!this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.pick}</div>`, this && this._config); return; }
-    if (this._loading === this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this && this._config); return; }
+    if (!this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.pick}</div>`, this._config); return; }
+    if (this._loading === this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this._config); return; }
     const res = this._cache.get(this._sel) || {};
     if (!res.ok) {
-      const msg = res.error === "no_service"
-        ? `${T.no_service} <code>${esc(this._config.service)}</code>. ${T.no_service_hint}`
-        : esc(res.error || T.none);
-      el.innerHTML = snIconify(`<div class="empty err">${msg}</div>`, this && this._config);
+      const msg = esc(res.error || T.none);
+      el.innerHTML = snIconify(`<div class="empty err">${msg}</div>`, this._config);
       return;
     }
     const n = res.n || {};
@@ -10352,14 +8911,12 @@ class SnWhyEngine extends SnCard {
     if (n.un && n.un.length) out.push(`<div class="pb warn"><div class="pbt">⚠ ${esc(T.un_title)}</div><div class="pbw">${esc(n.un.join(" · "))}</div></div>`);
 
     // sort the archived channels: sent, problems (failed / missed), routine skips
-    const SN_ROUTINE = new Set(["SNOOZE", "SNOOZED", "PRIORITY", "DELIVERY_CONDITION", "OCCUPANCY", "DELIVERY_DISABLED",
-      "SCENARIO", "TRANSPORT_DISABLED", "NO_SCENARIO", "DUPE"]);
     const sent = [], problems = [], skipped = [];
     for (const ch of n.dl || []) {
       if (ch.r === "ok") sent.push(ch);
       else if (ch.r === "err") problems.push(ch);
-      else if (ch.r === "skip" && !SN_ROUTINE.has(String(ch.why || "").toUpperCase())
-        && !(String(ch.why || "").toUpperCase() === "NO_TARGET" && !((n.ov || {})[ch.n]) && !(+n.mi > 0))) problems.push(ch);
+      else if (ch.r === "skip" && (!SN_ARCHIVE_ROUTINE_CODES.has(String(ch.why || "").toUpperCase())
+        || (String(ch.why || "").toUpperCase() === "NO_TARGET" && ((n.ov || {})[ch.n] || +n.mi > 0)))) problems.push(ch);
       else skipped.push(ch);
     }
     const seen = new Set((n.dl || []).map((ch) => ch.n));
@@ -10369,9 +8926,9 @@ class SnWhyEngine extends SnCard {
     // the path in four steps
     const ovNames = Object.entries(n.ov || {}).filter(([, ov]) => ov && ov.en !== false).map(([k]) => nameOf(k));
     const callTxt = ovNames.length ? `${T.call_named} ${ovNames.join(", ")}` : T.call_auto;
-    const scenTxt = scen.length ? scen.map((x) => this._scenarioLabel(x)).join(", ") : T.no_scenarios;
+    const scenTxt = scen.length ? scen.map((x) => snScenarioName(this._hass, x)).join(", ") : T.no_scenarios;
     const scenMore = [["ap", T.applied], ["rq", T.required], ["cs", T.constrain]]
-      .filter(([k]) => (sc[k] || []).length).map(([k, l]) => `${l}: ${sc[k].map((x) => this._scenarioLabel(x)).join(", ")}`);
+      .filter(([k]) => (sc[k] || []).length).map(([k, l]) => `${l}: ${sc[k].map((x) => snScenarioName(this._hass, x)).join(", ")}`);
     const home = n.occ ? (n.occ.home || []).map((pid) => this._personLabel(pid)) : null;
     const away = n.occ ? (n.occ.away || []).map((pid) => this._personLabel(pid)) : [];
     const peopleTxt = home === null ? "—" : home.length ? `${T.home}: ${home.join(", ")}` : T.nobody;
@@ -10400,7 +8957,7 @@ class SnWhyEngine extends SnCard {
         offBy = dis.filter((x) => !/^scenario:/.test(x)).map((x) => this._provLabel(x, T));
       } else {
         if (this._inclusion(row).includes("default")) by.push(T.src_default);
-        if (src.on.length) by.push(`${T.src_scen} ${src.on.map((x) => this._scenarioLabel(x)).join(", ")}`);
+        if (src.on.length) by.push(`${T.src_scen} ${src.on.map((x) => snScenarioName(this._hass, x)).join(", ")}`);
         if (ov && ov.en) by.push(T.src_call);
       }
       const icon = { ok: "✔", skip: "⊘", supp: "⊘", err: "✖" }[ch.r] || "?";
@@ -10410,7 +8967,7 @@ class SnWhyEngine extends SnCard {
       else why = `${esc(this._reasonText(ch.why, T))}${ch.tr && String(ch.why || "").toUpperCase() === "NO_TARGET" ? ` (${T.target_required} ${esc(ch.tr)})` : ""}`;
       const tg = ch.tg ? tgText(ch.tg) : "";
       const meta = [by.length ? `${T.started_by}: ${esc(by.join(" · "))}` : "",
-        src.off.length ? `${T.scen_would_off}: ${esc(src.off.map((x) => this._scenarioLabel(x)).join(", "))}` : "",
+        src.off.length ? `${T.scen_would_off}: ${esc(src.off.map((x) => snScenarioName(this._hass, x)).join(", "))}` : "",
         offBy.length ? `${T.r_off_by}: ${esc(offBy.join(", "))}` : ""].filter(Boolean);
       return `<div class="ch ${cls || ""}"><div class="r1"><span class="st ${ch.r}">${icon}</span>
         <span class="nm">${esc(alias || ch.n)}</span>${alias && !snSame(alias, ch.n) ? `<span class="al tech">${esc(ch.n)}</span>` : ""}</div>
@@ -10466,103 +9023,88 @@ class SnWhyEngine extends SnCard {
     } else {
       out.push(`<div class="note">ℹ️ ${T.no_trace}</div>`);
     }
-    el.innerHTML = snIconify(out.join(""), this && this._config);
+    el.innerHTML = snIconify(out.join(""), this._config);
     if (n.apl || (n.ctx && n.ctx.id)) this._sentBy(n);
     if (n.dupe || n.o === "dupe") this._dupeOf(n);
-  }
-}
+  },
 
-/**
- * 0.79.0: the notification a duplicate repeats - the newest one before it in the list with the
- * same title and text, sent within the two minutes SuperNotify keeps texts for. Same context id
- * = the same automation/script run called SuperNotify twice.
- */
-SnWhyEngine.prototype._dupeOf = async function (n) {
-  const T = this._T();
-  const esc = snEsc;
-  const idx = this._index();
-  const items = (idx && idx.items) || [];
-  const norm = (x) => String(x || "").trim();
-  const self = (r) => r.fid === n.id || r.id === n.id || String(n.id || "").startsWith(String(r.id)); // the index keeps 8 characters
-  const orig = items.filter((r) => !self(r) && r.o !== "dupe" && r.t <= n.t && n.t - r.t <= 130
-    && norm(r.ti) === norm(n.ti) && (!r.m || !n.m || norm(snPlainMsg(r.m)).slice(0, 60) === norm(snPlainMsg(n.m)).slice(0, 60)))
-    .sort((a, b) => b.t - a.t)[0];
-  const put = (html) => { const el = this.shadowRoot && this.shadowRoot.getElementById("dupeOf"); if (el && this._sel && String(n.id || "").startsWith(String(this._sel))) el.innerHTML = snIconify(html, this._config); };
-  if (!orig) return;
-  const at = new Date(orig.t * 1000).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: snH12(this._hass) });
-  const head = `<div class="pbt">♻ ${esc(T.dupe_of.replace("{s}", Math.max(0, Math.round(n.t - orig.t))).replace("{t}", at))}</div>`;
-  const link = `<div class="pbf"><a href="#" id="dupeLink">${esc(T.dupe_open)} ›</a></div>`;
-  put(head + link);
-  const wire = () => { const a = this.shadowRoot && this.shadowRoot.getElementById("dupeLink"); if (a) a.onclick = (e) => { e.preventDefault(); this._select(orig.id); }; };
-  wire();
-  // same run? compare the contexts (the original's detail is read once and kept)
-  if (!(n.ctx && n.ctx.id)) return;
-  if (!this._cache.has(orig.id)) this._cache.set(orig.id, await this._fetch(orig.id));
-  const o = (this._cache.get(orig.id) || {}).n || {};
-  if (!(o.ctx && o.ctx.id === n.ctx.id)) return;
-  let who = "";
-  await this._sentBy(n).catch(() => {});
-  const res = this._sentCache && this._sentCache.get(n.id);
-  if (res && res.kind !== "person") who = `${res.kind === "automation" ? T.sent_auto : T.sent_script} «${res.name}»`;
-  put(head + `<div class="pbw">${esc(who ? T.dupe_same_run.replace("{a}", who) : T.dupe_same_run_anon)}</div>` + link);
-  wire();
-};
+  /**
+   * 0.79.0: the notification a duplicate repeats - the newest one before it in the list with the
+   * same title and text, sent within the two minutes SuperNotify keeps texts for. Same context id
+   * = the same automation/script run called SuperNotify twice.
+   */
+  async _dupeOf(n) {
+    const T = this._T();
+    const esc = snEsc;
+    const idx = this._index();
+    const items = (idx && idx.items) || [];
+    const norm = (x) => String(x || "").trim();
+    const self = (r) => r.fid === n.id || r.id === n.id || String(n.id || "").startsWith(String(r.id)); // the index keeps 8 characters
+    const orig = items.filter((r) => !self(r) && r.o !== "dupe" && r.t <= n.t && n.t - r.t <= 130
+      && norm(r.ti) === norm(n.ti) && (!r.m || !n.m || norm(snPlainMsg(r.m)).slice(0, 60) === norm(snPlainMsg(n.m)).slice(0, 60)))
+      .sort((a, b) => b.t - a.t)[0];
+    const put = (html) => { const el = this.shadowRoot && this.shadowRoot.getElementById("dupeOf"); if (el && this._sel && String(n.id || "").startsWith(String(this._sel))) el.innerHTML = snIconify(html, this._config); };
+    if (!orig) return;
+    const at = new Date(orig.t * 1000).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: snH12(this._hass) });
+    const head = `<div class="pbt">♻ ${esc(T.dupe_of.replace("{s}", Math.max(0, Math.round(n.t - orig.t))).replace("{t}", at))}</div>`;
+    const link = `<div class="pbf"><a href="#" id="dupeLink">${esc(T.dupe_open)} ›</a></div>`;
+    put(head + link);
+    const wire = () => { const a = this.shadowRoot && this.shadowRoot.getElementById("dupeLink"); if (a) a.onclick = (e) => { e.preventDefault(); this._select(orig.id); }; };
+    wire();
+    // same run? compare the contexts (the original's detail is read once and kept)
+    if (!(n.ctx && n.ctx.id)) return;
+    if (!snDetailCached(this._cache, orig.id)) snDetailPut(this._cache, orig.id, await this._fetch(orig.id));
+    const o = (this._cache.get(orig.id) || {}).n || {};
+    if (!(o.ctx && o.ctx.id === n.ctx.id)) return;
+    let who = "";
+    const res = await this._sentBy(n).catch(() => null);
+    if (res && res.kind !== "person") who = `${res.kind === "automation" ? T.sent_auto : T.sent_script} «${res.name}»`;
+    put(head + `<div class="pbw">${esc(who ? T.dupe_same_run.replace("{a}", who) : T.dupe_same_run_anon)}</div>` + link);
+    wire();
+  },
 
-SnWhyEngine.prototype._sentBy = async function (n) {
-  // 0.61.0: who sent it - the automation or script whose run carries the notification's context
-  // (logbook), else the person of the user that made the call
-  const T = this._T();
-  const put = (html) => { const el = this.shadowRoot && this.shadowRoot.getElementById("sentBy"); if (el) el.innerHTML = snIconify(html, this._config); };
-  const esc = snEsc;
-  if (n.apl) {
-    // 0.44.0: Appliance Autonotify calls SuperNotify from the appliance's state change - no
-    // automation or person in the context, the tag says which appliance it is
-    const show = () => put(`📨 ${esc(T.sent_by)} ${esc(snAppliances.label(n.apl))}`);
-    show();
-    if (!snAppliances.names) await snAppliances.load(this._hass).then(show);
-    return;
-  }
-  this._sentCache = this._sentCache || new Map();
-  let res = this._sentCache.get(n.id);
-  if (res === undefined) {
-    res = null;
-    try {
-      const t = new Date((n.t || 0) * 1000);
-      const ev = await this._hass.callWS({ type: "logbook/get_events", start_time: new Date(t.getTime() - 120000).toISOString(),
-        end_time: new Date(t.getTime() + 5000).toISOString(), context_id: n.ctx.id });
-      const hit = (ev || []).find((e) => /^(automation|script)\./.test(e.entity_id || "") && e.context_id === n.ctx.id)
-        || (ev || []).find((e) => /^(automation|script)\./.test(e.entity_id || ""));
-      if (hit) res = { kind: hit.entity_id.split(".")[0], id: hit.entity_id, name: hit.name || hit.entity_id };
-    } catch (e) { /* logbook not available to this user: fall back below */ }
-    if (!res && n.ctx.user_id) {
-      const pid = Object.keys(this._hass.states).find((e) => e.startsWith("person.") && (this._hass.states[e].attributes || {}).user_id === n.ctx.user_id);
-      if (pid) res = { kind: "person", id: pid, name: (this._hass.states[pid].attributes || {}).friendly_name || pid };
+  async _sentBy(n) {
+    // 0.61.0: who sent it - the automation or script whose run carries the notification's context
+    // (logbook), else the person of the user that made the call
+    const T = this._T();
+    const put = (html) => { const el = this.shadowRoot && this.shadowRoot.getElementById("sentBy"); if (el) el.innerHTML = snIconify(html, this._config); };
+    const esc = snEsc;
+    if (n.apl) {
+      // 0.44.0: Appliance Autonotify calls SuperNotify from the appliance's state change - no
+      // automation or person in the context, the tag says which appliance it is
+      const show = () => put(`📨 ${esc(T.sent_by)} ${esc(snAppliances.label(n.apl))}`);
+      show();
+      if (!snAppliances.names) await snAppliances.load(this._hass).then(show);
+      return;
     }
-    this._sentCache.set(n.id, res);
-  }
-  if (!res) { put(`📨 ${esc(T.sent_unknown)}`); return; }
-  const what = res.kind === "automation" ? T.sent_auto : res.kind === "script" ? T.sent_script : T.sent_person;
-  put(`📨 ${esc(T.sent_by)} ${esc(what)} <a href="#" id="sentLink">${esc(res.name)}</a>`);
-  const a = this.shadowRoot.getElementById("sentLink");
-  if (a) a.onclick = (e) => { e.preventDefault(); this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: res.id }, bubbles: true, composed: true })); };
+    let res = null;
+    // the logbook entries, read once per notification (SN_SENDERS, shared with the pause panel); [] when the
+    // logbook is not available to this user: then the person below
+    const ev = await snSenderEvents(this._hass, { id: n.id, created: new Date((n.t || 0) * 1000).toISOString(), original_context: n.ctx });
+    const hit = ev.find((e) => e.context_id === n.ctx.id) || ev[0];
+    if (hit) res = { kind: hit.entity_id.split(".")[0], id: hit.entity_id, name: hit.name || hit.entity_id };
+    if (!res && n.ctx.user_id) {
+      const pid = snPersonOfUser(this._hass, n.ctx.user_id);
+      if (pid) res = { kind: "person", id: pid, name: snFname(this._hass, pid, pid) };
+    }
+    if (!res) { put(`📨 ${esc(T.sent_unknown)}`); return null; }
+    const what = res.kind === "automation" ? T.sent_auto : res.kind === "script" ? T.sent_script : T.sent_person;
+    put(`📨 ${esc(T.sent_by)} ${esc(what)} <a href="#" id="sentLink">${esc(res.name)}</a>`);
+    const a = this.shadowRoot.getElementById("sentLink");
+    if (a) a.onclick = (e) => { e.preventDefault(); this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: res.id }, bubbles: true, composed: true })); };
+    return res;
+  },
 };
 
-// 0.85.0: the detail of the archive card is the why card's: every SnWhyEngine method the archive
-// card does not have itself (_renderDetail, _fetch, _whyNotStarted, _sentBy, _dupeOf, ...)
-for (const k of Object.getOwnPropertyNames(SnWhyEngine.prototype)) {
-  if (k === "constructor" || k in SupernotifyArchiveCard.prototype) continue;
-  Object.defineProperty(SupernotifyArchiveCard.prototype, k, Object.getOwnPropertyDescriptor(SnWhyEngine.prototype, k));
-}
+Object.assign(SupernotifyArchiveCard.prototype, Object.fromEntries(
+  Object.entries(SnWhyDetail).filter(([k]) => !(k in SupernotifyArchiveCard.prototype))));
 
 /**
  * supernotify-why-card, kept as an alias (0.85.0): the same card as supernotify-archive-card,
  * so a dashboard configured with the old card keeps working - in a narrow column it shows the
- * list on top and the detail under it, as the why card did. Its editor keeps the why options.
+ * list on top and the detail under it, as the why card did. Same editor and version as the archive.
  */
-class SupernotifyWhyAliasCard extends SupernotifyArchiveCard {
-  static getConfigForm() { return snForm("why"); }
-  constructor() { super(); this._snKind = "why"; }
-}
+class SupernotifyWhyAliasCard extends SupernotifyArchiveCard {}
 
 customElements.define("supernotify-archive-card", SupernotifyArchiveCard);
 customElements.define("supernotify-why-card", SupernotifyWhyAliasCard);
@@ -10579,14 +9121,12 @@ window.customCards.push({
 
 const SN_WHY_STRINGS = {
   en: {
-    title: "Why?", pick: "Pick a notification to see why it went where it went.",
-    loading: "loading…", none: "no notification", no_sensor: "sensor not found:",
-    no_service: "Missing service", no_service_hint: "Update SuperNotify to 2.10 or later (supernotify.enquire_archive), or add the shell_command sn_archive_detail (see README) and restart Home Assistant.",
+    pick: "Pick a notification to see why it went where it went.",
+    loading: "loading…", none: "no notification",
     gone: "this notification is no longer in the archive",
-    priority: "priority", outcome: "outcome", dupe: "duplicate",
+    priority: "priority", dupe: "duplicate",
     outcomes: { success: "delivered", partial_delivery: "partly delivered", dupe: "duplicate", failed: "failed", error: "failed",
       fallback_delivery: "delivered by the fallback channel", no_delivery: "not delivered" },
-    missed: "missed (asked for, not sent)",
     step_call: "Call", step_scen: "Scenarios", step_people: "People", step_ch: "Channels",
     call_auto: "no channel named: normal routing", call_named: "named in the call:", call_debug: "with debug",
     nobody: "nobody home", ch_sent: "sent", ch_problems: "to look at", ch_skipped: "skipped",
@@ -10596,17 +9136,16 @@ const SN_WHY_STRINGS = {
       ERROR: "The integration behind this channel answered with an error: check its own log entry.",
       NO_ACTION: "The channel has no action to call: set `action:` on the delivery.",
       INVALID_ACTION_DATA: "The data passed to the action was rejected: check the `data:` of the call or of the delivery." },
-    scenarios: "Scenarios in force", no_scenarios: "no scenario in force",
+    no_scenarios: "no scenario in force",
     applied: "forced by the call", required: "required by the call", constrain: "limited by the call to",
-    presence: "Presence", home: "home", away: "away",
-    channels: "Channels", no_channels: "no channel was selected",
-    st_ok: "delivered", st_err: "failed", st_skip: "skipped", st_supp: "suppressed", calls: "calls", calls_1: "call",
+    home: "home", away: "away",
+    no_channels: "no channel was selected",
+    st_ok: "delivered", st_err: "failed", st_skip: "skipped", calls: "calls", calls_1: "call",
     target_required: "target required:", started_by: "selected by", scen_would_off: "switched off by (overruled)",
     src_default: "always on (default)", src_fallback: "fallback for {x}", src_scen: "scenario", src_call: "the call itself",
     src_recipient: "recipient", r_off_by: "switched off by",
     call_targets: "targets in the call",
     cats: { entity_id: "entities", mobile_app_id: "devices", person_id: "people", email: "email", phone: "phone", device_id: "devices" },
-    not_started: "Channels that did not start",
     r_call_off: "excluded by the call", r_scen_off: "switched off by a scenario in force",
     r_disabled: "switched off", r_transport_off: "its transport is off",
     r_only_scen: "starts only when a scenario turns it on", r_only_fallback: "only a fallback",
@@ -10622,7 +9161,7 @@ const SN_WHY_STRINGS = {
     dupe_no_orig: "Duplicate of a notification sent shortly before (not in the list).",
     un_title: "Names that do not exist", sent_by: "Sent by", sent_auto: "automation", sent_script: "script",
     sent_person: "", sent_unknown: "sender not known (no automation or person in its context)",
-    trace: "Selection trace", no_trace: "The full selection trace is only recorded when the notify call has debug: true, and archived when the archive diagnostics include it.",
+    no_trace: "The full selection trace is only recorded when the notify call has debug: true, and archived when the archive diagnostics include it.",
     reasons: { NO_TARGET: "no usable target", DUPE: "duplicate", PRIORITY: "not for this priority",
       SNOOZE: "snoozed", SNOOZED: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule", ERROR: "error",
       DELIVERY_DISABLED: "switched off", SCENARIO: "scenario", TRANSPORT_DISABLED: "its transport is off",
@@ -10630,14 +9169,12 @@ const SN_WHY_STRINGS = {
       INVALID_ACTION_DATA: "invalid action data", UNKNOWN: "unknown reason" },
   },
   it: {
-    title: "Perché?", pick: "Scegli una notifica per vedere perché è andata dove è andata.",
-    loading: "carico…", none: "nessuna notifica", no_sensor: "sensore non trovato:",
-    no_service: "Manca il servizio", no_service_hint: "Aggiorna SuperNotify alla 2.10 o successiva (supernotify.enquire_archive), oppure aggiungi lo shell_command sn_archive_detail (vedi README) e riavvia Home Assistant.",
+    pick: "Scegli una notifica per vedere perché è andata dove è andata.",
+    loading: "carico…", none: "nessuna notifica",
     gone: "questa notifica non è più nell'archivio",
-    priority: "priorità", outcome: "esito", dupe: "doppione",
+    priority: "priorità", dupe: "doppione",
     outcomes: { success: "consegnata", partial_delivery: "consegnata in parte", dupe: "doppione", failed: "fallita", error: "fallita",
       fallback_delivery: "consegnata dal canale di riserva", no_delivery: "non consegnata" },
-    missed: "mancati (richiesti, non partiti)",
     step_call: "Chiamata", step_scen: "Scenari", step_people: "Persone", step_ch: "Canali",
     call_auto: "nessun canale scelto: instradamento normale", call_named: "canali chiesti:", call_debug: "con debug",
     nobody: "nessuno in casa", ch_sent: "partiti", ch_sent_1: "partito", ch_problems: "da guardare", ch_skipped: "saltati", ch_skipped_1: "saltato",
@@ -10647,17 +9184,16 @@ const SN_WHY_STRINGS = {
       ERROR: "L'integrazione dietro questo canale ha risposto con un errore: guarda la sua voce nel log.",
       NO_ACTION: "Il canale non ha un'azione da chiamare: imposta `action:` nella delivery.",
       INVALID_ACTION_DATA: "I dati passati all'azione sono stati rifiutati: controlla il `data:` della chiamata o della delivery." },
-    scenarios: "Scenari in vigore", no_scenarios: "nessuno scenario in vigore",
+    no_scenarios: "nessuno scenario in vigore",
     applied: "forzati dalla chiamata", required: "richiesti dalla chiamata", constrain: "limitati dalla chiamata a",
-    presence: "Presenza", home: "in casa", away: "fuori",
-    channels: "Canali", no_channels: "nessun canale selezionato",
-    st_ok: "consegnata", st_err: "fallita", st_skip: "saltata", st_supp: "scartata", calls: "chiamate", calls_1: "chiamata",
+    home: "in casa", away: "fuori",
+    no_channels: "nessun canale selezionato",
+    st_ok: "consegnata", st_err: "fallita", st_skip: "saltata", calls: "chiamate", calls_1: "chiamata",
     target_required: "target richiesto:", started_by: "scelto da", scen_would_off: "spento da (ma ha perso)",
     src_default: "sempre attivo (default)", src_fallback: "riserva di {x}", src_scen: "scenario", src_call: "la chiamata stessa",
     src_recipient: "destinatario", r_off_by: "spento da",
     call_targets: "target nella chiamata",
     cats: { entity_id: "entità", mobile_app_id: "dispositivi", person_id: "persone", email: "email", phone: "telefono", device_id: "dispositivi" },
-    not_started: "Canali che non sono partiti",
     r_call_off: "escluso dalla chiamata", r_scen_off: "spento da uno scenario in vigore",
     r_disabled: "spento", r_transport_off: "il suo transport è spento",
     r_only_scen: "parte solo se uno scenario lo accende", r_only_fallback: "è solo un canale di riserva",
@@ -10673,7 +9209,7 @@ const SN_WHY_STRINGS = {
     dupe_no_orig: "Doppione di una notifica partita poco prima (non è nell'elenco).",
     un_title: "Nomi che non esistono", sent_by: "Inviata da", sent_auto: "automazione", sent_script: "script",
     sent_person: "", sent_unknown: "mittente non noto (nessuna automazione o persona nel suo contesto)",
-    trace: "Trace di selezione", no_trace: "Il trace completo viene registrato solo se la chiamata ha debug: true, e archiviato se la diagnostica dell'archivio lo include.",
+    no_trace: "Il trace completo viene registrato solo se la chiamata ha debug: true, e archiviato se la diagnostica dell'archivio lo include.",
     reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione", PRIORITY: "non per questa priorità",
       SNOOZE: "in pausa", SNOOZED: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza", ERROR: "errore",
       DELIVERY_DISABLED: "spento", SCENARIO: "scenario", TRANSPORT_DISABLED: "il suo transport è spento",
@@ -10707,7 +9243,7 @@ const SN_TOOLS_STRINGS = {
     q_config: "Configuration", q_scen: "Scenarios", q_active: "Active scenarios", q_by_scen: "Channels by scenario",
     q_implicit: "Default channels", q_recipients: "Recipients", q_occupancy: "Who is home", q_snoozes: "Pauses",
     q_last: "Last notification", copy: "Copy JSON", copied: "Copied", close: "Close", empty: "(empty)",
-    err: "SuperNotify answered with an error:", err_config: "SuperNotify 2.12.0 cannot return its configuration when a channel has template conditions (rhizomatics/supernotify#241).",
+    err: "SuperNotify answered with an error:",
     settings: "Integration settings", running: "working…", more: "more",
   },
   it: {
@@ -10720,7 +9256,7 @@ const SN_TOOLS_STRINGS = {
     q_config: "Configurazione", q_scen: "Scenari", q_active: "Scenari attivi", q_by_scen: "Canali per scenario",
     q_implicit: "Canali predefiniti", q_recipients: "Destinatari", q_occupancy: "Chi è in casa", q_snoozes: "Pause",
     q_last: "Ultima notifica", copy: "Copia JSON", copied: "Copiato", close: "Chiudi", empty: "(vuoto)",
-    err: "SuperNotify ha risposto con un errore:", err_config: "SuperNotify 2.12.0 non riesce a restituire la configurazione quando un canale ha condizioni con template (rhizomatics/supernotify#241).",
+    err: "SuperNotify ha risposto con un errore:",
     settings: "Impostazioni dell'integrazione", running: "in corso…", more: "altri",
   },
 };
@@ -10750,14 +9286,13 @@ class SupernotifyToolsCard extends SnCard {
   }
 
   _T() {
-    const lang = String(this._config.language || (this._hass && this._hass.language) || "en").split("-")[0];
-    return SN_TOOLS_STRINGS[lang] || SN_TOOLS_STRINGS.en;
+    return SN_TOOLS_STRINGS[snLang(this._config, this._hass)] || SN_TOOLS_STRINGS.en;
   }
 
   async _call(service, data, withResponse = true) {
     const msg = { type: "call_service", domain: "supernotify", service, service_data: data || {} };
     if (withResponse) msg.return_response = true;
-    const r = await this._hass.callWS(msg);
+    const r = await snWS(this._hass, msg, 30000); // 1.0.0: with a timeout
     return withResponse ? (r && r.response) : r;
   }
 
@@ -10881,9 +9416,8 @@ class SupernotifyToolsCard extends SnCard {
     try { data = await this._call(svc); } catch (e) { err = e; }
     if (err) {
       const m = String((err && (err.message || err.code)) || err);
-      const known = svc === "enquire_configuration" ? `<div class="res">${esc(T.err_config)}</div>` : "";
       out.innerHTML = `<div class="out"><div class="oh"><b>${esc(title)}</b><button class="b" id="oclose">${esc(T.close)}</button></div>
-        <div class="res err">✖ ${esc(T.err)} ${esc(m)}</div>${known}</div>`;
+        <div class="res err">✖ ${esc(T.err)} ${esc(m)}</div></div>`;
     } else {
       out.innerHTML = snIconify(`<div class="out"><div class="oh"><b>${esc(title)}</b><button class="b" id="ocopy">${esc(T.copy)}</button>
         <button class="b" id="oclose">${esc(T.close)}</button></div><div class="tree">${this._tree(data, 0)}</div></div>`, this._config);
@@ -10934,127 +9468,12 @@ window.customCards.push({
   description: "Maintenance with the result on the spot (refresh, resume pauses, archive and picture cleanup, reset hand-made changes) and every SuperNotify enquiry shown readable.",
 });
 
-/**
- * 0.73.0: the other languages SuperNotify itself is translated into. Merged over English at load,
- * so a string a language does not have yet shows in English. Keys: the language part of
- * hass.language (zh-Hans -> zh, pt-BR -> pt).
- */
 class SupernotifyAppliancesCard extends SnCard {
   /*
-   * 0.2.22 (bundle 0.92.0): no live preview in Home Assistant's card picker - it read config entries, the
-   * archive and the statistics every time the picker opened; the picker shows the description instead.
-   * 0.2.21 (bundle 0.92.0): a device added by hand on a plug ends its cycle once the plug has drawn no more
-   * than the threshold for the grace period, without waiting for the statistics (5 minutes late, or later
-   * after a restart of Home Assistant that left a gap in them).
-   * 0.2.20 (bundle 0.92.0): a plug appliance whose newest notification of Autonotify is a "live" (its end
-   * lost, or Home Assistant restarted between the two) is idle, not "running" at 0 W, once the plug has
-   * been at rest past the grace period and 10 minutes more and the statistics have no cycle under way.
-   * 0.2.19 (bundle 0.91.0): a robot that goes back to its dock to wash its mop and out again is on one
-   * cleaning, not two: runs up to 45 minutes apart are joined unless the area of the cleaning under way
-   * went back to zero between them.
-   * 0.2.18 (bundle 0.91.0): a notification of Autonotify with a title of its own that has not the
-   * appliance's name ("🧺 Bucato pronto") is found by its tag: the newest 40 rows with no name in their
-   * title are read once - a finished washer stayed "running" all night.
-   * 0.2.17 (bundle 0.91.0): Autonotify's notifications are found also when their title has an emoji or
-   * more words around the name ("🧺 Lavatrice", "🤖 Bruno ha finito") - a cycle under way showed as the
-   * last one finished; the newest 16 rows of each appliance are read, not 10.
-   * 0.2.16 (bundle 0.91.0): the overview's rows two by two, each still the name and its value side by side.
-   * 0.2.15 (bundle 0.91.0): a row of `info:` whose value says nothing (an oven's phase "None" at rest,
-   * unknown, unavailable) is not shown.
-   * 0.2.14 (bundle 0.91.0): beside the drawing nothing the state already says - an error says what went
-   * wrong, an idle device with no average its last cycle (then not again in the boxes), a plug off for how
-   * long; "Commands" is a pill in the row of buttons; the full-screen chart has the days under the bars, a
-   * dashed line for the average and a tap on a bar says that cycle; a dock's state is called "Dock"; values
-   * that open something have a small › instead of a dotted underline.
-   * 0.2.13 (bundle 0.91.0): one head in every tab - the drawing big on the left, beside it the name, the
-   * state and what matters now (the end, how long it waits), the round buttons (notifications, settings,
-   * device) in a column on the right; under it only the buttons for now. The usage tab shows the four
-   * periods and "See chart", which opens the chart, the days and the last cycles full screen. What is
-   * worn or due is a dot on its tab, no longer a row of the overview.
-   * 0.2.12 (bundle 0.91.0): a history read waits up to 2 minutes (30 s before): a Home Assistant busy at
-   * night answers late, and giving up early only made it compute the same read again.
-   * 0.2.11 (bundle 0.91.0): a history read that fails (a timeout while the phone wakes up) is read again by
-   * itself - in 15 s, then less often - what was already shown stays meanwhile; with nothing to show it
-   * says the read failed, with "Try again", instead of "timeout" or "the sensor has no statistics".
-   * 0.2.10 (bundle 0.91.0): no ring around the drawing - the band on top says the state, once; while it
-   * runs, a bar under the end fills in the colour of the phase, with the percentage beside it.
-   * 0.2.9 (bundle 0.91.0): the overview looks the same in every state - the drawing in its ring (filling
-   * while it runs, full orange to empty, red when it needs help, empty when idle) with the one thing that
-   * matters now beside it (the end, how long it waits, the average cycle), then the cycle in four boxes (the
-   * one under way, or the last), then the rows; consumables and maintenance have a tab of their own, and so
-   * have the settings - the overview keeps one row that says what is worn or due; switching the plug off
-   * asks for a second tap.
-   * 0.2.8 (bundle 0.91.0): many buttons of your own (a robot's) go in a "Commands" menu that opens on a
-   * tap, in groups (`group:`), more than three by default (`commands_menu: auto | always | never`); a
-   * button shows only in the states you list (`when: [running]`); `confirmation: double` asks for a
-   * second tap on the button itself instead of a dialog.
-   * 0.2.7 (bundle 0.91.0): running, the overview opens on the drawing inside a ring that fills with the
-   * cycle - coloured by its phase (rinse, spin, dry, heat...), the phase written under the drawing - the
-   * end big beside it, the program and the phase (`program:` / `phase:`, or found on the device); the last
-   * cycle as four boxes (start → end, duration, energy, cost); an icon on every row; consumables as a grid
-   * of bars with short names ("Filter", never two alike); a band on top in the colour of the state; and a
-   * short drop of the plug, the meter or the appliance's Wi-Fi keeps the last state for 15 minutes,
-   * marked "connection lost", instead of "off".
-   * 0.2.6 (bundle 0.91.0): maintenance every N cycles - `maintenance:` is a list (drum and filter, filter
-   * and salt...), each with the cycles done since the last one and every how many; the overview shows
-   * "46 of 50 · in 4 cycles" with a bar, the card and the row a reminder when it is near or due, and
-   * "Done" runs what resets the count (a counter is reset, a script or a button of yours).
-   * 0.2.5 (bundle 0.91.0): a device added by hand whose power sensor is unavailable runs while its plug is on.
-   * 0.2.4 (bundle 0.91.0): shorter - what can be changed (times, levels, switches) folds under "Settings",
-   * two entities on one row (`entities: [from, to]`), Notifications / Settings / the device as icons; "reading"
-   * while the history loads, not "no cycle yet"; `cycle_entity:` takes the cycles from a state (an oven's
-   * Running) when the power sensor is no use; no empty filament column for such a device.
-   * 0.2.3 (bundle 0.91.0): what the old control centres had - the rows of the overview open Home
-   * Assistant's own dialog of the entity (to change a time, a level, a switch), `actions:` adds buttons of
-   * your own next to the others (a script, a button, a toggle, any tap_action), and Switch on the plug.
-   * 0.2.2 (bundle 0.91.0): a more compact panel and one-device card - the drawing in the header (one
-   * picture, not an icon and a drawing), power / plug / battery on one line under the state, the buttons
-   * as one row of small buttons under the header on both tabs - the main one filled, then Remind,
-   * Switch off, Notifications, Settings, the device - all in sight, none hidden in a menu.
-   * 0.2.1 (bundle 0.91.0): a boiler (water heater) drawing - the water in its window warms from blue to
-   * orange while it heats, bubbles, the hot pipe and the heat above - and a dehumidifier: dry air out of
-   * the grille on top, drops into the tank.
-   * 0.2.0 (bundle 0.91.0): devices added by hand (`devices:`) next to Autonotify's - a dehumidifier, a
-   * heater, anything with a power sensor, a vacuum or a state of its own: running from the power and
-   * its cycles, the same drawings, overview and history, no "to empty" (that is Autonotify's). The
-   * history tab has the last 7 days, one row a day: cycles, time, energy and cost. `device: <name>` shows
-   * one device only, its overview and history right in the card (a control centre of its own). The card
-   * is now supernotify-devices-card; supernotify-appliances-card stays as an alias.
-   * 0.1.6 (bundle 0.91.0): a tap opens an overview first - the drawing, the state, the cycle under way
-   * or the last one, what the device says (plug, battery, consumables, temperatures...) and the buttons
-   * that make sense now - with the energy / cleanings / prints one tab away; "Details" opens that tab.
-   * 0.1.5 (bundle 0.91.0): on a computer (card over 820 px) the appliances that ask for something sit
-   * side by side with bigger drawings, the idle ones in columns; the view is named "Appliances".
-   * 0.1.4 (bundle 0.91.0): the details panel of an appliance with a state of its own (a 3D printer,
-   * Home Connect): its prints / cycles from the state history - duration, filament, name, a failed one
-   * marked - and its hours from its own counter when it has one.
-   * 0.1.3 (bundle 0.91.0): our own drawings in place of skyrotter's - washer, dryer, dishwasher, oven,
-   * 3D printer, robot vacuum with or without its dock - driven by the card's own state: the time left
-   * and the progress on the display, paused, a reminder already set, waiting to be emptied for over
-   * 2 hours, the robot charging or going back to its dock; the same four badges on all of them.
-   * The movements stop while the card is off screen.
-   * A robot vacuum has its details panel too: cleanings, time and area per period from its own totals
-   * (long-term statistics), each cleaning from its state history. A 3D printer is found on the device
-   * that prints, not on another with the same name.
-   * 0.1.2 (bundle 0.91.0): skyrotter's animated drawings as an option - `illustrations` (on/off) and
-   * `animations` (their movements on/off), both in the visual editor; only the drawing is shown, a tap
-   * on it opens the details panel.
-   * 0.1.1 (bundle 0.91.0): the power now on each appliance with a power sensor (⚡ on the cards, at the
-   * right of the idle rows, W or kW); the list is rebuilt only when what it shows changes.
-   * 0.1.0 (bundle 0.91.0): the appliances Appliance Autonotify watches - washing machine, dishwasher,
-   * dryer, robot vacuum, 3D printer - one card each for what asks for something (finished, stuck) or is
-   * running, one row each for the idle ones, and a details panel with energy and cycles.
-   * Where the data comes from (Autonotify 0.9 has no entities of its own, and a card cannot read the
-   * options of a config entry):
-   *   - the appliances: its config entries (config_entries/get), less discovery and ignored ones; the
-   *     power sensor, plug, vacuum or device of each found by its name (`appliances:` overrides);
-   *   - running / finished / emptied: what Autonotify itself sent through SuperNotify, read back from
-   *     the archive (tag appliance_<entry_id>: start, end, reminders, the Finished button) - so the
-   *     thresholds are Autonotify's own;
-   *   - cycles and energy: the recorder's statistics of the power sensor (5-minute for the last days,
-   *     hourly before), never raw history;
-   *   - buttons: the same mobile_app_notification_action event as the notification's own buttons
-   *     (admins only: fire_event), vacuum.start for a stuck vacuum.
+   * The appliances Appliance Autonotify watches plus devices added by hand: what asks for something or is
+   * running first, the idle ones as rows; a tap opens the overview, usage and settings of one device.
+   * Data: Autonotify's config entries, its notifications read back from the archive, the recorder's
+   * statistics of the power sensor. History: CHANGELOG.md.
    */
   static getConfigForm() {
     return snForm("appliances");
@@ -11082,14 +9501,17 @@ class SupernotifyAppliancesCard extends SnCard {
     window.addEventListener("supernotify-appliances", this._onData);
     this._onArchive = this._onArchive || (() => { if (this._hass) snAppl.refreshEvents(this._hass); });
     window.addEventListener("supernotify-archive", this._onArchive);
-    this._tick = setInterval(() => { if (this._rendered) this._update(); }, 60000);
+    // 1.0.0 (perf): off screen the minute tick draws nothing - the card is brought up to date when it comes back
+    this._tick = setInterval(() => { if (this._rendered && !this._offscreen) this._update(); }, 60000);
     this._readFocus();
     // the drawings move only while the card is on screen
     if (!this._io && typeof IntersectionObserver === "function") {
       this._io = new IntersectionObserver((es) => {
+        const was = this._offscreen;
         this._offscreen = !es[es.length - 1].isIntersecting;
         const card = this.shadowRoot && this.shadowRoot.querySelector("ha-card");
         if (card) card.classList.toggle("offs", this._offscreen);
+        if (was && !this._offscreen && this._rendered) this._update();
       });
       this._io.observe(this);
     }
@@ -11100,11 +9522,24 @@ class SupernotifyAppliancesCard extends SnCard {
     window.removeEventListener("supernotify-archive", this._onArchive);
     clearInterval(this._tick);
     if (this._io) { this._io.disconnect(); this._io = null; }
+    // 1.0.0: no redraw of a card that left the page (the flash, a two-tap button, a result line)
+    clearTimeout(this._flashT); this._flashT = null;
+    clearTimeout(this._armT); this._armed = null;
+    for (const t of this._msgT || []) clearTimeout(t);
+    this._msgT = null;
+  }
+
+  /** A result line under an appliance; 1.0.0: it goes after 6 s - a timer the card cancels when it leaves the page. */
+  _flash(id, ok, text) {
+    this._msg[id] = { ok, text };
+    const set = this._msgT || (this._msgT = new Set());
+    const t = setTimeout(() => { set.delete(t); delete this._msg[id]; this._update(); }, 6000);
+    set.add(t);
+    this._update();
   }
 
   _T() {
-    const lang = String((this._config && this._config.language) || (this._hass && this._hass.language) || "en").split("-")[0];
-    return SN_APPL_STRINGS[lang] || SN_APPL_STRINGS.en;
+    return SN_APPL_STRINGS[snLang(this._config, this._hass)] || SN_APPL_STRINGS.en;
   }
 
   _loc() {
@@ -11193,16 +9628,19 @@ class SupernotifyAppliancesCard extends SnCard {
     const html = snIconify(parts.join(""), this._config);
     this._shown = items;
     if (html !== this._bodyLast || !body.querySelector(".ap, .row")) {
+      // 1.0.0 (perf): only the power readings changed - those texts, not the whole list
+      if (!(this._bodyLast && body.querySelector(".ap, .row") && snApplPwPatch(body, this._bodyLast, html))) {
+        body.innerHTML = html;
+        this._mountArt(body, items);
+        this._bind(body, items);
+      }
       this._bodyLast = html;
-      body.innerHTML = html;
-      this._mountArt(body, items);
-      this._bind(body, items);
     }
     this._artSync(body, items);
     if (flash && !this._flashT) {
       this._flashT = setTimeout(() => { this._flashT = null; this._focusAt = 0; this._update(); }, Math.max(0, 5000 - (Date.now() - this._focusAt)));
     }
-    this._renderPanel();
+    this._renderPanel(items);
   }
 
   _renderNew() {
@@ -11315,13 +9753,9 @@ class SupernotifyAppliancesCard extends SnCard {
       if (cur && cur.kwh > 0.005) bits.push(`${this._fmtKwh(cur.kwh)} ${T.so_far}`);
       return bits.join(" · ");
     }
-    const last = s.last || (cy && cy.done.length ? cy.done[cy.done.length - 1] : null);
+    const last = this._lastRun(ap, s);
     if (!last) return s.since ? `${T.start} ${this._fmtTime(s.since)}` : (!cy || cy.loading) && (ap.power || ap.cycle || ap.vacuum) ? T.loading : T.no_cycle;
-    let kwh = last.kwh;
-    if (kwh == null && cy) {
-      const m = cy.done.find((c) => Math.abs(c.start - last.start) < 15 * 60000 || (c.start <= last.end && c.end >= last.start));
-      if (m) kwh = m.kwh;
-    }
+    const kwh = last.kwh;
     bits.push(`${this._fmtTime(last.start)} → ${this._fmtHm(last.end)}`);
     bits.push(this._fmtDur(last.end - last.start));
     if (kwh != null && kwh > 0.005) {
@@ -11346,21 +9780,33 @@ class SupernotifyAppliancesCard extends SnCard {
   /** What the primary button does for this state, or null. */
   _primary(ap, s) {
     const T = this._T();
-    const admin = !this._hass.user || this._hass.user.is_admin !== false;
+    const admin = snIsAdmin(this._hass);
     if (s.status === "done" && admin && !ap.manual) return { act: "finished", label: snApplEmptiable(ap) ? T.btn_empty : T.btn_seen };
     if (s.status === "error" && ap.vacuum) return { act: "resume", label: T.btn_resume };
     return null;
   }
 
+  /**
+   * 1.0.0: the actions of the ⋮ menu and of the panel's chips, worked out once: remind, switch the plug off
+   * (`armed`: the first of the two taps was made) or on; `admin` for the rest.
+   */
+  _actions(ap, s) {
+    const admin = snIsAdmin(this._hass);
+    const plug = ap.switch && this._st(ap.switch);
+    return { admin, remind: s.status === "done" && admin && !ap.manual,
+      off: plug === "on" && s.status !== "running" && ap.switch_off !== false, armed: this._armed === `${ap.id}|switch_off`,
+      on: plug === "off" && ap.switch_on !== false };
+  }
+
   _menuItems(ap, s) {
     const T = this._T();
-    const admin = !this._hass.user || this._hass.user.is_admin !== false;
+    const a = this._actions(ap, s);
     const out = [];
-    if (ap.switch && s.status !== "running" && ap.switch_off !== false && this._st(ap.switch) === "on") out.push(["switch_off", this._armed === `${ap.id}|switch_off` ? T.tap_again : T.m_switch_off]);
-    if (ap.switch && ap.switch_on !== false && this._st(ap.switch) === "off") out.push(["switch_on", T.m_switch_on]);
-    if (s.status === "done" && admin && !ap.manual) out.push(["remind", T.m_remind]);
+    if (a.off) out.push(["switch_off", a.armed ? T.tap_again : T.m_switch_off]);
+    if (a.on) out.push(["switch_on", T.m_switch_on]);
+    if (a.remind) out.push(["remind", T.m_remind]);
     out.push(["details", T.details]);
-    if (admin && !ap.manual) out.push(["settings", T.settings]);
+    if (a.admin && !ap.manual) out.push(["settings", T.settings]);
     return out;
   }
 
@@ -11390,7 +9836,7 @@ class SupernotifyAppliancesCard extends SnCard {
           <span class="st ${cls}"><span class="dot ${cls}"></span>${esc(word)}</span>
           <button class="more" data-more="${esc(ap.id)}" aria-haspopup="menu" aria-expanded="${this._menu === ap.id}" title="${esc(T.more)}">⋮</button>${menu}</div>
         ${run}
-        <div class="sum">${Number.isFinite(this._powerNow(ap)) ? `<span class="pw" title="${esc(T.power_now)}">⚡ ${esc(this._fmtW(this._powerNow(ap)))}</span> · ` : ""}${esc(this._summary(ap, s))}</div>
+        <div class="sum">${Number.isFinite(this._powerNow(ap)) ? `<span class="pw" title="${esc(T.power_now)}" data-pw>⚡ ${esc(this._fmtW(this._powerNow(ap)))}</span> · ` : ""}${esc(this._summary(ap, s))}</div>
         ${notes ? `<div class="note">🔔 ${esc(notes)}</div>` : ""}
         ${extra.join("")}
         <div class="acts">${pri ? `<button class="pb" data-act="${pri.act}" data-id="${esc(ap.id)}"${this._busy[ap.id] ? " disabled" : ""}>${esc(pri.label)}</button>` : ""}
@@ -11476,8 +9922,7 @@ class SupernotifyAppliancesCard extends SnCard {
     const T = this._T();
     const esc = snEsc;
     const [cls, word] = this._status(ap, s);
-    const cy = snAppl.cyclesOf(ap);
-    const last = s.last || (cy && cy.done.length ? cy.done[cy.done.length - 1] : null);
+    const last = this._lastRun(ap, s);
     const sub = last ? T.last_cycle.replace("{d}", `${this._fmtTime(last.start)} · ${this._fmtDur(last.end - last.start)}`) : T.no_cycle;
     const msg = this._msg[ap.id];
     const w = this._powerNow(ap);
@@ -11486,7 +9931,7 @@ class SupernotifyAppliancesCard extends SnCard {
       <div class="rb"><b>${esc(ap.name)}</b><span class="rs"><span class="dot ${cls}"></span>${esc(word)} · ${esc(sub)}</span>
         ${snApplMaints(this._hass, ap).filter((m) => m && m.near).map((m) => `<span class="rm${m.due ? " bad" : ""}">🔧 ${esc(`${m.name} · ${snApplMaintWhen(T, m)}`)}</span>`).join("")}
         ${msg ? `<span class="res ${msg.ok ? "ok" : "err"}">${esc(msg.text)}</span>` : ""}</div>
-      ${Number.isFinite(w) ? `<span class="pw rp" title="${esc(T.power_now)}">${esc(this._fmtW(w))}</span>` : ""}
+      ${Number.isFinite(w) ? `<span class="pw rp" title="${esc(T.power_now)}" data-pw>${esc(this._fmtW(w))}</span>` : ""}
       <span class="arr" aria-hidden="true">›</span></div>`;
   }
 
@@ -11586,7 +10031,7 @@ class SupernotifyAppliancesCard extends SnCard {
         // Autonotify has no button for it: the plug's own switch
         await this._hass.callService("switch", "turn_on", { entity_id: ap.switch });
         text = T.done_switch_on;
-      } else if (act === "switch_off" && (ap.manual || (this._hass.user && this._hass.user.is_admin === false))) {
+      } else if (act === "switch_off" && (ap.manual || !snIsAdmin(this._hass))) {
         // fire_event is for admins: anyone else switches the plug off with the switch itself
         await this._hass.callService("switch", "turn_off", { entity_id: ap.switch });
         text = T.done_switch;
@@ -11607,9 +10052,7 @@ class SupernotifyAppliancesCard extends SnCard {
     } finally {
       this._busy[ap.id] = false;
     }
-    this._msg[ap.id] = { ok, text };
-    setTimeout(() => { delete this._msg[ap.id]; this._update(); }, 6000);
-    this._update();
+    this._flash(ap.id, ok, text);
   }
 
   _userActName(a) {
@@ -11620,7 +10063,7 @@ class SupernotifyAppliancesCard extends SnCard {
   /** Home Assistant's own dialog of an entity - over the card, so the details panel closes first. */
   _moreInfo(entityId) {
     if (this._panel) this._closePanel();
-    this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true }));
+    super._moreInfo(entityId);
   }
 
   /**
@@ -11653,9 +10096,7 @@ class SupernotifyAppliancesCard extends SnCard {
       ok = false;
       text = `${T.err}: ${(e && (e.message || e.code)) || e}`;
     }
-    this._msg[ap.id] = { ok, text };
-    setTimeout(() => { delete this._msg[ap.id]; this._update(); }, 6000);
-    this._update();
+    this._flash(ap.id, ok, text);
   }
 
   /** Two taps: true on the second within 4 s, else arms it (the button says "tap again") and false. */
@@ -11673,15 +10114,7 @@ class SupernotifyAppliancesCard extends SnCard {
     const a = (ap.actions || [])[i];
     if (!a) return;
     if (a.confirmation !== "double") return this._userAct(ap, a);
-    const key = `${ap.id}|${i}`;
-    clearTimeout(this._armT);
-    if (this._armed !== key) {
-      this._armed = key;
-      this._armT = setTimeout(() => { this._armed = null; this._update(); }, 4000);
-      this._update();
-      return;
-    }
-    this._armed = null;
+    if (!this._arm(`${ap.id}|${i}`)) return;
     return this._userAct(ap, { ...a, confirmation: false });
   }
 
@@ -11722,14 +10155,19 @@ class SupernotifyAppliancesCard extends SnCard {
     if (back && back.focus) back.focus();
   }
 
-  _renderPanel() {
+  /** `items`: the appliances with the state _update just worked out (1.0.0, not worked out again here). */
+  _renderPanel(items) {
     const ov = this.shadowRoot && this.shadowRoot.getElementById("ov");
     if (!ov) return;
-    const ap = this._panel && snAppl.appliances(this._hass, this._config).find((a) => a.id === this._panel);
-    if (!ap) { ov.innerHTML = ""; ov.className = ""; this._panelLast = null; return; }
+    const x = this._panel && items && items.find((i) => i.ap.id === this._panel);
+    const ap = x ? x.ap : this._panel && snAppl.appliances(this._hass, this._config).find((a) => a.id === this._panel);
+    if (!ap) { if (ov.innerHTML !== "") ov.innerHTML = ""; ov.className = ""; this._panelLast = null; return; }
+    const s = x ? x.s : snApplState(this._hass, ap, Date.now(), snAppl.cyclesOf(ap));
     // the power changes every few seconds: redraw only what changed, and keep the scroll and the focus
-    const html = snIconify(this._panelHtml(ap), this._config);
+    const html = snIconify(this._panelHtml(ap, false, s), this._config);
     if (html === this._panelLast && ov.querySelector(".sheet")) return;
+    // 1.0.0 (perf): only the power reading changed - its text, not the whole sheet (the drawing keeps moving)
+    if (this._panelLast && ov.querySelector(".sheet") && snApplPwPatch(ov, this._panelLast, html)) { this._panelLast = html; return; }
     this._panelLast = html;
     const old = ov.querySelector(".sheet");
     const keep = old && old.scrollTop;
@@ -11747,13 +10185,13 @@ class SupernotifyAppliancesCard extends SnCard {
     ov.onkeydown = (e) => { if (e.key === "Escape") this._closePanel(); };
     const close = ov.querySelector(".x");
     if (close) close.onclick = () => this._closePanel();
-    this._bindPanel(ov, ap, () => this._renderPanel());
+    this._bindPanel(ov, ap, () => this._renderPanel(), s);
     if (this._panelFocus && close) { this._panelFocus = false; close.focus(); }
     else if (focusSel) { const f = ov.querySelector(focusSel); if (f) f.focus(); }
   }
 
-  /** What the panel's buttons do, in the dialog or (one device) in the card itself. */
-  _bindPanel(root, ap, redraw) {
+  /** What the panel's buttons do, in the dialog or (one device) in the card itself. `s`: the state drawn. */
+  _bindPanel(root, ap, redraw, s0) {
 
     const notifs = root.querySelector("#pNotifs");
     if (notifs) notifs.onclick = () => {
@@ -11786,8 +10224,6 @@ class SupernotifyAppliancesCard extends SnCard {
       b.onclick = () => { this._panelTab = b.dataset.ptab; this._full = null; redraw(); const t = root.querySelector(`[data-ptab="${this._panelTab}"]`); if (t) t.focus(); };
     });
     root.querySelectorAll("[data-more]").forEach((b) => { b.onclick = () => this._moreInfo(b.dataset.more); });
-    const sets = root.querySelector(".psets");
-    if (sets) sets.ontoggle = () => { (this._setsOpen = this._setsOpen || {})[ap.id] = sets.open; };
     root.querySelectorAll("[data-uact]").forEach((b) => { b.onclick = () => this._userTap(ap, +b.dataset.uact); });
     root.querySelectorAll("[data-retry]").forEach((b) => {
       b.onclick = () => {
@@ -11811,7 +10247,7 @@ class SupernotifyAppliancesCard extends SnCard {
     });
     const dev = root.querySelector("#pDevice");
     if (dev) dev.onclick = (e) => { e.preventDefault(); snNavigate(`/config/devices/device/${ap.device_id}`); };
-    if (root.querySelector(".pv-art")) this._artSync(root, [{ ap, s: snApplState(this._hass, ap, Date.now(), snAppl.cyclesOf(ap)) }]);
+    if (root.querySelector(".pv-art")) this._artSync(root, [{ ap, s: s0 || snApplState(this._hass, ap, Date.now(), snAppl.cyclesOf(ap)) }]);
     const set = root.querySelector("#pSettings");
     if (set) set.onclick = () => snNavigate(ap.manual ? `/config/devices/device/${ap.device_id}` : snApplSettingsUrl(ap));
   }
@@ -11826,41 +10262,42 @@ class SupernotifyAppliancesCard extends SnCard {
       return;
     }
     if (this._oneId !== x.ap.id) { this._oneId = x.ap.id; snAppl.loadStats(this._hass, x.ap, true); }
-    const html = snIconify(this._panelHtml(x.ap, true), this._config);
+    const html = snIconify(this._panelHtml(x.ap, true, x.s), this._config);
     const card = this.shadowRoot.querySelector("ha-card");
-    const band = this._status(x.ap, snApplState(this._hass, x.ap, Date.now(), snAppl.cyclesOf(x.ap)))[0];
+    const band = this._status(x.ap, x.s)[0];
     if (card && card.dataset.st !== band) card.dataset.st = band;
-    if (html !== this._bodyLast) {
+    if (html !== this._bodyLast && !(this._bodyLast && body.querySelector(".one") && snApplPwPatch(body, this._bodyLast, html))) {
       this._bodyLast = html;
       const oldFs = body.querySelector(".fsov");
       const keepFs = oldFs && oldFs.scrollTop;
       body.innerHTML = html;
       const fs = body.querySelector(".fsov");
       if (keepFs && fs) fs.scrollTop = keepFs;
-      this._bindPanel(body, x.ap, () => { this._bodyLast = null; this._update(); });
+      this._bindPanel(body, x.ap, () => { this._bodyLast = null; this._update(); }, x.s);
     }
+    this._bodyLast = html;
     this._artSync(body, [x]);
   }
 
-  _panelHtml(ap, inline) {
+  _panelHtml(ap, inline, s0) {
     const T = this._T();
     const esc = snEsc;
     const cy = snAppl.cyclesOf(ap);
-    const s = snApplState(this._hass, ap, Date.now(), cy);
+    const s = s0 || snApplState(this._hass, ap, Date.now(), cy);
     const [cls, word] = this._status(ap, s);
     const w = this._powerNow(ap);
     const kind = this._config.illustrations !== false && snApplArtKind(ap, this._config);
     const art = kind ? `<div class="pv-art ill" data-art="${esc(ap.id)}">${snApplSvg(kind, "pv")}</div>`
       : `<div class="pv-art"><ha-icon icon="${esc(ap.icon)}"></ha-icon></div>`;
     const plugOn = ap.switch && this._st(ap.switch) === "on";
+    const A = this._actions(ap, s);
     const quick = [Number.isFinite(w) ? `⚡ ${this._fmtW(w)}` : "", ap.switch ? `${T.plug} ${plugOn ? T.plug_on : T.plug_off}` : "",
       s.battery != null ? `🔋 ${s.battery}%${s.charging ? ` · ${T.st_charging}` : ""}` : "", s.lost ? `⚠ ${T.conn_lost}` : ""].filter(Boolean).join(" · ");
-    const admin = !this._hass.user || this._hass.user.is_admin !== false;
+    const admin = A.admin;
     const tab = ["stats", "cons", "sets"].includes(this._panelTab) ? this._panelTab : "info";
     const pri = this._primary(ap, s);
     const chip = (attr, label, main, icon) => `<button class="chip${main ? " main" : ""}${/class="ic"/.test(attr) ? " ic" : ""}" ${attr.replace(' class="ic"', "")}${main && this._busy[ap.id] ? " disabled" : ""}>${
       icon ? `<ha-icon icon="${esc(icon)}"></ha-icon>` : ""}${esc(label)}</button>`;
-    const plugOff = ap.switch && this._st(ap.switch) === "off";
     // the buttons of your own shown in this state (`when:`), in the row or - many of them - in the menu
     const now0 = s.status === "running" && s.paused ? "paused" : s.status;
     const mine = (ap.actions || []).map((a, i) => ({ a, i })).filter(({ a }) => !a.when || [].concat(a.when).some((w) => w === s.status || w === now0));
@@ -11885,10 +10322,9 @@ class SupernotifyAppliancesCard extends SnCard {
     }
     const acts = [
       pri ? chip(`data-pact="${pri.act}"`, pri.label, true) : "",
-      s.status === "done" && admin && !ap.manual ? chip('data-pact="remind"', T.m_remind) : "",
-      plugOn && s.status !== "running" && ap.switch_off !== false ? (this._armed === `${ap.id}|switch_off`
-        ? chip('data-pact="switch_off" data-armed', T.tap_again, false, "mdi:gesture-double-tap") : chip('data-pact="switch_off"', T.m_switch_off)) : "",
-      plugOff && ap.switch_on !== false ? chip('data-pact="switch_on"', T.m_switch_on) : "",
+      A.remind ? chip('data-pact="remind"', T.m_remind) : "",
+      A.off ? (A.armed ? chip('data-pact="switch_off" data-armed', T.tap_again, false, "mdi:gesture-double-tap") : chip('data-pact="switch_off"', T.m_switch_off)) : "",
+      A.on ? chip('data-pact="switch_on"', T.m_switch_on) : "",
       ...(inMenu ? [] : mine.map(uchip)),
     ].filter(Boolean);
     // the head, the same in every tab: the drawing, the name, the state and what matters now, the round buttons
@@ -11899,7 +10335,7 @@ class SupernotifyAppliancesCard extends SnCard {
       ap.device_id ? chip(`id="pDevice" class="ic" title="${esc(T.open_device)}" aria-label="${esc(T.chip_device)}"`, "", false, "mdi:devices") : "",
     ].filter(Boolean);
     const head = `<div class="ph"><div class="hwrap">${art}</div><div class="pht"><b id="pTitle">${esc(ap.name)}</b>
-        <span class="st ${cls}"><span class="dot ${cls}"></span>${esc(word)}</span>${quick ? `<span class="pq">${esc(quick)}</span>` : ""}
+        <span class="st ${cls}"><span class="dot ${cls}"></span>${esc(word)}</span>${quick ? `<span class="pq" data-pw>${esc(quick)}</span>` : ""}
         ${this._heroHtml(ap, s, cy)}</div>${side.length ? `<div class="pside">${side.join("")}</div>` : ""}</div>`;
     const msg = this._msg[ap.id];
     const now = (acts.length || menu ? `<div class="pchips">${acts.join("")}${menu}</div>` : "") + (msg ? `<div class="res ${msg.ok ? "ok" : "err"}">${esc(msg.text)}</div>` : "");
@@ -11984,8 +10420,7 @@ class SupernotifyAppliancesCard extends SnCard {
     }).join("");
     if (!full) return `<div class="tiles">${tiles}</div>${this._seeChart()}`;
     const types = cy.types;
-    const mStart = new Date(); mStart.setDate(1); mStart.setHours(0, 0, 0, 0);
-    const month = cy.done.filter((c) => c.start >= mStart.getTime());
+    const month = this._month(cy);
     // an hourly (coarse) cycle looks longer than it was: by its energy instead
     const kwhSplit = types.split ? (types.short.kwh + types.long.kwh) / 2 : 0;
     const kind = (c) => (c.anomalous ? "anom" : !types.split ? "short"
@@ -12005,13 +10440,28 @@ class SupernotifyAppliancesCard extends SnCard {
     if (month.some((c) => c.anomalous)) leg.push(`<span><i class="sw anom"></i>${esc(T.anomalous)}</span>`);
     const rows = cy.done.slice(-8).reverse().map((c) => `<tr class="${c.anomalous ? "anom" : ""}"><td>${esc(this._fmtTime(c.start))}</td>
         <td>${esc(this._fmtDur(c.end - c.start))}${c.anomalous ? " ⚠" : ""}</td><td>${esc(this._fmtKwh(c.kwh))}</td>${this._price() != null ? `<td>${esc(this._fmtCost(c.kwh))}</td>` : ""}</tr>`).join("");
-    return `<div class="sub">${esc(T.per_cycle)}</div>
-      ${month.length ? `${bars}<div class="leg">${leg.join("")}</div>` : `<div class="empty">${esc(T.no_cycle_month)}</div>`}
-      ${this._daysHtml(cy, T.col_cycles, "kwh")}
-      <div class="sub">${esc(T.last_cycles)}</div>
-      ${rows ? `<table class="tb"><thead><tr><th>${esc(T.col_start)}</th><th>${esc(T.col_dur)}</th><th>kWh</th>${this._price() != null ? `<th>${esc(T.col_cost)}</th>` : ""}</tr></thead><tbody>${rows}</tbody></table>`
-        : `<div class="empty">${esc(T.no_cycle)}</div>`}
-      ${cy.coarse ? `<div class="fine">${esc(T.coarse)}</div>` : ""}`;
+    return this._fullHtml({ per: T.per_cycle, month, bars, leg, noneM: T.no_cycle_month, days: this._daysHtml(cy, T.col_cycles, "kwh"),
+      last: T.last_cycles, rows, cols: `<th>kWh</th>${this._price() != null ? `<th>${esc(T.col_cost)}</th>` : ""}`, none: T.no_cycle,
+      foot: cy.coarse ? `<div class="fine">${esc(T.coarse)}</div>` : "" });
+  }
+
+  /** 1.0.0: the cycles started this month (the chart of the full screen). */
+  _month(cy) {
+    const mStart = new Date(); mStart.setDate(1); mStart.setHours(0, 0, 0, 0);
+    return cy.done.filter((c) => c.start >= mStart.getTime());
+  }
+
+  /** 1.0.0: the full screen of _panelStats and _panelRuns - the chart, the 7 days, the last ones in a table. */
+  _fullHtml(o) {
+    const T = this._T();
+    const esc = snEsc;
+    return `<div class="sub">${esc(o.per)}</div>
+      ${o.month.length ? `${o.bars}<div class="leg">${o.leg.join("")}</div>` : `<div class="empty">${esc(o.noneM)}</div>`}
+      ${o.days}
+      <div class="sub">${esc(o.last)}</div>
+      ${o.rows ? `<table class="tb"><thead><tr><th>${esc(T.col_start)}</th><th>${esc(T.col_dur)}</th>${o.cols}</tr></thead><tbody>${o.rows}</tbody></table>`
+        : `<div class="empty">${esc(o.none)}</div>`}
+      ${o.foot}`;
   }
 
   /** The last 7 days, one row a day (today first): runs, time, and energy and cost, or area, or filament. */
@@ -12082,7 +10532,7 @@ class SupernotifyAppliancesCard extends SnCard {
     const notes = this._notesLine(s);
     if (notes) fact(T.reminders_h, esc(notes), "", null, null, "mdi:bell-outline");
     if (s.errorText && s.status !== "error") fact(T.error_h, esc(s.errorText), "bad", null, null, "mdi:alert-circle-outline");
-    for (const e of snApplDeviceEntities(this._hass, ap.device_id)) {
+    for (const e of ap.ents || snApplDeviceEntities(this._hass, ap.device_id)) {
       const st = this._hass.states[e.entity_id];
       if (!st || ["unknown", "unavailable"].includes(st.state)) continue;
       const k = e.translation_key || "";
@@ -12147,8 +10597,7 @@ class SupernotifyAppliancesCard extends SnCard {
         <span class="ts">${esc(sub || "—")}</span></div>`;
     }).join("");
     if (!full) return `<div class="tiles">${tiles}</div>${this._seeChart()}`;
-    const mStart = new Date(); mStart.setDate(1); mStart.setHours(0, 0, 0, 0);
-    const month = cy.done.filter((c) => c.start >= mStart.getTime());
+    const month = this._month(cy);
     const tipOf = (c) => [this._fmtTime(c.start), this._fmtDur(c.end - c.start), m2(c.area), g(c.weight), c.name || "", c.failed ? T.failed : ""].filter(Boolean).join(" · ");
     const okM = month.filter((c) => !c.failed);
     const avgD = okM.length ? okM.reduce((x, c) => x + (c.end - c.start), 0) / okM.length : 0;
@@ -12163,17 +10612,10 @@ class SupernotifyAppliancesCard extends SnCard {
     const rows = cy.done.slice(-8).reverse().map((c) => `<tr class="${c.failed ? "anom" : ""}"${c.name ? ` title="${esc(c.name)}"` : ""}><td>${esc(this._fmtTime(c.start))}</td>
         <td>${esc(this._fmtDur(c.end - c.start))}${c.failed ? ` · ${esc(T.failed)}` : ""}</td>${area ? `<td>${esc(m2(c.area))}</td>` : ""}${fil ? `<td>${esc(g(c.weight))}</td>` : ""}</tr>`).join("");
     const days = Math.max(1, Math.round((Date.now() - cy.histFrom) / 86400000));
-    return `<div class="sub">${esc(w.per)}</div>
-      ${month.length ? `${bars}<div class="leg">${leg.join("")}</div>` : `<div class="empty">${esc(w.none_m)}</div>`}
-      ${this._daysHtml(cy, ap.vacuum ? T.tab_cleans : ap.type === "3d_printer" ? T.tab_prints : T.col_cycles, ap.vacuum ? "area" : "weight")}
-      <div class="sub">${esc(w.last)}</div>
-      ${rows ? `<table class="tb"><thead><tr><th>${esc(T.col_start)}</th><th>${esc(T.col_dur)}</th>${area ? `<th>${esc(T.col_area)}</th>` : ""}${fil ? `<th>${esc(T.col_fil)}</th>` : ""}</tr></thead><tbody>${rows}</tbody></table>`
-        : `<div class="empty">${esc(w.none)}</div>`}
-      <div class="fine">${esc(w.note.replace("{n}", days))}</div>`;
-  }
-
-  getGridOptions() {
-    return { columns: 12, min_columns: 6 };
+    return this._fullHtml({ per: w.per, month, bars, leg, noneM: w.none_m,
+      days: this._daysHtml(cy, ap.vacuum ? T.tab_cleans : ap.type === "3d_printer" ? T.tab_prints : T.col_cycles, ap.vacuum ? "area" : "weight"),
+      last: w.last, rows, cols: `${area ? `<th>${esc(T.col_area)}</th>` : ""}${fil ? `<th>${esc(T.col_fil)}</th>` : ""}`, none: w.none,
+      foot: `<div class="fine">${esc(w.note.replace("{n}", days))}</div>` });
   }
 }
 
@@ -12200,7 +10642,7 @@ const SN_APPL_WORDS = [
 // the program and the phase of a cycle, by translation key
 const SN_APPL_PROG_KEYS = ["program", "selected_program", "active_program", "programme", "program_name", "washer_program", "dryer_program"];
 const SN_APPL_PHASE_KEYS = ["program_phase", "process_phase", "phase", "program_step", "job_state", "washer_job_state", "dryer_job_state", "current_stage"];
-// the ring's colour by phase, from its words in the languages of the card
+// the colour of the progress bar by phase, from its words in the languages of the card
 const SN_APPL_PHASE_COLORS = [
   [/rins|risciac|spül|spuel|rinç|aclar|spoel|płuk/i, "#4fc3f7"],
   [/spin|centrif|schleud|essor|wiro/i, "#9575cd"],
@@ -12271,6 +10713,7 @@ const SN_APPL_DONE_MAX = 24 * 3600000;
 const SN_APPL_STALE = 2 * 3600000; // waiting to be emptied for longer: the drawing insists
 const SN_APPL_FINE_DAYS = 10;
 const SN_APPL_KEY = "supernotify-appliances-stats-v1";
+const SN_APPL_STORE = snStore(SN_APPL_KEY, () => ({}), (c) => !!c && typeof c === "object");
 // cycle detection on the statistics when Autonotify's own settings are out of reach (override per appliance)
 const SN_APPL_DEFAULTS = { threshold: 5, grace_period: 300, min_duration: 300 };
 
@@ -12386,6 +10829,8 @@ function snApplResolve(hass, entry, over) {
   ap.program = o.program || tk(SN_APPL_PROG_KEYS);
   ap.phase = o.phase || tk(SN_APPL_PHASE_KEYS);
   if (!ap.power && o.power_entity) ap.power = o.power_entity;
+  // 1.0.0 (perf): the device's entities, kept (the list is cached until hass.entities changes)
+  ap.ents = pEnts;
   // the vacuum and the device kinds: a power sensor of their own only when given
   ap.icon = o.icon || SN_APPL_ICONS[ap.type] || (ap.kind === "vacuum" ? "mdi:robot-vacuum" : "mdi:power-plug-outline");
   return ap;
@@ -12490,7 +10935,7 @@ function snApplState(hass, ap, now, cy) {
     if (vs === "paused") s.paused = true;
     if (vs === "returning") s.returning = true;
     const a = (v && v.attributes) || {};
-    const ents = snApplDeviceEntities(hass, ap.device_id);
+    const ents = ap.ents || snApplDeviceEntities(hass, ap.device_id);
     const errE = ents.find((e) => e.translation_key === "error");
     const errS = errE && raw(errE.entity_id);
     const code = errS ? String(errS.state) : "";
@@ -12561,7 +11006,7 @@ function snApplErrText(code, attr) {
   return `${/^\d+$/.test(code) ? `#${code}` : code}${desc ? ` · ${desc}` : ""}`;
 }
 
-/** The ring's colour: the phase's, else the appliance's (a dryer dries, an oven heats), else the running blue. */
+/** The progress bar's colour: the phase's, else the appliance's (a dryer dries, an oven heats), else the running blue. */
 function snApplPhaseColor(ap, text) {
   for (const [re, c] of SN_APPL_PHASE_COLORS) if (text && re.test(text)) return c;
   return ap.type === "dryer" ? "#fb8c00" : ["oven", "boiler", "kettle", "microwave"].includes(ap.type) ? "#f4511e" : "var(--info-color, var(--primary-color, #039be5))";
@@ -12653,7 +11098,7 @@ function snApplTypes(cycles) {
   const fine = cycles.filter((c) => !c.coarse && !c.anomalous);
   const use = fine.length >= 2 ? fine : cycles.filter((c) => !c.anomalous);
   if (!use.length) return {};
-  const avg = (a) => ({ dur: a.reduce((x, c) => x + (c.end - c.start), 0) / a.length, kwh: a.reduce((x, c) => x + (c.kwh || 0), 0) / a.length, n: a.length });
+  const avg = (a) => ({ dur: a.reduce((x, c) => x + (c.end - c.start), 0) / a.length, kwh: a.reduce((x, c) => x + (c.kwh || 0), 0) / a.length });
   const out = { all: avg(use) };
   const d = use.map((c) => c.end - c.start).sort((a, b) => a - b);
   let best = 0, at = -1;
@@ -12669,12 +11114,18 @@ function snApplTypes(cycles) {
   return out;
 }
 
-/** Today, this week, month and year: kWh (the power integrated) and cycles started. */
-function snApplPeriods(cy, now) {
+/** 1.0.0: midnight today, Monday of this week, the 1st of this month and of this year (local time). */
+function snApplPeriodStarts(now) {
   const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
   const w0 = new Date(d0); w0.setDate(w0.getDate() - ((w0.getDay() + 6) % 7));
   const m0 = new Date(d0); m0.setDate(1);
   const y0 = new Date(d0); y0.setMonth(0, 1);
+  return { d0, w0, m0, y0 };
+}
+
+/** Today, this week, month and year: kWh (the power integrated) and cycles started. */
+function snApplPeriods(cy, now) {
+  const { d0, w0, m0, y0 } = snApplPeriodStarts(now);
   return [["today", d0], ["week", w0], ["month", m0], ["year", y0]].map(([key, from]) => {
     const f = from.getTime();
     const kwh = cy.bins.filter((b) => b.t >= f).reduce((x, b) => x + (b.mean || 0) * b.dt / 3600000, 0) / 1000;
@@ -13089,6 +11540,24 @@ function snApplBins(rows, dt) {
     mean: r.mean != null ? +r.mean : null, max: r.max != null ? +r.max : null })).filter((b) => Number.isFinite(b.t));
 }
 
+/**
+ * 1.0.0: no new statistics / history read for this entry: one on its way (two cards, a refresh: `inflight`),
+ * a recent one (10 min, after an error SN_APPL_RETRY), or - forced - one less than a minute old.
+ */
+function snApplGuard(have, force) {
+  if (have && (have.loading || have.inflight || (!force && Date.now() - have.at < (have.error ? SN_APPL_RETRY : 600000)))) return true;
+  return !!(have && force && !have.error && Date.now() - have.at < 60000);
+}
+
+/** 1.0.0: a read that failed (a timeout while the phone wakes up): what was shown stays, `retry` runs again soon. */
+function snApplFail(entry, e, retry) {
+  const fails = (entry.fails || 0) + 1;
+  if (entry.at && !entry.error) Object.assign(entry, { loading: false, fails, at: Date.now() - 600000 + SN_APPL_RETRY });
+  else Object.assign(entry, { loading: false, fails, error: (e && e.message) || String(e), at: Date.now() });
+  clearTimeout(entry.retryT);
+  entry.retryT = setTimeout(retry, Math.min(600000, SN_APPL_RETRY * 2 ** (fails - 1)));
+}
+
 const snAppl = {
   entries: null,   // usable Autonotify entries
   flows: 0,        // appliances found and waiting to be set up (admins)
@@ -13103,20 +11572,21 @@ const snAppl = {
   reminded: new Set(), // "entry|t" "Remind me later" pressed on a card, until the next reminder
   stats: new Map(), // power entity -> { bins, done, current, types, loading, error, at }
   _list: null, _listKey: null,
+  _lists: new Map(), // 1.0.0 (perf): config key -> { list, key } - two cards with different configs no longer evict each other
 
   ensure(hass) {
     if (!hass || !hass.callWS) return;
     if (!this.busy && Date.now() - this.at > 300000) {
       this.busy = true;
-      const admin = !hass.user || hass.user.is_admin !== false;
+      const admin = snIsAdmin(hass);
       Promise.all([
-        snWS(hass, { type: "config_entries/get", domain: "appliance_autonotify" }).catch(() => []),
+        snAppliances.read(hass), // the names of snAppliances too
         admin ? snWS(hass, { type: "config_entries/flow/progress" }).catch(() => []) : Promise.resolve([]),
       ]).then(([entries, flows]) => {
         this.entries = snApplUsable(entries);
-        snAppliances.names = Object.fromEntries((entries || []).filter((e) => e && e.entry_id).map((e) => [e.entry_id, e.title || ""]));
         this.flows = (flows || []).filter((f) => f && f.handler === "appliance_autonotify").length;
         this._list = null;
+        this._lists.clear();
       }).finally(() => {
         this.busy = false;
         this.at = Date.now();
@@ -13132,12 +11602,16 @@ const snAppl = {
     const over = (config && config.appliances) || {};
     const hide = new Set(((config && config.hide) || []).map(String));
     const manual = ((config && config.devices) || []).filter((d) => d && d.name);
-    const key = [this.entries, hass.entities, hass.devices, JSON.stringify(over), [...hide].join(","), JSON.stringify(manual)];
-    if (this._list && this._listKey && key.every((k, i) => k === this._listKey[i])) return this._list;
+    const ck = JSON.stringify(over) + "|" + [...hide].join(",") + "|" + JSON.stringify(manual);
+    const key = [this.entries, hass.entities, hass.devices];
+    if (this._listKey === null) this._lists.clear(); // `_listKey = null` forgets every list (as before: the one list)
+    const hit = this._lists.get(ck);
+    if (hit && key.every((k, i) => k === hit.key[i])) { this._list = hit.list; this._listKey = hit.key; return hit.list; }
     this._list = this.entries.filter((e) => !hide.has(e.entry_id) && !hide.has(e.title))
       .map((e) => snApplResolve(hass, e, over[e.entry_id] || over[e.title]))
       .concat(manual.map((d) => Object.assign(snApplResolve(hass, { entry_id: `manual_${snApplSlug(d.name)}`, title: d.name }, d), { manual: true })));
     this._listKey = key;
+    this._lists.set(ck, { list: this._list, key });
     for (const ap of this._list) if (ap.power || ap.vacuum || ap.cycle) this.loadStats(hass, ap);
     return this._list;
   },
@@ -13158,38 +11632,56 @@ const snAppl = {
     snApplFire();
   },
 
-  /** Read the last two days of summaries (then only the newest), and in full what decides each state. */
+  /**
+   * Read the last two days of summaries (then only the newest), and in full what decides each state.
+   * 1.0.0 (perf): read again only when sensor.supernotify_notifications changed or a live event came
+   * (snArchiveStore.pokes) - not every 30 s - and at the latest every 10 minutes.
+   */
   refreshEvents(hass, force) {
     if (!this.entries || !this.entries.length || this.rowsBusy) return;
     const svc = hass.services && hass.services.supernotify && hass.services.supernotify.enquire_archive;
     if (!svc) return;
-    if (!force && Date.now() - this.rowsAt < 30000) return;
+    const cnt = snApplRaw(hass, "sensor.supernotify_notifications");
+    const stamp = `${cnt ? cnt.last_updated : ""}|${snArchiveStore.pokes}`;
+    if (!force && this.rowsAt && (stamp === this.rowsStamp ? Date.now() - this.rowsAt < 600000 : Date.now() - this.rowsAt < 2000)) return;
+    this.rowsStamp = stamp;
     this.rowsBusy = true;
+    const before = this._evSig();
     const from = this.rowsAt ? new Date(this.rowsAt - 600000) : new Date(Date.now() - 48 * 3600000);
     snWS(hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
       service_data: { verbosity: "summary", after: from.toISOString(), limit: 500 }, return_response: true })
       .then((r) => {
         const got = ((r && r.response && r.response.notifications) || []).filter(snIsObj);
         // all of them: a title of Autonotify's can be anything ("🧺 Bucato pronto"), its tag says whose it is
-        const mine = got;
-        const seen = new Set(mine.map((n) => n.id));
+        const seen = new Set(got.map((n) => n.id));
         const cut = Date.now() - 48 * 3600000;
-        this.rows = mine.concat(this.rows.filter((n) => !seen.has(n.id))).filter((n) => Date.parse(n.created) >= cut)
-          .sort((a, b) => String(b.created).localeCompare(String(a.created)));
+        this.rows = got.concat(this.rows.filter((n) => !seen.has(n.id))).filter((n) => Date.parse(n.created) >= cut)
+          .sort(snByCreatedDesc);
         this.rowsAt = Date.now();
         return this._classify(hass);
       })
       .catch(() => { this.rowsAt = Date.now(); })
-      .finally(() => { this.rowsBusy = false; snApplFire(); });
+      .finally(() => { this.rowsBusy = false; if (this._evSig() !== before) snApplFire(); });
+  },
+
+  /** 1.0.0 (perf): what the cards draw from the archive - the events of each appliance. */
+  _evSig() {
+    let sig = "";
+    for (const [id, ev] of this.events) sig += `${id}:${ev.more ? 1 : 0}:${ev.map((e) => `${e.kind}@${e.t}`).join(",")};`;
+    return sig;
   },
 
   /** Per appliance, read in full the newest rows until its state is known (at most 16). */
   async _classify(hass) {
     // the newest rows no appliance's name is in: read once (kept), their tag says the appliance
     const names = this.entries.map((e) => e.title.toLowerCase());
+    // 1.0.0 (perf): the classified documents of the two days read only - older ones are never looked at again
+    const keep = new Set(this.rows.map((r) => r.id));
+    for (const id of this.docs.keys()) if (!keep.has(id)) this.docs.delete(id);
+    // 1.0.0 (perf): read without touching the archive card's store (its list is not rebuilt for them)
     for (const n of this.rows.filter((r) => !snApplRowEntry(r, this.entries, names)).slice(0, SN_APPL_UNNAMED)) {
       if (this.docs.has(n.id)) continue;
-      const doc = await snArchiveStore.doc(hass, n.id).catch(() => null);
+      const doc = await snArchiveStore.doc(hass, n.id, true).catch(() => null);
       if (doc) this.docs.set(n.id, snApplClassify(doc, null));
     }
     for (const e of this.entries) {
@@ -13201,7 +11693,7 @@ const snAppl = {
         read++;
         let c = this.docs.get(n.id);
         if (!c) {
-          const doc = await snArchiveStore.doc(hass, n.id).catch(() => null);
+          const doc = await snArchiveStore.doc(hass, n.id, true).catch(() => null);
           if (!doc) continue;
           c = snApplClassify(doc, e.entry_id);
           this.docs.set(n.id, c);
@@ -13230,23 +11722,25 @@ const snAppl = {
     const id = ap.power;
     if (!id || !hass.callWS) return;
     const have = this.stats.get(id);
-    if (have && (have.loading || (!force && Date.now() - have.at < (have.error ? SN_APPL_RETRY : 600000)))) return;
-    if (have && force && !have.error && Date.now() - have.at < 60000) return;
+    if (snApplGuard(have, force)) return;
     const entry = have || { bins: [], done: [], types: {}, loading: true, at: 0 };
     entry.loading = !have || !have.bins.length;
+    entry.inflight = true;
     this.stats.set(id, entry);
     const now = Date.now();
     const fineFrom = new Date(now - SN_APPL_FINE_DAYS * 86400000); fineFrom.setMinutes(0, 0, 0);
-    const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
-    const w0 = new Date(d0); w0.setDate(w0.getDate() - ((w0.getDay() + 6) % 7));
-    const y0 = new Date(d0); y0.setMonth(0, 1);
+    const { w0, y0 } = snApplPeriodStarts(now);
     const from = new Date(Math.min(y0.getTime(), w0.getTime()));
     // the hourly part before the fine window is kept in this browser and never read again
-    let cache = null;
-    try { cache = JSON.parse(window.localStorage.getItem(SN_APPL_KEY) || "null"); } catch (e) { cache = null; }
+    const cache = SN_APPL_STORE.load();
     const mine = cache && cache[id] && cache[id].from === from.getTime() ? cache[id] : null;
     const hourFrom = mine ? new Date(mine.upto) : from;
-    const reads = [snWS(hass, { type: "recorder/statistics_during_period", start_time: fineFrom.toISOString(),
+    // 1.0.0 (perf): the 5-minute rows already read are kept - only the last hour is read again (a late
+    // statistic is corrected), the whole window on the first reading or after an error
+    const fine0 = entry.fine && !entry.error ? entry.fine.filter((b) => b.t >= fineFrom.getTime()) : null;
+    const last = fine0 && fine0.length ? fine0[fine0.length - 1].t : null;
+    const fineRead = last != null ? new Date(Math.max(fineFrom.getTime(), last - 3600000)) : fineFrom;
+    const reads = [snWS(hass, { type: "recorder/statistics_during_period", start_time: fineRead.toISOString(),
       end_time: new Date(now).toISOString(), statistic_ids: [id], period: "5minute", types: ["mean", "max"] }, SN_APPL_READ_MS)];
     if (hourFrom < fineFrom) {
       reads.push(snWS(hass, { type: "recorder/statistics_during_period", start_time: hourFrom.toISOString(),
@@ -13255,12 +11749,19 @@ const snAppl = {
     Promise.all(reads).then(([fine, hour]) => {
       const hb = (mine ? mine.rows : []).concat(snApplBins(hour && hour[id], 3600000).map((b) => [b.t, b.mean, b.max]))
         .filter((r) => r[0] < fineFrom.getTime());
-      try {
-        const c = cache || {};
-        c[id] = { from: from.getTime(), upto: fineFrom.getTime(), rows: hb };
-        window.localStorage.setItem(SN_APPL_KEY, JSON.stringify(c));
-      } catch (e) { /* full or private */ }
-      const bins = hb.map(([t, mean, max]) => ({ t, dt: 3600000, mean, max })).concat(snApplBins(fine && fine[id], 300000));
+      {
+        // 1.0.0: read the blob again right before writing - the other appliances load in the
+        // same tick and each one wrote back the copy it read at the start (the last one won)
+        const c = SN_APPL_STORE.load();
+        const r1 = (v) => (typeof v === "number" ? Math.round(v * 10) / 10 : v);
+        c[id] = { from: from.getTime(), upto: fineFrom.getTime(), rows: hb.map(([t, mean, max]) => [t, r1(mean), r1(max)]) };
+        SN_APPL_STORE.save(c);
+      }
+      const got = snApplBins(fine && fine[id], 300000);
+      const fineAll = (fine0 || []).filter((b) => b.t < fineRead.getTime()).concat(got);
+      fineAll.sort((a, b) => a.t - b.t);
+      entry.fine = fineAll;
+      const bins = hb.map(([t, mean, max]) => ({ t, dt: 3600000, mean, max })).concat(fineAll);
       bins.sort((a, b) => a.t - b.t);
       const all = snApplCycles(bins, ap.threshold, ap.grace, ap.minDur);
       // the cycle still going: its last bin is in the last grace period
@@ -13272,14 +11773,7 @@ const snAppl = {
       all.forEach((c) => { if (durs.length >= 3 && c.end - c.start > 3 * med) c.anomalous = true; });
       Object.assign(entry, { bins, done: all, current: open, types: snApplTypes(all), coarse: all.some((c) => c.coarse),
         loading: false, error: null, fails: 0, at: Date.now() });
-    }).catch((e) => {
-      // a read that failed (a timeout while the phone wakes up): what was shown stays, read again soon
-      const fails = (entry.fails || 0) + 1;
-      if (entry.at && !entry.error) Object.assign(entry, { loading: false, fails, at: Date.now() - 600000 + SN_APPL_RETRY });
-      else Object.assign(entry, { loading: false, fails, error: (e && e.message) || String(e), at: Date.now() });
-      clearTimeout(entry.retryT);
-      entry.retryT = setTimeout(() => this.loadStats(hass, ap), Math.min(600000, SN_APPL_RETRY * 2 ** (fails - 1)));
-    }).finally(() => snApplFire());
+    }).catch((e) => snApplFail(entry, e, () => this.loadStats(hass, ap))).finally(() => { entry.inflight = false; snApplFire(); });
   },
 
   /**
@@ -13290,25 +11784,43 @@ const snAppl = {
     const id = ap.vacuum || ap.cycle;
     if (!id || !hass.callWS) return;
     const have = this.stats.get(id);
-    if (have && (have.loading || (!force && Date.now() - have.at < (have.error ? SN_APPL_RETRY : 600000)))) return;
-    if (have && force && !have.error && Date.now() - have.at < 60000) return;
-    const entry = have || { done: [], types: {}, runs: true, loading: true, at: 0 };
+    if (snApplGuard(have, force)) return;
+    const entry = have || { done: [], types: {}, loading: true, at: 0 };
     entry.loading = !have;
+    entry.inflight = true;
     this.stats.set(id, entry);
     const now = Date.now();
-    const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
-    const w0 = new Date(d0); w0.setDate(w0.getDate() - ((w0.getDay() + 6) % 7));
-    const y0 = new Date(d0); y0.setMonth(0, 1);
+    const { w0, y0 } = snApplPeriodStarts(now);
     const from = new Date(Math.min(y0.getTime(), w0.getTime()));
     const vs = ap.vstats || {};
     const totals = [vs.count, vs.time, vs.area].filter(Boolean);
-    const reads = [snWS(hass, { type: "history/history_during_period", start_time: new Date(now - SN_APPL_VAC_DAYS * 86400000).toISOString(),
-      end_time: new Date(now).toISOString(), entity_ids: [id, vs.last_area, vs.weight, vs.name].filter(Boolean), minimal_response: true,
+    const ids = [id, vs.last_area, vs.weight, vs.name].filter(Boolean);
+    const cut = now - SN_APPL_VAC_DAYS * 86400000;
+    // 1.0.0 (perf): the 30 days of history already read are kept - only from an hour before the last
+    // reading on; the whole window the first time, after an error or when the entities changed
+    const h0 = entry.hist && !entry.error && entry.histIds === ids.join(",") ? entry.hist : null;
+    const histRead = h0 ? Math.max(cut, entry.histAt - 3600000) : cut;
+    const reads = [snWS(hass, { type: "history/history_during_period", start_time: new Date(histRead).toISOString(),
+      end_time: new Date(now).toISOString(), entity_ids: ids, minimal_response: true,
       no_attributes: true, significant_changes_only: false }, SN_APPL_READ_MS),
     totals.length ? snWS(hass, { type: "recorder/statistics_during_period", start_time: from.toISOString(), end_time: new Date(now).toISOString(),
       statistic_ids: totals, period: "day", types: ["change"] }, SN_APPL_READ_MS) : Promise.resolve(null)];
     Promise.all(reads).then(([hist, stats]) => {
-      const pts = (k) => (k && hist && hist[k] || []).map((x) => ({ t: (x.lu != null ? x.lu : x.lc) * 1000, s: x.s })).filter((x) => Number.isFinite(x.t));
+      const merged = {};
+      for (const k of ids) {
+        const got = (hist && hist[k] || []).map((x) => ({ t: (x.lu != null ? x.lu : x.lc) * 1000, s: x.s })).filter((x) => Number.isFinite(x.t));
+        // the history read again replaces what was read from that time on; what fell out of the 30 days
+        // goes, its last state kept as the state at the start of the window (as a full reading has it)
+        let old = h0 ? (h0[k] || []).filter((x) => x.t < histRead) : [];
+        const before = old.filter((x) => x.t < cut);
+        old = old.filter((x) => x.t >= cut);
+        if (before.length && !(old.length && old[0].t === cut)) old.unshift({ t: cut, s: before[before.length - 1].s });
+        merged[k] = old.concat(got);
+      }
+      entry.hist = merged;
+      entry.histIds = ids.join(",");
+      entry.histAt = now;
+      const pts = (k) => (k && merged[k]) || [];
       const { done, current } = snApplRunCycles(pts(id), { area: pts(vs.last_area), weight: pts(vs.weight), name: pts(vs.name) },
         ap.vacuum ? SN_APPL_RUN_VAC : SN_APPL_RUN_DEV);
       const first = pts(id)[0];
@@ -13317,14 +11829,7 @@ const snAppl = {
       const tot = stats ? { count: rows(vs.count), time: rows(vs.time), area: rows(vs.area) } : null;
       Object.assign(entry, { done, current, types: snApplTypes(done.filter((c) => !c.failed)), totals: tot, histFrom: first ? first.t : now,
         loading: false, error: null, fails: 0, at: Date.now() });
-    }).catch((e) => {
-      // a read that failed (a timeout while the phone wakes up): what was shown stays, read again soon
-      const fails = (entry.fails || 0) + 1;
-      if (entry.at && !entry.error) Object.assign(entry, { loading: false, fails, at: Date.now() - 600000 + SN_APPL_RETRY });
-      else Object.assign(entry, { loading: false, fails, error: (e && e.message) || String(e), at: Date.now() });
-      clearTimeout(entry.retryT);
-      entry.retryT = setTimeout(() => this.loadStats(hass, ap), Math.min(600000, SN_APPL_RETRY * 2 ** (fails - 1)));
-    }).finally(() => snApplFire());
+    }).catch((e) => snApplFail(entry, e, () => this.loadStats(hass, ap))).finally(() => { entry.inflight = false; snApplFire(); });
   },
 };
 
@@ -13368,10 +11873,7 @@ function snApplRunCycles(pts, extra, runStates) {
 
 /** Today, week, month and year: runs, time, m² and filament - from the totals, else from the runs read. */
 function snApplRunPeriods(cy, now) {
-  const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
-  const w0 = new Date(d0); w0.setDate(w0.getDate() - ((w0.getDay() + 6) % 7));
-  const m0 = new Date(d0); m0.setDate(1);
-  const y0 = new Date(d0); y0.setMonth(0, 1);
+  const { d0, w0, m0, y0 } = snApplPeriodStarts(now);
   const t = cy.totals;
   const sum = (rows, f) => rows && rows.length ? rows.filter((r) => r.t >= f).reduce((x, r) => x + r.v, 0) : null;
   return [["today", d0], ["week", w0], ["month", m0], ["year", y0]].map(([key, from]) => {
@@ -13386,7 +11888,7 @@ function snApplRunPeriods(cy, now) {
     const ms = Math.max(h != null ? h * 3600000 : 0, mine.reduce((x, c) => x + (c.end - c.start), 0));
     if (area == null && whole && mine.some((c) => c.area != null)) area = mine.reduce((x, c) => x + (c.area || 0), 0);
     const weight = whole && mine.some((c) => c.weight != null) ? mine.reduce((x, c) => x + (c.weight || 0), 0) : null;
-    return { key, cycles: Math.round(n), ms, area, weight, failed: mine.filter((c) => c.failed).length, partial: n != null && !t && !whole };
+    return { key, cycles: Math.round(n), ms, area, weight, failed: mine.filter((c) => c.failed).length };
   });
 }
 
@@ -13423,18 +11925,33 @@ function snApplRowEntry(n, entries, names) {
 /** What a full document says: live (start/progress), clear (end of cycle), end, emptied, stuck. */
 function snApplClassify(doc, entryId) {
   const x = doc.extra_data || {};
-  const tag = String(x.mobile_push_notification_tag || "");
   const t = Date.parse(doc.created);
-  const m = /^appliance_([0-9a-z]+?)(_end)?$/i.exec(tag);
-  if (!m) {
+  const entry = snArchiveAppliance(doc);
+  if (!entry) {
     if (SN_APPL_STUCK.some((re) => re.test(String(doc.message || "")))) return { entry: entryId, t, kind: "stuck" };
     return { entry: entryId, t, kind: "other" };
   }
   const clear = !!x.mobile_push_clear_notification;
   let kind;
-  if (m[2]) kind = clear ? "emptied" : "end";
+  if (/_end$/i.test(x.mobile_push_notification_tag)) kind = clear ? "emptied" : "end";
   else kind = clear ? "clear" : x.live_update ? "live" : "other";
-  return { entry: m[1], t, kind };
+  return { entry, t, kind };
+}
+
+/**
+ * 1.0.0 (perf): `prev` and `next` are the HTML of a part of the appliances card. When they differ only in
+ * the text of the [data-pw] spans (the power, the plug, the battery: they change every few seconds) those
+ * spans get their new text and true is returned; otherwise nothing is touched and false (rebuild it all).
+ */
+const SN_APPL_PW_RE = /(<span [^>]*data-pw[^>]*>)([\s\S]*?)(<\/span>)/g;
+function snApplPwPatch(root, prev, next) {
+  const strip = (h) => h.replace(SN_APPL_PW_RE, "$1$3");
+  if (strip(prev) !== strip(next)) return false;
+  const texts = [...next.matchAll(SN_APPL_PW_RE)].map((m) => m[2]);
+  const els = root.querySelectorAll("[data-pw]");
+  if (els.length !== texts.length) return false;
+  els.forEach((el, i) => { if (el.innerHTML !== texts[i]) el.innerHTML = texts[i]; });
+  return true;
 }
 
 function snApplFire() {
@@ -13476,7 +11993,6 @@ function snApplCss(p) {
   .hbar { display: block; height: 8px; border-radius: 999px; background: ${p.soft}; overflow: hidden; margin: 8px 0 4px; }
   .hbar i { display: block; height: 100%; border-radius: 999px; transition: width .8s; }
   .htx .herr { color: ${p.crit}; font-weight: 700; font-size: 15px; }
-  .menu .mi[data-armed], .mi.armed { color: ${p.crit}; }
   .hwrap .pv-art { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
   .hwrap .pv-art ha-icon { --mdc-icon-size: 80px; color: ${p.brandD}; }
   .htx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -13599,11 +12115,6 @@ function snApplCss(p) {
   .chip { white-space: nowrap; flex: none; max-width: 100%; }
   .chip.ic { padding: 4px 8px; min-width: 34px; justify-content: center; }
   .chip.ic ha-icon { --mdc-icon-size: 18px; }
-  .psets { margin-top: 10px; border-top: 1px solid ${p.line}; padding-top: 8px; }
-  .psets summary { cursor: pointer; font-weight: 700; font-size: 13px; color: ${p.brandD}; list-style: none; padding: 4px 0; }
-  .psets summary::-webkit-details-marker { display: none; }
-  .psets summary::after { content: " ▾"; } .psets[open] summary::after { content: " ▴"; }
-  .psets .facts { margin-top: 8px; }
   .fv { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: left; cursor: pointer; }
   .fv:hover { color: ${p.brandD}; text-decoration: underline; }
   .facts .fv::after { content: "›"; color: ${p.muted}; margin-left: 6px; font-weight: 700; }
@@ -13623,8 +12134,6 @@ function snApplCss(p) {
   .days td:nth-child(4) { white-space: nowrap; }
   .dbar { display: inline-block; width: 46px; height: 6px; border-radius: 3px; background: ${p.soft}; margin-right: 8px; vertical-align: middle; overflow: hidden; }
   .dbar i { display: block; height: 100%; background: var(--primary-color, ${p.brand}); border-radius: 3px; }
-  .mini { font: inherit; font-size: 12.5px; font-weight: 700; border: 1.5px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
-    border-radius: 999px; padding: 2px 10px; min-height: 30px; margin-left: 6px; cursor: pointer; }
   .pht { flex: 1; display: flex; flex-direction: column; gap: 2px; } .pht b { font-size: 18px; }
   .x { border: 0; background: ${p.soft}; color: ${p.ink}; font-size: 18px; min-width: 44px; min-height: 44px; border-radius: 50%; cursor: pointer; }
   .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -13651,9 +12160,6 @@ function snApplCss(p) {
   .tb th { text-align: left; font-size: 11.5px; color: ${p.muted}; font-weight: 700; padding: 4px 6px; border-bottom: 1px solid ${p.line}; }
   .tb td { padding: 6px; border-bottom: 1px solid ${p.line}; } .tb tr.anom td { color: ${p.warn}; }
   .fine { font-size: 11.5px; color: ${p.muted}; margin-top: 6px; }
-  .pacts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-  .sb { font: inherit; font-size: 14px; font-weight: 700; border: 1.5px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
-    border-radius: 999px; padding: 0 16px; min-height: 44px; cursor: pointer; }
   @container (max-width: 520px) {
     .ap { gap: 10px; padding: 10px; }
     .art { flex-basis: 56px; min-height: 56px; align-self: flex-start; }
@@ -13712,12 +12218,11 @@ const SN_APPL_STRINGS = {
     last7: "Last 7 days", col_day: "Day", col_cycles: "Cycles", col_time: "Time", col_energy: "Energy",
     source_h: "Source", manual_src: "added by hand: running above {w}",
     tab_info: "Overview", tab_stats: "Energy and cycles", tab_cleans: "Cleanings", tab_prints: "Prints", last_run: "Last cycle",
-    avg_run: "Average", reminders_h: "Notifications", power_h: "Power now", plug: "Plug", plug_on: "on", plug_off: "off",
+    avg_run: "Average", reminders_h: "Notifications", plug: "Plug", plug_on: "on", plug_off: "off",
     error_h: "Error", open_device: "The device in Home Assistant",
     prints: "prints", print1: "print", per_print: "Each print this month", last_prints: "Last prints", no_print_month: "No print this month yet",
-    no_print: "No print yet", col_fil: "Filament", failed: "failed", per_run: "Each cycle this month", no_run: "No cycle yet",
+    no_print: "No print yet", col_fil: "Filament", failed: "failed", per_run: "Each cycle this month",
     dev_hist: "Each one comes from Home Assistant's history (last {n} days); the hours from the appliance's own counter when it has one.",
-    no_stats: "The power sensor has no statistics (it needs state_class: measurement).",
   },
   it: {
     title: "Elettrodomestici", loading: "lettura…", none: "Nessun elettrodomestico: aggiungine uno in Appliance Autonotify (Impostazioni → Dispositivi e servizi).",
@@ -13755,12 +12260,11 @@ const SN_APPL_STRINGS = {
     last7: "Ultimi 7 giorni", col_day: "Giorno", col_cycles: "Cicli", col_time: "Tempo", col_energy: "Consumo",
     source_h: "Origine", manual_src: "aggiunto a mano: in funzione sopra {w}",
     tab_info: "Panoramica", tab_stats: "Consumi e cicli", tab_cleans: "Pulizie", tab_prints: "Stampe", last_run: "Ultimo ciclo",
-    avg_run: "Media", reminders_h: "Notifiche", power_h: "Potenza ora", plug: "Presa", plug_on: "accesa", plug_off: "spenta",
+    avg_run: "Media", reminders_h: "Notifiche", plug: "Presa", plug_on: "accesa", plug_off: "spenta",
     error_h: "Errore", open_device: "Il dispositivo in Home Assistant",
     prints: "stampe", print1: "stampa", per_print: "Ogni stampa del mese", last_prints: "Ultime stampe", no_print_month: "Ancora nessuna stampa questo mese",
-    no_print: "Ancora nessuna stampa", col_fil: "Filamento", failed: "fallita", per_run: "Ogni ciclo del mese", no_run: "Ancora nessun ciclo",
+    no_print: "Ancora nessuna stampa", col_fil: "Filamento", failed: "fallita", per_run: "Ogni ciclo del mese",
     dev_hist: "Ognuna viene dalla cronologia di Home Assistant (ultimi {n} giorni); le ore dal contatore dell'elettrodomestico, quando ce l'ha.",
-    no_stats: "Il sensore di potenza non ha statistiche (serve state_class: measurement).",
   },
 };
 
@@ -13777,13 +12281,26 @@ window.customCards.push({
   description: "The appliances Appliance Autonotify watches: running, finished or stuck first, with the Finished / Remind / Switch off buttons of its notifications, and a details panel with energy and cycles.",
 });
 
-const SN_I18N_EXTRA = {"de":{"SN_STRINGS":{"presence":"Anwesenheit","time_band":"Zeitfenster","quiet":"Ruhe","act_scen":"Aktive Szenarien","on":"an","off":"aus","active":"aktiv","dnd":"Nicht stören","tap_silence":"tippen zum Stummschalten","snooze":"Pause","min":"Min.","pause_nc":"Nicht-Kritisches pausieren","snoozed":"Pausiert","until":"bis","tap_clear":"tippen zum Aufheben","announce":"Durchsage","intercom":"Gegensprechen","announce_ph":"Auf allen Lautsprechern durchsagen…","send":"Senden","announced":"Durchgesagt","cleared":"Pausen aufgehoben","snoozed_for":"Nicht-kritische Benachrichtigungen pausiert für","sent":"Gesendet","sent_today":"Heute gesendet","since_startup":"seit dem Start","yesterday":"gestern","failures":"Fehler","fail_today":"fehlgeschlagene Kanal-Sendungen heute","deliveries":"Kanäle","enabled_total":"aktiv/gesamt","last_notif":"Letzte Benachrichtigung","transports":"Transporte","delivered":"zugestellt","failed":"fehlgeschlagen","channels":"Kanäle","none":"keine","no_transports":"keine Transport-Entitäten gefunden","tr_used":"genutzt von","tr_unused":"kein Kanal nutzt ihn","start":"Start","volume":"Lautstärke","now":"jetzt","crosses":"über Mitternacht","no_voice":"keine Sprache","mute_hint":"Ein Zeitfenster mit <b>0%</b> sendet <b>keine Sprachdurchsage</b> (Alexa und TTS aus, Push und Dashboard werden trotzdem zugestellt). Kritische und hohe Priorität werden immer gesprochen.","enabled":"aktiv","implicit":"immer an","explicit":"auf Anfrage","by_scenario":"nur per Szenario","fallback":"Reserve","fallback_err":"Reserve bei Fehler","inc_sum":"dieser Kanäle","inc_always":"starten von selbst","inc_req":"nur wenn angefordert","inc_scen":"nur mit einem Szenario","grp_auto":"Starten von selbst","grp_named":"Nur wenn im Aufruf genannt","grp_scen":"Nur mit einem Szenario","grp_fallback":"Reserve, wenn die anderen scheitern","ch_title":"Kanäle","ch_count":"{on} von {tot} an","off_manual":"ausgeschaltet","paused_by":"gerade pausiert durch","on_by":"gerade an durch","fixed_targets":"feste Ziele","no_deliveries":"keine Zustellungs-Entitäten gefunden","home":"zu Hause","away":"unterwegs","devices":"Geräte","devices_1":"Gerät","rc_test":"Test senden","rc_test_confirm":"Zum Senden erneut tippen","rc_test_sent":"Test gesendet","rc_test_title":"SuperNotify-Test","rc_test_msg":"Testnachricht vom Dashboard,","overrides":"Zustellungs-Übersteuerungen","overrides_1":"Zustellungs-Übersteuerung","no_contact":"keine Kontaktpunkte","no_recipients":"keine Empfänger-Entitäten gefunden","details":"Details","h_update":"Update verfügbar:","h_restart":"Home Assistant neu starten, um das Update abzuschließen","h_uptodate":"aktuell","h_transport_err":"Transporte mit Fehlern","h_channels_off":"Kanäle aus","h_all_good":"Alles in Ordnung","h_health":"Zustand","h_failures":"Fehler","h_failures_1":"Fehler","h_transport_err_1":"Transport mit Fehlern","h_channels_off_1":"Kanal aus","channels_1":"Kanal","band_early_morning":"Früher Morgen","band_morning":"Morgen","band_afternoon":"Nachmittag","band_evening":"Abend","band_night":"Nacht","band_late_night":"Späte Nacht","h_look_1":"1 Sache zum Ansehen","h_look_n":"{n} Sachen zum Ansehen","h_rest_ok":"alles andere funktioniert","h_ch_on":"{on} von {tot} Kanälen an","h_open":"Öffnen","ln_delivered":"zugestellt","ln_failed":"fehlgeschlagen","ln_why":"Warum","tgt_loading":"Auswahl wird geladen…","bands_empty_t":"Noch keine Zeitfenster","bands_empty":"Füge ein Zeitfenster pro Tagesabschnitt hinzu: ein input_datetime für den Beginn und ein input_number für die Sprachlautstärke.","active_now":"gerade aktiv","disabled":"deaktiviert","other":"Sonstige","manual":"manuell","apply_now":"jetzt anwenden","applied":"Angewendet","apply_off":"tippen, um es nicht mehr anzuwenden","enabled_lbl":"aktiviert","reset_overrides":"Übersteuerungen zurücksetzen","reset_done":"Übersteuerungen zurückgesetzt","transport_off":"Transport aus","last_notified":"zuletzt benachrichtigt","never_notified":"nie benachrichtigt","media":"Medien","no_scenarios":"keine Szenario-Entitäten gefunden","sim_pick":"🎬 Szenarien — zum Simulieren tippen","sim_fire":"📤 Kanäle","sim_hint":"Echte Daten der Engine (enquire-Dienste). Die Filterung nach Priorität passiert in der Engine und wird hier nicht simuliert. Deaktiviert gewinnt gegen aktiviert, wie beim Zusammenführen zur Laufzeit.","sim_none":"keine Zustellung würde ausgelöst","scenario_tag":"Szenario","sim_go":"Würde gesendet","sim_stop":"Würde nicht gesendet","sim_r_default":"startet von selbst","sim_r_on":"eingeschaltet durch","sim_r_off":"ausgeschaltet durch","sim_r_named":"nur wenn im Aufruf genannt","sim_r_scen":"nur mit einem Szenario, das ihn einschaltet","sim_r_fallback":"Reserve, wenn die anderen scheitern","sim_r_switched":"ausgeschaltet","title":"Titel","message":"Nachricht","priority":"Priorität","channels_lbl":"Kanäle — keiner gewählt = normales Routing","camera_lbl":"Kamera-Schnappschuss","preview":"Vorschau","no_title":"(kein Titel)","no_message":"(keine Nachricht)","default_prio":"Standard (mittel)","comp_hint":"Gewählte Kanäle werden mit delivery_selection: fixed gesendet (nur diese lösen aus). Kritisch ist wirklich kritisch — Sirenen inklusive.","critical_confirm":"Eine KRITISCHE Benachrichtigung senden? Sirenen und maximale Lautstärke inklusive.","write_first":"Schreib zuerst eine Nachricht","sent_toast":"Gesendet","write_or_pick":"Schreib eine Nachricht oder wähle eine Kamera oder einen Kanal","need_2111":"Eine Benachrichtigung ohne Text braucht SuperNotify 2.11.1","send_err":"Nicht gesendet","dry_btn":"Testen ohne Senden","dry_title":"Wenn du es jetzt sendest","dry_err":"Testlauf fehlgeschlagen","dry_would":"würde senden","dry_skip":"übersprungen","dry_nobody":"kein Empfänger, nur direkte Ziele","dry_targets":"Ziele","dry_suppressed":"Die Benachrichtigung würde unterdrückt","dry_fallback":"Kein Kanal würde auslösen: Fallback auf","dry_none":"Kein Kanal ausgewählt","dry_scen":"Aktive Szenarien","dry_raw":"Rohe Antwort","dry_prio":"Priorität","dry_would_n":"Kanäle würden senden","dry_nothing":"Es würde nichts gesendet","dry_dupe":"Duplikat einer kürzlichen Benachrichtigung: sie würde verworfen","dry_no_dupe":"Duplikatprüfung nicht simuliert, damit das echte Senden direkt danach nicht blockiert wird.","dry_restart":"Das laufende SuperNotify kann nicht simulieren: Der Testlauf braucht 2.12, und Home Assistant muss nach dem Update neu gestartet werden.","dry_home":"Zu Hause","dry_empty":"SuperNotify hat nicht geantwortet: ist es 2.12 oder neuer?","dry_reasons":{"NO_TARGET":"kein nutzbares Ziel","DUPE":"Duplikat","PRIORITY":"nicht für diese Priorität","SNOOZED":"pausiert","DELIVERY_CONDITION":"Zustellungsbedingung falsch","OCCUPANCY":"Anwesenheitsregel","TRANSPORT_DISABLED":"Transport aus","DELIVERY_DISABLED":"ausgeschaltet","NO_SCENARIO":"erforderliches Szenario nicht aktiv","NO_ACTION":"keine Aktion","INVALID_ACTION_DATA":"ungültige Daten","UNKNOWN":"unbekannter Grund","ERROR":"Fehler"},"prio_minimum":"Minimal","prio_low":"Niedrig","prio_medium":"Mittel","prio_high":"Hoch","prio_critical":"Kritisch","target_lbl":"Ziel — Personen, Geräte, Bereiche, Etagen, Labels","custom_target_lbl":"Eigene Ziele (E-Mail, Telegram-IDs, …) — durch Komma getrennt","adv_title":"Erweiterte Optionen","adv_spoken":"Gesprochene Nachricht (Alexa, TTS)","adv_spoken_ph":"was die Lautsprecher sagen, falls anders als der Text","adv_apply":"Diese Szenarien anwenden","adv_require":"Nur senden, wenn diese Szenarien aktiv sind","adv_constrain":"Nur diese Szenarien berücksichtigen","adv_snapshot":"Bild von einer URL","adv_debug":"Debug: vollständige Auswahl-Ablaufverfolgung aufzeichnen (in der Warum-Karte angezeigt)","custom_target_ph":"z. B. user@example.com, 123456789","native_target_tag":"🎯 nativer Bereich/Etage/Label","target_warn":"⚠️ Bereiche, Etagen und Labels werden nur von notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts und chime aufgelöst. Mit jedem anderen Kanal — oder dem Standard-Routing, wenn oben kein Kanal gewählt ist — kann die Benachrichtigung unbemerkt ohne Ziel bleiben. Wähle einen kompatiblen Kanal oder füge direkt eine Person bzw. ein Gerät hinzu.","aut_search":"Automationen suchen…","aut_all":"Alle","aut_none":"Keine Treffer","aut_err":"Manifest nicht gefunden — erzeuge es mit tools/genera_vista_automazioni.py","aut_updated":"Liste aktualisiert","aut_count":"Automationen","aut_count_1":"Automation","never":"nie","ago_now":"jetzt","ago_min":"Min. her","ago_h":"Std. her","ago_d":"T. her","aut_disabled_only":"Nur deaktivierte","grp_active":"aktiv","repeat":"Wiederholen","skipped_n":"übersprungen","left":"übrig","missed_n":"verpasst","snz_all":"alles","snz_nc":"nicht kritisch","snz_prio":"Priorität","snz_transport":"Transport","snz_for":"für","snz_choose":"wähle was und wie lange","snz_title":"Benachrichtigungen pausieren","snz_what":"Was","snz_nc_l":"Nicht kritisch","snz_all_l":"Alles","snz_ch":"Ein Kanal","snz_pr":"Eine Priorität","snz_who":"Für wen","snz_everyone":"Alle","snz_me":"Nur ich","snz_len":"Wie lange","snz_forever":"Bis ich fortsetze","snz_go":"Pausieren","snz_close":"Schließen","rs_hand":"von Hand","rs_voice":"per Sprache","rs_assist":"vom Assistenten","snz_voice_info":"Deine Pausen laufen über die Sprachbefehle von SuperNotify: sie gelten nur für dich.","snz_voice_off":"Die Sprachbefehle von SuperNotify sind aus: schalte sie in den Integrationsoptionen ein.","snz_resume_mine":"Meine fortsetzen","go_open":"Anzeigen","dl_probe":"Diesen Kanal testen","probe_msg":"Kanaltest vom Dashboard","sc_why":"Warum","sc_yes":"Gilt jetzt","sc_no":"Gilt jetzt nicht","sc_manual_why":"Manuelles Szenario: von Hand angewendet","sc_no_cond":"Keine Bedingungen","sc_off_sw":"Ausgeschaltet","sc_not_eval":"nicht geprüft","sc_now":"jetzt","sc_diff_btn_on":"Was sich ändert, wenn es gilt","sc_diff_btn_off":"Was sich ohne es ändert","sc_diff_on":"Wenn es gälte, für eine mittlere Benachrichtigung jetzt:","sc_diff_off":"Ohne es, für eine mittlere Benachrichtigung jetzt:","sc_diff_add":"würde zusätzlich senden","sc_diff_rem":"würde nicht mehr senden","sc_diff_none":"kein Unterschied","c_state":"{e} ist {s}","c_template":"Template-Bedingung","c_time":"Zeit","c_after":"nach","c_before":"vor","c_numeric":"{e}","c_above":"über","c_below":"unter","c_and":"alle davon","c_or":"mindestens eine davon","c_not":"keine davon","c_or_join":" oder ","sim_hint_dry":"Die Antwort von SuperNotify selbst (Testlauf, nichts wird gesendet): eine Benachrichtigung jetzt, mit der Priorität und nur den oben gewählten Szenarien.","sim_msg":"Simulator-Test","sim_prio":"Priorität","sa_snooze":"{what} pausiert für {len}.","sa_silence":"{what} bis auf Weiteres stummgeschaltet.","sa_resume":"{what} wieder an.","sa_resume_one":"Pause beendet: {x}.","sa_resume_all":"Benachrichtigungen wieder an.","sa_w_nc":"Nicht-kritische Benachrichtigungen","sa_w_all":"Alle Benachrichtigungen","sa_w_ch":"Kanal {x}","sa_w_pr":"Benachrichtigungen mit Priorität {x}","sa_w_mine":"Deine Benachrichtigungen","sa_for":"für {x}","sa_min":"{n} Minuten","sa_hour":"eine Stunde","sa_hours":"{n} Stunden","occ_title":"Wer ist zu Hause","occ_home_l":"Zu Hause","occ_ALL_HOME":"Alle zu Hause","occ_ALL_AWAY":"Alle unterwegs","occ_LONE_HOME":"Nur eine Person zu Hause","occ_MULTI_HOME":"Einige zu Hause","occ_UNDEFINED_OCCUPANTS":"Niemand erfasst","h_repairs":"SuperNotify-Reparaturen","h_repairs_1":"SuperNotify-Reparatur","det_more":"Alle Attribute","det_yes":"ja","det_no":"nein","det_action":"Aktion","det_target":"Feste Ziele","det_target_req":"Braucht ein Ziel","det_target_use":"Ziele nutzen","det_inclusion":"Verwendet, wenn","det_prio":"Prioritäten","det_occ":"Wer zu Hause sein muss","det_transport":"Transport","det_data":"Daten","det_debug":"Debug","det_err_last":"Letzter Fehler","det_err_in":"In","det_err_n":"Fehler seit Start","det_select":"Auswahl","adv_html":"Text für E-Mail (HTML)","adv_clip":"Videoclip von einer URL","adv_actions":"Schaltflächen in der Benachrichtigung","adv_act_id":"Aktions-ID","adv_act_title":"Schaltflächentext","adv_act_add":"+ Schaltfläche","adv_groups":"Schaltflächengruppen (Komma)","adv_dc":"Kanaleinstellungen für diese Benachrichtigung","adv_dc_ph":"schlüssel: wert, einer pro Zeile","adv_dc_add":"+ Kanal","snz_active":"Gerade pausiert","snz_resume":"Fortsetzen","snz_resume_all":"Alles fortsetzen","snz_until_resumed":"bis zur Fortsetzung","snz_done":"Pausiert","snz_resumed":"Fortgesetzt","no_notif":"noch keine Benachrichtigung","st_title":"Nutzung","st_days":"Tage","st_days_short":"T","st_hist_note":"Uhrzeiten, Kanäle und Prioritäten der letzten {n} Tage im Verlauf","st_total":"Benachrichtigungen","st_avg":"pro Tag","st_today":"Heute","st_vs_avg":"ggü. Durchschnitt","st_peak_hour":"Spitzenstunde","st_top_channel":"Top-Kanal","st_errors":"Kanalfehler","st_of_sends":"der Kanal-Sendungen","st_daily":"Pro Tag","st_hourly":"Nach Tageszeit","st_weekday":"Nach Wochentag","st_channels":"Kanäle — meistgenutzt","st_priority":"Priorität","st_period":"Tagesabschnitt","st_insights":"Erkenntnisse","st_no_data":"Noch kein Verlauf — Daten erscheinen nach den ersten Benachrichtigungen.","st_unknown":"unbekannt","st_loading":"wird geladen…","st_versions":"Versionen","st_installed":"installiert","st_latest":"neueste","st_uptodate":"aktuell","st_update":"Update verfügbar","st_restart":"Neustart erforderlich","st_cards":"Karten","st_logged":"erfasst","st_reading":"Archiv wird gelesen: Tag {n} von {of}…","st_from_archive":"aus dem SuperNotify-Archiv","st_archive_err":"Archiv teilweise gelesen","st_wd":["Mo","Di","Mi","Do","Fr","Sa","So"],"st_i_share":"{p}% aller Kanal-Sendungen laufen über {c}.","st_i_peak":"Die meisten Benachrichtigungen kommen um {h}:00 ({n} in {d} Tagen).","st_i_night":"{p}% der Benachrichtigungen kommen zwischen 23:00 und 07:00 — erwäge ein Nicht-stören-Szenario, falls das unerwünscht ist.","st_i_night_ok":"Nur {p}% der Benachrichtigungen kommen nachts (23–07): die Ruhezeiten funktionieren.","st_i_weekend":"Am Wochenende gibt es {p}% {dir} Benachrichtigungen als an Werktagen.","st_i_errors":"{n} Kanalfehler in {d} Tagen, vor allem bei {c}.","st_i_noerr":"Keine Kanalfehler in den letzten {d} Tagen.","st_i_prio":"{p}% der Benachrichtigungen haben Priorität {prio}.","st_i_trend":"Letzte 7 Tage: {n}/Tag, {dir} {p}% ggü. den 7 davor.","st_more":"mehr","st_less":"weniger","st_up":"plus","st_down":"minus"},"SN_STATS_STRINGS":{"st_title":"Nutzung","st_days":"Tage","st_days_short":"T","st_hist_note":"Uhrzeiten, Kanäle und Prioritäten der letzten {n} Tage im Verlauf","st_total":"Benachrichtigungen","st_avg":"pro Tag","st_today":"Heute","st_vs_avg":"ggü. Durchschnitt","st_peak_hour":"Spitzenstunde","st_top_channel":"Top-Kanal","st_errors":"Kanalfehler","st_of_sends":"der Kanal-Sendungen","st_daily":"Pro Tag","st_hourly":"Nach Tageszeit","st_weekday":"Nach Wochentag","st_channels":"Kanäle — meistgenutzt","st_priority":"Priorität","st_period":"Tagesabschnitt","st_insights":"Erkenntnisse","st_no_data":"Noch kein Verlauf — Daten erscheinen nach den ersten Benachrichtigungen.","st_unknown":"unbekannt","st_loading":"wird geladen…","st_versions":"Versionen","st_installed":"installiert","st_latest":"neueste","st_uptodate":"aktuell","st_update":"Update verfügbar","st_restart":"Neustart erforderlich","st_cards":"Karten","st_logged":"erfasst","st_reading":"Archiv wird gelesen: Tag {n} von {of}…","st_from_archive":"aus dem SuperNotify-Archiv","st_archive_err":"Archiv teilweise gelesen","st_wd":["Mo","Di","Mi","Do","Fr","Sa","So"],"st_i_share":"{p}% aller Kanal-Sendungen laufen über {c}.","st_i_peak":"Die meisten Benachrichtigungen kommen um {h}:00 ({n} in {d} Tagen).","st_i_night":"{p}% der Benachrichtigungen kommen zwischen 23:00 und 07:00 — erwäge ein Nicht-stören-Szenario, falls das unerwünscht ist.","st_i_night_ok":"Nur {p}% der Benachrichtigungen kommen nachts (23–07): die Ruhezeiten funktionieren.","st_i_weekend":"Am Wochenende gibt es {p}% {dir} Benachrichtigungen als an Werktagen.","st_i_errors":"{n} Kanalfehler in {d} Tagen, vor allem bei {c}.","st_i_noerr":"Keine Kanalfehler in den letzten {d} Tagen.","st_i_prio":"{p}% der Benachrichtigungen haben Priorität {prio}.","st_i_trend":"Letzte 7 Tage: {n}/Tag, {dir} {p}% ggü. den 7 davor.","st_more":"mehr","st_less":"weniger","st_up":"plus","st_down":"minus"},"SN_ARCH_STRINGS":{"title":"Benachrichtigungsverlauf","search":"Titel oder Nachricht suchen…","f_all":"Alle","f_problems":"Nur Probleme","f_today":"Heute","f_whisper":"Geflüstert","wh":"geflüstert","said":"Alexa sagte","said_by":"{ch} sagte","none":"keine passende Benachrichtigung","no_sensor":"Sensor nicht gefunden","no_sensor_hint":"Aktualisiere SuperNotify auf 2.10 oder neuer, das die Aktion supernotify.enquire_archive hat, oder füge den command_line-Sensor hinzu, der das Archiv indiziert (siehe README).","loading":"Archiv wird gelesen…","recent":"neueste Benachrichtigungen","read_at":"gelesen um","of":"von","in_archive":"im Archiv","since":"älteste","updated":"Index aktualisiert","today":"Heute","yesterday":"Gestern","delivered":"zugestellt","failed":"fehlgeschlagen","skipped":"übersprungen","missed":"verpasst","prio":{"critical":"Kritisch","high":"Hoch","low":"Niedrig","minimum":"Minimal","medium":"Mittel"},"reasons":{"doppione":"Duplikat","nessun target":"kein Ziel","errore":"Fehler","condizione":"Bedingung","scenario":"Szenario","presenza":"Anwesenheit","priorita":"Priorität","spento":"aus","pausa":"pausiert","transport spento":"Transport aus","nessuna azione":"keine Aktion","dati non validi":"ungültige Daten","sconosciuto":"unbekannt"},"scenarios":"Aktive Szenarien","truncated":"Nachricht im Index gekürzt","dur":"Dauer","id":"ID","why":"Warum? - alle Details","f_appliance":"Haushaltsgeräte","ap_scope":"unter den letzten {n} vollständig gelesenen – ältere werden nicht erkannt"},"SN_WHY_STRINGS":{"title":"Warum?","pick":"Wähle eine Benachrichtigung, um zu sehen, warum sie dorthin ging, wo sie hinging.","loading":"wird geladen…","none":"keine Benachrichtigung","no_sensor":"Sensor nicht gefunden:","no_service":"Dienst fehlt","no_service_hint":"Aktualisiere SuperNotify auf 2.10 oder neuer (supernotify.enquire_archive) oder füge den shell_command sn_archive_detail hinzu (siehe README) und starte Home Assistant neu.","gone":"diese Benachrichtigung ist nicht mehr im Archiv","priority":"Priorität","outcome":"Ergebnis","dupe":"Duplikat","outcomes":{"success":"zugestellt","partial_delivery":"teilweise zugestellt","dupe":"Duplikat","failed":"fehlgeschlagen","error":"fehlgeschlagen","fallback_delivery":"über den Fallback-Kanal zugestellt","no_delivery":"nicht zugestellt"},"missed":"verpasst (angefordert, nicht gesendet)","step_call":"Aufruf","step_scen":"Szenarien","step_people":"Personen","step_ch":"Kanäle","call_auto":"kein Kanal genannt: normales Routing","call_named":"im Aufruf genannt:","call_debug":"mit Debug","nobody":"niemand zu Hause","ch_sent":"gesendet","ch_problems":"zum Ansehen","ch_skipped":"übersprungen","pb_failed":"fehlgeschlagen","pb_missed":"angefordert, aber nicht gesendet","grp_skipped":"per Regel übersprungen: normal","grp_not":"nicht beteiligt","trace_title":"Vollständige Auswahl-Ablaufverfolgung","fix":{"NO_TARGET":"Kein Empfänger hat eine Adresse für diesen Kanal: füge einem Empfänger eine hinzu, gib dem Kanal feste Ziele oder lass ihn bei diesem Aufruf weg.","ERROR":"Die Integration hinter diesem Kanal hat mit einem Fehler geantwortet: sieh in ihrem eigenen Logeintrag nach.","NO_ACTION":"Der Kanal hat keine Aktion zum Aufrufen: setze `action:` in der Zustellung.","INVALID_ACTION_DATA":"Die an die Aktion übergebenen Daten wurden abgelehnt: prüfe `data:` im Aufruf oder in der Zustellung."},"scenarios":"Aktive Szenarien","no_scenarios":"kein Szenario aktiv","applied":"vom Aufruf erzwungen","required":"vom Aufruf verlangt","constrain":"vom Aufruf beschränkt auf","presence":"Anwesenheit","home":"zu Hause","away":"unterwegs","channels":"Kanäle","no_channels":"kein Kanal wurde ausgewählt","st_ok":"zugestellt","st_err":"fehlgeschlagen","st_skip":"übersprungen","st_supp":"unterdrückt","calls":"Aufrufe","calls_1":"Aufruf","target_required":"Ziel erforderlich:","started_by":"ausgewählt durch","scen_would_off":"ausgeschaltet durch (überstimmt)","src_default":"immer an (Standard)","src_scen":"Szenario","src_call":"den Aufruf selbst","src_recipient":"Empfänger","r_off_by":"ausgeschaltet durch","call_targets":"Ziele im Aufruf","cats":{"entity_id":"Entitäten","mobile_app_id":"Geräte","person_id":"Personen","email":"E-Mail","phone":"Telefon","device_id":"Geräte"},"not_started":"Kanäle, die nicht gestartet sind","r_call_off":"vom Aufruf ausgeschlossen","r_scen_off":"von einem aktiven Szenario ausgeschaltet","r_disabled":"ausgeschaltet","r_transport_off":"sein Transport ist aus","r_only_scen":"startet nur, wenn ein Szenario ihn einschaltet","r_only_fallback":"nur ein Fallback","r_only_explicit":"startet nur, wenn namentlich angefordert","r_priority":"nicht für diese Priorität","r_unknown":"ohne Ablaufverfolgung nicht rekonstruierbar","from_config":"Gründe für nicht gestartete Kanäle werden aus der Konfiguration rekonstruiert, wie sie JETZT ist, nicht wie sie damals war.","from_trace":"Die Gründe stammen aus der Auswahl-Ablaufverfolgung, die mit der Benachrichtigung archiviert wurde.","st_time":"Dauer","st_slow":"langsamster","st_rate":"der Kanäle erfolgreich","ua_title":"Ziele, die kein Kanal übernommen hat","ua_hint":"Sie waren im Aufruf, aber kein ausgewählter Kanal akzeptiert diese Art von Ziel.","un_title":"Namen, die nicht existieren","sent_by":"Gesendet von","sent_auto":"Automation","sent_script":"Skript","sent_person":"","sent_unknown":"Absender unbekannt (keine Automation oder Person im Kontext)","trace":"Auswahl-Ablaufverfolgung","no_trace":"Die vollständige Auswahl-Ablaufverfolgung wird nur aufgezeichnet, wenn der notify-Aufruf debug: true hat, und archiviert, wenn die Archiv-Diagnose sie einschließt.","reasons":{"NO_TARGET":"kein nutzbares Ziel","DUPE":"Duplikat einer kürzlichen Benachrichtigung","PRIORITY":"nicht für diese Priorität","SNOOZE":"pausiert","SNOOZED":"pausiert","DELIVERY_CONDITION":"Zustellungsbedingung falsch","OCCUPANCY":"Anwesenheitsregel","ERROR":"Fehler","DELIVERY_DISABLED":"ausgeschaltet","SCENARIO":"Szenario","TRANSPORT_DISABLED":"sein Transport ist aus","NO_SCENARIO":"ein erforderliches Szenario ist nicht aktiv","NO_ACTION":"keine Aktion zum Aufrufen","INVALID_ACTION_DATA":"ungültige Aktionsdaten","UNKNOWN":"unbekannter Grund"}},"SN_TOOLS_STRINGS":{"maint":"Wartung","enq":"SuperNotify fragen","refresh":"Alle Entitäten neu veröffentlichen","refresh_btn":"Aktualisieren","resume_btn":"Fortsetzen","refreshed":"Entitäten neu veröffentlicht.","resume_all":"Alle Pausen fortsetzen","cleared_n":"Pausen fortgesetzt","purge_arch":"Archiv bereinigen","purge_media":"Bilder bereinigen","older":"älter als","days":"Tage","purge_btn":"Bereinigen","confirm":"Zum Bestätigen erneut tippen","purged":"gelöscht","remaining":"übrig","reset":"Manuelle Änderungen rückgängig machen","reset_btn":"Zurücksetzen","reset_none":"Nichts zurückzusetzen: alles ist wie konfiguriert.","reset_done":"Zurück zur Konfiguration:","k_all":"alles","k_scenario":"Szenarien","k_delivery":"Kanäle","k_recipient":"Personen","k_transport":"Transporte","q_config":"Konfiguration","q_scen":"Szenarien","q_active":"Aktive Szenarien","q_by_scen":"Kanäle nach Szenario","q_implicit":"Standardkanäle","q_recipients":"Empfänger","q_occupancy":"Wer ist zu Hause","q_snoozes":"Pausen","q_last":"Letzte Benachrichtigung","copy":"JSON kopieren","copied":"Kopiert","close":"Schließen","empty":"(leer)","err":"SuperNotify hat mit einem Fehler geantwortet:","err_config":"SuperNotify 2.12.0 kann seine Konfiguration nicht zurückgeben, wenn ein Kanal Template-Bedingungen hat (rhizomatics/supernotify#241).","settings":"Integrationseinstellungen","running":"läuft…","more":"mehr"},"SN_FORM_LABELS":{"_common":"Aussehen und Text","style":"Farben","icons":"Symbole","show_version":"Kartenversion anzeigen","intro":"Einleitungstext oben","title":"Titel","dnd_entity":"Nicht-stören-Schalter","quiet_entity":"Berechneter Ruhezustand (optional)","presence_entity":"Person für die Statusleiste","archive_days":"Archivbereinigung: älter als (Tage)","media_days":"Bilderbereinigung: älter als (Tage)","occupancy":"Wer ist zu Hause (von SuperNotify)","repairs":"SuperNotify-Reparaturen in der Zustandsliste","snooze_announce":"Pausen laut ansagen (Durchsage-Kanal)","snooze_via":"Pausen laufen über","o_event":"das Push-Schaltflächen-Ereignis (Admin)","o_voice":"die Sprachbefehle","snooze_minutes":"Pausendauer (Minuten)","snooze_panel":"Pause-Kachel öffnet das Pausen-Panel","announce_delivery":"Kanal für Durchsagen","last_notification":"Letzte Benachrichtigung anzeigen","last_channels":"Ein Chip pro Kanal der letzten Benachrichtigung","repeat_entity":"Schaltfläche „Letzte wiederholen“ (optional)","tile_layout":"Kacheln","tile_columns":"Kachelspalten (leer = automatisch)","update_entity":"SuperNotify-Update-Entität","cards_update_entity":"Karten-Update-Entität","sent_today_entity":"Tageszähler (Verbrauchszähler, optional)","count_entity":"SuperNotify-Zähler (Langzeitstatistik)","health":"Zustand oben","stats":"Zahlen","poll_seconds":"Aktualisieren alle (Sekunden)","group":"Nach Startart der Kanäle gruppieren","hide_defaults":"Automatische DEFAULT_-Kanäle ausblenden","limit":"Benachrichtigungen in der Liste","expand":"Eingeklappte Teile öffnen","max_height":"Maximale Höhe (CSS, z. B. 70vh)","source":"Archivquelle","entity":"Archivsensor (nur Bridge)","trigger_entity":"Aktualisieren, wenn sich dies ändert","dry_run":"„Testen ohne Senden“ anzeigen","dry_run_dupe_check":"Auch die Duplikatprüfung simulieren","days":"Standardmäßig angezeigte Tage","manifest_url":"URL des Automationen-Manifests","o_supernotify":"SuperNotify","o_theme":"Home Assistant-Design","o_mdi":"Home Assistant-Symbole","o_emoji":"Emoji","o_row":"Symbol links","o_stacked":"Hoch, Symbol oben","o_three":"Gesendet, Fehler, Kanäle","o_full":"Alle fünf","o_auto":"Automatisch","o_sensor":"Sensor-Bridge (vor SuperNotify 2.10)","o_archive":"SuperNotify-Archiv (2.12.1+)","o_history":"Verlauf der Helfer"},"SN_NATIVE_STR":{"all_good":"Alles in Ordnung","paused":"Pausiert","until":"bis","resume":"Fortsetzen","test":"Test senden","sure":"Zum Senden erneut tippen","sent":"Gesendet","last":"Zuletzt","none":"Noch keine Benachrichtigung","ago":"her","min":"Min.","h":"Std.","err":"Transporte mit Fehlern","off":"Kanäle aus"},"SN_STRATEGY_TITLES":{"home":"Start","archive":"Archiv","send":"Senden","setup":"Einrichtung","stats":"Statistik","tools":"Werkzeuge","title":"SuperNotify","appliances":"Haushaltsgeräte"},"SN_APPL_STRINGS":{"title":"Haushaltsgeräte","loading":"wird gelesen…","none":"Keine Geräte: richte eines in Appliance Autonotify ein (Einstellungen → Geräte & Dienste).","st_run":"Läuft","st_cleaning":"Reinigt","st_done":"Fertig · ausräumen","st_done_other":"Fertig","st_err":"Braucht Hilfe","m_switch_on":"Steckdose einschalten","done_switch_on":"Steckdose eingeschaltet.","done_action":"Erledigt: {n}.","confirm_action":"«{n}» ausführen?","open_entity":"Zum Ändern öffnen","chip_notifs":"Benachrichtigungen","chip_device":"Gerät","not_found":"Kein Gerät mit dem Namen «{n}».","last7":"Letzte 7 Tage","col_day":"Tag","col_cycles":"Zyklen","col_time":"Zeit","col_energy":"Verbrauch","source_h":"Quelle","manual_src":"von Hand hinzugefügt: läuft über {w}","tab_info":"Übersicht","tab_stats":"Verbrauch und Zyklen","tab_cleans":"Reinigungen","tab_prints":"Drucke","last_run":"Letzter Zyklus","avg_run":"Durchschnitt","reminders_h":"Benachrichtigungen","power_h":"Leistung jetzt","plug":"Steckdose","plug_on":"an","plug_off":"aus","error_h":"Fehler","open_device":"Das Gerät in Home Assistant","prints":"Drucke","print1":"Druck","per_print":"Jeder Druck in diesem Monat","last_prints":"Letzte Drucke","no_print_month":"Noch kein Druck in diesem Monat","no_print":"Noch kein Druck","col_fil":"Filament","failed":"fehlgeschlagen","per_run":"Jeder Zyklus in diesem Monat","no_run":"Noch kein Zyklus","dev_hist":"Jeder Eintrag stammt aus dem Verlauf von Home Assistant (letzte {n} Tage); die Stunden aus dem Zähler des Geräts, wenn es einen hat.","cleans":"Reinigungen","clean1":"Reinigung","per_clean":"Jede Reinigung in diesem Monat","avg_clean":"Durchschnitt {d}","col_area":"Fläche","last_cleans":"Letzte Reinigungen","no_clean_month":"Noch keine Reinigung in diesem Monat","no_clean":"Noch keine Reinigung","vac_hist":"Die Summen stammen aus den Zählern des Roboters, die einzelnen Reinigungen aus dem Verlauf von Home Assistant (letzte {n} Tage).","st_paused":"Pausiert","st_returning":"Fährt zur Station","st_charging":"Lädt","st_docked_w":"In der Station","st_idle":"Aus","st_off":"Ausgeschaltet","stopped":"Inaktiv","yesterday":"gestern","u_min":"Min.","u_h":"Std.","start":"Start","so_far":"bisher","no_cycle":"Noch kein Durchlauf","last_cycle":"Letzter Durchlauf {d}","ended_at":"Fertig um {t}","reminders":"+{n} Erinnerungen bis {t}","reminder1":"+1 Erinnerung um {t}","end_est":"Voraussichtliches Ende","left":"noch {d}","almost":"gleich fertig","est_from_avg":"geschätzt aus ähnlichen Durchläufen","running_for":"Läuft seit {d}","btn_empty":"Ausgeräumt","btn_seen":"Erledigt","btn_resume":"Reinigung fortsetzen","m_switch_off":"Steckdose ausschalten","m_remind":"Später erinnern","details":"Details","settings":"Einstellungen","more":"Mehr","details_link":"Details, Verbrauch und Durchläufe","done_empty":"Erledigt: keine Erinnerungen mehr.","done_remind":"Es erinnert dich später.","done_switch":"Steckdose ausgeschaltet.","done_resume":"Reinigung fortgesetzt.","err":"Fehler","new_dev":"{n} neue Geräte","new_dev1":"1 neues Gerät","battery":"Akku","consumable":"{n} bei {p}%","maint_in":"in {c} Zyklen","maint_next":"beim nächsten Zyklus","maint_due":"fällig","maint_of":"{d} von {e}","maint_done":"Erledigt","confirm_maint":"«{n}» als erledigt markieren? Die Zählung beginnt neu.","conn_lost":"Verbindung verloren: letzter bekannter Zustand","cons_h":"Verbrauchsmaterial","commands":"Befehle","tap_again":"Zum Bestätigen erneut tippen","empty_since":"Auszuräumen seit","done_since":"Fertig seit","avg_cycle":"Durchschnittlicher Zyklus","maint_tab":"Wartung","tab_stats_short":"Verbrauch","read_failed":"Der Verlauf konnte nicht gelesen werden ({e}); neuer Versuch in Kürze.","retry":"Erneut versuchen","see_chart":"Diagramm anzeigen","back":"Zurück","avg_line":"Schnitt {v}","tap_bar":"Tippe auf einen Balken für den Zyklus","k_station":"Station","off_since":"Aus seit","close":"Schließen","power_now":"jetzt","p_today":"Heute","p_week":"Woche","p_month":"Monat","p_year":"Jahr","cycles":"Durchläufe","cycle1":"Durchlauf","per_cycle":"Verbrauch pro Durchlauf in diesem Monat","short":"Kurz","long":"Lang","anomalous":"Ungewöhnlich","avg":"Ø {d}, {k}","last_cycles":"Letzte Durchläufe","col_start":"Start","col_dur":"Dauer","col_cost":"Kosten","no_cycle_month":"Diesen Monat noch kein Durchlauf","coarse":"Durchläufe vor mehr als 10 Tagen werden stundenweise gezählt.","open_notifs":"Benachrichtigungen des Geräts","no_power":"Kein Leistungssensor gefunden: gib ihn mit `power_entity` in `appliances:` an.","no_power_vac":"Ein Saugroboter hat keinen Leistungssensor: Verbrauch und Durchläufe werden nicht gezählt.","no_stats":"Der Leistungssensor hat keine Statistiken (er braucht state_class: measurement)."}},"es":{"SN_STRINGS":{"presence":"Presencia","time_band":"Franja horaria","quiet":"Silencio","act_scen":"Escenarios activos","on":"sí","off":"no","active":"activo","dnd":"No molestar","tap_silence":"toca para silenciar","snooze":"Pausa","min":"min","pause_nc":"pausar las no críticas","snoozed":"En pausa","until":"hasta","tap_clear":"toca para quitar","announce":"Anunciar","intercom":"intercomunicador","announce_ph":"Anunciar en todos los altavoces…","send":"Enviar","announced":"Anunciado","cleared":"Pausas quitadas","snoozed_for":"Notificaciones no críticas en pausa durante","sent":"Enviadas","sent_today":"Enviadas hoy","since_startup":"desde el arranque","yesterday":"ayer","failures":"Fallos","fail_today":"envíos a canales fallidos hoy","deliveries":"Entregas","enabled_total":"activas/total","last_notif":"Última notificación","transports":"Transportes","delivered":"entregada","failed":"fallida","channels":"canales","none":"ninguno","no_transports":"no se encontraron entidades de transporte","tr_used":"usado por","tr_unused":"ningún canal lo usa","start":"inicio","volume":"volumen","now":"ahora","crosses":"pasa la medianoche","no_voice":"sin voz","mute_hint":"Una franja al <b>0%</b> no envía <b>ningún anuncio de voz</b> (Alexa y TTS apagados; push y panel siguen recibiendo). Las alertas críticas y de prioridad alta siempre hablan.","enabled":"activo","implicit":"siempre activo","explicit":"bajo petición","by_scenario":"solo con escenario","fallback":"respaldo","fallback_err":"respaldo si hay error","inc_sum":"de estos canales","inc_always":"arrancan solos","inc_req":"solo cuando se piden","inc_scen":"solo con un escenario","grp_auto":"Arrancan solos","grp_named":"Solo si se nombran en la llamada","grp_scen":"Solo con un escenario","grp_fallback":"Respaldo, cuando los demás fallan","ch_title":"Canales","ch_count":"{on} de {tot} activos","off_manual":"apagado","paused_by":"en pausa ahora por","on_by":"activo ahora por","fixed_targets":"destinos fijos","no_deliveries":"no se encontraron entidades de entrega","home":"en casa","away":"fuera","devices":"dispositivos","devices_1":"dispositivo","rc_test":"Enviar una prueba","rc_test_confirm":"Toca otra vez para enviar","rc_test_sent":"Prueba enviada","rc_test_title":"Prueba de SuperNotify","rc_test_msg":"Mensaje de prueba desde el panel,","overrides":"ajustes de entrega","overrides_1":"ajuste de entrega","no_contact":"sin puntos de contacto","no_recipients":"no se encontraron entidades de destinatario","details":"Detalles","h_update":"actualización disponible:","h_restart":"reinicia Home Assistant para terminar la actualización","h_uptodate":"actualizado","h_transport_err":"transportes con errores","h_channels_off":"canales apagados","h_all_good":"Todo bien","h_health":"Estado","h_failures":"fallos","h_failures_1":"fallo","h_transport_err_1":"transporte con errores","h_channels_off_1":"canal apagado","channels_1":"canal","band_early_morning":"Madrugada","band_morning":"Mañana","band_afternoon":"Tarde","band_evening":"Noche temprana","band_night":"Noche","band_late_night":"Noche cerrada","h_look_1":"1 cosa que revisar","h_look_n":"{n} cosas que revisar","h_rest_ok":"todo lo demás funciona","h_ch_on":"{on} de {tot} canales activos","h_open":"Abrir","ln_delivered":"entregada","ln_failed":"fallida","ln_why":"Por qué","tgt_loading":"cargando el selector…","bands_empty_t":"Aún no hay franjas horarias","bands_empty":"Añade una franja por cada parte del día: un input_datetime para su inicio y un input_number para el volumen de voz.","active_now":"activo ahora","disabled":"desactivado","other":"Otros","manual":"manual","apply_now":"aplicar ahora","applied":"Aplicado","apply_off":"toca para dejar de aplicarlo","enabled_lbl":"activado","reset_overrides":"Restablecer ajustes","reset_done":"ajustes restablecidos","transport_off":"transporte apagado","last_notified":"última notificación","never_notified":"nunca notificado","media":"multimedia","no_scenarios":"no se encontraron entidades de escenario","sim_pick":"🎬 Escenarios — toca para simular","sim_fire":"📤 Canales","sim_hint":"Datos reales del motor (servicios de consulta). El filtrado de entregas por prioridad lo hace el motor y no se simula aquí. Desactivado gana sobre activado, como en la fusión en tiempo real.","sim_none":"no saldría ninguna entrega","scenario_tag":"escenario","sim_go":"Saldrían","sim_stop":"No saldrían","sim_r_default":"arranca solo","sim_r_on":"activado por","sim_r_off":"desactivado por","sim_r_named":"solo si se nombra en la llamada","sim_r_scen":"solo con un escenario que lo active","sim_r_fallback":"respaldo, cuando los demás fallan","sim_r_switched":"apagado","title":"Título","message":"Mensaje","priority":"Prioridad","channels_lbl":"Canales — ninguno elegido = envío normal","camera_lbl":"Instantánea de cámara","preview":"Vista previa","no_title":"(sin título)","no_message":"(sin mensaje)","default_prio":"predeterminada (media)","comp_hint":"Los canales elegidos se envían con delivery_selection: fixed (solo salen esos). Crítica es crítica de verdad — sirenas incluidas.","critical_confirm":"¿Enviar una notificación CRÍTICA? Incluye sirenas y volumen máximo.","write_first":"Escribe primero un mensaje","sent_toast":"Enviada","write_or_pick":"Escribe un mensaje, o elige una cámara o un canal","need_2111":"Una notificación sin texto necesita SuperNotify 2.11.1","send_err":"No enviada","dry_btn":"Probar sin enviar","dry_title":"Si la enviaras ahora","dry_err":"La simulación falló","dry_would":"enviaría","dry_skip":"omitido","dry_nobody":"sin destinatario, solo destinos directos","dry_targets":"destinos","dry_suppressed":"La notificación se suprimiría","dry_fallback":"No saldría ningún canal: respaldo a","dry_none":"Ningún canal elegido","dry_scen":"Escenarios activos","dry_raw":"Respuesta en bruto","dry_prio":"Prioridad","dry_would_n":"canales enviarían","dry_nothing":"No se enviaría nada","dry_dupe":"Duplicado de una notificación reciente: se descartaría","dry_no_dupe":"La comprobación de duplicados no se simula, así que el Enviar real justo después no se bloquea.","dry_restart":"El SuperNotify en marcha no puede simular: la simulación necesita la 2.12, y hay que reiniciar Home Assistant tras la actualización.","dry_home":"En casa","dry_empty":"SuperNotify no dio respuesta: ¿es la 2.12 o posterior?","dry_reasons":{"NO_TARGET":"sin destino utilizable","DUPE":"duplicado","PRIORITY":"no para esta prioridad","SNOOZED":"en pausa","DELIVERY_CONDITION":"condición de entrega falsa","OCCUPANCY":"regla de presencia","TRANSPORT_DISABLED":"transporte apagado","DELIVERY_DISABLED":"apagado","NO_SCENARIO":"falta el escenario requerido","NO_ACTION":"sin acción","INVALID_ACTION_DATA":"datos no válidos","UNKNOWN":"motivo desconocido","ERROR":"error"},"prio_minimum":"Mínima","prio_low":"Baja","prio_medium":"Media","prio_high":"Alta","prio_critical":"Crítica","target_lbl":"Destino — personas, dispositivos, áreas, plantas, etiquetas","custom_target_lbl":"Destinos personalizados (correo, IDs de Telegram, …) — separados por comas","adv_title":"Opciones avanzadas","adv_spoken":"Mensaje hablado (Alexa, TTS)","adv_spoken_ph":"lo que dicen los altavoces, si es distinto del texto","adv_apply":"Aplicar estos escenarios","adv_require":"Enviar solo si estos escenarios están activos","adv_constrain":"Tener en cuenta solo estos escenarios","adv_snapshot":"Imagen desde una URL","adv_debug":"Depuración: registrar la traza de selección completa (la muestra la tarjeta del porqué)","custom_target_ph":"p. ej. user@example.com, 123456789","native_target_tag":"🎯 área/planta/etiqueta nativa","target_warn":"⚠️ Las áreas, plantas y etiquetas solo las resuelven notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts y chime. Con cualquier otro canal — o con el envío normal si no eliges canal arriba — la notificación puede quedarse sin destino sin avisar. Elige un canal compatible, o añade directamente una persona o un dispositivo.","aut_search":"Buscar automatizaciones…","aut_all":"Todas","aut_none":"Sin resultados","aut_err":"Manifiesto no encontrado — genéralo con tools/genera_vista_automazioni.py","aut_updated":"lista actualizada","aut_count":"automatizaciones","aut_count_1":"automatización","never":"nunca","ago_now":"ahora","ago_min":"min atrás","ago_h":"h atrás","ago_d":"d atrás","aut_disabled_only":"Solo desactivadas","grp_active":"activos","repeat":"Repetir","skipped_n":"omitidos","left":"restantes","missed_n":"perdidos","snz_all":"todo","snz_nc":"no críticas","snz_prio":"prioridad","snz_transport":"transporte","snz_for":"para","snz_choose":"elige qué y cuánto tiempo","snz_title":"Pausar notificaciones","snz_what":"Qué","snz_nc_l":"No críticas","snz_all_l":"Todo","snz_ch":"Un canal","snz_pr":"Una prioridad","snz_who":"Para quién","snz_everyone":"Todos","snz_me":"Solo yo","snz_len":"Cuánto tiempo","snz_forever":"Hasta que reanude","snz_go":"Pausar","snz_close":"Cerrar","rs_hand":"a mano","rs_voice":"por voz","rs_assist":"por el asistente","snz_voice_info":"Tus pausas pasan por los comandos de voz de SuperNotify: son solo tuyas.","snz_voice_off":"Los comandos de voz de SuperNotify están apagados: actívalos en las opciones de la integración.","snz_resume_mine":"Reanudar las mías","go_open":"Mostrar","dl_probe":"Probar este canal","probe_msg":"Prueba de canal desde el panel","sc_why":"Por qué","sc_yes":"Se aplica ahora","sc_no":"No se aplica ahora","sc_manual_why":"Escenario manual: se aplica a mano","sc_no_cond":"Sin condiciones","sc_off_sw":"Apagado","sc_not_eval":"no comprobado","sc_now":"ahora","sc_diff_btn_on":"Qué cambia si se aplica","sc_diff_btn_off":"Qué cambia sin él","sc_diff_on":"Si se aplicara, para una notificación media ahora:","sc_diff_off":"Sin él, para una notificación media ahora:","sc_diff_add":"también enviaría","sc_diff_rem":"ya no enviaría","sc_diff_none":"ninguna diferencia","c_state":"{e} está en {s}","c_template":"condición de plantilla","c_time":"hora","c_after":"después de","c_before":"antes de","c_numeric":"{e}","c_above":"por encima de","c_below":"por debajo de","c_and":"todas estas","c_or":"al menos una de estas","c_not":"ninguna de estas","c_or_join":" o ","sim_hint_dry":"La respuesta del propio SuperNotify (simulación, no se envía nada): una notificación ahora, con la prioridad y solo los escenarios elegidos arriba.","sim_msg":"Prueba del simulador","sim_prio":"Prioridad","sa_snooze":"{what} en pausa durante {len}.","sa_silence":"{what} silenciadas hasta nuevo aviso.","sa_resume":"{what} reactivadas.","sa_resume_one":"Pausa terminada: {x}.","sa_resume_all":"Notificaciones reactivadas.","sa_w_nc":"Las notificaciones no críticas","sa_w_all":"Todas las notificaciones","sa_w_ch":"Canal {x}","sa_w_pr":"Las notificaciones de prioridad {x}","sa_w_mine":"Tus notificaciones","sa_for":"para {x}","sa_min":"{n} minutos","sa_hour":"una hora","sa_hours":"{n} horas","occ_title":"Quién está en casa","occ_home_l":"En casa","occ_ALL_HOME":"Todos en casa","occ_ALL_AWAY":"Todos fuera","occ_LONE_HOME":"Solo uno en casa","occ_MULTI_HOME":"Algunos en casa","occ_UNDEFINED_OCCUPANTS":"Nadie con seguimiento","h_repairs":"reparaciones de SuperNotify","h_repairs_1":"reparación de SuperNotify","det_more":"Todos los atributos","det_yes":"sí","det_no":"no","det_action":"Acción","det_target":"Destinos fijos","det_target_req":"Necesita un destino","det_target_use":"Destinos usados","det_inclusion":"Se usa cuando","det_prio":"Prioridades","det_occ":"Quién debe estar en casa","det_transport":"Transporte","det_data":"Datos","det_debug":"Depuración","det_err_last":"Último error","det_err_in":"En","det_err_n":"Errores desde el arranque","det_select":"Selección","adv_html":"Texto para correo (HTML)","adv_clip":"Videoclip desde una URL","adv_actions":"Botones en la notificación","adv_act_id":"id de acción","adv_act_title":"texto del botón","adv_act_add":"+ botón","adv_groups":"Grupos de botones (comas)","adv_dc":"Ajustes de canal para esta notificación","adv_dc_ph":"clave: valor, uno por línea","adv_dc_add":"+ canal","snz_active":"En pausa ahora","snz_resume":"Reanudar","snz_resume_all":"Reanudar todo","snz_until_resumed":"hasta reanudar","snz_done":"En pausa","snz_resumed":"Reanudado","no_notif":"aún no hay notificaciones","st_title":"Uso","st_days":"días","st_days_short":"d","st_hist_note":"horas, canales y prioridades de los últimos {n} días de historial","st_total":"Notificaciones","st_avg":"al día","st_today":"Hoy","st_vs_avg":"vs. media","st_peak_hour":"Hora punta","st_top_channel":"Canal principal","st_errors":"Errores de canal","st_of_sends":"de los envíos a canales","st_daily":"Por día","st_hourly":"Por hora del día","st_weekday":"Por día de la semana","st_channels":"Canales — más usados","st_priority":"Prioridad","st_period":"Parte del día","st_insights":"Observaciones","st_no_data":"Aún no hay historial — los datos aparecen tras las primeras notificaciones.","st_unknown":"desconocido","st_loading":"cargando…","st_versions":"Versiones","st_installed":"instalada","st_latest":"última","st_uptodate":"actualizado","st_update":"actualización disponible","st_restart":"hay que reiniciar","st_cards":"tarjetas","st_logged":"registradas","st_reading":"leyendo el archivo: día {n} de {of}…","st_from_archive":"del archivo de SuperNotify","st_archive_err":"archivo leído en parte","st_wd":["lun","mar","mié","jue","vie","sáb","dom"],"st_i_share":"El {p}% de los envíos a canales pasa por {c}.","st_i_peak":"La hora con más actividad es las {h}:00 ({n} notificaciones en {d} días).","st_i_night":"El {p}% de las notificaciones llega entre las 23:00 y las 07:00 — plantéate un escenario de No molestar si no lo quieres.","st_i_night_ok":"Solo el {p}% de las notificaciones llega de noche (23–07): las horas de silencio funcionan.","st_i_weekend":"Los fines de semana tienen un {p}% {dir} notificaciones que los días laborables.","st_i_errors":"{n} errores de canal en {d} días, sobre todo en {c}.","st_i_noerr":"Ningún error de canal en los últimos {d} días.","st_i_prio":"El {p}% de las notificaciones son de prioridad {prio}.","st_i_trend":"Últimos 7 días: {n}/día, {dir} un {p}% respecto a los 7 anteriores.","st_more":"más","st_less":"menos","st_up":"sube","st_down":"baja"},"SN_STATS_STRINGS":{"st_title":"Uso","st_days":"días","st_days_short":"d","st_hist_note":"horas, canales y prioridades de los últimos {n} días de historial","st_total":"Notificaciones","st_avg":"al día","st_today":"Hoy","st_vs_avg":"vs. media","st_peak_hour":"Hora punta","st_top_channel":"Canal principal","st_errors":"Errores de canal","st_of_sends":"de los envíos a canales","st_daily":"Por día","st_hourly":"Por hora del día","st_weekday":"Por día de la semana","st_channels":"Canales — más usados","st_priority":"Prioridad","st_period":"Parte del día","st_insights":"Observaciones","st_no_data":"Aún no hay historial — los datos aparecen tras las primeras notificaciones.","st_unknown":"desconocido","st_loading":"cargando…","st_versions":"Versiones","st_installed":"instalada","st_latest":"última","st_uptodate":"actualizado","st_update":"actualización disponible","st_restart":"hay que reiniciar","st_cards":"tarjetas","st_logged":"registradas","st_reading":"leyendo el archivo: día {n} de {of}…","st_from_archive":"del archivo de SuperNotify","st_archive_err":"archivo leído en parte","st_wd":["lun","mar","mié","jue","vie","sáb","dom"],"st_i_share":"El {p}% de los envíos a canales pasa por {c}.","st_i_peak":"La hora con más actividad es las {h}:00 ({n} notificaciones en {d} días).","st_i_night":"El {p}% de las notificaciones llega entre las 23:00 y las 07:00 — plantéate un escenario de No molestar si no lo quieres.","st_i_night_ok":"Solo el {p}% de las notificaciones llega de noche (23–07): las horas de silencio funcionan.","st_i_weekend":"Los fines de semana tienen un {p}% {dir} notificaciones que los días laborables.","st_i_errors":"{n} errores de canal en {d} días, sobre todo en {c}.","st_i_noerr":"Ningún error de canal en los últimos {d} días.","st_i_prio":"El {p}% de las notificaciones son de prioridad {prio}.","st_i_trend":"Últimos 7 días: {n}/día, {dir} un {p}% respecto a los 7 anteriores.","st_more":"más","st_less":"menos","st_up":"sube","st_down":"baja"},"SN_ARCH_STRINGS":{"title":"Historial de notificaciones","search":"Buscar en título o mensaje…","f_all":"Todas","f_problems":"Solo problemas","f_today":"Hoy","f_whisper":"Susurradas","wh":"susurrada","said":"Alexa dijo","said_by":"{ch} dijo","none":"ninguna notificación coincide","no_sensor":"sensor no encontrado","no_sensor_hint":"Actualiza SuperNotify a la 2.10 o posterior, que tiene la acción supernotify.enquire_archive, o añade el sensor command_line que indexa el archivo (ver README).","loading":"leyendo el archivo…","recent":"últimas notificaciones","read_at":"leído a las","of":"de","in_archive":"en el archivo","since":"la más antigua","updated":"índice actualizado","today":"Hoy","yesterday":"Ayer","delivered":"entregada","failed":"fallida","skipped":"omitida","missed":"perdida","prio":{"critical":"Crítica","high":"Alta","low":"Baja","minimum":"Mínima","medium":"Media"},"reasons":{"doppione":"duplicado","nessun target":"sin destino","errore":"error","condizione":"condición","scenario":"escenario","presenza":"presencia","priorita":"prioridad","spento":"apagado","pausa":"en pausa","transport spento":"transporte apagado","nessuna azione":"sin acción","dati non validi":"datos no válidos","sconosciuto":"desconocido"},"scenarios":"Escenarios vigentes","truncated":"mensaje recortado en el índice","dur":"tardó","id":"id","why":"¿Por qué? - detalle completo","f_appliance":"Electrodomésticos","ap_scope":"entre las últimas {n} leídas completas: las más antiguas no se reconocen"},"SN_WHY_STRINGS":{"title":"¿Por qué?","pick":"Elige una notificación para ver por qué fue a donde fue.","loading":"cargando…","none":"ninguna notificación","no_sensor":"sensor no encontrado:","no_service":"Falta el servicio","no_service_hint":"Actualiza SuperNotify a la 2.10 o posterior (supernotify.enquire_archive), o añade el shell_command sn_archive_detail (ver README) y reinicia Home Assistant.","gone":"esta notificación ya no está en el archivo","priority":"prioridad","outcome":"resultado","dupe":"duplicado","outcomes":{"success":"entregada","partial_delivery":"entregada en parte","dupe":"duplicado","failed":"fallida","error":"fallida","fallback_delivery":"entregada por el canal de respaldo","no_delivery":"no entregada"},"missed":"perdida (pedida, no enviada)","step_call":"Llamada","step_scen":"Escenarios","step_people":"Personas","step_ch":"Canales","call_auto":"ningún canal nombrado: envío normal","call_named":"nombrados en la llamada:","call_debug":"con depuración","nobody":"nadie en casa","ch_sent":"enviados","ch_problems":"por revisar","ch_skipped":"omitidos","pb_failed":"fallido","pb_missed":"pedido pero no enviado","grp_skipped":"omitidos por una regla: normal","grp_not":"no implicados","trace_title":"Traza de selección completa","fix":{"NO_TARGET":"Ningún destinatario tiene una dirección para este canal: añade una a un destinatario, da al canal destinos fijos o déjalo fuera de esta llamada.","ERROR":"La integración detrás de este canal respondió con un error: revisa su propia entrada en el registro.","NO_ACTION":"El canal no tiene ninguna acción que llamar: define `action:` en la entrega.","INVALID_ACTION_DATA":"Los datos pasados a la acción fueron rechazados: revisa el `data:` de la llamada o de la entrega."},"scenarios":"Escenarios vigentes","no_scenarios":"ningún escenario vigente","applied":"forzado por la llamada","required":"requerido por la llamada","constrain":"limitado por la llamada a","presence":"Presencia","home":"en casa","away":"fuera","channels":"Canales","no_channels":"no se eligió ningún canal","st_ok":"entregado","st_err":"fallido","st_skip":"omitido","st_supp":"suprimido","calls":"llamadas","calls_1":"llamada","target_required":"destino requerido:","started_by":"elegido por","scen_would_off":"apagado por (anulado)","src_default":"siempre activo (predeterminado)","src_scen":"escenario","src_call":"la propia llamada","src_recipient":"destinatario","r_off_by":"apagado por","call_targets":"destinos en la llamada","cats":{"entity_id":"entidades","mobile_app_id":"dispositivos","person_id":"personas","email":"correo","phone":"teléfono","device_id":"dispositivos"},"not_started":"Canales que no arrancaron","r_call_off":"excluido por la llamada","r_scen_off":"apagado por un escenario vigente","r_disabled":"apagado","r_transport_off":"su transporte está apagado","r_only_scen":"solo arranca cuando un escenario lo activa","r_only_fallback":"solo de respaldo","r_only_explicit":"solo arranca si se pide por nombre","r_priority":"no para esta prioridad","r_unknown":"no se puede reconstruir sin la traza","from_config":"Los motivos de los canales que no arrancaron se reconstruyen a partir de la configuración ACTUAL, no de la de entonces.","from_trace":"Los motivos vienen de la traza de selección archivada con la notificación.","st_time":"tardó","st_slow":"el más lento","st_rate":"de los canales funcionaron","ua_title":"Destinos que ningún canal aceptó","ua_hint":"Estaban en la llamada, pero ningún canal elegido acepta este tipo de destino.","un_title":"Nombres que no existen","sent_by":"Enviada por","sent_auto":"automatización","sent_script":"script","sent_person":"","sent_unknown":"remitente desconocido (ninguna automatización ni persona en su contexto)","trace":"Traza de selección","no_trace":"La traza de selección completa solo se registra cuando la llamada notify tiene debug: true, y se archiva cuando los diagnósticos del archivo la incluyen.","reasons":{"NO_TARGET":"sin destino utilizable","DUPE":"duplicado de una notificación reciente","PRIORITY":"no para esta prioridad","SNOOZE":"en pausa","SNOOZED":"en pausa","DELIVERY_CONDITION":"condición de entrega falsa","OCCUPANCY":"regla de presencia","ERROR":"error","DELIVERY_DISABLED":"apagado","SCENARIO":"escenario","TRANSPORT_DISABLED":"su transporte está apagado","NO_SCENARIO":"falta un escenario requerido","NO_ACTION":"ninguna acción que llamar","INVALID_ACTION_DATA":"datos de acción no válidos","UNKNOWN":"motivo desconocido"}},"SN_TOOLS_STRINGS":{"maint":"Mantenimiento","enq":"Preguntar a SuperNotify","refresh":"Volver a publicar todas las entidades","refresh_btn":"Actualizar","resume_btn":"Reanudar","refreshed":"Entidades publicadas de nuevo.","resume_all":"Reanudar todas las pausas","cleared_n":"pausas reanudadas","purge_arch":"Limpiar el archivo","purge_media":"Limpiar las imágenes","older":"más antiguos de","days":"días","purge_btn":"Limpiar","confirm":"Toca otra vez para confirmar","purged":"eliminados","remaining":"restantes","reset":"Deshacer los cambios hechos a mano","reset_btn":"Restablecer","reset_none":"Nada que restablecer: todo está como en la configuración.","reset_done":"De vuelta a la configuración:","k_all":"todo","k_scenario":"escenarios","k_delivery":"canales","k_recipient":"personas","k_transport":"transportes","q_config":"Configuración","q_scen":"Escenarios","q_active":"Escenarios activos","q_by_scen":"Canales por escenario","q_implicit":"Canales predeterminados","q_recipients":"Destinatarios","q_occupancy":"Quién está en casa","q_snoozes":"Pausas","q_last":"Última notificación","copy":"Copiar JSON","copied":"Copiado","close":"Cerrar","empty":"(vacío)","err":"SuperNotify respondió con un error:","err_config":"SuperNotify 2.12.0 no puede devolver su configuración cuando un canal tiene condiciones de plantilla (rhizomatics/supernotify#241).","settings":"Ajustes de la integración","running":"trabajando…","more":"más"},"SN_FORM_LABELS":{"_common":"Aspecto y texto","style":"Colores","icons":"Iconos","show_version":"Mostrar la versión de la tarjeta","intro":"Texto de introducción arriba","title":"Título","dnd_entity":"Interruptor de No molestar","quiet_entity":"Estado de silencio calculado (opcional)","presence_entity":"Persona para la barra de estado","archive_days":"Limpieza del archivo: más antiguos de (días)","media_days":"Limpieza de imágenes: más antiguas de (días)","occupancy":"Quién está en casa (de SuperNotify)","repairs":"Reparaciones de SuperNotify en la lista de estado","snooze_announce":"Decir las pausas en voz alta (canal de anuncios)","snooze_via":"Las pausas pasan por","o_event":"el evento de los botones push (admin)","o_voice":"los comandos de voz","snooze_minutes":"Duración de la pausa (minutos)","snooze_panel":"La ficha de pausa abre el panel de pausas","announce_delivery":"Canal para anuncios","last_notification":"Mostrar la última notificación","last_channels":"Una etiqueta por canal en la última notificación","repeat_entity":"Botón de repetir la última (opcional)","tile_layout":"Fichas","tile_columns":"Columnas de fichas (vacío = automático)","update_entity":"Entidad de actualización de SuperNotify","cards_update_entity":"Entidad de actualización de las tarjetas","sent_today_entity":"Contador diario (utility meter, opcional)","count_entity":"Contador de SuperNotify (estadísticas a largo plazo)","health":"Estado arriba","stats":"Cifras","poll_seconds":"Actualizar cada (segundos)","group":"Agrupar según cómo arranca un canal","hide_defaults":"Ocultar los canales automáticos DEFAULT_","limit":"Notificaciones en la lista","expand":"Abrir las partes plegadas","max_height":"Altura máxima (CSS, p. ej. 70vh)","source":"Origen del archivo","entity":"Sensor del archivo (solo puente)","trigger_entity":"Actualizar cuando esto cambie","dry_run":"Mostrar \"Probar sin enviar\"","dry_run_dupe_check":"Simular también la comprobación de duplicados","days":"Días mostrados por defecto","manifest_url":"URL del manifiesto de automatizaciones","o_supernotify":"SuperNotify","o_theme":"Tema de Home Assistant","o_mdi":"Iconos de Home Assistant","o_emoji":"Emoji","o_row":"Icono a la izquierda","o_stacked":"Alta, icono arriba","o_three":"Enviadas, fallos, canales","o_full":"Las cinco","o_auto":"Automático","o_sensor":"Puente con sensor (antes de SuperNotify 2.10)","o_archive":"Archivo de SuperNotify (2.12.1+)","o_history":"Historial de los ayudantes"},"SN_NATIVE_STR":{"all_good":"Todo bien","paused":"En pausa","until":"hasta","resume":"Reanudar","test":"Enviar una prueba","sure":"Toca otra vez para enviar","sent":"Enviadas","last":"Última","none":"Aún no hay notificaciones","ago":"atrás","min":"min","h":"h","err":"transportes con errores","off":"canales apagados"},"SN_STRATEGY_TITLES":{"home":"Inicio","archive":"Archivo","send":"Enviar","setup":"Configuración","stats":"Estadísticas","tools":"Herramientas","title":"SuperNotify","appliances":"Electrodomésticos"},"SN_APPL_STRINGS":{"title":"Electrodomésticos","loading":"leyendo…","none":"No hay electrodomésticos: añade uno en Appliance Autonotify (Ajustes → Dispositivos y servicios).","st_run":"En marcha","st_cleaning":"Limpiando","st_done":"Terminado · por vaciar","st_done_other":"Terminado","st_err":"Necesita ayuda","m_switch_on":"Encender enchufe","done_switch_on":"Enchufe encendido.","done_action":"Hecho: {n}.","confirm_action":"¿Ejecutar «{n}»?","open_entity":"Abrir para cambiarlo","chip_notifs":"Notificaciones","chip_device":"Dispositivo","not_found":"Ningún aparato o dispositivo llamado «{n}».","last7":"Últimos 7 días","col_day":"Día","col_cycles":"Ciclos","col_time":"Tiempo","col_energy":"Consumo","source_h":"Origen","manual_src":"añadido a mano: en marcha por encima de {w}","tab_info":"Resumen","tab_stats":"Consumo y ciclos","tab_cleans":"Limpiezas","tab_prints":"Impresiones","last_run":"Último ciclo","avg_run":"Media","reminders_h":"Notificaciones","power_h":"Potencia ahora","plug":"Enchufe","plug_on":"encendido","plug_off":"apagado","error_h":"Error","open_device":"El dispositivo en Home Assistant","prints":"impresiones","print1":"impresión","per_print":"Cada impresión del mes","last_prints":"Últimas impresiones","no_print_month":"Aún ninguna impresión este mes","no_print":"Aún ninguna impresión","col_fil":"Filamento","failed":"fallida","per_run":"Cada ciclo del mes","no_run":"Aún ningún ciclo","dev_hist":"Cada una viene del historial de Home Assistant (últimos {n} días); las horas, del contador del aparato cuando lo tiene.","cleans":"limpiezas","clean1":"limpieza","per_clean":"Cada limpieza del mes","avg_clean":"media {d}","col_area":"Área","last_cleans":"Últimas limpiezas","no_clean_month":"Aún ninguna limpieza este mes","no_clean":"Aún ninguna limpieza","vac_hist":"Los totales vienen de los contadores del robot; cada limpieza, del historial de Home Assistant (últimos {n} días).","st_paused":"En pausa","st_returning":"Vuelve a la base","st_charging":"Cargando","st_docked_w":"En la base","st_idle":"Parado","st_off":"Apagado","stopped":"Parados","yesterday":"ayer","u_min":"min","u_h":"h","start":"Inicio","so_far":"hasta ahora","no_cycle":"Aún ningún ciclo","last_cycle":"Último ciclo {d}","ended_at":"Terminó a las {t}","reminders":"+{n} recordatorios hasta las {t}","reminder1":"+1 recordatorio a las {t}","end_est":"Fin previsto","left":"faltan {d}","almost":"está por terminar","est_from_avg":"estimado por ciclos parecidos","running_for":"En marcha desde hace {d}","btn_empty":"Vaciado","btn_seen":"Hecho","btn_resume":"Reanudar limpieza","m_switch_off":"Apagar el enchufe","m_remind":"Recordármelo luego","details":"Detalles","settings":"Ajustes","more":"Más","details_link":"Detalles, consumo y ciclos","done_empty":"Hecho: los recordatorios se detienen.","done_remind":"Te lo recordará más tarde.","done_switch":"Enchufe apagado.","done_resume":"Limpieza reanudada.","err":"Error","new_dev":"{n} dispositivos nuevos","new_dev1":"1 dispositivo nuevo","battery":"Batería","consumable":"{n} al {p}%","maint_in":"en {c} ciclos","maint_next":"en el próximo ciclo","maint_due":"toca ahora","maint_of":"{d} de {e}","maint_done":"Hecho","confirm_maint":"¿Marcar «{n}» como hecho? La cuenta vuelve a empezar.","conn_lost":"conexión perdida: último estado conocido","cons_h":"Consumibles","commands":"Comandos","tap_again":"Toca otra vez para confirmar","empty_since":"Por vaciar desde hace","done_since":"Terminado hace","avg_cycle":"Ciclo medio","maint_tab":"Mantenimiento","tab_stats_short":"Consumo","read_failed":"No se pudo leer el historial ({e}); vuelvo a intentarlo en breve.","retry":"Reintentar","see_chart":"Ver gráfico","back":"Atrás","avg_line":"media {v}","tap_bar":"Toca una barra para ver ese ciclo","k_station":"Base","off_since":"Apagado desde hace","close":"Cerrar","power_now":"ahora","p_today":"Hoy","p_week":"Semana","p_month":"Mes","p_year":"Año","cycles":"ciclos","cycle1":"ciclo","per_cycle":"Consumo por ciclo este mes","short":"Cortos","long":"Largos","anomalous":"Anómalos","avg":"media {d}, {k}","last_cycles":"Últimos ciclos","col_start":"Inicio","col_dur":"Duración","col_cost":"Coste","no_cycle_month":"Aún ningún ciclo este mes","coarse":"Los ciclos de hace más de 10 días se cuentan por horas.","open_notifs":"Notificaciones del electrodoméstico","no_power":"No se encontró un sensor de potencia: indícalo con `power_entity` en `appliances:`.","no_power_vac":"Un robot aspirador no tiene sensor de potencia: no se cuentan consumo ni ciclos.","no_stats":"El sensor de potencia no tiene estadísticas (necesita state_class: measurement)."}},"fr":{"SN_STRINGS":{"presence":"Présence","time_band":"Plage horaire","quiet":"Calme","act_scen":"Scénarios actifs","on":"activé","off":"désactivé","active":"actif","dnd":"Ne pas déranger","tap_silence":"touchez pour couper le son","snooze":"Pause","min":"min","pause_nc":"mettre en pause le non critique","snoozed":"En pause","until":"jusqu'à","tap_clear":"touchez pour annuler","announce":"Annonce","intercom":"interphone","announce_ph":"Annoncer sur toutes les enceintes…","send":"Envoyer","announced":"Annoncé","cleared":"Pauses annulées","snoozed_for":"Notifications non critiques en pause pendant","sent":"Envoyées","sent_today":"Envoyées aujourd'hui","since_startup":"depuis le démarrage","yesterday":"hier","failures":"Échecs","fail_today":"envois par canal échoués aujourd'hui","deliveries":"Livraisons","enabled_total":"activées/total","last_notif":"Dernière notification","transports":"Transports","delivered":"livré","failed":"échoué","channels":"canaux","none":"aucun","no_transports":"aucune entité de transport trouvée","tr_used":"utilisé par","tr_unused":"aucun canal ne l'utilise","start":"début","volume":"volume","now":"maintenant","crosses":"passe minuit","no_voice":"pas de voix","mute_hint":"Une plage à <b>0 %</b> n'envoie <b>aucune annonce vocale</b> (Alexa et TTS coupés, push et tableau de bord toujours livrés). Les alertes critiques et de priorité haute parlent toujours.","enabled":"activé","implicit":"toujours actif","explicit":"sur demande","by_scenario":"scénario seulement","fallback":"secours","fallback_err":"secours en cas d'erreur","inc_sum":"de ces canaux","inc_always":"partent d'eux-mêmes","inc_req":"seulement sur demande","inc_scen":"seulement avec un scénario","grp_auto":"Partent d'eux-mêmes","grp_named":"Seulement si nommés dans l'appel","grp_scen":"Seulement avec un scénario","grp_fallback":"Secours, quand les autres échouent","ch_title":"Canaux","ch_count":"{on} sur {tot} actifs","off_manual":"désactivé","paused_by":"en pause à cause de","on_by":"actif grâce à","fixed_targets":"cibles fixes","no_deliveries":"aucune entité de livraison trouvée","home":"à la maison","away":"absent","devices":"appareils","devices_1":"appareil","rc_test":"Envoyer un test","rc_test_confirm":"Touchez encore pour envoyer","rc_test_sent":"Test envoyé","rc_test_title":"Test SuperNotify","rc_test_msg":"Message de test depuis le tableau de bord,","overrides":"modifications de livraison","overrides_1":"modification de livraison","no_contact":"aucun moyen de contact","no_recipients":"aucune entité de destinataire trouvée","details":"Détails","h_update":"mise à jour disponible :","h_restart":"redémarrez Home Assistant pour terminer la mise à jour","h_uptodate":"à jour","h_transport_err":"transports en erreur","h_channels_off":"canaux désactivés","h_all_good":"Tout va bien","h_health":"État","h_failures":"échecs","h_failures_1":"échec","h_transport_err_1":"transport en erreur","h_channels_off_1":"canal désactivé","channels_1":"canal","band_early_morning":"Petit matin","band_morning":"Matin","band_afternoon":"Après-midi","band_evening":"Soir","band_night":"Nuit","band_late_night":"Tard dans la nuit","h_look_1":"1 point à vérifier","h_look_n":"{n} points à vérifier","h_rest_ok":"tout le reste fonctionne","h_ch_on":"{on} canaux actifs sur {tot}","h_open":"Ouvrir","ln_delivered":"livré","ln_failed":"échoué","ln_why":"Pourquoi","tgt_loading":"chargement du sélecteur…","bands_empty_t":"Aucune plage horaire","bands_empty":"Ajoutez une plage par moment de la journée : un input_datetime pour son début et un input_number pour le volume de la voix.","active_now":"actif maintenant","disabled":"désactivé","other":"Autre","manual":"manuel","apply_now":"appliquer maintenant","applied":"Appliqué","apply_off":"touchez pour ne plus l'appliquer","enabled_lbl":"activé","reset_overrides":"Réinitialiser les modifications","reset_done":"modifications réinitialisées","transport_off":"transport désactivé","last_notified":"dernière notification","never_notified":"jamais notifié","media":"médias","no_scenarios":"aucune entité de scénario trouvée","sim_pick":"🎬 Scénarios — touchez pour simuler","sim_fire":"📤 Canaux","sim_hint":"Données réelles du moteur (services enquire). Le filtrage des livraisons par priorité se fait dans le moteur et n'est pas simulé ici. Désactivé l'emporte sur activé, comme la fusion à l'exécution.","sim_none":"aucune livraison ne partirait","scenario_tag":"scénario","sim_go":"Partiraient","sim_stop":"Ne partiraient pas","sim_r_default":"part de lui-même","sim_r_on":"activé par","sim_r_off":"désactivé par","sim_r_named":"seulement si nommé dans l'appel","sim_r_scen":"seulement avec un scénario qui l'active","sim_r_fallback":"secours, quand les autres échouent","sim_r_switched":"désactivé","title":"Titre","message":"Message","priority":"Priorité","channels_lbl":"Canaux — aucun choisi = routage normal","camera_lbl":"Instantané de caméra","preview":"Aperçu","no_title":"(sans titre)","no_message":"(sans message)","default_prio":"par défaut (moyenne)","comp_hint":"Les canaux choisis sont envoyés avec delivery_selection: fixed (seuls ceux-ci partent). Critique veut vraiment dire critique — sirènes comprises.","critical_confirm":"Envoyer une notification CRITIQUE ? Sirènes et volume maximal compris.","write_first":"Écrivez d'abord un message","sent_toast":"Envoyé","write_or_pick":"Écrivez un message, ou choisissez une caméra ou un canal","need_2111":"Une notification sans texte nécessite SuperNotify 2.11.1","send_err":"Non envoyé","dry_btn":"Essayer sans envoyer","dry_title":"Si vous l'envoyiez maintenant","dry_err":"La simulation a échoué","dry_would":"enverrait","dry_skip":"ignoré","dry_nobody":"aucun destinataire, cibles directes seulement","dry_targets":"cibles","dry_suppressed":"La notification serait supprimée","dry_fallback":"Aucun canal ne partirait : secours vers","dry_none":"Aucun canal sélectionné","dry_scen":"Scénarios actifs","dry_raw":"Réponse brute","dry_prio":"Priorité","dry_would_n":"canaux enverraient","dry_nothing":"Rien ne serait envoyé","dry_dupe":"Doublon d'une notification récente : elle serait écartée","dry_no_dupe":"Contrôle des doublons non simulé, donc le vrai Envoyer juste après n'est pas bloqué.","dry_restart":"Le SuperNotify en cours d'exécution ne peut pas simuler : la simulation nécessite la 2.12, et Home Assistant doit être redémarré après la mise à jour.","dry_home":"À la maison","dry_empty":"SuperNotify n'a pas répondu : est-ce la 2.12 ou plus récente ?","dry_reasons":{"NO_TARGET":"aucune cible utilisable","DUPE":"doublon","PRIORITY":"pas pour cette priorité","SNOOZED":"en pause","DELIVERY_CONDITION":"condition de livraison fausse","OCCUPANCY":"règle de présence","TRANSPORT_DISABLED":"transport désactivé","DELIVERY_DISABLED":"désactivé","NO_SCENARIO":"scénario requis non actif","NO_ACTION":"aucune action","INVALID_ACTION_DATA":"données non valides","UNKNOWN":"raison inconnue","ERROR":"erreur"},"prio_minimum":"Minimum","prio_low":"Faible","prio_medium":"Moyenne","prio_high":"Haute","prio_critical":"Critique","target_lbl":"Cible — personnes, appareils, pièces, étages, étiquettes","custom_target_lbl":"Cibles personnalisées (e-mail, ID Telegram, …) — séparées par des virgules","adv_title":"Options avancées","adv_spoken":"Message parlé (Alexa, TTS)","adv_spoken_ph":"ce que disent les enceintes, si différent du texte","adv_apply":"Appliquer ces scénarios","adv_require":"Envoyer seulement si ces scénarios sont actifs","adv_constrain":"Ne considérer que ces scénarios","adv_snapshot":"Image depuis une URL","adv_debug":"Débogage : enregistrer la trace complète de sélection (affichée par la carte Pourquoi)","custom_target_ph":"ex. user@example.com, 123456789","native_target_tag":"🎯 pièce/étage/étiquette natif","target_warn":"⚠️ Les pièces, étages et étiquettes ne sont résolus que par notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts et chime. Avec tout autre canal — ou le routage par défaut quand aucun canal n'est choisi ci-dessus — la notification peut se retrouver sans cible sans le signaler. Choisissez un canal compatible, ou ajoutez directement une personne/un appareil.","aut_search":"Rechercher des automatisations…","aut_all":"Toutes","aut_none":"Aucun résultat","aut_err":"Manifeste introuvable — générez-le avec tools/genera_vista_automazioni.py","aut_updated":"liste mise à jour","aut_count":"automatisations","aut_count_1":"automatisation","never":"jamais","ago_now":"maintenant","ago_min":"min","ago_h":"h","ago_d":"j","aut_disabled_only":"Désactivées seulement","grp_active":"actifs","repeat":"Répéter","skipped_n":"ignorés","left":"restant","missed_n":"manqués","snz_all":"tout","snz_nc":"non critique","snz_prio":"priorité","snz_transport":"transport","snz_for":"pour","snz_choose":"choisir quoi et combien de temps","snz_title":"Mettre les notifications en pause","snz_what":"Quoi","snz_nc_l":"Non critiques","snz_all_l":"Tout","snz_ch":"Un canal","snz_pr":"Une priorité","snz_who":"Pour qui","snz_everyone":"Tout le monde","snz_me":"Moi seulement","snz_len":"Combien de temps","snz_forever":"Jusqu'à ce que je reprenne","snz_go":"Pause","snz_close":"Fermer","rs_hand":"à la main","rs_voice":"à la voix","rs_assist":"par l'assistant","snz_voice_info":"Vos pauses passent par les commandes vocales de SuperNotify : elles ne concernent que vous.","snz_voice_off":"Les commandes vocales de SuperNotify sont désactivées : activez-les dans les options de l'intégration.","snz_resume_mine":"Reprendre les miennes","go_open":"Afficher","dl_probe":"Essayer ce canal","probe_msg":"Test du canal depuis le tableau de bord","sc_why":"Pourquoi","sc_yes":"S'applique maintenant","sc_no":"Ne s'applique pas maintenant","sc_manual_why":"Scénario manuel : appliqué à la main","sc_no_cond":"Aucune condition","sc_off_sw":"Désactivé","sc_not_eval":"non vérifié","sc_now":"maintenant","sc_diff_btn_on":"Ce qui change s'il s'applique","sc_diff_btn_off":"Ce qui change sans lui","sc_diff_on":"S'il s'appliquait, pour une notification moyenne maintenant :","sc_diff_off":"Sans lui, pour une notification moyenne maintenant :","sc_diff_add":"enverrait aussi","sc_diff_rem":"n'enverrait plus","sc_diff_none":"aucune différence","c_state":"{e} est {s}","c_template":"condition de modèle","c_time":"heure","c_after":"après","c_before":"avant","c_numeric":"{e}","c_above":"au-dessus de","c_below":"en dessous de","c_and":"toutes celles-ci","c_or":"au moins une de celles-ci","c_not":"aucune de celles-ci","c_or_join":" ou ","sim_hint_dry":"La réponse de SuperNotify lui-même (simulation, rien n'est envoyé) : une notification maintenant, avec la priorité et seulement les scénarios choisis ci-dessus.","sim_msg":"Test du simulateur","sim_prio":"Priorité","sa_snooze":"Pause de {len} : {what}.","sa_silence":"Silence jusqu'à nouvel ordre : {what}.","sa_resume":"Reprise : {what}.","sa_resume_one":"Fin de la pause : {x}.","sa_resume_all":"Notifications réactivées.","sa_w_nc":"Les notifications non critiques","sa_w_all":"Toutes les notifications","sa_w_ch":"Le canal {x}","sa_w_pr":"Les notifications de priorité {x}","sa_w_mine":"Vos notifications","sa_for":"pour {x}","sa_min":"{n} minutes","sa_hour":"une heure","sa_hours":"{n} heures","occ_title":"Qui est à la maison","occ_home_l":"À la maison","occ_ALL_HOME":"Tout le monde à la maison","occ_ALL_AWAY":"Tout le monde absent","occ_LONE_HOME":"Une seule personne à la maison","occ_MULTI_HOME":"Quelques-uns à la maison","occ_UNDEFINED_OCCUPANTS":"Personne n'est suivi","h_repairs":"réparations SuperNotify","h_repairs_1":"réparation SuperNotify","det_more":"Tous les attributs","det_yes":"oui","det_no":"non","det_action":"Action","det_target":"Cibles fixes","det_target_req":"Nécessite une cible","det_target_use":"Cibles utilisées","det_inclusion":"Utilisé quand","det_prio":"Priorités","det_occ":"Qui doit être à la maison","det_transport":"Transport","det_data":"Données","det_debug":"Débogage","det_err_last":"Dernière erreur","det_err_in":"Dans","det_err_n":"Erreurs depuis le démarrage","det_select":"Sélection","adv_html":"Texte pour l'e-mail (HTML)","adv_clip":"Clip vidéo depuis une URL","adv_actions":"Boutons sur la notification","adv_act_id":"id de l'action","adv_act_title":"texte du bouton","adv_act_add":"+ bouton","adv_groups":"Groupes de boutons (virgule)","adv_dc":"Réglages des canaux pour cette notification","adv_dc_ph":"clé: valeur, une par ligne","adv_dc_add":"+ canal","snz_active":"En pause maintenant","snz_resume":"Reprendre","snz_resume_all":"Tout reprendre","snz_until_resumed":"jusqu'à la reprise","snz_done":"En pause","snz_resumed":"Repris","no_notif":"aucune notification pour l'instant","st_title":"Utilisation","st_days":"jours","st_days_short":"j","st_hist_note":"heures, canaux et priorités sur les {n} derniers jours d'historique","st_total":"Notifications","st_avg":"par jour","st_today":"Aujourd'hui","st_vs_avg":"vs moyenne","st_peak_hour":"Heure de pointe","st_top_channel":"Canal principal","st_errors":"Erreurs de canal","st_of_sends":"des envois par canal","st_daily":"Par jour","st_hourly":"Par heure de la journée","st_weekday":"Par jour de la semaine","st_channels":"Canaux — les plus utilisés","st_priority":"Priorité","st_period":"Moment de la journée","st_insights":"Observations","st_no_data":"Pas encore d'historique — les données apparaissent après les premières notifications.","st_unknown":"inconnu","st_loading":"chargement…","st_versions":"Versions","st_installed":"installée","st_latest":"dernière","st_uptodate":"à jour","st_update":"mise à jour disponible","st_restart":"redémarrage requis","st_cards":"cartes","st_logged":"enregistrées","st_reading":"lecture de l'archive : jour {n} sur {of}…","st_from_archive":"depuis l'archive de SuperNotify","st_archive_err":"archive lue en partie","st_wd":["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"],"st_i_share":"{p} % de tous les envois passent par {c}.","st_i_peak":"L'heure la plus chargée est {h}:00 ({n} notifications en {d} jours).","st_i_night":"{p} % des notifications arrivent entre 23:00 et 07:00 — envisagez un scénario Ne pas déranger si ce n'est pas voulu.","st_i_night_ok":"Seulement {p} % des notifications arrivent la nuit (23–07) : les heures calmes fonctionnent.","st_i_weekend":"Le week-end compte {p} % de notifications {dir} qu'en semaine.","st_i_errors":"{n} erreurs de canal en {d} jours, surtout sur {c}.","st_i_noerr":"Aucune erreur de canal ces {d} derniers jours.","st_i_prio":"{p} % des notifications sont de priorité {prio}.","st_i_trend":"7 derniers jours : {n}/jour, {dir} de {p} % par rapport aux 7 précédents.","st_more":"en plus","st_less":"en moins","st_up":"en hausse","st_down":"en baisse"},"SN_STATS_STRINGS":{"st_title":"Utilisation","st_days":"jours","st_days_short":"j","st_hist_note":"heures, canaux et priorités sur les {n} derniers jours d'historique","st_total":"Notifications","st_avg":"par jour","st_today":"Aujourd'hui","st_vs_avg":"vs moyenne","st_peak_hour":"Heure de pointe","st_top_channel":"Canal principal","st_errors":"Erreurs de canal","st_of_sends":"des envois par canal","st_daily":"Par jour","st_hourly":"Par heure de la journée","st_weekday":"Par jour de la semaine","st_channels":"Canaux — les plus utilisés","st_priority":"Priorité","st_period":"Moment de la journée","st_insights":"Observations","st_no_data":"Pas encore d'historique — les données apparaissent après les premières notifications.","st_unknown":"inconnu","st_loading":"chargement…","st_versions":"Versions","st_installed":"installée","st_latest":"dernière","st_uptodate":"à jour","st_update":"mise à jour disponible","st_restart":"redémarrage requis","st_cards":"cartes","st_logged":"enregistrées","st_reading":"lecture de l'archive : jour {n} sur {of}…","st_from_archive":"depuis l'archive de SuperNotify","st_archive_err":"archive lue en partie","st_wd":["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"],"st_i_share":"{p} % de tous les envois passent par {c}.","st_i_peak":"L'heure la plus chargée est {h}:00 ({n} notifications en {d} jours).","st_i_night":"{p} % des notifications arrivent entre 23:00 et 07:00 — envisagez un scénario Ne pas déranger si ce n'est pas voulu.","st_i_night_ok":"Seulement {p} % des notifications arrivent la nuit (23–07) : les heures calmes fonctionnent.","st_i_weekend":"Le week-end compte {p} % de notifications {dir} qu'en semaine.","st_i_errors":"{n} erreurs de canal en {d} jours, surtout sur {c}.","st_i_noerr":"Aucune erreur de canal ces {d} derniers jours.","st_i_prio":"{p} % des notifications sont de priorité {prio}.","st_i_trend":"7 derniers jours : {n}/jour, {dir} de {p} % par rapport aux 7 précédents.","st_more":"en plus","st_less":"en moins","st_up":"en hausse","st_down":"en baisse"},"SN_ARCH_STRINGS":{"title":"Historique des notifications","search":"Rechercher dans le titre ou le message…","f_all":"Toutes","f_problems":"Problèmes seulement","f_today":"Aujourd'hui","f_whisper":"Chuchotées","wh":"chuchoté","said":"Alexa a dit","said_by":"{ch} a dit","none":"aucune notification ne correspond","no_sensor":"capteur introuvable","no_sensor_hint":"Mettez à jour SuperNotify en 2.10 ou plus récente, qui dispose de l'action supernotify.enquire_archive, ou ajoutez le capteur command_line qui indexe l'archive (voir le README).","loading":"lecture de l'archive…","recent":"dernières notifications","read_at":"lu à","of":"sur","in_archive":"dans l'archive","since":"la plus ancienne","updated":"index mis à jour","today":"Aujourd'hui","yesterday":"Hier","delivered":"livré","failed":"échoué","skipped":"ignoré","missed":"manqué","prio":{"critical":"Critique","high":"Haute","low":"Faible","minimum":"Minimum","medium":"Moyenne"},"reasons":{"doppione":"doublon","nessun target":"aucune cible","errore":"erreur","condizione":"condition","scenario":"scénario","presenza":"présence","priorita":"priorité","spento":"désactivé","pausa":"en pause","transport spento":"transport désactivé","nessuna azione":"aucune action","dati non validi":"données non valides","sconosciuto":"inconnu"},"scenarios":"Scénarios actifs","truncated":"message tronqué dans l'index","dur":"durée","id":"id","why":"Pourquoi ? - détail complet","f_appliance":"Électroménager","ap_scope":"parmi les {n} dernières lues en entier : les plus anciennes ne sont pas reconnues"},"SN_WHY_STRINGS":{"title":"Pourquoi ?","pick":"Choisissez une notification pour voir pourquoi elle est allée là où elle est allée.","loading":"chargement…","none":"aucune notification","no_sensor":"capteur introuvable :","no_service":"Service manquant","no_service_hint":"Mettez à jour SuperNotify en 2.10 ou plus récente (supernotify.enquire_archive), ou ajoutez le shell_command sn_archive_detail (voir le README) et redémarrez Home Assistant.","gone":"cette notification n'est plus dans l'archive","priority":"priorité","outcome":"résultat","dupe":"doublon","outcomes":{"success":"livrée","partial_delivery":"livrée en partie","dupe":"doublon","failed":"échouée","error":"échouée","fallback_delivery":"livrée par le canal de secours","no_delivery":"non livrée"},"missed":"manqué (demandé, non envoyé)","step_call":"Appel","step_scen":"Scénarios","step_people":"Personnes","step_ch":"Canaux","call_auto":"aucun canal nommé : routage normal","call_named":"nommés dans l'appel :","call_debug":"avec débogage","nobody":"personne à la maison","ch_sent":"envoyé","ch_problems":"à vérifier","ch_skipped":"ignoré","pb_failed":"échoué","pb_missed":"demandé mais non envoyé","grp_skipped":"ignoré par une règle : normal","grp_not":"non concerné","trace_title":"Trace complète de sélection","fix":{"NO_TARGET":"Aucun destinataire n'a d'adresse pour ce canal : ajoutez-en une à un destinataire, donnez des cibles fixes au canal, ou laissez-le hors de cet appel.","ERROR":"L'intégration derrière ce canal a répondu par une erreur : consultez sa propre entrée dans le journal.","NO_ACTION":"Le canal n'a aucune action à appeler : définissez `action:` sur la livraison.","INVALID_ACTION_DATA":"Les données passées à l'action ont été refusées : vérifiez le `data:` de l'appel ou de la livraison."},"scenarios":"Scénarios actifs","no_scenarios":"aucun scénario actif","applied":"forcé par l'appel","required":"requis par l'appel","constrain":"limité par l'appel à","presence":"Présence","home":"à la maison","away":"absent","channels":"Canaux","no_channels":"aucun canal n'a été sélectionné","st_ok":"livré","st_err":"échoué","st_skip":"ignoré","st_supp":"supprimé","calls":"appels","calls_1":"appel","target_required":"cible requise :","started_by":"sélectionné par","scen_would_off":"désactivé par (outrepassé)","src_default":"toujours actif (par défaut)","src_scen":"scénario","src_call":"l'appel lui-même","src_recipient":"destinataire","r_off_by":"désactivé par","call_targets":"cibles dans l'appel","cats":{"entity_id":"entités","mobile_app_id":"appareils","person_id":"personnes","email":"e-mail","phone":"téléphone","device_id":"appareils"},"not_started":"Canaux qui ne sont pas partis","r_call_off":"exclu par l'appel","r_scen_off":"désactivé par un scénario actif","r_disabled":"désactivé","r_transport_off":"son transport est désactivé","r_only_scen":"ne part que si un scénario l'active","r_only_fallback":"secours uniquement","r_only_explicit":"ne part que si demandé par son nom","r_priority":"pas pour cette priorité","r_unknown":"impossible à reconstituer sans la trace","from_config":"Les raisons des canaux qui ne sont pas partis sont reconstituées à partir de la configuration ACTUELLE, pas de celle de l'époque.","from_trace":"Les raisons proviennent de la trace de sélection archivée avec la notification.","st_time":"durée","st_slow":"le plus lent","st_rate":"des canaux ont réussi","ua_title":"Cibles qu'aucun canal n'a prises","ua_hint":"Elles étaient dans l'appel, mais aucun canal sélectionné n'accepte ce type de cible.","un_title":"Noms qui n'existent pas","sent_by":"Envoyé par","sent_auto":"automatisation","sent_script":"script","sent_person":"","sent_unknown":"expéditeur inconnu (aucune automatisation ni personne dans son contexte)","trace":"Trace de sélection","no_trace":"La trace complète de sélection n'est enregistrée que lorsque l'appel notify contient debug: true, et archivée lorsque les diagnostics de l'archive l'incluent.","reasons":{"NO_TARGET":"aucune cible utilisable","DUPE":"doublon d'une notification récente","PRIORITY":"pas pour cette priorité","SNOOZE":"en pause","SNOOZED":"en pause","DELIVERY_CONDITION":"condition de livraison fausse","OCCUPANCY":"règle de présence","ERROR":"erreur","DELIVERY_DISABLED":"désactivé","SCENARIO":"scénario","TRANSPORT_DISABLED":"son transport est désactivé","NO_SCENARIO":"un scénario requis n'est pas actif","NO_ACTION":"aucune action à appeler","INVALID_ACTION_DATA":"données d'action non valides","UNKNOWN":"raison inconnue"}},"SN_TOOLS_STRINGS":{"maint":"Maintenance","enq":"Interroger SuperNotify","refresh":"Republier toutes les entités","refresh_btn":"Actualiser","resume_btn":"Reprendre","refreshed":"Entités republiées.","resume_all":"Reprendre toutes les pauses","cleared_n":"pauses reprises","purge_arch":"Nettoyer l'archive","purge_media":"Nettoyer les images","older":"plus anciennes que","days":"jours","purge_btn":"Nettoyer","confirm":"Touchez encore pour confirmer","purged":"supprimés","remaining":"restants","reset":"Annuler les modifications faites à la main","reset_btn":"Réinitialiser","reset_none":"Rien à réinitialiser : tout est comme configuré.","reset_done":"Retour à la configuration :","k_all":"tout","k_scenario":"scénarios","k_delivery":"canaux","k_recipient":"personnes","k_transport":"transports","q_config":"Configuration","q_scen":"Scénarios","q_active":"Scénarios actifs","q_by_scen":"Canaux par scénario","q_implicit":"Canaux par défaut","q_recipients":"Destinataires","q_occupancy":"Qui est à la maison","q_snoozes":"Pauses","q_last":"Dernière notification","copy":"Copier le JSON","copied":"Copié","close":"Fermer","empty":"(vide)","err":"SuperNotify a répondu par une erreur :","err_config":"SuperNotify 2.12.0 ne peut pas renvoyer sa configuration quand un canal a des conditions de modèle (rhizomatics/supernotify#241).","settings":"Paramètres de l'intégration","running":"en cours…","more":"plus"},"SN_FORM_LABELS":{"_common":"Apparence et textes","style":"Couleurs","icons":"Icônes","show_version":"Afficher la version de la carte","intro":"Texte d'introduction en haut","title":"Titre","dnd_entity":"Interrupteur Ne pas déranger","quiet_entity":"État calme calculé (facultatif)","presence_entity":"Personne pour la barre d'état","archive_days":"Nettoyage de l'archive : plus ancien que (jours)","media_days":"Nettoyage des images : plus ancien que (jours)","occupancy":"Qui est à la maison (depuis SuperNotify)","repairs":"Réparations SuperNotify dans la liste d'état","snooze_announce":"Annoncer les pauses à voix haute (canal d'annonce)","snooze_via":"Les pauses passent par","o_event":"l'événement des boutons push (admin)","o_voice":"les commandes vocales","snooze_minutes":"Durée de la pause (minutes)","snooze_panel":"La tuile Pause ouvre le panneau des pauses","announce_delivery":"Canal pour les annonces","last_notification":"Afficher la dernière notification","last_channels":"Une puce par canal dans la dernière notification","repeat_entity":"Bouton Répéter la dernière (facultatif)","tile_layout":"Tuiles","tile_columns":"Colonnes de tuiles (vide = automatique)","update_entity":"Entité de mise à jour SuperNotify","cards_update_entity":"Entité de mise à jour des cartes","sent_today_entity":"Compteur journalier (utility meter, facultatif)","count_entity":"Compteur SuperNotify (statistiques à long terme)","health":"État en haut","stats":"Chiffres","poll_seconds":"Actualiser toutes les (secondes)","group":"Grouper selon la façon dont un canal part","hide_defaults":"Masquer les canaux automatiques DEFAULT_","limit":"Notifications dans la liste","expand":"Ouvrir les parties repliées","max_height":"Hauteur maximale (CSS, ex. 70vh)","source":"Source de l'archive","entity":"Capteur d'archive (pont uniquement)","trigger_entity":"Actualiser quand ceci change","dry_run":"Afficher « Essayer sans envoyer »","dry_run_dupe_check":"Simuler aussi le contrôle des doublons","days":"Jours affichés par défaut","manifest_url":"URL du manifeste des automatisations","o_supernotify":"SuperNotify","o_theme":"Thème Home Assistant","o_mdi":"Icônes Home Assistant","o_emoji":"Emoji","o_row":"Icône à gauche","o_stacked":"Haute, icône en haut","o_three":"Envoyées, échecs, canaux","o_full":"Les cinq","o_auto":"Automatique","o_sensor":"Pont par capteur (avant SuperNotify 2.10)","o_archive":"Archive SuperNotify (2.12.1+)","o_history":"Historique des entrées"},"SN_NATIVE_STR":{"all_good":"Tout va bien","paused":"En pause","until":"jusqu'à","resume":"Reprendre","test":"Envoyer un test","sure":"Touchez encore pour envoyer","sent":"Envoyé","last":"Dernière","none":"Aucune notification pour l'instant","ago":"il y a","min":"min","h":"h","err":"transports en erreur","off":"canaux désactivés"},"SN_STRATEGY_TITLES":{"home":"Accueil","archive":"Archives","send":"Envoyer","setup":"Configuration","stats":"Statistiques","tools":"Outils","title":"SuperNotify","appliances":"Électroménager"},"SN_APPL_STRINGS":{"title":"Électroménager","loading":"lecture…","none":"Aucun appareil : ajoutez-en un dans Appliance Autonotify (Paramètres → Appareils et services).","st_run":"En marche","st_cleaning":"Nettoie","st_done":"Terminé · à vider","st_done_other":"Terminé","st_err":"A besoin d'aide","m_switch_on":"Allumer la prise","done_switch_on":"Prise allumée.","done_action":"Fait : {n}.","confirm_action":"Lancer « {n} » ?","open_entity":"Ouvrir pour le modifier","chip_notifs":"Notifications","chip_device":"Appareil","not_found":"Aucun appareil nommé « {n} ».","last7":"7 derniers jours","col_day":"Jour","col_cycles":"Cycles","col_time":"Durée","col_energy":"Consommation","source_h":"Origine","manual_src":"ajouté à la main : en marche au-dessus de {w}","tab_info":"Aperçu","tab_stats":"Consommation et cycles","tab_cleans":"Nettoyages","tab_prints":"Impressions","last_run":"Dernier cycle","avg_run":"Moyenne","reminders_h":"Notifications","power_h":"Puissance actuelle","plug":"Prise","plug_on":"allumée","plug_off":"éteinte","error_h":"Erreur","open_device":"L'appareil dans Home Assistant","prints":"impressions","print1":"impression","per_print":"Chaque impression du mois","last_prints":"Dernières impressions","no_print_month":"Pas encore d'impression ce mois-ci","no_print":"Pas encore d'impression","col_fil":"Filament","failed":"échouée","per_run":"Chaque cycle du mois","no_run":"Pas encore de cycle","dev_hist":"Chacune vient de l'historique de Home Assistant ({n} derniers jours) ; les heures, du compteur de l'appareil quand il en a un.","cleans":"nettoyages","clean1":"nettoyage","per_clean":"Chaque nettoyage du mois","avg_clean":"moyenne {d}","col_area":"Surface","last_cleans":"Derniers nettoyages","no_clean_month":"Pas encore de nettoyage ce mois-ci","no_clean":"Pas encore de nettoyage","vac_hist":"Les totaux viennent des compteurs du robot ; chaque nettoyage, de l'historique de Home Assistant ({n} derniers jours).","st_paused":"En pause","st_returning":"Retourne à la base","st_charging":"En charge","st_docked_w":"Sur sa base","st_idle":"À l'arrêt","st_off":"Éteint","stopped":"À l'arrêt","yesterday":"hier","u_min":"min","u_h":"h","start":"Début","so_far":"jusqu'ici","no_cycle":"Aucun cycle pour l'instant","last_cycle":"Dernier cycle {d}","ended_at":"Terminé à {t}","reminders":"+{n} rappels jusqu'à {t}","reminder1":"+1 rappel à {t}","end_est":"Fin prévue","left":"encore {d}","almost":"presque fini","est_from_avg":"estimé d'après des cycles similaires","running_for":"En marche depuis {d}","btn_empty":"Vidé","btn_seen":"Fait","btn_resume":"Reprendre le nettoyage","m_switch_off":"Éteindre la prise","m_remind":"Me le rappeler plus tard","details":"Détails","settings":"Paramètres","more":"Plus","details_link":"Détails, consommation et cycles","done_empty":"Fait : les rappels s'arrêtent.","done_remind":"Il vous le rappellera plus tard.","done_switch":"Prise éteinte.","done_resume":"Nettoyage repris.","err":"Erreur","new_dev":"{n} nouveaux appareils","new_dev1":"1 nouvel appareil","battery":"Batterie","consumable":"{n} à {p} %","maint_in":"dans {c} cycles","maint_next":"au prochain cycle","maint_due":"à faire","maint_of":"{d} sur {e}","maint_done":"Fait","confirm_maint":"Marquer « {n} » comme fait ? Le compte repart de zéro.","conn_lost":"connexion perdue : dernier état connu","cons_h":"Consommables","commands":"Commandes","tap_again":"Touchez encore pour confirmer","empty_since":"À vider depuis","done_since":"Terminé depuis","avg_cycle":"Cycle moyen","maint_tab":"Entretien","tab_stats_short":"Consommation","read_failed":"Impossible de lire l'historique ({e}) ; nouvel essai sous peu.","retry":"Réessayer","see_chart":"Voir le graphique","back":"Retour","avg_line":"moyenne {v}","tap_bar":"Touchez une barre pour voir ce cycle","k_station":"Station","off_since":"Éteint depuis","close":"Fermer","power_now":"maintenant","p_today":"Aujourd'hui","p_week":"Semaine","p_month":"Mois","p_year":"Année","cycles":"cycles","cycle1":"cycle","per_cycle":"Consommation par cycle ce mois-ci","short":"Courts","long":"Longs","anomalous":"Inhabituels","avg":"moy. {d}, {k}","last_cycles":"Derniers cycles","col_start":"Début","col_dur":"Durée","col_cost":"Coût","no_cycle_month":"Aucun cycle ce mois-ci pour l'instant","coarse":"Les cycles de plus de 10 jours sont comptés à l'heure.","open_notifs":"Notifications de l'appareil","no_power":"Aucun capteur de puissance trouvé : indiquez-le avec `power_entity` dans `appliances:`.","no_power_vac":"Un robot aspirateur n'a pas de capteur de puissance : consommation et cycles ne sont pas comptés.","no_stats":"Le capteur de puissance n'a pas de statistiques (il faut state_class: measurement)."}},"nl":{"SN_STRINGS":{"presence":"Aanwezigheid","time_band":"Tijdvak","quiet":"Stil","act_scen":"Actieve scenario's","on":"aan","off":"uit","active":"actief","dnd":"Niet storen","tap_silence":"tik om te dempen","snooze":"Pauzeren","min":"min","pause_nc":"niet-kritieke pauzeren","snoozed":"Gepauzeerd","until":"tot","tap_clear":"tik om te wissen","announce":"Omroepen","intercom":"intercom","announce_ph":"Omroepen op alle speakers…","send":"Versturen","announced":"Omgeroepen","cleared":"Pauzes gewist","snoozed_for":"Niet-kritieke meldingen gepauzeerd voor","sent":"Verstuurd","sent_today":"Vandaag verstuurd","since_startup":"sinds opstarten","yesterday":"gisteren","failures":"Mislukt","fail_today":"mislukte kanaalverzendingen vandaag","deliveries":"Bezorgingen","enabled_total":"ingeschakeld/totaal","last_notif":"Laatste melding","transports":"Transporten","delivered":"bezorgd","failed":"mislukt","channels":"kanalen","none":"geen","no_transports":"geen transport-entiteiten gevonden","tr_used":"gebruikt door","tr_unused":"geen kanaal gebruikt het","start":"start","volume":"volume","now":"nu","crosses":"gaat over middernacht","no_voice":"geen stem","mute_hint":"Een tijdvak op <b>0%</b> stuurt <b>helemaal geen gesproken melding</b> (Alexa en TTS uit, push en dashboard worden nog wel bezorgd). Kritieke meldingen en meldingen met hoge prioriteit spreken altijd.","enabled":"ingeschakeld","implicit":"altijd aan","explicit":"op verzoek","by_scenario":"alleen scenario","fallback":"reserve","fallback_err":"reserve bij fout","inc_sum":"van deze kanalen","inc_always":"starten vanzelf","inc_req":"alleen op verzoek","inc_scen":"alleen met een scenario","grp_auto":"Starten vanzelf","grp_named":"Alleen als genoemd in de aanroep","grp_scen":"Alleen met een scenario","grp_fallback":"Reserve, als de andere mislukken","ch_title":"Kanalen","ch_count":"{on} van {tot} aan","off_manual":"uitgeschakeld","paused_by":"nu gepauzeerd door","on_by":"nu aan via","fixed_targets":"vaste doelen","no_deliveries":"geen bezorging-entiteiten gevonden","home":"thuis","away":"afwezig","devices":"apparaten","devices_1":"apparaat","rc_test":"Test versturen","rc_test_confirm":"Tik nogmaals om te versturen","rc_test_sent":"Test verstuurd","rc_test_title":"SuperNotify-test","rc_test_msg":"Testbericht vanaf het dashboard,","overrides":"bezorgingsaanpassingen","overrides_1":"bezorgingsaanpassing","no_contact":"geen contactpunten","no_recipients":"geen ontvanger-entiteiten gevonden","details":"Details","h_update":"update beschikbaar:","h_restart":"herstart Home Assistant om de update af te ronden","h_uptodate":"up-to-date","h_transport_err":"transporten met fouten","h_channels_off":"kanalen uit","h_all_good":"Alles in orde","h_health":"Status","h_failures":"mislukkingen","h_failures_1":"mislukking","h_transport_err_1":"transport met fouten","h_channels_off_1":"kanaal uit","channels_1":"kanaal","band_early_morning":"Vroege ochtend","band_morning":"Ochtend","band_afternoon":"Middag","band_evening":"Avond","band_night":"Nacht","band_late_night":"Late nacht","h_look_1":"1 ding om naar te kijken","h_look_n":"{n} dingen om naar te kijken","h_rest_ok":"de rest werkt","h_ch_on":"{on} van {tot} kanalen aan","h_open":"Openen","ln_delivered":"bezorgd","ln_failed":"mislukt","ln_why":"Waarom","tgt_loading":"kiezer laden…","bands_empty_t":"Nog geen tijdvakken","bands_empty":"Voeg één tijdvak per dagdeel toe: een input_datetime voor de start en een input_number voor het stemvolume.","active_now":"nu actief","disabled":"uitgeschakeld","other":"Overig","manual":"handmatig","apply_now":"nu toepassen","applied":"Toegepast","apply_off":"tik om niet meer toe te passen","enabled_lbl":"ingeschakeld","reset_overrides":"Aanpassingen resetten","reset_done":"aanpassingen gereset","transport_off":"transport uit","last_notified":"laatst gemeld","never_notified":"nooit gemeld","media":"media","no_scenarios":"geen scenario-entiteiten gevonden","sim_pick":"🎬 Scenario's — tik om te simuleren","sim_fire":"📤 Kanalen","sim_hint":"Echte gegevens van de engine (opvraagacties). Filteren van bezorgingen op prioriteit gebeurt in de engine en wordt hier niet gesimuleerd. Uitgeschakeld wint van ingeschakeld, net als bij het samenvoegen tijdens gebruik.","sim_none":"er zouden geen bezorgingen starten","scenario_tag":"scenario","sim_go":"Zou verstuurd worden","sim_stop":"Zou niet verstuurd worden","sim_r_default":"start vanzelf","sim_r_on":"aangezet door","sim_r_off":"uitgezet door","sim_r_named":"alleen als genoemd in de aanroep","sim_r_scen":"alleen met een scenario dat het aanzet","sim_r_fallback":"reserve, als de andere mislukken","sim_r_switched":"uitgeschakeld","title":"Titel","message":"Bericht","priority":"Prioriteit","channels_lbl":"Kanalen — niets gekozen = normale routering","camera_lbl":"Camera-snapshot","preview":"Voorbeeld","no_title":"(geen titel)","no_message":"(geen bericht)","default_prio":"standaard (gemiddeld)","comp_hint":"Gekozen kanalen worden verstuurd met delivery_selection: fixed (alleen die starten). Kritiek is echt kritiek — sirenes inbegrepen.","critical_confirm":"Een KRITIEKE melding versturen? Sirenes en maximaal volume inbegrepen.","write_first":"Schrijf eerst een bericht","sent_toast":"Verstuurd","write_or_pick":"Schrijf een bericht, of kies een camera of een kanaal","need_2111":"Een melding zonder tekst vereist SuperNotify 2.11.1","send_err":"Niet verstuurd","dry_btn":"Proberen zonder versturen","dry_title":"Als je het nu verstuurde","dry_err":"Testrun mislukt","dry_would":"zou versturen","dry_skip":"overgeslagen","dry_nobody":"geen ontvanger, alleen directe doelen","dry_targets":"doelen","dry_suppressed":"De melding zou worden onderdrukt","dry_fallback":"Geen kanaal zou starten: terugval op","dry_none":"Geen kanaal geselecteerd","dry_scen":"Actieve scenario's","dry_raw":"Ruw antwoord","dry_prio":"Prioriteit","dry_would_n":"kanalen zouden versturen","dry_nothing":"Er zou niets worden verstuurd","dry_dupe":"Duplicaat van een recente melding: zou worden weggegooid","dry_no_dupe":"Duplicaatcontrole niet gesimuleerd, dus het echte Versturen direct daarna wordt niet geblokkeerd.","dry_restart":"De SuperNotify die nu draait kan niet simuleren: een testrun vereist 2.12, en Home Assistant moet na de update worden herstart.","dry_home":"Thuis","dry_empty":"SuperNotify gaf geen antwoord: is het 2.12 of nieuwer?","dry_reasons":{"NO_TARGET":"geen bruikbaar doel","DUPE":"duplicaat","PRIORITY":"niet voor deze prioriteit","SNOOZED":"gepauzeerd","DELIVERY_CONDITION":"bezorgingsvoorwaarde onwaar","OCCUPANCY":"aanwezigheidsregel","TRANSPORT_DISABLED":"transport uit","DELIVERY_DISABLED":"uitgeschakeld","NO_SCENARIO":"vereist scenario niet actief","NO_ACTION":"geen actie","INVALID_ACTION_DATA":"ongeldige gegevens","UNKNOWN":"onbekende reden","ERROR":"fout"},"prio_minimum":"Minimaal","prio_low":"Laag","prio_medium":"Gemiddeld","prio_high":"Hoog","prio_critical":"Kritiek","target_lbl":"Doel — personen, apparaten, ruimtes, verdiepingen, labels","custom_target_lbl":"Eigen doelen (e-mail, Telegram-ID's, …) — gescheiden door komma's","adv_title":"Geavanceerde opties","adv_spoken":"Gesproken bericht (Alexa, TTS)","adv_spoken_ph":"wat de speakers zeggen, als het anders is dan de tekst","adv_apply":"Deze scenario's toepassen","adv_require":"Alleen versturen als deze scenario's actief zijn","adv_constrain":"Alleen deze scenario's meenemen","adv_snapshot":"Afbeelding van een URL","adv_debug":"Debug: volledige selectietrace vastleggen (getoond door de waarom-kaart)","custom_target_ph":"bijv. user@example.com, 123456789","native_target_tag":"🎯 native ruimte/verdieping/label","target_warn":"⚠️ Ruimtes, verdiepingen en labels worden alleen opgelost door notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts en chime. Met elk ander kanaal — of de standaardroutering als hierboven geen kanaal is gekozen — kan de melding ongemerkt zonder doel eindigen. Kies een compatibel kanaal, of voeg direct een persoon/apparaat toe.","aut_search":"Automatiseringen zoeken…","aut_all":"Alle","aut_none":"Geen resultaten","aut_err":"Manifest niet gevonden — genereer het met tools/genera_vista_automazioni.py","aut_updated":"lijst bijgewerkt","aut_count":"automatiseringen","aut_count_1":"automatisering","never":"nooit","ago_now":"nu","ago_min":"min geleden","ago_h":"u geleden","ago_d":"d geleden","aut_disabled_only":"Alleen uitgeschakeld","grp_active":"actief","repeat":"Herhalen","skipped_n":"overgeslagen","left":"over","missed_n":"gemist","snz_all":"alles","snz_nc":"niet-kritiek","snz_prio":"prioriteit","snz_transport":"transport","snz_for":"voor","snz_choose":"kies wat en hoe lang","snz_title":"Meldingen pauzeren","snz_what":"Wat","snz_nc_l":"Niet-kritiek","snz_all_l":"Alles","snz_ch":"Een kanaal","snz_pr":"Een prioriteit","snz_who":"Voor wie","snz_everyone":"Iedereen","snz_me":"Alleen ik","snz_len":"Hoe lang","snz_forever":"Tot ik hervat","snz_go":"Pauzeren","snz_close":"Sluiten","rs_hand":"handmatig","rs_voice":"met spraak","rs_assist":"door de assistent","snz_voice_info":"Je pauzes lopen via de spraakopdrachten van SuperNotify: ze gelden alleen voor jou.","snz_voice_off":"De spraakopdrachten van SuperNotify staan uit: zet ze aan in de integratie-opties.","snz_resume_mine":"Mijn pauzes hervatten","go_open":"Tonen","dl_probe":"Dit kanaal proberen","probe_msg":"Kanaaltest vanaf het dashboard","sc_why":"Waarom","sc_yes":"Geldt nu","sc_no":"Geldt nu niet","sc_manual_why":"Handmatig scenario: met de hand toegepast","sc_no_cond":"Geen voorwaarden","sc_off_sw":"Uitgeschakeld","sc_not_eval":"niet gecontroleerd","sc_now":"nu","sc_diff_btn_on":"Wat verandert als het geldt","sc_diff_btn_off":"Wat verandert zonder","sc_diff_on":"Als het gold, voor een gemiddelde melding nu:","sc_diff_off":"Zonder, voor een gemiddelde melding nu:","sc_diff_add":"zou ook versturen","sc_diff_rem":"zou niet meer versturen","sc_diff_none":"geen verschil","c_state":"{e} is {s}","c_template":"sjabloonvoorwaarde","c_time":"tijd","c_after":"na","c_before":"voor","c_numeric":"{e}","c_above":"boven","c_below":"onder","c_and":"al deze","c_or":"minstens één hiervan","c_not":"geen van deze","c_or_join":" of ","sim_hint_dry":"Het eigen antwoord van SuperNotify (testrun, er wordt niets verstuurd): een melding nu, met de prioriteit en alleen de scenario's die hierboven zijn gekozen.","sim_msg":"Simulatortest","sim_prio":"Prioriteit","sa_snooze":"{what} gepauzeerd voor {len}.","sa_silence":"{what} gedempt tot nader order.","sa_resume":"{what} weer aan.","sa_resume_one":"Pauze voorbij: {x}.","sa_resume_all":"Meldingen weer aan.","sa_w_nc":"Niet-kritieke meldingen","sa_w_all":"Alle meldingen","sa_w_ch":"Kanaal {x}","sa_w_pr":"Meldingen met prioriteit {x}","sa_w_mine":"Je meldingen","sa_for":"voor {x}","sa_min":"{n} minuten","sa_hour":"een uur","sa_hours":"{n} uur","occ_title":"Wie is er thuis","occ_home_l":"Thuis","occ_ALL_HOME":"Iedereen thuis","occ_ALL_AWAY":"Iedereen weg","occ_LONE_HOME":"Eén persoon thuis","occ_MULTI_HOME":"Enkelen thuis","occ_UNDEFINED_OCCUPANTS":"Niemand gevolgd","h_repairs":"SuperNotify-reparaties","h_repairs_1":"SuperNotify-reparatie","det_more":"Alle attributen","det_yes":"ja","det_no":"nee","det_action":"Actie","det_target":"Vaste doelen","det_target_req":"Vereist een doel","det_target_use":"Doelen gebruiken","det_inclusion":"Gebruikt wanneer","det_prio":"Prioriteiten","det_occ":"Wie thuis moet zijn","det_transport":"Transport","det_data":"Gegevens","det_debug":"Debug","det_err_last":"Laatste fout","det_err_in":"In","det_err_n":"Fouten sinds start","det_select":"Selectie","adv_html":"Tekst voor e-mail (HTML)","adv_clip":"Videoclip van een URL","adv_actions":"Knoppen op de melding","adv_act_id":"actie-id","adv_act_title":"knoptekst","adv_act_add":"+ knop","adv_groups":"Knopgroepen (komma)","adv_dc":"Kanaalinstellingen voor deze melding","adv_dc_ph":"sleutel: waarde, één per regel","adv_dc_add":"+ kanaal","snz_active":"Nu gepauzeerd","snz_resume":"Hervatten","snz_resume_all":"Alles hervatten","snz_until_resumed":"tot hervat","snz_done":"Gepauzeerd","snz_resumed":"Hervat","no_notif":"nog geen melding","st_title":"Gebruik","st_days":"dagen","st_days_short":"d","st_hist_note":"uren, kanalen en prioriteiten over de laatste {n} dagen geschiedenis","st_total":"Meldingen","st_avg":"per dag","st_today":"Vandaag","st_vs_avg":"t.o.v. gemiddelde","st_peak_hour":"Piekuur","st_top_channel":"Topkanaal","st_errors":"Kanaalfouten","st_of_sends":"van de kanaalverzendingen","st_daily":"Per dag","st_hourly":"Per uur van de dag","st_weekday":"Per weekdag","st_channels":"Kanalen — meest gebruikt","st_priority":"Prioriteit","st_period":"Dagdeel","st_insights":"Inzichten","st_no_data":"Nog geen geschiedenis — gegevens verschijnen na de eerste meldingen.","st_unknown":"onbekend","st_loading":"laden…","st_versions":"Versies","st_installed":"geïnstalleerd","st_latest":"nieuwste","st_uptodate":"up-to-date","st_update":"update beschikbaar","st_restart":"herstart vereist","st_cards":"kaarten","st_logged":"vastgelegd","st_reading":"archief lezen: dag {n} van {of}…","st_from_archive":"uit het archief van SuperNotify","st_archive_err":"archief deels gelezen","st_wd":["ma","di","wo","do","vr","za","zo"],"st_i_share":"{p}% van alle kanaalverzendingen gaat via {c}.","st_i_peak":"Drukste uur is {h}:00 ({n} meldingen in {d} dagen).","st_i_night":"{p}% van de meldingen komt binnen tussen 23:00 en 07:00 — overweeg een niet-storen-scenario als je dat niet wilt.","st_i_night_ok":"Slechts {p}% van de meldingen komt 's nachts binnen (23–07): de stille uren werken.","st_i_weekend":"Weekenddagen hebben {p}% {dir} meldingen dan doordeweekse dagen.","st_i_errors":"{n} kanaalfouten in {d} dagen, vooral bij {c}.","st_i_noerr":"Geen kanaalfouten in de laatste {d} dagen.","st_i_prio":"{p}% van de meldingen heeft prioriteit {prio}.","st_i_trend":"Laatste 7 dagen: {n}/dag, {dir} {p}% t.o.v. de 7 daarvoor.","st_more":"meer","st_less":"minder","st_up":"omhoog","st_down":"omlaag"},"SN_STATS_STRINGS":{"st_title":"Gebruik","st_days":"dagen","st_days_short":"d","st_hist_note":"uren, kanalen en prioriteiten over de laatste {n} dagen geschiedenis","st_total":"Meldingen","st_avg":"per dag","st_today":"Vandaag","st_vs_avg":"t.o.v. gemiddelde","st_peak_hour":"Piekuur","st_top_channel":"Topkanaal","st_errors":"Kanaalfouten","st_of_sends":"van de kanaalverzendingen","st_daily":"Per dag","st_hourly":"Per uur van de dag","st_weekday":"Per weekdag","st_channels":"Kanalen — meest gebruikt","st_priority":"Prioriteit","st_period":"Dagdeel","st_insights":"Inzichten","st_no_data":"Nog geen geschiedenis — gegevens verschijnen na de eerste meldingen.","st_unknown":"onbekend","st_loading":"laden…","st_versions":"Versies","st_installed":"geïnstalleerd","st_latest":"nieuwste","st_uptodate":"up-to-date","st_update":"update beschikbaar","st_restart":"herstart vereist","st_cards":"kaarten","st_logged":"vastgelegd","st_reading":"archief lezen: dag {n} van {of}…","st_from_archive":"uit het archief van SuperNotify","st_archive_err":"archief deels gelezen","st_wd":["ma","di","wo","do","vr","za","zo"],"st_i_share":"{p}% van alle kanaalverzendingen gaat via {c}.","st_i_peak":"Drukste uur is {h}:00 ({n} meldingen in {d} dagen).","st_i_night":"{p}% van de meldingen komt binnen tussen 23:00 en 07:00 — overweeg een niet-storen-scenario als je dat niet wilt.","st_i_night_ok":"Slechts {p}% van de meldingen komt 's nachts binnen (23–07): de stille uren werken.","st_i_weekend":"Weekenddagen hebben {p}% {dir} meldingen dan doordeweekse dagen.","st_i_errors":"{n} kanaalfouten in {d} dagen, vooral bij {c}.","st_i_noerr":"Geen kanaalfouten in de laatste {d} dagen.","st_i_prio":"{p}% van de meldingen heeft prioriteit {prio}.","st_i_trend":"Laatste 7 dagen: {n}/dag, {dir} {p}% t.o.v. de 7 daarvoor.","st_more":"meer","st_less":"minder","st_up":"omhoog","st_down":"omlaag"},"SN_ARCH_STRINGS":{"title":"Meldingsgeschiedenis","search":"Zoek in titel of bericht…","f_all":"Alle","f_problems":"Alleen problemen","f_today":"Vandaag","f_whisper":"Gefluisterd","wh":"gefluisterd","said":"Alexa zei","said_by":"{ch} zei","none":"geen melding komt overeen","no_sensor":"sensor niet gevonden","no_sensor_hint":"Werk SuperNotify bij naar 2.10 of nieuwer, met de actie supernotify.enquire_archive, of voeg de command_line-sensor toe die het archief indexeert (zie README).","loading":"archief lezen…","recent":"laatste meldingen","read_at":"gelezen om","of":"van","in_archive":"in het archief","since":"oudste","updated":"index bijgewerkt","today":"Vandaag","yesterday":"Gisteren","delivered":"bezorgd","failed":"mislukt","skipped":"overgeslagen","missed":"gemist","prio":{"critical":"Kritiek","high":"Hoog","low":"Laag","minimum":"Minimaal","medium":"Gemiddeld"},"reasons":{"doppione":"duplicaat","nessun target":"geen doel","errore":"fout","condizione":"voorwaarde","scenario":"scenario","presenza":"aanwezigheid","priorita":"prioriteit","spento":"uit","pausa":"gepauzeerd","transport spento":"transport uit","nessuna azione":"geen actie","dati non validi":"ongeldige gegevens","sconosciuto":"onbekend"},"scenarios":"Actieve scenario's","truncated":"bericht ingekort in de index","dur":"duurde","id":"id","why":"Waarom? - alle details","f_appliance":"Huishoudapparaten","ap_scope":"bij de laatste {n} die volledig zijn gelezen – oudere worden niet herkend"},"SN_WHY_STRINGS":{"title":"Waarom?","pick":"Kies een melding om te zien waarom die ging waar die heen ging.","loading":"laden…","none":"geen melding","no_sensor":"sensor niet gevonden:","no_service":"Ontbrekende actie","no_service_hint":"Werk SuperNotify bij naar 2.10 of nieuwer (supernotify.enquire_archive), of voeg het shell_command sn_archive_detail toe (zie README) en herstart Home Assistant.","gone":"deze melding staat niet meer in het archief","priority":"prioriteit","outcome":"resultaat","dupe":"duplicaat","outcomes":{"success":"bezorgd","partial_delivery":"deels bezorgd","dupe":"duplicaat","failed":"mislukt","error":"mislukt","fallback_delivery":"bezorgd via het reservekanaal","no_delivery":"niet bezorgd"},"missed":"gemist (gevraagd, niet verstuurd)","step_call":"Aanroep","step_scen":"Scenario's","step_people":"Personen","step_ch":"Kanalen","call_auto":"geen kanaal genoemd: normale routering","call_named":"genoemd in de aanroep:","call_debug":"met debug","nobody":"niemand thuis","ch_sent":"verstuurd","ch_problems":"om naar te kijken","ch_skipped":"overgeslagen","pb_failed":"mislukt","pb_missed":"gevraagd maar niet verstuurd","grp_skipped":"overgeslagen door een regel: normaal","grp_not":"niet betrokken","trace_title":"Volledige selectietrace","fix":{"NO_TARGET":"Geen enkele ontvanger heeft een adres voor dit kanaal: voeg er een toe aan een ontvanger, geef het kanaal vaste doelen, of laat het weg uit deze aanroep.","ERROR":"De integratie achter dit kanaal gaf een fout: bekijk de eigen logregel ervan.","NO_ACTION":"Het kanaal heeft geen actie om aan te roepen: stel `action:` in op de bezorging.","INVALID_ACTION_DATA":"De gegevens die aan de actie zijn doorgegeven werden geweigerd: controleer de `data:` van de aanroep of van de bezorging."},"scenarios":"Actieve scenario's","no_scenarios":"geen scenario actief","applied":"geforceerd door de aanroep","required":"vereist door de aanroep","constrain":"door de aanroep beperkt tot","presence":"Aanwezigheid","home":"thuis","away":"afwezig","channels":"Kanalen","no_channels":"er is geen kanaal geselecteerd","st_ok":"bezorgd","st_err":"mislukt","st_skip":"overgeslagen","st_supp":"onderdrukt","calls":"aanroepen","calls_1":"aanroep","target_required":"doel vereist:","started_by":"geselecteerd door","scen_would_off":"uitgezet door (overruled)","src_default":"altijd aan (standaard)","src_scen":"scenario","src_call":"de aanroep zelf","src_recipient":"ontvanger","r_off_by":"uitgezet door","call_targets":"doelen in de aanroep","cats":{"entity_id":"entiteiten","mobile_app_id":"apparaten","person_id":"personen","email":"e-mail","phone":"telefoon","device_id":"apparaten"},"not_started":"Kanalen die niet zijn gestart","r_call_off":"uitgesloten door de aanroep","r_scen_off":"uitgezet door een actief scenario","r_disabled":"uitgeschakeld","r_transport_off":"het transport staat uit","r_only_scen":"start alleen als een scenario het aanzet","r_only_fallback":"alleen reserve","r_only_explicit":"start alleen als het bij naam wordt gevraagd","r_priority":"niet voor deze prioriteit","r_unknown":"niet te reconstrueren zonder de trace","from_config":"Redenen voor kanalen die niet zijn gestart, zijn gereconstrueerd uit de configuratie zoals die NU is, niet zoals die toen was.","from_trace":"Redenen komen uit de selectietrace die met de melding is gearchiveerd.","st_time":"duurde","st_slow":"traagste","st_rate":"van de kanalen gelukt","ua_title":"Doelen die geen kanaal oppakte","ua_hint":"Ze stonden in de aanroep, maar geen geselecteerd kanaal accepteert dit soort doel.","un_title":"Namen die niet bestaan","sent_by":"Verstuurd door","sent_auto":"automatisering","sent_script":"script","sent_person":"","sent_unknown":"afzender onbekend (geen automatisering of persoon in de context)","trace":"Selectietrace","no_trace":"De volledige selectietrace wordt alleen vastgelegd als de notify-aanroep debug: true heeft, en gearchiveerd als de archiefdiagnostiek die bevat.","reasons":{"NO_TARGET":"geen bruikbaar doel","DUPE":"duplicaat van een recente melding","PRIORITY":"niet voor deze prioriteit","SNOOZE":"gepauzeerd","SNOOZED":"gepauzeerd","DELIVERY_CONDITION":"bezorgingsvoorwaarde onwaar","OCCUPANCY":"aanwezigheidsregel","ERROR":"fout","DELIVERY_DISABLED":"uitgeschakeld","SCENARIO":"scenario","TRANSPORT_DISABLED":"het transport staat uit","NO_SCENARIO":"een vereist scenario is niet actief","NO_ACTION":"geen actie om aan te roepen","INVALID_ACTION_DATA":"ongeldige actiegegevens","UNKNOWN":"onbekende reden"}},"SN_TOOLS_STRINGS":{"maint":"Onderhoud","enq":"SuperNotify bevragen","refresh":"Alle entiteiten opnieuw publiceren","refresh_btn":"Vernieuwen","resume_btn":"Hervatten","refreshed":"Entiteiten opnieuw gepubliceerd.","resume_all":"Alle pauzes hervatten","cleared_n":"pauzes hervat","purge_arch":"Archief opschonen","purge_media":"Afbeeldingen opschonen","older":"ouder dan","days":"dagen","purge_btn":"Opschonen","confirm":"Tik nogmaals om te bevestigen","purged":"verwijderd","remaining":"over","reset":"Handmatige wijzigingen ongedaan maken","reset_btn":"Resetten","reset_none":"Niets te resetten: alles is zoals geconfigureerd.","reset_done":"Terug naar de configuratie:","k_all":"alles","k_scenario":"scenario's","k_delivery":"kanalen","k_recipient":"personen","k_transport":"transporten","q_config":"Configuratie","q_scen":"Scenario's","q_active":"Actieve scenario's","q_by_scen":"Kanalen per scenario","q_implicit":"Standaardkanalen","q_recipients":"Ontvangers","q_occupancy":"Wie is er thuis","q_snoozes":"Pauzes","q_last":"Laatste melding","copy":"JSON kopiëren","copied":"Gekopieerd","close":"Sluiten","empty":"(leeg)","err":"SuperNotify antwoordde met een fout:","err_config":"SuperNotify 2.12.0 kan zijn configuratie niet teruggeven als een kanaal sjabloonvoorwaarden heeft (rhizomatics/supernotify#241).","settings":"Integratie-instellingen","running":"bezig…","more":"meer"},"SN_FORM_LABELS":{"_common":"Uiterlijk en tekst","style":"Kleuren","icons":"Pictogrammen","show_version":"Kaartversie tonen","intro":"Introtekst bovenaan","title":"Titel","dnd_entity":"Niet-storen-schakelaar","quiet_entity":"Berekende stille status (optioneel)","presence_entity":"Persoon voor de statusbalk","archive_days":"Archief opschonen: ouder dan (dagen)","media_days":"Afbeeldingen opschonen: ouder dan (dagen)","occupancy":"Wie is er thuis (van SuperNotify)","repairs":"SuperNotify-reparaties in de statuslijst","snooze_announce":"Pauzes hardop zeggen (omroepkanaal)","snooze_via":"Pauzes lopen via","o_event":"de gebeurtenis van de pushknoppen (beheerder)","o_voice":"de spraakopdrachten","snooze_minutes":"Pauzeduur (minuten)","snooze_panel":"Pauzetegel opent het pauzepaneel","announce_delivery":"Kanaal voor omroepen","last_notification":"Laatste melding tonen","last_channels":"Eén chip per kanaal in de laatste melding","repeat_entity":"Knop laatste herhalen (optioneel)","tile_layout":"Tegels","tile_columns":"Tegelkolommen (leeg = automatisch)","update_entity":"SuperNotify-update-entiteit","cards_update_entity":"Update-entiteit van de kaarten","sent_today_entity":"Dagteller (utility meter, optioneel)","count_entity":"SuperNotify-teller (langetermijnstatistieken)","health":"Status bovenaan","stats":"Cijfers","poll_seconds":"Vernieuwen elke (seconden)","group":"Groeperen op hoe een kanaal start","hide_defaults":"Automatische DEFAULT_-kanalen verbergen","limit":"Meldingen in de lijst","expand":"Ingeklapte delen openen","max_height":"Maximale hoogte (CSS, bijv. 70vh)","source":"Archiefbron","entity":"Archiefsensor (alleen brug)","trigger_entity":"Vernieuwen als dit verandert","dry_run":"\"Proberen zonder versturen\" tonen","dry_run_dupe_check":"Ook de duplicaatcontrole simuleren","days":"Standaard getoonde dagen","manifest_url":"URL van het automatiseringsmanifest","o_supernotify":"SuperNotify","o_theme":"Home Assistant-thema","o_mdi":"Home Assistant-pictogrammen","o_emoji":"Emoji","o_row":"Pictogram links","o_stacked":"Hoog, pictogram bovenaan","o_three":"Verstuurd, mislukt, kanalen","o_full":"Alle vijf","o_auto":"Automatisch","o_sensor":"Sensorbrug (vóór SuperNotify 2.10)","o_archive":"SuperNotify-archief (2.12.1+)","o_history":"Geschiedenis van de helpers"},"SN_NATIVE_STR":{"all_good":"Alles in orde","paused":"Gepauzeerd","until":"tot","resume":"Hervatten","test":"Test versturen","sure":"Tik nogmaals om te versturen","sent":"Verstuurd","last":"Laatste","none":"Nog geen melding","ago":"geleden","min":"min","h":"u","err":"transporten met fouten","off":"kanalen uit"},"SN_STRATEGY_TITLES":{"home":"Home","archive":"Archief","send":"Versturen","setup":"Instellingen","stats":"Statistieken","tools":"Hulpmiddelen","title":"SuperNotify","appliances":"Huishoudapparaten"},"SN_APPL_STRINGS":{"title":"Huishoudapparaten","loading":"lezen…","none":"Geen apparaten: stel er een in via Appliance Autonotify (Instellingen → Apparaten en diensten).","st_run":"Bezig","st_cleaning":"Maakt schoon","st_done":"Klaar · leeghalen","st_done_other":"Klaar","st_err":"Heeft hulp nodig","m_switch_on":"Stekker aanzetten","done_switch_on":"Stekker aangezet.","done_action":"Gedaan: {n}.","confirm_action":"«{n}» uitvoeren?","open_entity":"Openen om te wijzigen","chip_notifs":"Meldingen","chip_device":"Apparaat","not_found":"Geen apparaat met de naam «{n}».","last7":"Laatste 7 dagen","col_day":"Dag","col_cycles":"Cycli","col_time":"Tijd","col_energy":"Verbruik","source_h":"Bron","manual_src":"handmatig toegevoegd: draait boven {w}","tab_info":"Overzicht","tab_stats":"Verbruik en cycli","tab_cleans":"Schoonmaakbeurten","tab_prints":"Afdrukken","last_run":"Laatste cyclus","avg_run":"Gemiddeld","reminders_h":"Meldingen","power_h":"Vermogen nu","plug":"Stekker","plug_on":"aan","plug_off":"uit","error_h":"Fout","open_device":"Het apparaat in Home Assistant","prints":"afdrukken","print1":"afdruk","per_print":"Elke afdruk deze maand","last_prints":"Laatste afdrukken","no_print_month":"Nog geen afdruk deze maand","no_print":"Nog geen afdruk","col_fil":"Filament","failed":"mislukt","per_run":"Elke cyclus deze maand","no_run":"Nog geen cyclus","dev_hist":"Elk komt uit de geschiedenis van Home Assistant (laatste {n} dagen); de uren uit de teller van het apparaat als het die heeft.","cleans":"schoonmaakbeurten","clean1":"schoonmaakbeurt","per_clean":"Elke schoonmaakbeurt deze maand","avg_clean":"gemiddeld {d}","col_area":"Oppervlak","last_cleans":"Laatste schoonmaakbeurten","no_clean_month":"Nog geen schoonmaakbeurt deze maand","no_clean":"Nog geen schoonmaakbeurt","vac_hist":"De totalen komen uit de tellers van de robot; elke schoonmaakbeurt uit de geschiedenis van Home Assistant (laatste {n} dagen).","st_paused":"Gepauzeerd","st_returning":"Keert terug naar het dock","st_charging":"Laadt op","st_docked_w":"In het dock","st_idle":"Stil","st_off":"Uit","stopped":"Stil","yesterday":"gisteren","u_min":"min","u_h":"u","start":"Start","so_far":"tot nu toe","no_cycle":"Nog geen cyclus","last_cycle":"Laatste cyclus {d}","ended_at":"Klaar om {t}","reminders":"+{n} herinneringen tot {t}","reminder1":"+1 herinnering om {t}","end_est":"Verwacht einde","left":"nog {d}","almost":"bijna klaar","est_from_avg":"geschat uit vergelijkbare cycli","running_for":"Bezig sinds {d}","btn_empty":"Leeggehaald","btn_seen":"Gedaan","btn_resume":"Schoonmaken hervatten","m_switch_off":"Stekker uitschakelen","m_remind":"Herinner me later","details":"Details","settings":"Instellingen","more":"Meer","details_link":"Details, verbruik en cycli","done_empty":"Gedaan: de herinneringen stoppen.","done_remind":"Je wordt later herinnerd.","done_switch":"Stekker uitgeschakeld.","done_resume":"Schoonmaken hervat.","err":"Fout","new_dev":"{n} nieuwe apparaten","new_dev1":"1 nieuw apparaat","battery":"Batterij","consumable":"{n} op {p}%","maint_in":"over {c} cycli","maint_next":"bij de volgende cyclus","maint_due":"nu nodig","maint_of":"{d} van {e}","maint_done":"Gedaan","confirm_maint":"«{n}» als gedaan markeren? De telling begint opnieuw.","conn_lost":"verbinding verbroken: laatst bekende toestand","cons_h":"Verbruiksartikelen","commands":"Opdrachten","tap_again":"Tik nogmaals om te bevestigen","empty_since":"Uit te ruimen sinds","done_since":"Klaar sinds","avg_cycle":"Gemiddelde cyclus","maint_tab":"Onderhoud","tab_stats_short":"Verbruik","read_failed":"De geschiedenis kon niet worden gelezen ({e}); straks opnieuw.","retry":"Opnieuw","see_chart":"Grafiek bekijken","back":"Terug","avg_line":"gemiddeld {v}","tap_bar":"Tik op een balk voor die cyclus","k_station":"Station","off_since":"Uit sinds","close":"Sluiten","power_now":"nu","p_today":"Vandaag","p_week":"Week","p_month":"Maand","p_year":"Jaar","cycles":"cycli","cycle1":"cyclus","per_cycle":"Verbruik per cyclus deze maand","short":"Kort","long":"Lang","anomalous":"Afwijkend","avg":"gem. {d}, {k}","last_cycles":"Laatste cycli","col_start":"Start","col_dur":"Duur","col_cost":"Kosten","no_cycle_month":"Deze maand nog geen cyclus","coarse":"Cycli van meer dan 10 dagen geleden worden per uur geteld.","open_notifs":"Meldingen van het apparaat","no_power":"Geen vermogenssensor gevonden: geef hem op met `power_entity` in `appliances:`.","no_power_vac":"Een robotstofzuiger heeft geen vermogenssensor: verbruik en cycli worden niet geteld.","no_stats":"De vermogenssensor heeft geen statistieken (state_class: measurement nodig)."}},"pl":{"SN_STRINGS":{"presence":"Obecność","time_band":"Pora dnia","quiet":"Cisza","act_scen":"Aktywne scenariusze","on":"wł.","off":"wył.","active":"aktywny","dnd":"Nie przeszkadzać","tap_silence":"dotknij, aby wyciszyć","snooze":"Drzemka","min":"min","pause_nc":"wstrzymaj niekrytyczne","snoozed":"Wstrzymane","until":"do","tap_clear":"dotknij, aby wyczyścić","announce":"Ogłoś","intercom":"interkom","announce_ph":"Ogłoś na wszystkich głośnikach…","send":"Wyślij","announced":"Ogłoszono","cleared":"Drzemki wyczyszczone","snoozed_for":"Wstrzymano niekrytyczne powiadomienia na","sent":"Wysłane","sent_today":"Wysłane dzisiaj","since_startup":"od uruchomienia","yesterday":"wczoraj","failures":"Błędy","fail_today":"nieudane wysyłki kanałów dzisiaj","deliveries":"Dostarczenia","enabled_total":"włączone/wszystkie","last_notif":"Ostatnie powiadomienie","transports":"Transporty","delivered":"dostarczone","failed":"nieudane","channels":"kanałów","none":"brak","no_transports":"nie znaleziono encji transportów","tr_used":"używany przez","tr_unused":"żaden kanał go nie używa","start":"początek","volume":"głośność","now":"teraz","crosses":"przechodzi przez północ","no_voice":"bez głosu","mute_hint":"Pora z <b>0%</b> nie wysyła <b>żadnego ogłoszenia głosowego</b> (Alexa i TTS wyłączone, push i pulpit nadal dostarczane). Alerty krytyczne i o wysokim priorytecie zawsze są wypowiadane.","enabled":"włączone","implicit":"zawsze wł.","explicit":"na żądanie","by_scenario":"tylko scenariusz","fallback":"zapasowy","fallback_err":"zapasowy przy błędzie","inc_sum":"z tych kanałów","inc_always":"startuje samo","inc_req":"tylko na żądanie","inc_scen":"tylko ze scenariuszem","grp_auto":"Startują same","grp_named":"Tylko gdy wskazane w wywołaniu","grp_scen":"Tylko ze scenariuszem","grp_fallback":"Zapasowe, gdy inne zawiodą","ch_title":"Kanały","ch_count":"{on} z {tot} wł.","off_manual":"wyłączony","paused_by":"teraz wstrzymany przez","on_by":"teraz włączony przez","fixed_targets":"stałe cele","no_deliveries":"nie znaleziono encji dostarczeń","home":"w domu","away":"poza domem","devices":"urządzeń","devices_1":"urządzenie","rc_test":"Wyślij test","rc_test_confirm":"Dotknij ponownie, aby wysłać","rc_test_sent":"Test wysłany","rc_test_title":"Test SuperNotify","rc_test_msg":"Wiadomość testowa z pulpitu,","overrides":"nadpisań dostarczeń","overrides_1":"nadpisanie dostarczenia","no_contact":"brak danych kontaktowych","no_recipients":"nie znaleziono encji odbiorców","details":"Szczegóły","h_update":"dostępna aktualizacja:","h_restart":"uruchom ponownie Home Assistant, aby dokończyć aktualizację","h_uptodate":"aktualne","h_transport_err":"transportów z błędami","h_channels_off":"kanałów wył.","h_all_good":"Wszystko w porządku","h_health":"Stan","h_failures":"błędów","h_failures_1":"błąd","h_transport_err_1":"transport z błędami","h_channels_off_1":"kanał wył.","channels_1":"kanał","band_early_morning":"Wczesny ranek","band_morning":"Rano","band_afternoon":"Popołudnie","band_evening":"Wieczór","band_night":"Noc","band_late_night":"Późna noc","h_look_1":"1 rzecz do sprawdzenia","h_look_n":"Rzeczy do sprawdzenia: {n}","h_rest_ok":"reszta działa","h_ch_on":"{on} z {tot} kanałów wł.","h_open":"Otwórz","ln_delivered":"dostarczone","ln_failed":"nieudane","ln_why":"Dlaczego","tgt_loading":"ładowanie selektora…","bands_empty_t":"Brak pór dnia","bands_empty":"Dodaj jedną porę na każdą część dnia: input_datetime dla jej początku i input_number dla głośności głosu.","active_now":"aktywny teraz","disabled":"wyłączony","other":"Inne","manual":"ręczny","apply_now":"zastosuj teraz","applied":"Zastosowany","apply_off":"dotknij, aby przestać stosować","enabled_lbl":"włączony","reset_overrides":"Resetuj nadpisania","reset_done":"nadpisania zresetowane","transport_off":"transport wył.","last_notified":"ostatnio powiadomiony","never_notified":"nigdy nie powiadomiony","media":"media","no_scenarios":"nie znaleziono encji scenariuszy","sim_pick":"🎬 Scenariusze — dotknij, aby zasymulować","sim_fire":"📤 Kanały","sim_hint":"Prawdziwe dane silnika (usługi enquire). Filtrowanie dostarczeń według priorytetu odbywa się w silniku i nie jest tu symulowane. Wyłączenie wygrywa z włączeniem, jak przy scalaniu w trakcie działania.","sim_none":"żadne dostarczenie by nie ruszyło","scenario_tag":"scenariusz","sim_go":"Zostałoby wysłane","sim_stop":"Nie zostałoby wysłane","sim_r_default":"startuje samo","sim_r_on":"włączony przez","sim_r_off":"wyłączony przez","sim_r_named":"tylko gdy wskazany w wywołaniu","sim_r_scen":"tylko ze scenariuszem, który go włącza","sim_r_fallback":"zapasowy, gdy inne zawiodą","sim_r_switched":"wyłączony","title":"Tytuł","message":"Wiadomość","priority":"Priorytet","channels_lbl":"Kanały — brak wyboru = zwykłe kierowanie","camera_lbl":"Zrzut z kamery","preview":"Podgląd","no_title":"(bez tytułu)","no_message":"(bez wiadomości)","default_prio":"domyślny (średni)","comp_hint":"Wybrane kanały są wysyłane z delivery_selection: fixed (tylko one ruszają). Krytyczny naprawdę jest krytyczny — łącznie z syrenami.","critical_confirm":"Wysłać KRYTYCZNE powiadomienie? Łącznie z syrenami i maksymalną głośnością.","write_first":"Najpierw napisz wiadomość","sent_toast":"Wysłano","write_or_pick":"Napisz wiadomość albo wybierz kamerę lub kanał","need_2111":"Powiadomienie bez tekstu wymaga SuperNotify 2.11.1","send_err":"Nie wysłano","dry_btn":"Wypróbuj bez wysyłania","dry_title":"Gdybyś wysłał je teraz","dry_err":"Próba nie powiodła się","dry_would":"wysłałby","dry_skip":"pominięty","dry_nobody":"brak odbiorcy, tylko cele bezpośrednie","dry_targets":"cele","dry_suppressed":"Powiadomienie zostałoby wstrzymane","dry_fallback":"Żaden kanał by nie ruszył: zapasowy","dry_none":"Nie wybrano kanału","dry_scen":"Aktywne scenariusze","dry_raw":"Surowa odpowiedź","dry_prio":"Priorytet","dry_would_n":"kanałów by wysłało","dry_nothing":"Nic nie zostałoby wysłane","dry_dupe":"Duplikat niedawnego powiadomienia: zostałoby odrzucone","dry_no_dupe":"Wykrywanie duplikatów nie jest symulowane, więc prawdziwe Wyślij zaraz potem nie zostanie zablokowane.","dry_restart":"Obecnie działający SuperNotify nie potrafi symulować: próba wymaga 2.12, a po aktualizacji trzeba ponownie uruchomić Home Assistant.","dry_home":"W domu","dry_empty":"SuperNotify nie odpowiedział: czy to wersja 2.12 lub nowsza?","dry_reasons":{"NO_TARGET":"brak użytecznego celu","DUPE":"duplikat","PRIORITY":"nie dla tego priorytetu","SNOOZED":"drzemka","DELIVERY_CONDITION":"warunek dostarczenia niespełniony","OCCUPANCY":"reguła obecności","TRANSPORT_DISABLED":"transport wył.","DELIVERY_DISABLED":"wyłączony","NO_SCENARIO":"wymagany scenariusz nieaktywny","NO_ACTION":"brak akcji","INVALID_ACTION_DATA":"nieprawidłowe dane","UNKNOWN":"nieznany powód","ERROR":"błąd"},"prio_minimum":"Minimalny","prio_low":"Niski","prio_medium":"Średni","prio_high":"Wysoki","prio_critical":"Krytyczny","target_lbl":"Cel — osoby, urządzenia, obszary, piętra, etykiety","custom_target_lbl":"Własne cele (e-mail, ID Telegram, …) — oddzielone przecinkami","adv_title":"Opcje zaawansowane","adv_spoken":"Wiadomość mówiona (Alexa, TTS)","adv_spoken_ph":"co mówią głośniki, jeśli inaczej niż tekst","adv_apply":"Zastosuj te scenariusze","adv_require":"Wyślij tylko, gdy te scenariusze są aktywne","adv_constrain":"Uwzględnij tylko te scenariusze","adv_snapshot":"Obraz z adresu URL","adv_debug":"Debug: zapisz pełny ślad wyboru (pokazywany przez kartę Dlaczego)","custom_target_ph":"np. user@example.com, 123456789","native_target_tag":"🎯 natywny obszar/piętro/etykieta","target_warn":"⚠️ Obszary, piętra i etykiety są rozwiązywane tylko przez notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts i chime. Z każdym innym kanałem — albo przy domyślnym kierowaniu, gdy powyżej nie wybrano kanału — powiadomienie może po cichu zostać bez celu. Wybierz zgodny kanał albo dodaj osobę/urządzenie bezpośrednio.","aut_search":"Szukaj automatyzacji…","aut_all":"Wszystkie","aut_none":"Brak wyników","aut_err":"Nie znaleziono manifestu — wygeneruj go przez tools/genera_vista_automazioni.py","aut_updated":"lista zaktualizowana","aut_count":"automatyzacji","aut_count_1":"automatyzacja","never":"nigdy","ago_now":"teraz","ago_min":"min temu","ago_h":"godz. temu","ago_d":"dni temu","aut_disabled_only":"Tylko wyłączone","grp_active":"aktywne","repeat":"Powtórz","skipped_n":"pominięte","left":"zostało","missed_n":"nieodebrane","snz_all":"wszystko","snz_nc":"niekrytyczne","snz_prio":"priorytet","snz_transport":"transport","snz_for":"na","snz_choose":"wybierz co i na jak długo","snz_title":"Wstrzymaj powiadomienia","snz_what":"Co","snz_nc_l":"Niekrytyczne","snz_all_l":"Wszystko","snz_ch":"Kanał","snz_pr":"Priorytet","snz_who":"Dla kogo","snz_everyone":"Wszyscy","snz_me":"Tylko ja","snz_len":"Jak długo","snz_forever":"Aż wznowię","snz_go":"Wstrzymaj","snz_close":"Zamknij","rs_hand":"ręcznie","rs_voice":"głosem","rs_assist":"przez asystenta","snz_voice_info":"Twoje pauzy idą przez komendy głosowe SuperNotify: dotyczą tylko ciebie.","snz_voice_off":"Komendy głosowe SuperNotify są wyłączone: włącz je w opcjach integracji.","snz_resume_mine":"Wznów moje","go_open":"Pokaż","dl_probe":"Wypróbuj ten kanał","probe_msg":"Test kanału z pulpitu","sc_why":"Dlaczego","sc_yes":"Obowiązuje teraz","sc_no":"Teraz nie obowiązuje","sc_manual_why":"Scenariusz ręczny: stosowany ręcznie","sc_no_cond":"Brak warunków","sc_off_sw":"Wyłączony","sc_not_eval":"nie sprawdzono","sc_now":"teraz","sc_diff_btn_on":"Co się zmieni, jeśli obowiązuje","sc_diff_btn_off":"Co się zmieni bez niego","sc_diff_on":"Gdyby obowiązywał, dla średniego powiadomienia teraz:","sc_diff_off":"Bez niego, dla średniego powiadomienia teraz:","sc_diff_add":"wysłałby też","sc_diff_rem":"już by nie wysłał","sc_diff_none":"bez różnicy","c_state":"{e} to {s}","c_template":"warunek szablonu","c_time":"czas","c_after":"po","c_before":"przed","c_numeric":"{e}","c_above":"powyżej","c_below":"poniżej","c_and":"wszystkie z tych","c_or":"co najmniej jeden z tych","c_not":"żaden z tych","c_or_join":" lub ","sim_hint_dry":"Własna odpowiedź SuperNotify (próba, nic nie jest wysyłane): powiadomienie teraz, z priorytetem i tylko scenariuszami wybranymi powyżej.","sim_msg":"Test symulatora","sim_prio":"Priorytet","sa_snooze":"{what} wstrzymane na {len}.","sa_silence":"{what} wyciszone do odwołania.","sa_resume":"{what} znów włączone.","sa_resume_one":"Koniec pauzy: {x}.","sa_resume_all":"Powiadomienia znów włączone.","sa_w_nc":"Niekrytyczne powiadomienia","sa_w_all":"Wszystkie powiadomienia","sa_w_ch":"Kanał {x}","sa_w_pr":"Powiadomienia o priorytecie {x}","sa_w_mine":"Twoje powiadomienia","sa_for":"dla {x}","sa_min":"{n} minut","sa_hour":"jedną godzinę","sa_hours":"{n} godz.","occ_title":"Kto jest w domu","occ_home_l":"W domu","occ_ALL_HOME":"Wszyscy w domu","occ_ALL_AWAY":"Wszyscy poza domem","occ_LONE_HOME":"Tylko jedna osoba w domu","occ_MULTI_HOME":"Kilka osób w domu","occ_UNDEFINED_OCCUPANTS":"Nikt nie jest śledzony","h_repairs":"naprawy SuperNotify","h_repairs_1":"naprawa SuperNotify","det_more":"Wszystkie atrybuty","det_yes":"tak","det_no":"nie","det_action":"Akcja","det_target":"Stałe cele","det_target_req":"Wymaga celu","det_target_use":"Cele używają","det_inclusion":"Używany, gdy","det_prio":"Priorytety","det_occ":"Kto musi być w domu","det_transport":"Transport","det_data":"Dane","det_debug":"Debug","det_err_last":"Ostatni błąd","det_err_in":"W","det_err_n":"Błędy od uruchomienia","det_select":"Wybór","adv_html":"Tekst do e-maila (HTML)","adv_clip":"Klip wideo z adresu URL","adv_actions":"Przyciski w powiadomieniu","adv_act_id":"id akcji","adv_act_title":"tekst przycisku","adv_act_add":"+ przycisk","adv_groups":"Grupy przycisków (przecinek)","adv_dc":"Ustawienia kanałów dla tego powiadomienia","adv_dc_ph":"klucz: wartość, jedno na linię","adv_dc_add":"+ kanał","snz_active":"Teraz wstrzymane","snz_resume":"Wznów","snz_resume_all":"Wznów wszystko","snz_until_resumed":"do wznowienia","snz_done":"Wstrzymano","snz_resumed":"Wznowiono","no_notif":"brak powiadomień","st_title":"Użycie","st_days":"dni","st_days_short":"d","st_hist_note":"godziny, kanały i priorytety z ostatnich {n} dni historii","st_total":"Powiadomienia","st_avg":"dziennie","st_today":"Dzisiaj","st_vs_avg":"vs. średnia","st_peak_hour":"Godzina szczytu","st_top_channel":"Główny kanał","st_errors":"Błędy kanałów","st_of_sends":"wysyłek kanałów","st_daily":"Dziennie","st_hourly":"Według godziny","st_weekday":"Według dnia tygodnia","st_channels":"Kanały — najczęściej używane","st_priority":"Priorytet","st_period":"Pora dnia","st_insights":"Wnioski","st_no_data":"Brak historii — dane pojawią się po pierwszych powiadomieniach.","st_unknown":"nieznane","st_loading":"ładowanie…","st_versions":"Wersje","st_installed":"zainstalowana","st_latest":"najnowsza","st_uptodate":"aktualna","st_update":"dostępna aktualizacja","st_restart":"wymagany restart","st_cards":"karty","st_logged":"zapisane","st_reading":"czytanie archiwum: dzień {n} z {of}…","st_from_archive":"z archiwum SuperNotify","st_archive_err":"archiwum odczytane częściowo","st_wd":["Pn","Wt","Śr","Cz","Pt","So","Nd"],"st_i_share":"{p}% wszystkich wysyłek kanałów idzie przez {c}.","st_i_peak":"Najbardziej ruchliwa godzina to {h}:00 ({n} powiadomień w {d} dni).","st_i_night":"{p}% powiadomień przychodzi między 23:00 a 07:00 — rozważ scenariusz „Nie przeszkadzać”, jeśli to niepożądane.","st_i_night_ok":"Tylko {p}% powiadomień przychodzi w nocy (23–07): godziny ciszy działają.","st_i_weekend":"W weekendy jest {p}% {dir} powiadomień niż w dni robocze.","st_i_errors":"{n} błędów kanałów w {d} dni, głównie na {c}.","st_i_noerr":"Brak błędów kanałów w ostatnich {d} dniach.","st_i_prio":"{p}% powiadomień ma priorytet {prio}.","st_i_trend":"Ostatnie 7 dni: {n}/dzień, {dir} o {p}% względem 7 poprzednich.","st_more":"więcej","st_less":"mniej","st_up":"wzrost","st_down":"spadek"},"SN_STATS_STRINGS":{"st_title":"Użycie","st_days":"dni","st_days_short":"d","st_hist_note":"godziny, kanały i priorytety z ostatnich {n} dni historii","st_total":"Powiadomienia","st_avg":"dziennie","st_today":"Dzisiaj","st_vs_avg":"vs. średnia","st_peak_hour":"Godzina szczytu","st_top_channel":"Główny kanał","st_errors":"Błędy kanałów","st_of_sends":"wysyłek kanałów","st_daily":"Dziennie","st_hourly":"Według godziny","st_weekday":"Według dnia tygodnia","st_channels":"Kanały — najczęściej używane","st_priority":"Priorytet","st_period":"Pora dnia","st_insights":"Wnioski","st_no_data":"Brak historii — dane pojawią się po pierwszych powiadomieniach.","st_unknown":"nieznane","st_loading":"ładowanie…","st_versions":"Wersje","st_installed":"zainstalowana","st_latest":"najnowsza","st_uptodate":"aktualna","st_update":"dostępna aktualizacja","st_restart":"wymagany restart","st_cards":"karty","st_logged":"zapisane","st_reading":"czytanie archiwum: dzień {n} z {of}…","st_from_archive":"z archiwum SuperNotify","st_archive_err":"archiwum odczytane częściowo","st_wd":["Pn","Wt","Śr","Cz","Pt","So","Nd"],"st_i_share":"{p}% wszystkich wysyłek kanałów idzie przez {c}.","st_i_peak":"Najbardziej ruchliwa godzina to {h}:00 ({n} powiadomień w {d} dni).","st_i_night":"{p}% powiadomień przychodzi między 23:00 a 07:00 — rozważ scenariusz „Nie przeszkadzać”, jeśli to niepożądane.","st_i_night_ok":"Tylko {p}% powiadomień przychodzi w nocy (23–07): godziny ciszy działają.","st_i_weekend":"W weekendy jest {p}% {dir} powiadomień niż w dni robocze.","st_i_errors":"{n} błędów kanałów w {d} dni, głównie na {c}.","st_i_noerr":"Brak błędów kanałów w ostatnich {d} dniach.","st_i_prio":"{p}% powiadomień ma priorytet {prio}.","st_i_trend":"Ostatnie 7 dni: {n}/dzień, {dir} o {p}% względem 7 poprzednich.","st_more":"więcej","st_less":"mniej","st_up":"wzrost","st_down":"spadek"},"SN_ARCH_STRINGS":{"title":"Historia powiadomień","search":"Szukaj w tytule lub wiadomości…","f_all":"Wszystkie","f_problems":"Tylko problemy","f_today":"Dzisiaj","f_whisper":"Szeptane","wh":"szeptem","said":"Alexa powiedziała","said_by":"{ch} powiedział","none":"żadne powiadomienie nie pasuje","no_sensor":"nie znaleziono sensora","no_sensor_hint":"Zaktualizuj SuperNotify do 2.10 lub nowszej, która ma akcję supernotify.enquire_archive, albo dodaj sensor command_line indeksujący archiwum (zob. README).","loading":"czytanie archiwum…","recent":"ostatnie powiadomienia","read_at":"odczytano o","of":"z","in_archive":"w archiwum","since":"najstarsze","updated":"indeks zaktualizowany","today":"Dzisiaj","yesterday":"Wczoraj","delivered":"dostarczone","failed":"nieudane","skipped":"pominięte","missed":"nieodebrane","prio":{"critical":"Krytyczny","high":"Wysoki","low":"Niski","minimum":"Minimalny","medium":"Średni"},"reasons":{"doppione":"duplikat","nessun target":"brak celu","errore":"błąd","condizione":"warunek","scenario":"scenariusz","presenza":"obecność","priorita":"priorytet","spento":"wył.","pausa":"drzemka","transport spento":"transport wył.","nessuna azione":"brak akcji","dati non validi":"nieprawidłowe dane","sconosciuto":"nieznany"},"scenarios":"Obowiązujące scenariusze","truncated":"wiadomość skrócona w indeksie","dur":"trwało","id":"id","why":"Dlaczego? - pełne szczegóły","f_appliance":"AGD","ap_scope":"wśród ostatnich {n} odczytanych w całości – starsze nie są rozpoznawane"},"SN_WHY_STRINGS":{"title":"Dlaczego?","pick":"Wybierz powiadomienie, aby zobaczyć, dlaczego trafiło tam, gdzie trafiło.","loading":"ładowanie…","none":"brak powiadomienia","no_sensor":"nie znaleziono sensora:","no_service":"Brak usługi","no_service_hint":"Zaktualizuj SuperNotify do 2.10 lub nowszej (supernotify.enquire_archive) albo dodaj shell_command sn_archive_detail (zob. README) i uruchom ponownie Home Assistant.","gone":"tego powiadomienia nie ma już w archiwum","priority":"priorytet","outcome":"wynik","dupe":"duplikat","outcomes":{"success":"dostarczone","partial_delivery":"częściowo dostarczone","dupe":"duplikat","failed":"nieudane","error":"nieudane","fallback_delivery":"dostarczone przez kanał zapasowy","no_delivery":"niedostarczone"},"missed":"nieodebrane (żądane, nie wysłane)","step_call":"Wywołanie","step_scen":"Scenariusze","step_people":"Osoby","step_ch":"Kanały","call_auto":"nie wskazano kanału: zwykłe kierowanie","call_named":"wskazane w wywołaniu:","call_debug":"z debugiem","nobody":"nikogo nie ma w domu","ch_sent":"wysłane","ch_problems":"do sprawdzenia","ch_skipped":"pominięte","pb_failed":"nieudane","pb_missed":"żądane, ale nie wysłane","grp_skipped":"pominięte przez regułę: normalne","grp_not":"niezaangażowane","trace_title":"Pełny ślad wyboru","fix":{"NO_TARGET":"Żaden odbiorca nie ma adresu dla tego kanału: dodaj go odbiorcy, nadaj kanałowi stałe cele albo pomiń go w tym wywołaniu.","ERROR":"Integracja stojąca za tym kanałem odpowiedziała błędem: sprawdź jej wpis w logu.","NO_ACTION":"Kanał nie ma akcji do wywołania: ustaw `action:` w dostarczeniu.","INVALID_ACTION_DATA":"Dane przekazane do akcji zostały odrzucone: sprawdź `data:` wywołania lub dostarczenia."},"scenarios":"Obowiązujące scenariusze","no_scenarios":"żaden scenariusz nie obowiązuje","applied":"wymuszony przez wywołanie","required":"wymagany przez wywołanie","constrain":"ograniczony przez wywołanie do","presence":"Obecność","home":"w domu","away":"poza domem","channels":"Kanały","no_channels":"nie wybrano żadnego kanału","st_ok":"dostarczone","st_err":"nieudane","st_skip":"pominięte","st_supp":"wstrzymane","calls":"wywołań","calls_1":"wywołanie","target_required":"wymagany cel:","started_by":"wybrany przez","scen_would_off":"wyłączony przez (uchylone)","src_default":"zawsze wł. (domyślnie)","src_scen":"scenariusz","src_call":"samo wywołanie","src_recipient":"odbiorca","r_off_by":"wyłączony przez","call_targets":"cele w wywołaniu","cats":{"entity_id":"encje","mobile_app_id":"urządzenia","person_id":"osoby","email":"e-mail","phone":"telefon","device_id":"urządzenia"},"not_started":"Kanały, które nie ruszyły","r_call_off":"wykluczony przez wywołanie","r_scen_off":"wyłączony przez obowiązujący scenariusz","r_disabled":"wyłączony","r_transport_off":"jego transport jest wyłączony","r_only_scen":"startuje tylko, gdy włączy go scenariusz","r_only_fallback":"tylko zapasowy","r_only_explicit":"startuje tylko, gdy wskazany z nazwy","r_priority":"nie dla tego priorytetu","r_unknown":"nie do odtworzenia bez śladu","from_config":"Powody dla kanałów, które nie ruszyły, są odtwarzane z konfiguracji w jej OBECNYM stanie, nie takim, jaki był wtedy.","from_trace":"Powody pochodzą ze śladu wyboru zarchiwizowanego z powiadomieniem.","st_time":"trwało","st_slow":"najwolniejszy","st_rate":"kanałów się powiodło","ua_title":"Cele, których nie przyjął żaden kanał","ua_hint":"Były w wywołaniu, ale żaden wybrany kanał nie przyjmuje tego rodzaju celu.","un_title":"Nazwy, które nie istnieją","sent_by":"Wysłane przez","sent_auto":"automatyzacja","sent_script":"skrypt","sent_person":"","sent_unknown":"nadawca nieznany (brak automatyzacji lub osoby w kontekście)","trace":"Ślad wyboru","no_trace":"Pełny ślad wyboru jest zapisywany tylko, gdy wywołanie notify ma debug: true, i archiwizowany, gdy diagnostyka archiwum go uwzględnia.","reasons":{"NO_TARGET":"brak użytecznego celu","DUPE":"duplikat niedawnego powiadomienia","PRIORITY":"nie dla tego priorytetu","SNOOZE":"drzemka","SNOOZED":"drzemka","DELIVERY_CONDITION":"warunek dostarczenia niespełniony","OCCUPANCY":"reguła obecności","ERROR":"błąd","DELIVERY_DISABLED":"wyłączony","SCENARIO":"scenariusz","TRANSPORT_DISABLED":"jego transport jest wyłączony","NO_SCENARIO":"wymagany scenariusz nie obowiązuje","NO_ACTION":"brak akcji do wywołania","INVALID_ACTION_DATA":"nieprawidłowe dane akcji","UNKNOWN":"nieznany powód"}},"SN_TOOLS_STRINGS":{"maint":"Konserwacja","enq":"Zapytaj SuperNotify","refresh":"Opublikuj ponownie każdą encję","refresh_btn":"Odśwież","resume_btn":"Wznów","refreshed":"Encje opublikowane ponownie.","resume_all":"Wznów każdą pauzę","cleared_n":"pauz wznowionych","purge_arch":"Wyczyść archiwum","purge_media":"Wyczyść obrazy","older":"starsze niż","days":"dni","purge_btn":"Wyczyść","confirm":"Dotknij ponownie, aby potwierdzić","purged":"usunięte","remaining":"zostało","reset":"Cofnij zmiany wprowadzone ręcznie","reset_btn":"Resetuj","reset_none":"Nic do zresetowania: wszystko jest zgodne z konfiguracją.","reset_done":"Przywrócono konfigurację:","k_all":"wszystko","k_scenario":"scenariusze","k_delivery":"kanały","k_recipient":"osoby","k_transport":"transporty","q_config":"Konfiguracja","q_scen":"Scenariusze","q_active":"Aktywne scenariusze","q_by_scen":"Kanały według scenariusza","q_implicit":"Kanały domyślne","q_recipients":"Odbiorcy","q_occupancy":"Kto jest w domu","q_snoozes":"Pauzy","q_last":"Ostatnie powiadomienie","copy":"Kopiuj JSON","copied":"Skopiowano","close":"Zamknij","empty":"(puste)","err":"SuperNotify odpowiedział błędem:","err_config":"SuperNotify 2.12.0 nie potrafi zwrócić swojej konfiguracji, gdy kanał ma warunki szablonu (rhizomatics/supernotify#241).","settings":"Ustawienia integracji","running":"w toku…","more":"więcej"},"SN_FORM_LABELS":{"_common":"Wygląd i tekst","style":"Kolory","icons":"Ikony","show_version":"Pokaż wersję karty","intro":"Tekst wprowadzający na górze","title":"Tytuł","dnd_entity":"Przełącznik Nie przeszkadzać","quiet_entity":"Obliczony stan ciszy (opcjonalnie)","presence_entity":"Osoba na pasku stanu","archive_days":"Czyszczenie archiwum: starsze niż (dni)","media_days":"Czyszczenie obrazów: starsze niż (dni)","occupancy":"Kto jest w domu (z SuperNotify)","repairs":"Naprawy SuperNotify na liście stanu","snooze_announce":"Ogłaszaj pauzy na głos (kanał ogłoszeń)","snooze_via":"Pauzy idą przez","o_event":"zdarzenie przycisków push (admin)","o_voice":"komendy głosowe","snooze_minutes":"Długość drzemki (minuty)","snooze_panel":"Kafelek drzemki otwiera panel pauzy","announce_delivery":"Kanał do ogłoszeń","last_notification":"Pokaż ostatnie powiadomienie","last_channels":"Jeden chip na kanał w ostatnim powiadomieniu","repeat_entity":"Przycisk powtórzenia ostatniego (opcjonalnie)","tile_layout":"Kafelki","tile_columns":"Kolumny kafelków (puste = automatycznie)","update_entity":"Encja aktualizacji SuperNotify","cards_update_entity":"Encja aktualizacji kart","sent_today_entity":"Licznik dzienny (utility meter, opcjonalnie)","count_entity":"Licznik SuperNotify (statystyki długoterminowe)","health":"Stan na górze","stats":"Liczby","poll_seconds":"Odświeżaj co (sekundy)","group":"Grupuj według sposobu startu kanału","hide_defaults":"Ukryj automatyczne kanały DEFAULT_","limit":"Powiadomienia na liście","expand":"Rozwiń zwinięte części","max_height":"Maksymalna wysokość (CSS, np. 70vh)","source":"Źródło archiwum","entity":"Sensor archiwum (tylko most)","trigger_entity":"Odśwież, gdy to się zmieni","dry_run":"Pokaż „Wypróbuj bez wysyłania”","dry_run_dupe_check":"Symuluj też wykrywanie duplikatów","days":"Domyślnie pokazywane dni","manifest_url":"URL manifestu automatyzacji","o_supernotify":"SuperNotify","o_theme":"Motyw Home Assistant","o_mdi":"Ikony Home Assistant","o_emoji":"Emoji","o_row":"Ikona po lewej","o_stacked":"Wysokie, ikona na górze","o_three":"Wysłane, błędy, kanały","o_full":"Wszystkie pięć","o_auto":"Automatycznie","o_sensor":"Most sensora (przed SuperNotify 2.10)","o_archive":"Archiwum SuperNotify (2.12.1+)","o_history":"Historia pomocników"},"SN_NATIVE_STR":{"all_good":"Wszystko w porządku","paused":"Wstrzymane","until":"do","resume":"Wznów","test":"Wyślij test","sure":"Dotknij ponownie, aby wysłać","sent":"Wysłane","last":"Ostatnie","none":"Brak powiadomień","ago":"temu","min":"min","h":"godz.","err":"transportów z błędami","off":"kanałów wył."},"SN_STRATEGY_TITLES":{"home":"Główna","archive":"Archiwum","send":"Wyślij","setup":"Ustawienia","stats":"Statystyki","tools":"Narzędzia","title":"SuperNotify","appliances":"AGD"},"SN_APPL_STRINGS":{"title":"AGD","loading":"odczyt…","none":"Brak urządzeń: dodaj je w Appliance Autonotify (Ustawienia → Urządzenia i usługi).","st_run":"Pracuje","st_cleaning":"Sprząta","st_done":"Gotowe · do opróżnienia","st_done_other":"Gotowe","st_err":"Potrzebuje pomocy","m_switch_on":"Włącz gniazdko","done_switch_on":"Gniazdko włączone.","done_action":"Gotowe: {n}.","confirm_action":"Wykonać «{n}»?","open_entity":"Otwórz, aby zmienić","chip_notifs":"Powiadomienia","chip_device":"Urządzenie","not_found":"Brak urządzenia o nazwie «{n}».","last7":"Ostatnie 7 dni","col_day":"Dzień","col_cycles":"Cykle","col_time":"Czas","col_energy":"Zużycie","source_h":"Źródło","manual_src":"dodane ręcznie: pracuje powyżej {w}","tab_info":"Przegląd","tab_stats":"Zużycie i cykle","tab_cleans":"Sprzątania","tab_prints":"Wydruki","last_run":"Ostatni cykl","avg_run":"Średnio","reminders_h":"Powiadomienia","power_h":"Moc teraz","plug":"Gniazdko","plug_on":"włączone","plug_off":"wyłączone","error_h":"Błąd","open_device":"Urządzenie w Home Assistant","prints":"wydruki","print1":"wydruk","per_print":"Każdy wydruk w tym miesiącu","last_prints":"Ostatnie wydruki","no_print_month":"W tym miesiącu jeszcze bez wydruku","no_print":"Jeszcze bez wydruku","col_fil":"Filament","failed":"nieudany","per_run":"Każdy cykl w tym miesiącu","no_run":"Jeszcze bez cyklu","dev_hist":"Każdy pochodzi z historii Home Assistant (ostatnie {n} dni); godziny z licznika urządzenia, jeśli go ma.","cleans":"sprzątania","clean1":"sprzątanie","per_clean":"Każde sprzątanie w tym miesiącu","avg_clean":"średnio {d}","col_area":"Powierzchnia","last_cleans":"Ostatnie sprzątania","no_clean_month":"W tym miesiącu jeszcze bez sprzątania","no_clean":"Jeszcze bez sprzątania","vac_hist":"Sumy pochodzą z liczników robota, pojedyncze sprzątania z historii Home Assistant (ostatnie {n} dni).","st_paused":"Wstrzymane","st_returning":"Wraca do stacji","st_charging":"Ładuje się","st_docked_w":"W stacji","st_idle":"Bezczynne","st_off":"Wyłączone","stopped":"Bezczynne","yesterday":"wczoraj","u_min":"min","u_h":"godz.","start":"Start","so_far":"dotąd","no_cycle":"Jeszcze bez cyklu","last_cycle":"Ostatni cykl {d}","ended_at":"Skończone o {t}","reminders":"+{n} przypomnień do {t}","reminder1":"+1 przypomnienie o {t}","end_est":"Przewidywany koniec","left":"zostało {d}","almost":"zaraz skończy","est_from_avg":"szacunek z podobnych cykli","running_for":"Pracuje od {d}","btn_empty":"Opróżnione","btn_seen":"Zrobione","btn_resume":"Wznów sprzątanie","m_switch_off":"Wyłącz gniazdko","m_remind":"Przypomnij później","details":"Szczegóły","settings":"Ustawienia","more":"Więcej","details_link":"Szczegóły, zużycie i cykle","done_empty":"Zrobione: przypomnienia ustają.","done_remind":"Przypomni później.","done_switch":"Gniazdko wyłączone.","done_resume":"Sprzątanie wznowione.","err":"Błąd","new_dev":"Nowe urządzenia: {n}","new_dev1":"1 nowe urządzenie","battery":"Bateria","consumable":"{n}: {p}%","maint_in":"pozostało cykli: {c}","maint_next":"przy następnym cyklu","maint_due":"do zrobienia","maint_of":"{d} z {e}","maint_done":"Zrobione","confirm_maint":"Oznaczyć «{n}» jako zrobione? Liczenie zacznie się od nowa.","conn_lost":"utracono połączenie: ostatni znany stan","cons_h":"Materiały eksploatacyjne","commands":"Polecenia","tap_again":"Dotknij ponownie, aby potwierdzić","empty_since":"Do opróżnienia od","done_since":"Zakończono","avg_cycle":"Średni cykl","maint_tab":"Konserwacja","tab_stats_short":"Zużycie","read_failed":"Nie udało się odczytać historii ({e}); ponowię za chwilę.","retry":"Ponów","see_chart":"Pokaż wykres","back":"Wstecz","avg_line":"średnio {v}","tap_bar":"Dotknij słupka, aby zobaczyć cykl","k_station":"Stacja","off_since":"Wyłączone od","close":"Zamknij","power_now":"teraz","p_today":"Dziś","p_week":"Tydzień","p_month":"Miesiąc","p_year":"Rok","cycles":"cykli","cycle1":"cykl","per_cycle":"Zużycie na cykl w tym miesiącu","short":"Krótkie","long":"Długie","anomalous":"Nietypowe","avg":"śr. {d}, {k}","last_cycles":"Ostatnie cykle","col_start":"Start","col_dur":"Czas","col_cost":"Koszt","no_cycle_month":"W tym miesiącu jeszcze bez cyklu","coarse":"Cykle sprzed ponad 10 dni liczone są co godzinę.","open_notifs":"Powiadomienia urządzenia","no_power":"Nie znaleziono czujnika mocy: podaj go jako `power_entity` w `appliances:`.","no_power_vac":"Robot sprzątający nie ma czujnika mocy: zużycie i cykle nie są liczone.","no_stats":"Czujnik mocy nie ma statystyk (potrzebny state_class: measurement)."}},"pt":{"SN_STRINGS":{"presence":"Presença","time_band":"Faixa horária","quiet":"Silêncio","act_scen":"Cenários ativos","on":"ligado","off":"desligado","active":"ativo","dnd":"Não incomodar","tap_silence":"toque para silenciar","snooze":"Pausa","min":"min","pause_nc":"pausar não críticas","snoozed":"Em pausa","until":"até","tap_clear":"toque para limpar","announce":"Anunciar","intercom":"intercomunicador","announce_ph":"Anunciar em todos os altifalantes…","send":"Enviar","announced":"Anunciado","cleared":"Pausas removidas","snoozed_for":"Notificações não críticas em pausa durante","sent":"Enviadas","sent_today":"Enviadas hoje","since_startup":"desde o arranque","yesterday":"ontem","failures":"Falhas","fail_today":"envios por canal falhados hoje","deliveries":"Entregas","enabled_total":"ativas/total","last_notif":"Última notificação","transports":"Transportes","delivered":"entregue","failed":"falhou","channels":"canais","none":"nenhum","no_transports":"nenhuma entidade de transporte encontrada","tr_used":"usado por","tr_unused":"nenhum canal o usa","start":"início","volume":"volume","now":"agora","crosses":"passa a meia-noite","no_voice":"sem voz","mute_hint":"Uma faixa a <b>0%</b> não envia <b>nenhum anúncio por voz</b> (Alexa e TTS desligados, push e painel continuam a ser entregues). Os alertas críticos e de prioridade alta falam sempre.","enabled":"ativado","implicit":"sempre ligado","explicit":"a pedido","by_scenario":"só por cenário","fallback":"reserva","fallback_err":"reserva em caso de erro","inc_sum":"destes canais","inc_always":"arrancam sozinhos","inc_req":"só quando pedidos","inc_scen":"só com um cenário","grp_auto":"Arrancam sozinhos","grp_named":"Só quando indicados na chamada","grp_scen":"Só com um cenário","grp_fallback":"Reserva, quando os outros falham","ch_title":"Canais","ch_count":"{on} de {tot} ligados","off_manual":"desligado","paused_by":"em pausa agora por","on_by":"ligado agora através de","fixed_targets":"destinos fixos","no_deliveries":"nenhuma entidade de entrega encontrada","home":"em casa","away":"fora","devices":"dispositivos","devices_1":"dispositivo","rc_test":"Enviar um teste","rc_test_confirm":"Toque de novo para enviar","rc_test_sent":"Teste enviado","rc_test_title":"Teste SuperNotify","rc_test_msg":"Mensagem de teste do painel,","overrides":"substituições de entrega","overrides_1":"substituição de entrega","no_contact":"sem contactos","no_recipients":"nenhuma entidade de destinatário encontrada","details":"Detalhes","h_update":"atualização disponível:","h_restart":"reinicie o Home Assistant para concluir a atualização","h_uptodate":"atualizado","h_transport_err":"transportes com erros","h_channels_off":"canais desligados","h_all_good":"Tudo bem","h_health":"Estado","h_failures":"falhas","h_failures_1":"falha","h_transport_err_1":"transporte com erros","h_channels_off_1":"canal desligado","channels_1":"canal","band_early_morning":"Madrugada","band_morning":"Manhã","band_afternoon":"Tarde","band_evening":"Fim de tarde","band_night":"Noite","band_late_night":"Noite avançada","h_look_1":"1 coisa a verificar","h_look_n":"{n} coisas a verificar","h_rest_ok":"todo o resto funciona","h_ch_on":"{on} de {tot} canais ligados","h_open":"Abrir","ln_delivered":"entregue","ln_failed":"falhou","ln_why":"Porquê","tgt_loading":"a carregar o seletor…","bands_empty_t":"Ainda sem faixas horárias","bands_empty":"Adicione uma faixa por cada parte do dia: um input_datetime para o início e um input_number para o volume da voz.","active_now":"ativo agora","disabled":"desativado","other":"Outros","manual":"manual","apply_now":"aplicar agora","applied":"Aplicado","apply_off":"toque para deixar de aplicar","enabled_lbl":"ativado","reset_overrides":"Repor substituições","reset_done":"substituições repostas","transport_off":"transporte desligado","last_notified":"última notificação","never_notified":"nunca notificado","media":"multimédia","no_scenarios":"nenhuma entidade de cenário encontrada","sim_pick":"🎬 Cenários — toque para simular","sim_fire":"📤 Canais","sim_hint":"Dados reais do motor (serviços enquire). A filtragem de entregas por prioridade acontece no motor e não é simulada aqui. Desativado prevalece sobre ativado, como na combinação em execução.","sim_none":"nenhuma entrega seria acionada","scenario_tag":"cenário","sim_go":"Seria enviado","sim_stop":"Não seria enviado","sim_r_default":"arranca sozinho","sim_r_on":"ligado por","sim_r_off":"desligado por","sim_r_named":"só quando indicado na chamada","sim_r_scen":"só com um cenário que o ligue","sim_r_fallback":"reserva, quando os outros falham","sim_r_switched":"desligado","title":"Título","message":"Mensagem","priority":"Prioridade","channels_lbl":"Canais — nenhum escolhido = encaminhamento normal","camera_lbl":"Captura da câmara","preview":"Pré-visualização","no_title":"(sem título)","no_message":"(sem mensagem)","default_prio":"predefinida (média)","comp_hint":"Os canais escolhidos são enviados com delivery_selection: fixed (só esses são acionados). Crítica é mesmo crítica — sirenes incluídas.","critical_confirm":"Enviar uma notificação CRÍTICA? Sirenes e volume máximo incluídos.","write_first":"Escreva primeiro uma mensagem","sent_toast":"Enviado","write_or_pick":"Escreva uma mensagem, ou escolha uma câmara ou um canal","need_2111":"Uma notificação sem texto requer o SuperNotify 2.11.1","send_err":"Não enviado","dry_btn":"Experimentar sem enviar","dry_title":"Se o enviasse agora","dry_err":"A simulação falhou","dry_would":"enviaria","dry_skip":"ignorado","dry_nobody":"nenhum destinatário, só destinos diretos","dry_targets":"destinos","dry_suppressed":"A notificação seria suprimida","dry_fallback":"Nenhum canal seria acionado: reserva para","dry_none":"Nenhum canal selecionado","dry_scen":"Cenários ativos","dry_raw":"Resposta em bruto","dry_prio":"Prioridade","dry_would_n":"canais enviariam","dry_nothing":"Nada seria enviado","dry_dupe":"Duplicado de uma notificação recente: seria descartada","dry_no_dupe":"Verificação de duplicados não simulada, por isso o Enviar real logo a seguir não é bloqueado.","dry_restart":"O SuperNotify em execução não consegue simular: a simulação requer a 2.12 e o Home Assistant tem de ser reiniciado após a atualização.","dry_home":"Casa","dry_empty":"O SuperNotify não deu resposta: é a 2.12 ou posterior?","dry_reasons":{"NO_TARGET":"sem destino utilizável","DUPE":"duplicado","PRIORITY":"não para esta prioridade","SNOOZED":"em pausa","DELIVERY_CONDITION":"condição da entrega falsa","OCCUPANCY":"regra de presença","TRANSPORT_DISABLED":"transporte desligado","DELIVERY_DISABLED":"desligado","NO_SCENARIO":"cenário exigido não está em vigor","NO_ACTION":"sem ação","INVALID_ACTION_DATA":"dados inválidos","UNKNOWN":"motivo desconhecido","ERROR":"erro"},"prio_minimum":"Mínima","prio_low":"Baixa","prio_medium":"Média","prio_high":"Alta","prio_critical":"Crítica","target_lbl":"Destino — pessoas, dispositivos, áreas, pisos, etiquetas","custom_target_lbl":"Destinos personalizados (e-mail, IDs do Telegram, …) — separados por vírgulas","adv_title":"Opções avançadas","adv_spoken":"Mensagem falada (Alexa, TTS)","adv_spoken_ph":"o que os altifalantes dizem, se for diferente do texto","adv_apply":"Aplicar estes cenários","adv_require":"Enviar só se estes cenários estiverem ativos","adv_constrain":"Considerar só estes cenários","adv_snapshot":"Imagem a partir de um URL","adv_debug":"Depuração: registar o rastreio completo da seleção (mostrado pelo cartão Porquê)","custom_target_ph":"ex. user@example.com, 123456789","native_target_tag":"🎯 área/piso/etiqueta nativos","target_warn":"⚠️ Áreas, pisos e etiquetas só são resolvidos por notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts e chime. Com qualquer outro canal — ou com o encaminhamento predefinido quando nenhum canal é escolhido acima — a notificação pode ficar silenciosamente sem destino. Escolha um canal compatível, ou adicione diretamente uma pessoa/dispositivo.","aut_search":"Pesquisar automações…","aut_all":"Todas","aut_none":"Sem resultados","aut_err":"Manifesto não encontrado — gere-o com tools/genera_vista_automazioni.py","aut_updated":"lista atualizada","aut_count":"automações","aut_count_1":"automação","never":"nunca","ago_now":"agora","ago_min":"min atrás","ago_h":"h atrás","ago_d":"d atrás","aut_disabled_only":"Só desativadas","grp_active":"ativos","repeat":"Repetir","skipped_n":"ignorados","left":"restantes","missed_n":"perdidos","snz_all":"tudo","snz_nc":"não críticas","snz_prio":"prioridade","snz_transport":"transporte","snz_for":"durante","snz_choose":"escolha o quê e por quanto tempo","snz_title":"Pausar notificações","snz_what":"O quê","snz_nc_l":"Não críticas","snz_all_l":"Tudo","snz_ch":"Um canal","snz_pr":"Uma prioridade","snz_who":"Para quem","snz_everyone":"Todos","snz_me":"Só eu","snz_len":"Quanto tempo","snz_forever":"Até eu retomar","snz_go":"Pausar","snz_close":"Fechar","rs_hand":"à mão","rs_voice":"por voz","rs_assist":"pelo assistente","snz_voice_info":"As suas pausas passam pelos comandos de voz do SuperNotify: são só suas.","snz_voice_off":"Os comandos de voz do SuperNotify estão desligados: ative-os nas opções da integração.","snz_resume_mine":"Retomar as minhas","go_open":"Mostrar","dl_probe":"Experimentar este canal","probe_msg":"Teste de canal a partir do painel","sc_why":"Porquê","sc_yes":"Aplica-se agora","sc_no":"Não se aplica agora","sc_manual_why":"Cenário manual: aplicado à mão","sc_no_cond":"Sem condições","sc_off_sw":"Desligado","sc_not_eval":"não verificado","sc_now":"agora","sc_diff_btn_on":"O que muda se se aplicar","sc_diff_btn_off":"O que muda sem ele","sc_diff_on":"Se se aplicasse, para uma notificação média agora:","sc_diff_off":"Sem ele, para uma notificação média agora:","sc_diff_add":"também enviaria","sc_diff_rem":"deixaria de enviar","sc_diff_none":"sem diferença","c_state":"{e} está {s}","c_template":"condição de modelo","c_time":"hora","c_after":"depois de","c_before":"antes de","c_numeric":"{e}","c_above":"acima de","c_below":"abaixo de","c_and":"todas estas","c_or":"pelo menos uma destas","c_not":"nenhuma destas","c_or_join":" ou ","sim_hint_dry":"A resposta do próprio SuperNotify (simulação, nada é enviado): uma notificação agora, com a prioridade e só os cenários escolhidos acima.","sim_msg":"Teste do simulador","sim_prio":"Prioridade","sa_snooze":"{what} em pausa durante {len}.","sa_silence":"{what} silenciadas até nova ordem.","sa_resume":"{what} reativadas.","sa_resume_one":"Pausa terminada: {x}.","sa_resume_all":"Notificações reativadas.","sa_w_nc":"Notificações não críticas","sa_w_all":"Todas as notificações","sa_w_ch":"Canal {x}","sa_w_pr":"Notificações de prioridade {x}","sa_w_mine":"As suas notificações","sa_for":"para {x}","sa_min":"{n} minutos","sa_hour":"uma hora","sa_hours":"{n} horas","occ_title":"Quem está em casa","occ_home_l":"Em casa","occ_ALL_HOME":"Todos em casa","occ_ALL_AWAY":"Todos fora","occ_LONE_HOME":"Só um em casa","occ_MULTI_HOME":"Alguns em casa","occ_UNDEFINED_OCCUPANTS":"Ninguém monitorizado","h_repairs":"reparações do SuperNotify","h_repairs_1":"reparação do SuperNotify","det_more":"Todos os atributos","det_yes":"sim","det_no":"não","det_action":"Ação","det_target":"Destinos fixos","det_target_req":"Requer um destino","det_target_use":"Os destinos usam","det_inclusion":"Usado quando","det_prio":"Prioridades","det_occ":"Quem tem de estar em casa","det_transport":"Transporte","det_data":"Dados","det_debug":"Depuração","det_err_last":"Último erro","det_err_in":"Em","det_err_n":"Erros desde o arranque","det_select":"Seleção","adv_html":"Texto para e-mail (HTML)","adv_clip":"Clipe de vídeo a partir de um URL","adv_actions":"Botões na notificação","adv_act_id":"id da ação","adv_act_title":"texto do botão","adv_act_add":"+ botão","adv_groups":"Grupos de botões (vírgula)","adv_dc":"Definições do canal para esta notificação","adv_dc_ph":"chave: valor, um por linha","adv_dc_add":"+ canal","snz_active":"Em pausa agora","snz_resume":"Retomar","snz_resume_all":"Retomar tudo","snz_until_resumed":"até retomar","snz_done":"Em pausa","snz_resumed":"Retomado","no_notif":"ainda sem notificações","st_title":"Utilização","st_days":"dias","st_days_short":"d","st_hist_note":"horas, canais e prioridades nos últimos {n} dias de histórico","st_total":"Notificações","st_avg":"por dia","st_today":"Hoje","st_vs_avg":"vs. média","st_peak_hour":"Hora de pico","st_top_channel":"Canal mais usado","st_errors":"Erros de canal","st_of_sends":"dos envios por canal","st_daily":"Por dia","st_hourly":"Por hora do dia","st_weekday":"Por dia da semana","st_channels":"Canais — mais usados","st_priority":"Prioridade","st_period":"Período do dia","st_insights":"Observações","st_no_data":"Ainda sem histórico — os dados aparecem após as primeiras notificações.","st_unknown":"desconhecido","st_loading":"a carregar…","st_versions":"Versões","st_installed":"instalada","st_latest":"mais recente","st_uptodate":"atualizado","st_update":"atualização disponível","st_restart":"reinício necessário","st_cards":"cartões","st_logged":"registadas","st_reading":"a ler o arquivo: dia {n} de {of}…","st_from_archive":"do arquivo do SuperNotify","st_archive_err":"arquivo lido em parte","st_wd":["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"],"st_i_share":"{p}% de todos os envios por canal passam por {c}.","st_i_peak":"A hora mais movimentada é às {h}:00 ({n} notificações em {d} dias).","st_i_night":"{p}% das notificações chegam entre as 23:00 e as 07:00 — considere um cenário Não incomodar se não as quiser.","st_i_night_ok":"Apenas {p}% das notificações chegam à noite (23–07): as horas de silêncio estão a funcionar.","st_i_weekend":"Os dias de fim de semana têm {p}% {dir} notificações do que os dias úteis.","st_i_errors":"{n} erros de canal em {d} dias, sobretudo em {c}.","st_i_noerr":"Nenhum erro de canal nos últimos {d} dias.","st_i_prio":"{p}% das notificações têm prioridade {prio}.","st_i_trend":"Últimos 7 dias: {n}/dia, {dir} {p}% face aos 7 anteriores.","st_more":"mais","st_less":"menos","st_up":"subida de","st_down":"descida de"},"SN_STATS_STRINGS":{"st_title":"Utilização","st_days":"dias","st_days_short":"d","st_hist_note":"horas, canais e prioridades nos últimos {n} dias de histórico","st_total":"Notificações","st_avg":"por dia","st_today":"Hoje","st_vs_avg":"vs. média","st_peak_hour":"Hora de pico","st_top_channel":"Canal mais usado","st_errors":"Erros de canal","st_of_sends":"dos envios por canal","st_daily":"Por dia","st_hourly":"Por hora do dia","st_weekday":"Por dia da semana","st_channels":"Canais — mais usados","st_priority":"Prioridade","st_period":"Período do dia","st_insights":"Observações","st_no_data":"Ainda sem histórico — os dados aparecem após as primeiras notificações.","st_unknown":"desconhecido","st_loading":"a carregar…","st_versions":"Versões","st_installed":"instalada","st_latest":"mais recente","st_uptodate":"atualizado","st_update":"atualização disponível","st_restart":"reinício necessário","st_cards":"cartões","st_logged":"registadas","st_reading":"a ler o arquivo: dia {n} de {of}…","st_from_archive":"do arquivo do SuperNotify","st_archive_err":"arquivo lido em parte","st_wd":["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"],"st_i_share":"{p}% de todos os envios por canal passam por {c}.","st_i_peak":"A hora mais movimentada é às {h}:00 ({n} notificações em {d} dias).","st_i_night":"{p}% das notificações chegam entre as 23:00 e as 07:00 — considere um cenário Não incomodar se não as quiser.","st_i_night_ok":"Apenas {p}% das notificações chegam à noite (23–07): as horas de silêncio estão a funcionar.","st_i_weekend":"Os dias de fim de semana têm {p}% {dir} notificações do que os dias úteis.","st_i_errors":"{n} erros de canal em {d} dias, sobretudo em {c}.","st_i_noerr":"Nenhum erro de canal nos últimos {d} dias.","st_i_prio":"{p}% das notificações têm prioridade {prio}.","st_i_trend":"Últimos 7 dias: {n}/dia, {dir} {p}% face aos 7 anteriores.","st_more":"mais","st_less":"menos","st_up":"subida de","st_down":"descida de"},"SN_ARCH_STRINGS":{"title":"Histórico de notificações","search":"Pesquisar título ou mensagem…","f_all":"Todas","f_problems":"Só problemas","f_today":"Hoje","f_whisper":"Sussurradas","wh":"sussurrada","said":"A Alexa disse","said_by":"{ch} disse","none":"nenhuma notificação corresponde","no_sensor":"sensor não encontrado","no_sensor_hint":"Atualize o SuperNotify para a 2.10 ou posterior, que tem a ação supernotify.enquire_archive, ou adicione o sensor command_line que indexa o arquivo (ver README).","loading":"a ler o arquivo…","recent":"últimas notificações","read_at":"lido às","of":"de","in_archive":"no arquivo","since":"mais antiga","updated":"índice atualizado","today":"Hoje","yesterday":"Ontem","delivered":"entregue","failed":"falhou","skipped":"ignorado","missed":"perdido","prio":{"critical":"Crítica","high":"Alta","low":"Baixa","minimum":"Mínima","medium":"Média"},"reasons":{"doppione":"duplicado","nessun target":"sem destino","errore":"erro","condizione":"condição","scenario":"cenário","presenza":"presença","priorita":"prioridade","spento":"desligado","pausa":"em pausa","transport spento":"transporte desligado","nessuna azione":"sem ação","dati non validi":"dados inválidos","sconosciuto":"desconhecido"},"scenarios":"Cenários em vigor","truncated":"mensagem truncada no índice","dur":"demorou","id":"id","why":"Porquê? - detalhe completo","f_appliance":"Eletrodomésticos","ap_scope":"entre as últimas {n} lidas por completo: as mais antigas não são reconhecidas"},"SN_WHY_STRINGS":{"title":"Porquê?","pick":"Escolha uma notificação para ver porque foi para onde foi.","loading":"a carregar…","none":"nenhuma notificação","no_sensor":"sensor não encontrado:","no_service":"Serviço em falta","no_service_hint":"Atualize o SuperNotify para a 2.10 ou posterior (supernotify.enquire_archive), ou adicione o shell_command sn_archive_detail (ver README) e reinicie o Home Assistant.","gone":"esta notificação já não está no arquivo","priority":"prioridade","outcome":"resultado","dupe":"duplicado","outcomes":{"success":"entregue","partial_delivery":"entregue em parte","dupe":"duplicado","failed":"falhou","error":"falhou","fallback_delivery":"entregue pelo canal de reserva","no_delivery":"não entregue"},"missed":"perdido (pedido, não enviado)","step_call":"Chamada","step_scen":"Cenários","step_people":"Pessoas","step_ch":"Canais","call_auto":"nenhum canal indicado: encaminhamento normal","call_named":"indicados na chamada:","call_debug":"com depuração","nobody":"ninguém em casa","ch_sent":"enviados","ch_problems":"a verificar","ch_skipped":"ignorados","pb_failed":"falhou","pb_missed":"pedido mas não enviado","grp_skipped":"ignorados por uma regra: normal","grp_not":"não envolvidos","trace_title":"Rastreio completo da seleção","fix":{"NO_TARGET":"Nenhum destinatário tem um endereço para este canal: adicione um a um destinatário, dê ao canal destinos fixos ou deixe-o fora desta chamada.","ERROR":"A integração por trás deste canal respondeu com um erro: verifique a respetiva entrada no registo.","NO_ACTION":"O canal não tem nenhuma ação a chamar: defina `action:` na entrega.","INVALID_ACTION_DATA":"Os dados passados à ação foram rejeitados: verifique o `data:` da chamada ou da entrega."},"scenarios":"Cenários em vigor","no_scenarios":"nenhum cenário em vigor","applied":"forçado pela chamada","required":"exigido pela chamada","constrain":"limitado pela chamada a","presence":"Presença","home":"em casa","away":"fora","channels":"Canais","no_channels":"nenhum canal foi selecionado","st_ok":"entregue","st_err":"falhou","st_skip":"ignorado","st_supp":"suprimido","calls":"chamadas","calls_1":"chamada","target_required":"destino exigido:","started_by":"selecionado por","scen_would_off":"desligado por (anulado)","src_default":"sempre ligado (predefinição)","src_scen":"cenário","src_call":"a própria chamada","src_recipient":"destinatário","r_off_by":"desligado por","call_targets":"destinos na chamada","cats":{"entity_id":"entidades","mobile_app_id":"dispositivos","person_id":"pessoas","email":"e-mail","phone":"telefone","device_id":"dispositivos"},"not_started":"Canais que não arrancaram","r_call_off":"excluído pela chamada","r_scen_off":"desligado por um cenário em vigor","r_disabled":"desligado","r_transport_off":"o seu transporte está desligado","r_only_scen":"só arranca quando um cenário o liga","r_only_fallback":"apenas reserva","r_only_explicit":"só arranca quando pedido pelo nome","r_priority":"não para esta prioridade","r_unknown":"não reconstituível sem o rastreio","from_config":"Os motivos dos canais que não arrancaram são reconstituídos a partir da configuração ATUAL, não da que existia na altura.","from_trace":"Os motivos vêm do rastreio da seleção arquivado com a notificação.","st_time":"demorou","st_slow":"mais lento","st_rate":"dos canais tiveram êxito","ua_title":"Destinos que nenhum canal aceitou","ua_hint":"Estavam na chamada, mas nenhum canal selecionado aceita este tipo de destino.","un_title":"Nomes que não existem","sent_by":"Enviado por","sent_auto":"automação","sent_script":"script","sent_person":"","sent_unknown":"remetente desconhecido (nenhuma automação ou pessoa no seu contexto)","trace":"Rastreio da seleção","no_trace":"O rastreio completo da seleção só é registado quando a chamada notify tem debug: true, e arquivado quando os diagnósticos do arquivo o incluem.","reasons":{"NO_TARGET":"sem destino utilizável","DUPE":"duplicado de uma notificação recente","PRIORITY":"não para esta prioridade","SNOOZE":"em pausa","SNOOZED":"em pausa","DELIVERY_CONDITION":"condição da entrega falsa","OCCUPANCY":"regra de presença","ERROR":"erro","DELIVERY_DISABLED":"desligado","SCENARIO":"cenário","TRANSPORT_DISABLED":"o seu transporte está desligado","NO_SCENARIO":"um cenário exigido não está em vigor","NO_ACTION":"nenhuma ação a chamar","INVALID_ACTION_DATA":"dados da ação inválidos","UNKNOWN":"motivo desconhecido"}},"SN_TOOLS_STRINGS":{"maint":"Manutenção","enq":"Perguntar ao SuperNotify","refresh":"Publicar de novo todas as entidades","refresh_btn":"Atualizar","resume_btn":"Retomar","refreshed":"Entidades publicadas de novo.","resume_all":"Retomar todas as pausas","cleared_n":"pausas retomadas","purge_arch":"Limpar o arquivo","purge_media":"Limpar as imagens","older":"com mais de","days":"dias","purge_btn":"Limpar","confirm":"Toque de novo para confirmar","purged":"eliminados","remaining":"restantes","reset":"Desfazer as alterações feitas à mão","reset_btn":"Repor","reset_none":"Nada a repor: está tudo como configurado.","reset_done":"De volta à configuração:","k_all":"tudo","k_scenario":"cenários","k_delivery":"canais","k_recipient":"pessoas","k_transport":"transportes","q_config":"Configuração","q_scen":"Cenários","q_active":"Cenários ativos","q_by_scen":"Canais por cenário","q_implicit":"Canais predefinidos","q_recipients":"Destinatários","q_occupancy":"Quem está em casa","q_snoozes":"Pausas","q_last":"Última notificação","copy":"Copiar JSON","copied":"Copiado","close":"Fechar","empty":"(vazio)","err":"O SuperNotify respondeu com um erro:","err_config":"O SuperNotify 2.12.0 não consegue devolver a sua configuração quando um canal tem condições de modelo (rhizomatics/supernotify#241).","settings":"Definições da integração","running":"a processar…","more":"mais"},"SN_FORM_LABELS":{"_common":"Aspeto e texto","style":"Cores","icons":"Ícones","show_version":"Mostrar a versão do cartão","intro":"Texto de introdução no topo","title":"Título","dnd_entity":"Interruptor Não incomodar","quiet_entity":"Estado de silêncio calculado (opcional)","presence_entity":"Pessoa para a barra de estado","archive_days":"Limpeza do arquivo: com mais de (dias)","media_days":"Limpeza das imagens: com mais de (dias)","occupancy":"Quem está em casa (do SuperNotify)","repairs":"Reparações do SuperNotify na lista de estado","snooze_announce":"Dizer as pausas em voz alta (canal de anúncios)","snooze_via":"As pausas passam por","o_event":"o evento dos botões push (admin)","o_voice":"os comandos de voz","snooze_minutes":"Duração da pausa (minutos)","snooze_panel":"O mosaico Pausa abre o painel de pausa","announce_delivery":"Canal para anúncios","last_notification":"Mostrar a última notificação","last_channels":"Um chip por canal na última notificação","repeat_entity":"Botão repetir a última (opcional)","tile_layout":"Mosaicos","tile_columns":"Colunas de mosaicos (vazio = automático)","update_entity":"Entidade de atualização do SuperNotify","cards_update_entity":"Entidade de atualização dos cartões","sent_today_entity":"Contador diário (utility meter, opcional)","count_entity":"Contador do SuperNotify (estatísticas a longo prazo)","health":"Estado no topo","stats":"Números","poll_seconds":"Atualizar a cada (segundos)","group":"Agrupar pela forma como um canal arranca","hide_defaults":"Ocultar canais automáticos DEFAULT_","limit":"Notificações na lista","expand":"Abrir as partes recolhidas","max_height":"Altura máxima (CSS, ex. 70vh)","source":"Origem do arquivo","entity":"Sensor do arquivo (só ponte)","trigger_entity":"Atualizar quando isto mudar","dry_run":"Mostrar \"Experimentar sem enviar\"","dry_run_dupe_check":"Simular também a verificação de duplicados","days":"Dias mostrados por predefinição","manifest_url":"URL do manifesto das automações","o_supernotify":"SuperNotify","o_theme":"Tema do Home Assistant","o_mdi":"Ícones do Home Assistant","o_emoji":"Emoji","o_row":"Ícone à esquerda","o_stacked":"Alto, ícone em cima","o_three":"Enviadas, falhas, canais","o_full":"Todos os cinco","o_auto":"Automático","o_sensor":"Ponte por sensor (antes do SuperNotify 2.10)","o_archive":"Arquivo do SuperNotify (2.12.1+)","o_history":"Histórico dos auxiliares"},"SN_NATIVE_STR":{"all_good":"Tudo bem","paused":"Em pausa","until":"até","resume":"Retomar","test":"Enviar um teste","sure":"Toque de novo para enviar","sent":"Enviado","last":"Última","none":"Ainda sem notificações","ago":"atrás","min":"min","h":"h","err":"transportes com erros","off":"canais desligados"},"SN_STRATEGY_TITLES":{"home":"Início","archive":"Arquivo","send":"Enviar","setup":"Configuração","stats":"Estatísticas","tools":"Ferramentas","title":"SuperNotify","appliances":"Eletrodomésticos"},"SN_APPL_STRINGS":{"title":"Eletrodomésticos","loading":"a ler…","none":"Sem eletrodomésticos: adicione um no Appliance Autonotify (Definições → Dispositivos e serviços).","st_run":"A funcionar","st_cleaning":"A limpar","st_done":"Terminado · por esvaziar","st_done_other":"Terminado","st_err":"Precisa de ajuda","m_switch_on":"Ligar tomada","done_switch_on":"Tomada ligada.","done_action":"Feito: {n}.","confirm_action":"Executar «{n}»?","open_entity":"Abrir para alterar","chip_notifs":"Notificações","chip_device":"Dispositivo","not_found":"Nenhum aparelho ou dispositivo chamado «{n}».","last7":"Últimos 7 dias","col_day":"Dia","col_cycles":"Ciclos","col_time":"Tempo","col_energy":"Consumo","source_h":"Origem","manual_src":"adicionado à mão: a funcionar acima de {w}","tab_info":"Resumo","tab_stats":"Consumo e ciclos","tab_cleans":"Limpezas","tab_prints":"Impressões","last_run":"Último ciclo","avg_run":"Média","reminders_h":"Notificações","power_h":"Potência agora","plug":"Tomada","plug_on":"ligada","plug_off":"desligada","error_h":"Erro","open_device":"O dispositivo no Home Assistant","prints":"impressões","print1":"impressão","per_print":"Cada impressão do mês","last_prints":"Últimas impressões","no_print_month":"Ainda nenhuma impressão este mês","no_print":"Ainda nenhuma impressão","col_fil":"Filamento","failed":"falhada","per_run":"Cada ciclo do mês","no_run":"Ainda nenhum ciclo","dev_hist":"Cada uma vem do histórico do Home Assistant (últimos {n} dias); as horas, do contador do aparelho quando o tem.","cleans":"limpezas","clean1":"limpeza","per_clean":"Cada limpeza do mês","avg_clean":"média {d}","col_area":"Área","last_cleans":"Últimas limpezas","no_clean_month":"Ainda nenhuma limpeza este mês","no_clean":"Ainda nenhuma limpeza","vac_hist":"Os totais vêm dos contadores do robô; cada limpeza, do histórico do Home Assistant (últimos {n} dias).","st_paused":"Em pausa","st_returning":"A voltar à base","st_charging":"A carregar","st_docked_w":"Na base","st_idle":"Parado","st_off":"Desligado","stopped":"Parados","yesterday":"ontem","u_min":"min","u_h":"h","start":"Início","so_far":"até agora","no_cycle":"Ainda nenhum ciclo","last_cycle":"Último ciclo {d}","ended_at":"Terminou às {t}","reminders":"+{n} lembretes até às {t}","reminder1":"+1 lembrete às {t}","end_est":"Fim previsto","left":"faltam {d}","almost":"quase a terminar","est_from_avg":"estimativa de ciclos parecidos","running_for":"A funcionar há {d}","btn_empty":"Esvaziado","btn_seen":"Feito","btn_resume":"Retomar limpeza","m_switch_off":"Desligar a tomada","m_remind":"Lembrar mais tarde","details":"Detalhes","settings":"Definições","more":"Mais","details_link":"Detalhes, consumo e ciclos","done_empty":"Feito: os lembretes param.","done_remind":"Vai lembrar mais tarde.","done_switch":"Tomada desligada.","done_resume":"Limpeza retomada.","err":"Erro","new_dev":"{n} dispositivos novos","new_dev1":"1 dispositivo novo","battery":"Bateria","consumable":"{n} a {p}%","maint_in":"daqui a {c} ciclos","maint_next":"no próximo ciclo","maint_due":"a fazer","maint_of":"{d} de {e}","maint_done":"Feito","confirm_maint":"Marcar «{n}» como feito? A contagem recomeça.","conn_lost":"ligação perdida: último estado conhecido","cons_h":"Consumíveis","commands":"Comandos","tap_again":"Toque de novo para confirmar","empty_since":"Por esvaziar há","done_since":"Terminado há","avg_cycle":"Ciclo médio","maint_tab":"Manutenção","tab_stats_short":"Consumo","read_failed":"Não foi possível ler o histórico ({e}); tento de novo em breve.","retry":"Tentar de novo","see_chart":"Ver gráfico","back":"Voltar","avg_line":"média {v}","tap_bar":"Toque numa barra para ver esse ciclo","k_station":"Base","off_since":"Desligado há","close":"Fechar","power_now":"agora","p_today":"Hoje","p_week":"Semana","p_month":"Mês","p_year":"Ano","cycles":"ciclos","cycle1":"ciclo","per_cycle":"Consumo por ciclo este mês","short":"Curtos","long":"Longos","anomalous":"Anómalos","avg":"média {d}, {k}","last_cycles":"Últimos ciclos","col_start":"Início","col_dur":"Duração","col_cost":"Custo","no_cycle_month":"Ainda nenhum ciclo este mês","coarse":"Os ciclos com mais de 10 dias são contados à hora.","open_notifs":"Notificações do eletrodoméstico","no_power":"Nenhum sensor de potência encontrado: indique-o com `power_entity` em `appliances:`.","no_power_vac":"Um robot aspirador não tem sensor de potência: consumo e ciclos não são contados.","no_stats":"O sensor de potência não tem estatísticas (precisa de state_class: measurement)."}},"ja":{"SN_STRINGS":{"presence":"在宅状況","time_band":"時間帯","quiet":"静音","act_scen":"有効なシナリオ","on":"オン","off":"オフ","active":"有効","dnd":"おやすみモード","tap_silence":"タップで消音","snooze":"一時停止","min":"分","pause_nc":"重要でない通知を停止","snoozed":"一時停止中","until":"まで","tap_clear":"タップで解除","announce":"アナウンス","intercom":"インターホン","announce_ph":"すべてのスピーカーでアナウンス…","send":"送信","announced":"アナウンスしました","cleared":"一時停止を解除しました","snoozed_for":"重要でない通知を一時停止しました:","sent":"送信済み","sent_today":"今日の送信","since_startup":"起動以降","yesterday":"昨日","failures":"失敗","fail_today":"今日失敗したチャンネル送信","deliveries":"配信","enabled_total":"有効/合計","last_notif":"最後の通知","transports":"トランスポート","delivered":"配信済み","failed":"失敗","channels":"チャンネル","none":"なし","no_transports":"トランスポートのエンティティが見つかりません","tr_used":"使用中:","tr_unused":"使用しているチャンネルなし","start":"開始","volume":"音量","now":"現在","crosses":"日付をまたぐ","no_voice":"音声なし","mute_hint":"<b>0%</b> の時間帯は<b>音声アナウンスを一切行いません</b>（Alexa と TTS はオフ、プッシュとダッシュボードには届きます）。緊急・高優先度の通知は常に読み上げます。","enabled":"有効","implicit":"常にオン","explicit":"指定時のみ","by_scenario":"シナリオのみ","fallback":"予備","fallback_err":"エラー時の予備","inc_sum":"このチャンネルのうち","inc_always":"自動で開始","inc_req":"指定されたときのみ","inc_scen":"シナリオがあるときのみ","grp_auto":"自動で開始","grp_named":"呼び出しで指定されたときのみ","grp_scen":"シナリオがあるときのみ","grp_fallback":"予備（他が失敗したとき）","ch_title":"チャンネル","ch_count":"{tot} 件中 {on} 件オン","off_manual":"オフにされています","paused_by":"現在停止中:","on_by":"現在オン:","fixed_targets":"固定ターゲット","no_deliveries":"配信のエンティティが見つかりません","home":"在宅","away":"外出","devices":"台のデバイス","devices_1":"台のデバイス","rc_test":"テスト送信","rc_test_confirm":"もう一度タップで送信","rc_test_sent":"テストを送信しました","rc_test_title":"SuperNotify テスト","rc_test_msg":"ダッシュボードからのテストメッセージ、","overrides":"件の配信オーバーライド","overrides_1":"件の配信オーバーライド","no_contact":"連絡先なし","no_recipients":"受信者のエンティティが見つかりません","details":"詳細","h_update":"アップデートあり:","h_restart":"アップデートを完了するには Home Assistant を再起動してください","h_uptodate":"最新です","h_transport_err":"件のトランスポートでエラー","h_channels_off":"件のチャンネルがオフ","h_all_good":"問題なし","h_health":"状態","h_failures":"件の失敗","h_failures_1":"件の失敗","h_transport_err_1":"件のトランスポートでエラー","h_channels_off_1":"件のチャンネルがオフ","channels_1":"チャンネル","band_early_morning":"早朝","band_morning":"朝","band_afternoon":"午後","band_evening":"夕方","band_night":"夜","band_late_night":"深夜","h_look_1":"確認が必要な項目が1件","h_look_n":"確認が必要な項目が {n} 件","h_rest_ok":"その他は正常です","h_ch_on":"{tot} チャンネル中 {on} 件オン","h_open":"開く","ln_delivered":"配信済み","ln_failed":"失敗","ln_why":"理由","tgt_loading":"選択画面を読み込み中…","bands_empty_t":"時間帯がまだありません","bands_empty":"1日の区切りごとに時間帯を1つ追加します。開始時刻用の input_datetime と音声音量用の input_number を用意してください。","active_now":"現在有効","disabled":"無効","other":"その他","manual":"手動","apply_now":"今すぐ適用","applied":"適用中","apply_off":"タップで適用を解除","enabled_lbl":"有効","reset_overrides":"オーバーライドをリセット","reset_done":"オーバーライドをリセットしました","transport_off":"トランスポートがオフ","last_notified":"最終通知","never_notified":"通知履歴なし","media":"メディア","no_scenarios":"シナリオのエンティティが見つかりません","sim_pick":"🎬 シナリオ — タップでシミュレート","sim_fire":"📤 チャンネル","sim_hint":"エンジンの実データ（照会サービス）です。優先度による配信の絞り込みはエンジン側で行われ、ここではシミュレートされません。実行時の統合と同様に、無効が有効より優先されます。","sim_none":"送信される配信はありません","scenario_tag":"シナリオ","sim_go":"送信される","sim_stop":"送信されない","sim_r_default":"自動で開始","sim_r_on":"オンにしたもの:","sim_r_off":"オフにしたもの:","sim_r_named":"呼び出しで指定されたときのみ","sim_r_scen":"オンにするシナリオがあるときのみ","sim_r_fallback":"予備（他が失敗したとき）","sim_r_switched":"オフにされています","title":"タイトル","message":"メッセージ","priority":"優先度","channels_lbl":"チャンネル — 未選択なら通常のルーティング","camera_lbl":"カメラのスナップショット","preview":"プレビュー","no_title":"（タイトルなし）","no_message":"（メッセージなし）","default_prio":"デフォルト（中）","comp_hint":"選択したチャンネルは delivery_selection: fixed で送信されます（それらのみ送信）。「緊急」は本当に緊急扱いです — サイレンも鳴ります。","critical_confirm":"緊急通知を送信しますか？サイレンと最大音量を含みます。","write_first":"先にメッセージを入力してください","sent_toast":"送信しました","write_or_pick":"メッセージを入力するか、カメラかチャンネルを選んでください","need_2111":"本文のない通知には SuperNotify 2.11.1 が必要です","send_err":"送信されませんでした","dry_btn":"送信せずに試す","dry_title":"今送信した場合","dry_err":"ドライランに失敗しました","dry_would":"送信予定","dry_skip":"スキップ","dry_nobody":"受信者なし、直接ターゲットのみ","dry_targets":"ターゲット","dry_suppressed":"この通知は抑制されます","dry_fallback":"送信されるチャンネルがありません: フォールバック先","dry_none":"チャンネルが選択されていません","dry_scen":"有効なシナリオ","dry_raw":"生の応答","dry_prio":"優先度","dry_would_n":"チャンネルで送信予定","dry_nothing":"何も送信されません","dry_dupe":"最近の通知と重複しています: 破棄されます","dry_no_dupe":"重複チェックはシミュレートしていないため、直後の実際の送信はブロックされません。","dry_restart":"現在動作中の SuperNotify ではシミュレートできません: ドライランには 2.12 が必要で、アップデート後に Home Assistant を再起動する必要があります。","dry_home":"在宅","dry_empty":"SuperNotify から応答がありません: バージョンは 2.12 以降ですか？","dry_reasons":{"NO_TARGET":"使えるターゲットなし","DUPE":"重複","PRIORITY":"この優先度は対象外","SNOOZED":"一時停止中","DELIVERY_CONDITION":"配信条件が偽","OCCUPANCY":"在宅ルール","TRANSPORT_DISABLED":"トランスポートがオフ","DELIVERY_DISABLED":"オフにされています","NO_SCENARIO":"必須シナリオが有効でない","NO_ACTION":"アクションなし","INVALID_ACTION_DATA":"無効なデータ","UNKNOWN":"不明な理由","ERROR":"エラー"},"prio_minimum":"最低","prio_low":"低","prio_medium":"中","prio_high":"高","prio_critical":"緊急","target_lbl":"ターゲット — 人、デバイス、エリア、フロア、ラベル","custom_target_lbl":"カスタムターゲット（メール、Telegram ID など）— カンマ区切り","adv_title":"詳細オプション","adv_spoken":"読み上げメッセージ（Alexa、TTS）","adv_spoken_ph":"本文と異なる場合にスピーカーで読み上げる内容","adv_apply":"これらのシナリオを適用","adv_require":"これらのシナリオが有効な場合のみ送信","adv_constrain":"これらのシナリオのみを考慮","adv_snapshot":"URL からの画像","adv_debug":"デバッグ: 選択トレースをすべて記録（理由カードに表示）","custom_target_ph":"例: user@example.com, 123456789","native_target_tag":"🎯 ネイティブのエリア/フロア/ラベル","target_warn":"⚠️ エリア、フロア、ラベルを解決できるのは notify_entity、alexa_devices、html5、ntfy、kodi、media_player、tts、chime だけです。他のチャンネル — または上でチャンネルを選ばない場合のデフォルトのルーティング — では、通知がターゲットなしで黙って失われることがあります。対応するチャンネルを選ぶか、人やデバイスを直接追加してください。","aut_search":"オートメーションを検索…","aut_all":"すべて","aut_none":"一致なし","aut_err":"マニフェストが見つかりません — tools/genera_vista_automazioni.py で生成してください","aut_updated":"リスト更新","aut_count":"件のオートメーション","aut_count_1":"件のオートメーション","never":"なし","ago_now":"たった今","ago_min":"分前","ago_h":"時間前","ago_d":"日前","aut_disabled_only":"無効のみ","grp_active":"有効","repeat":"繰り返し","skipped_n":"スキップ","left":"残り","missed_n":"未送信","snz_all":"すべて","snz_nc":"重要でない通知","snz_prio":"優先度","snz_transport":"トランスポート","snz_for":"対象","snz_choose":"対象と時間を選択","snz_title":"通知を一時停止","snz_what":"対象","snz_nc_l":"重要でない通知","snz_all_l":"すべて","snz_ch":"チャンネル","snz_pr":"優先度","snz_who":"誰の分","snz_everyone":"全員","snz_me":"自分のみ","snz_len":"期間","snz_forever":"再開するまで","snz_go":"一時停止","snz_close":"閉じる","rs_hand":"手動","rs_voice":"音声","rs_assist":"アシスタント","snz_voice_info":"一時停止は SuperNotify の音声コマンド経由で行われ、あなたの分だけに適用されます。","snz_voice_off":"SuperNotify の音声コマンドがオフです: 統合のオプションでオンにしてください。","snz_resume_mine":"自分の分を再開","go_open":"表示","dl_probe":"このチャンネルを試す","probe_msg":"ダッシュボードからのチャンネルテスト","sc_why":"理由","sc_yes":"現在適用中","sc_no":"現在は適用されていません","sc_manual_why":"手動シナリオ: 手動で適用","sc_no_cond":"条件なし","sc_off_sw":"オフにされています","sc_not_eval":"未評価","sc_now":"現在","sc_diff_btn_on":"適用されたら何が変わるか","sc_diff_btn_off":"なければ何が変わるか","sc_diff_on":"適用された場合、今の「中」優先度の通知では:","sc_diff_off":"なかった場合、今の「中」優先度の通知では:","sc_diff_add":"追加で送信","sc_diff_rem":"送信されなくなる","sc_diff_none":"違いなし","c_state":"{e} が {s}","c_template":"テンプレート条件","c_time":"時刻","c_after":"以降","c_before":"以前","c_numeric":"{e}","c_above":"より上","c_below":"より下","c_and":"以下のすべて","c_or":"以下のいずれか","c_not":"以下のいずれでもない","c_or_join":" または ","sim_hint_dry":"SuperNotify 自身の回答です（ドライラン、何も送信されません）: 上で選んだ優先度とシナリオのみで今通知した場合。","sim_msg":"シミュレーターのテスト","sim_prio":"優先度","sa_snooze":"{what}を {len} 一時停止しました。","sa_silence":"{what}を追って通知があるまで消音しました。","sa_resume":"{what}を再開しました。","sa_resume_one":"一時停止終了: {x}。","sa_resume_all":"通知を再開しました。","sa_w_nc":"重要でない通知","sa_w_all":"すべての通知","sa_w_ch":"チャンネル {x}","sa_w_pr":"優先度「{x}」の通知","sa_w_mine":"あなたの通知","sa_for":"{x} の分","sa_min":"{n} 分間","sa_hour":"1時間","sa_hours":"{n} 時間","occ_title":"在宅中の人","occ_home_l":"在宅","occ_ALL_HOME":"全員在宅","occ_ALL_AWAY":"全員外出","occ_LONE_HOME":"1人だけ在宅","occ_MULTI_HOME":"数人が在宅","occ_UNDEFINED_OCCUPANTS":"追跡対象なし","h_repairs":"件の SuperNotify 修復","h_repairs_1":"件の SuperNotify 修復","det_more":"すべての属性","det_yes":"はい","det_no":"いいえ","det_action":"アクション","det_target":"固定ターゲット","det_target_req":"ターゲットが必要","det_target_use":"ターゲットの用途","det_inclusion":"使用条件","det_prio":"優先度","det_occ":"在宅が必要な人","det_transport":"トランスポート","det_data":"データ","det_debug":"デバッグ","det_err_last":"最後のエラー","det_err_in":"発生箇所","det_err_n":"起動以降のエラー","det_select":"選択","adv_html":"メール用テキスト（HTML）","adv_clip":"URL からの動画クリップ","adv_actions":"通知のボタン","adv_act_id":"アクション ID","adv_act_title":"ボタンのテキスト","adv_act_add":"+ ボタン","adv_groups":"ボタングループ（カンマ区切り）","adv_dc":"この通知のチャンネル設定","adv_dc_ph":"key: value、1行に1つ","adv_dc_add":"+ チャンネル","snz_active":"現在一時停止中","snz_resume":"再開","snz_resume_all":"すべて再開","snz_until_resumed":"再開するまで","snz_done":"一時停止しました","snz_resumed":"再開しました","no_notif":"通知はまだありません","st_title":"利用状況","st_days":"日","st_days_short":"日","st_hist_note":"過去 {n} 日間の履歴に基づく時間帯・チャンネル・優先度","st_total":"通知","st_avg":"1日あたり","st_today":"今日","st_vs_avg":"平均比","st_peak_hour":"ピーク時間","st_top_channel":"最多チャンネル","st_errors":"チャンネルエラー","st_of_sends":"（チャンネル送信中）","st_daily":"日別","st_hourly":"時間帯別","st_weekday":"曜日別","st_channels":"チャンネル — 利用の多い順","st_priority":"優先度","st_period":"時間帯","st_insights":"気づき","st_no_data":"履歴はまだありません — 最初の通知の後にデータが表示されます。","st_unknown":"不明","st_loading":"読み込み中…","st_versions":"バージョン","st_installed":"インストール済み","st_latest":"最新","st_uptodate":"最新です","st_update":"アップデートあり","st_restart":"再起動が必要","st_cards":"カード","st_logged":"記録済み","st_reading":"アーカイブを読み込み中: {of} 日中 {n} 日目…","st_from_archive":"SuperNotify のアーカイブから","st_archive_err":"アーカイブを一部のみ読み込み","st_wd":["月","火","水","木","金","土","日"],"st_i_share":"チャンネル送信全体の {p}% が {c} 経由です。","st_i_peak":"最も多いのは {h}:00 台です（{d} 日間で {n} 件の通知）。","st_i_night":"通知の {p}% が 23:00〜07:00 に届いています — 不要なら「おやすみ」シナリオを検討してください。","st_i_night_ok":"夜間（23〜07時）に届く通知は {p}% だけです。静かな時間帯が機能しています。","st_i_weekend":"週末は平日より通知が {p}% {dir}です。","st_i_errors":"{d} 日間でチャンネルエラーが {n} 件、主に {c} です。","st_i_noerr":"過去 {d} 日間、チャンネルエラーはありません。","st_i_prio":"通知の {p}% が優先度「{prio}」です。","st_i_trend":"直近7日間: 1日 {n} 件、前の7日間より {p}% {dir}。","st_more":"多い","st_less":"少ない","st_up":"増加","st_down":"減少"},"SN_STATS_STRINGS":{"st_title":"利用状況","st_days":"日","st_days_short":"日","st_hist_note":"過去 {n} 日間の履歴に基づく時間帯・チャンネル・優先度","st_total":"通知","st_avg":"1日あたり","st_today":"今日","st_vs_avg":"平均比","st_peak_hour":"ピーク時間","st_top_channel":"最多チャンネル","st_errors":"チャンネルエラー","st_of_sends":"（チャンネル送信中）","st_daily":"日別","st_hourly":"時間帯別","st_weekday":"曜日別","st_channels":"チャンネル — 利用の多い順","st_priority":"優先度","st_period":"時間帯","st_insights":"気づき","st_no_data":"履歴はまだありません — 最初の通知の後にデータが表示されます。","st_unknown":"不明","st_loading":"読み込み中…","st_versions":"バージョン","st_installed":"インストール済み","st_latest":"最新","st_uptodate":"最新です","st_update":"アップデートあり","st_restart":"再起動が必要","st_cards":"カード","st_logged":"記録済み","st_reading":"アーカイブを読み込み中: {of} 日中 {n} 日目…","st_from_archive":"SuperNotify のアーカイブから","st_archive_err":"アーカイブを一部のみ読み込み","st_wd":["月","火","水","木","金","土","日"],"st_i_share":"チャンネル送信全体の {p}% が {c} 経由です。","st_i_peak":"最も多いのは {h}:00 台です（{d} 日間で {n} 件の通知）。","st_i_night":"通知の {p}% が 23:00〜07:00 に届いています — 不要なら「おやすみ」シナリオを検討してください。","st_i_night_ok":"夜間（23〜07時）に届く通知は {p}% だけです。静かな時間帯が機能しています。","st_i_weekend":"週末は平日より通知が {p}% {dir}です。","st_i_errors":"{d} 日間でチャンネルエラーが {n} 件、主に {c} です。","st_i_noerr":"過去 {d} 日間、チャンネルエラーはありません。","st_i_prio":"通知の {p}% が優先度「{prio}」です。","st_i_trend":"直近7日間: 1日 {n} 件、前の7日間より {p}% {dir}。","st_more":"多い","st_less":"少ない","st_up":"増加","st_down":"減少"},"SN_ARCH_STRINGS":{"title":"通知履歴","search":"タイトルやメッセージを検索…","f_all":"すべて","f_problems":"問題のみ","f_today":"今日","f_whisper":"ささやき","wh":"ささやき","said":"Alexa の発話","said_by":"{ch} の発話","none":"一致する通知はありません","no_sensor":"センサーが見つかりません","no_sensor_hint":"supernotify.enquire_archive アクションを備えた SuperNotify 2.10 以降にアップデートするか、アーカイブをインデックス化する command_line センサーを追加してください（README 参照）。","loading":"アーカイブを読み込み中…","recent":"最新の通知","read_at":"読み込み時刻","of":"/","in_archive":"件（アーカイブ内）","since":"最古","updated":"インデックス更新","today":"今日","yesterday":"昨日","delivered":"配信済み","failed":"失敗","skipped":"スキップ","missed":"未送信","prio":{"critical":"緊急","high":"高","low":"低","minimum":"最低","medium":"中"},"reasons":{"doppione":"重複","nessun target":"ターゲットなし","errore":"エラー","condizione":"条件","scenario":"シナリオ","presenza":"在宅状況","priorita":"優先度","spento":"オフ","pausa":"一時停止中","transport spento":"トランスポートがオフ","nessuna azione":"アクションなし","dati non validi":"無効なデータ","sconosciuto":"不明"},"scenarios":"有効なシナリオ","truncated":"インデックス内ではメッセージが省略されています","dur":"所要時間","id":"ID","why":"理由 - 詳細をすべて表示","f_appliance":"家電","ap_scope":"全文を読み込んだ最新{n}件のみ。それより古いものは識別されません"},"SN_WHY_STRINGS":{"title":"理由","pick":"通知を選ぶと、なぜその宛先に届いたのかを確認できます。","loading":"読み込み中…","none":"通知なし","no_sensor":"センサーが見つかりません:","no_service":"サービスがありません","no_service_hint":"SuperNotify を 2.10 以降にアップデートする（supernotify.enquire_archive）か、shell_command sn_archive_detail を追加して（README 参照）Home Assistant を再起動してください。","gone":"この通知はもうアーカイブにありません","priority":"優先度","outcome":"結果","dupe":"重複","outcomes":{"success":"配信済み","partial_delivery":"一部配信","dupe":"重複","failed":"失敗","error":"失敗","fallback_delivery":"フォールバックチャンネルで配信","no_delivery":"未配信"},"missed":"未送信（指定されたが送信されず）","step_call":"呼び出し","step_scen":"シナリオ","step_people":"人","step_ch":"チャンネル","call_auto":"チャンネル指定なし: 通常のルーティング","call_named":"呼び出しで指定:","call_debug":"デバッグあり","nobody":"誰も在宅していません","ch_sent":"送信済み","ch_problems":"要確認","ch_skipped":"スキップ","pb_failed":"失敗","pb_missed":"指定されたが送信されず","grp_skipped":"ルールによりスキップ: 正常","grp_not":"対象外","trace_title":"選択トレース全体","fix":{"NO_TARGET":"このチャンネル用のアドレスを持つ受信者がいません: 受信者にアドレスを追加するか、チャンネルに固定ターゲットを設定するか、この呼び出しから外してください。","ERROR":"このチャンネルの元になっている統合がエラーを返しました: その統合のログを確認してください。","NO_ACTION":"このチャンネルには呼び出すアクションがありません: 配信に `action:` を設定してください。","INVALID_ACTION_DATA":"アクションに渡したデータが拒否されました: 呼び出しまたは配信の `data:` を確認してください。"},"scenarios":"有効なシナリオ","no_scenarios":"有効なシナリオなし","applied":"呼び出しで強制","required":"呼び出しで必須","constrain":"呼び出しで制限:","presence":"在宅状況","home":"在宅","away":"外出","channels":"チャンネル","no_channels":"選択されたチャンネルはありません","st_ok":"配信済み","st_err":"失敗","st_skip":"スキップ","st_supp":"抑制","calls":"回の呼び出し","calls_1":"回の呼び出し","target_required":"ターゲットが必要:","started_by":"選択元","scen_would_off":"オフにしようとしたもの（無効化）","src_default":"常にオン（デフォルト）","src_scen":"シナリオ","src_call":"呼び出し自体","src_recipient":"受信者","r_off_by":"オフにしたもの:","call_targets":"呼び出し内のターゲット","cats":{"entity_id":"エンティティ","mobile_app_id":"デバイス","person_id":"人","email":"メール","phone":"電話","device_id":"デバイス"},"not_started":"開始しなかったチャンネル","r_call_off":"呼び出しで除外","r_scen_off":"有効なシナリオによりオフ","r_disabled":"オフにされています","r_transport_off":"トランスポートがオフ","r_only_scen":"シナリオでオンにされたときのみ開始","r_only_fallback":"フォールバック専用","r_only_explicit":"名前で指定されたときのみ開始","r_priority":"この優先度は対象外","r_unknown":"トレースなしでは再構成できません","from_config":"開始しなかったチャンネルの理由は、当時ではなく現在の設定から再構成しています。","from_trace":"理由は通知と一緒にアーカイブされた選択トレースに基づいています。","st_time":"所要時間","st_slow":"最も遅い","st_rate":"のチャンネルが成功","ua_title":"どのチャンネルも受け付けなかったターゲット","ua_hint":"呼び出しには含まれていましたが、選択されたチャンネルのどれもこの種類のターゲットを受け付けません。","un_title":"存在しない名前","sent_by":"送信元","sent_auto":"オートメーション","sent_script":"スクリプト","sent_person":"","sent_unknown":"送信元不明（コンテキストにオートメーションや人がありません）","trace":"選択トレース","no_trace":"選択トレース全体は notify 呼び出しに debug: true がある場合のみ記録され、アーカイブの診断に含まれる場合にアーカイブされます。","reasons":{"NO_TARGET":"使えるターゲットなし","DUPE":"最近の通知と重複","PRIORITY":"この優先度は対象外","SNOOZE":"一時停止中","SNOOZED":"一時停止中","DELIVERY_CONDITION":"配信条件が偽","OCCUPANCY":"在宅ルール","ERROR":"エラー","DELIVERY_DISABLED":"オフにされています","SCENARIO":"シナリオ","TRANSPORT_DISABLED":"トランスポートがオフ","NO_SCENARIO":"必須シナリオが有効でない","NO_ACTION":"呼び出すアクションなし","INVALID_ACTION_DATA":"無効なアクションデータ","UNKNOWN":"不明な理由"}},"SN_TOOLS_STRINGS":{"maint":"メンテナンス","enq":"SuperNotify に照会","refresh":"すべてのエンティティを再公開","refresh_btn":"更新","resume_btn":"再開","refreshed":"エンティティを再公開しました。","resume_all":"すべての一時停止を再開","cleared_n":"件の一時停止を再開しました","purge_arch":"アーカイブを整理","purge_media":"画像を整理","older":"次より古いもの:","days":"日","purge_btn":"整理","confirm":"もう一度タップで確定","purged":"削除","remaining":"残り","reset":"手動で行った変更を元に戻す","reset_btn":"リセット","reset_none":"リセットするものはありません: すべて設定どおりです。","reset_done":"設定に戻しました:","k_all":"すべて","k_scenario":"シナリオ","k_delivery":"チャンネル","k_recipient":"人","k_transport":"トランスポート","q_config":"設定","q_scen":"シナリオ","q_active":"有効なシナリオ","q_by_scen":"シナリオ別チャンネル","q_implicit":"デフォルトのチャンネル","q_recipients":"受信者","q_occupancy":"在宅中の人","q_snoozes":"一時停止","q_last":"最後の通知","copy":"JSON をコピー","copied":"コピーしました","close":"閉じる","empty":"（空）","err":"SuperNotify がエラーを返しました:","err_config":"SuperNotify 2.12.0 は、テンプレート条件を持つチャンネルがあると設定を返せません（rhizomatics/supernotify#241）。","settings":"統合の設定","running":"処理中…","more":"もっと見る"},"SN_FORM_LABELS":{"_common":"外観とテキスト","style":"配色","icons":"アイコン","show_version":"カードのバージョンを表示","intro":"上部の説明文","title":"タイトル","dnd_entity":"おやすみモードのスイッチ","quiet_entity":"計算された静音状態（オプション）","presence_entity":"ステータスバーに表示する人","archive_days":"アーカイブ整理: 次の日数より古いもの","media_days":"画像整理: 次の日数より古いもの","occupancy":"在宅中の人（SuperNotify から）","repairs":"状態リストに SuperNotify の修復を表示","snooze_announce":"一時停止を読み上げる（アナウンスチャンネル）","snooze_via":"一時停止の経路","o_event":"プッシュボタンのイベント（管理者）","o_voice":"音声コマンド","snooze_minutes":"一時停止の長さ（分）","snooze_panel":"一時停止タイルで一時停止パネルを開く","announce_delivery":"アナウンス用のチャンネル","last_notification":"最後の通知を表示","last_channels":"最後の通知のチャンネルごとにチップを表示","repeat_entity":"最後を繰り返すボタン（オプション）","tile_layout":"タイル","tile_columns":"タイルの列数（空欄 = 自動）","update_entity":"SuperNotify のアップデートエンティティ","cards_update_entity":"カードのアップデートエンティティ","sent_today_entity":"日次カウンター（utility meter、オプション）","count_entity":"SuperNotify カウンター（長期統計）","health":"上部に状態を表示","stats":"数値","poll_seconds":"更新間隔（秒）","group":"チャンネルの開始方法でグループ化","hide_defaults":"自動の DEFAULT_ チャンネルを非表示","limit":"リストの通知数","expand":"折りたたまれた部分を開く","max_height":"最大の高さ（CSS、例: 70vh）","source":"アーカイブのソース","entity":"アーカイブセンサー（ブリッジのみ）","trigger_entity":"これが変化したら更新","dry_run":"「送信せずに試す」を表示","dry_run_dupe_check":"重複チェックもシミュレート","days":"デフォルトの表示日数","manifest_url":"オートメーションのマニフェスト URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant のテーマ","o_mdi":"Home Assistant のアイコン","o_emoji":"絵文字","o_row":"アイコンを左に","o_stacked":"縦長、アイコンを上に","o_three":"送信、失敗、チャンネル","o_full":"5つすべて","o_auto":"自動","o_sensor":"センサーブリッジ（SuperNotify 2.10 より前）","o_archive":"SuperNotify のアーカイブ（2.12.1 以降）","o_history":"ヘルパーの履歴"},"SN_NATIVE_STR":{"all_good":"問題なし","paused":"一時停止中","until":"まで","resume":"再開","test":"テスト送信","sure":"もう一度タップで送信","sent":"送信しました","last":"最後","none":"通知はまだありません","ago":"前","min":"分","h":"時間","err":"件のトランスポートでエラー","off":"件のチャンネルがオフ"},"SN_STRATEGY_TITLES":{"home":"ホーム","archive":"アーカイブ","send":"送信","setup":"設定","stats":"統計","tools":"ツール","title":"SuperNotify","appliances":"家電"},"SN_APPL_STRINGS":{"title":"家電","loading":"読み込み中…","none":"家電がありません。Appliance Autonotify で追加してください（設定 → デバイスとサービス）。","st_run":"運転中","st_cleaning":"掃除中","st_done":"完了 · 取り出してください","st_done_other":"完了","st_err":"助けが必要","m_switch_on":"プラグをオン","done_switch_on":"プラグをオンにしました。","done_action":"完了: {n}","confirm_action":"「{n}」を実行しますか?","open_entity":"開いて変更","chip_notifs":"通知","chip_device":"デバイス","not_found":"「{n}」という機器はありません。","last7":"過去 7 日間","col_day":"日","col_cycles":"サイクル","col_time":"時間","col_energy":"消費","source_h":"ソース","manual_src":"手動で追加: {w} を超えると稼働中","tab_info":"概要","tab_stats":"消費とサイクル","tab_cleans":"掃除","tab_prints":"印刷","last_run":"前回のサイクル","avg_run":"平均","reminders_h":"通知","power_h":"現在の電力","plug":"プラグ","plug_on":"オン","plug_off":"オフ","error_h":"エラー","open_device":"Home Assistant のデバイス","prints":"回の印刷","print1":"回の印刷","per_print":"今月の各印刷","last_prints":"最近の印刷","no_print_month":"今月はまだ印刷していません","no_print":"まだ印刷していません","col_fil":"フィラメント","failed":"失敗","per_run":"今月の各サイクル","no_run":"まだサイクルがありません","dev_hist":"各項目は Home Assistant の履歴から(過去 {n} 日)、時間は機器のカウンターがあればそこから取得しています。","cleans":"回の掃除","clean1":"回の掃除","per_clean":"今月の各掃除","avg_clean":"平均 {d}","col_area":"面積","last_cleans":"最近の掃除","no_clean_month":"今月はまだ掃除していません","no_clean":"まだ掃除していません","vac_hist":"合計はロボットのカウンターから、各掃除は Home Assistant の履歴から取得しています(過去 {n} 日)。","st_paused":"一時停止中","st_returning":"ドックに戻っています","st_charging":"充電中","st_docked_w":"ドックにいます","st_idle":"停止中","st_off":"オフ","stopped":"停止中","yesterday":"昨日","u_min":"分","u_h":"時間","start":"開始","so_far":"これまで","no_cycle":"まだサイクルなし","last_cycle":"前回のサイクル {d}","ended_at":"{t} に完了","reminders":"{t} まで +{n} 件のリマインダー","reminder1":"{t} に +1 件のリマインダー","end_est":"終了予定","left":"残り {d}","almost":"まもなく終了","est_from_avg":"似たサイクルからの推定","running_for":"{d} 運転中","btn_empty":"取り出した","btn_seen":"完了","btn_resume":"掃除を再開","m_switch_off":"プラグをオフ","m_remind":"あとで通知","details":"詳細","settings":"設定","more":"その他","details_link":"詳細・消費電力・サイクル","done_empty":"完了: リマインダーを止めました。","done_remind":"あとでお知らせします。","done_switch":"プラグをオフにしました。","done_resume":"掃除を再開しました。","err":"エラー","new_dev":"新しいデバイス {n} 台","new_dev1":"新しいデバイス 1 台","battery":"バッテリー","consumable":"{n} {p}%","maint_in":"あと {c} サイクル","maint_next":"次のサイクルで","maint_due":"今すぐ必要","maint_of":"{d} / {e}","maint_done":"完了","confirm_maint":"「{n}」を完了にしますか?カウントは最初からになります。","conn_lost":"接続が切れました: 最後の状態","cons_h":"消耗品","commands":"操作","tap_again":"もう一度タップして確定","empty_since":"取り出し待ち","done_since":"完了から","avg_cycle":"平均サイクル","maint_tab":"メンテナンス","tab_stats_short":"消費","read_failed":"履歴を読み込めませんでした ({e})。まもなく再試行します。","retry":"再試行","see_chart":"グラフを表示","back":"戻る","avg_line":"平均 {v}","tap_bar":"棒をタップするとそのサイクルを表示","k_station":"ステーション","off_since":"オフになってから","close":"閉じる","power_now":"現在","p_today":"今日","p_week":"今週","p_month":"今月","p_year":"今年","cycles":"サイクル","cycle1":"サイクル","per_cycle":"今月のサイクルごとの消費","short":"短い","long":"長い","anomalous":"異常","avg":"平均 {d}、{k}","last_cycles":"最近のサイクル","col_start":"開始","col_dur":"時間","col_cost":"費用","no_cycle_month":"今月はまだサイクルなし","coarse":"10 日以上前のサイクルは 1 時間単位で数えます。","open_notifs":"この家電の通知","no_power":"電力センサーが見つかりません。`appliances:` の `power_entity` で指定してください。","no_power_vac":"ロボット掃除機には電力センサーがないため、消費とサイクルは数えません。","no_stats":"電力センサーに統計がありません（state_class: measurement が必要です）。"}},"zh":{"SN_STRINGS":{"presence":"在家情况","time_band":"时段","quiet":"安静","act_scen":"活动场景","on":"开","off":"关","active":"活动","dnd":"勿扰","tap_silence":"点按静音","snooze":"暂停","min":"分钟","pause_nc":"暂停非紧急通知","snoozed":"已暂停","until":"直到","tap_clear":"点按清除","announce":"播报","intercom":"对讲","announce_ph":"在所有音箱上播报…","send":"发送","announced":"已播报","cleared":"暂停已清除","snoozed_for":"已暂停非紧急通知，时长","sent":"已发送","sent_today":"今日已发送","since_startup":"自启动以来","yesterday":"昨天","failures":"失败","fail_today":"今天渠道发送失败次数","deliveries":"推送","enabled_total":"已启用/总数","last_notif":"最后一条通知","transports":"传输方式","delivered":"已送达","failed":"失败","channels":"个渠道","none":"无","no_transports":"未找到传输方式实体","tr_used":"使用者","tr_unused":"没有渠道使用它","start":"开始","volume":"音量","now":"现在","crosses":"跨越午夜","no_voice":"无语音","mute_hint":"音量为 <b>0%</b> 的时段完全<b>不发送语音播报</b>（Alexa 和 TTS 关闭，推送通知和仪表板照常送达）。紧急和高优先级提醒始终会播报。","enabled":"已启用","implicit":"始终开启","explicit":"按需","by_scenario":"仅限场景","fallback":"备用","fallback_err":"出错时备用","inc_sum":"这些渠道中","inc_always":"自动启动","inc_req":"仅在请求时","inc_scen":"仅在有场景时","grp_auto":"自动启动","grp_named":"仅在调用中指定时","grp_scen":"仅在有场景时","grp_fallback":"备用，其他渠道失败时","ch_title":"渠道","ch_count":"{tot} 个中 {on} 个开启","off_manual":"已关闭","paused_by":"当前被暂停，原因","on_by":"当前开启，通过","fixed_targets":"固定目标","no_deliveries":"未找到推送实体","home":"在家","away":"外出","devices":"个设备","devices_1":"个设备","rc_test":"发送测试","rc_test_confirm":"再次点按以发送","rc_test_sent":"测试已发送","rc_test_title":"SuperNotify 测试","rc_test_msg":"来自仪表板的测试消息，","overrides":"个推送覆盖","overrides_1":"个推送覆盖","no_contact":"无联系方式","no_recipients":"未找到接收人实体","details":"详情","h_update":"有可用更新：","h_restart":"重启 Home Assistant 以完成更新","h_uptodate":"已是最新","h_transport_err":"个传输方式出错","h_channels_off":"个渠道已关闭","h_all_good":"一切正常","h_health":"健康状况","h_failures":"次失败","h_failures_1":"次失败","h_transport_err_1":"个传输方式出错","h_channels_off_1":"个渠道已关闭","channels_1":"个渠道","band_early_morning":"清晨","band_morning":"上午","band_afternoon":"下午","band_evening":"傍晚","band_night":"夜间","band_late_night":"深夜","h_look_1":"有 1 项需要查看","h_look_n":"有 {n} 项需要查看","h_rest_ok":"其余一切正常","h_ch_on":"{tot} 个渠道中 {on} 个开启","h_open":"打开","ln_delivered":"已送达","ln_failed":"失败","ln_why":"原因","tgt_loading":"正在加载选择器…","bands_empty_t":"还没有时段","bands_empty":"为一天中的每个时段添加一项：用一个 input_datetime 设置开始时间，用一个 input_number 设置语音音量。","active_now":"当前活动","disabled":"已禁用","other":"其他","manual":"手动","apply_now":"立即应用","applied":"已应用","apply_off":"点按停止应用","enabled_lbl":"已启用","reset_overrides":"重置覆盖","reset_done":"覆盖已重置","transport_off":"传输方式已关闭","last_notified":"上次通知","never_notified":"从未通知","media":"媒体","no_scenarios":"未找到场景实体","sim_pick":"🎬 场景 — 点按以模拟","sim_fire":"📤 渠道","sim_hint":"真实引擎数据（查询服务）。基于优先级的推送筛选在引擎端进行，此处不模拟。与运行时合并一样，禁用优先于启用。","sim_none":"不会触发任何推送","scenario_tag":"场景","sim_go":"会发出","sim_stop":"不会发出","sim_r_default":"自动启动","sim_r_on":"开启者","sim_r_off":"关闭者","sim_r_named":"仅在调用中指定时","sim_r_scen":"仅在有场景开启它时","sim_r_fallback":"备用，其他渠道失败时","sim_r_switched":"已关闭","title":"标题","message":"消息","priority":"优先级","channels_lbl":"渠道 — 不选 = 正常路由","camera_lbl":"摄像头快照","preview":"预览","no_title":"（无标题）","no_message":"（无消息）","default_prio":"默认（中）","comp_hint":"选中的渠道以 delivery_selection: fixed 发送（只有它们会触发）。紧急就是真的紧急 — 包括警报器。","critical_confirm":"发送一条紧急通知？包括警报器和最大音量。","write_first":"请先写一条消息","sent_toast":"已发送","write_or_pick":"写一条消息，或选择一个摄像头或渠道","need_2111":"不带文字的通知需要 SuperNotify 2.11.1","send_err":"未发送","dry_btn":"试一下，不发送","dry_title":"如果现在发送","dry_err":"演练失败","dry_would":"会发送","dry_skip":"已跳过","dry_nobody":"无接收人，仅直接目标","dry_targets":"目标","dry_suppressed":"该通知会被抑制","dry_fallback":"没有渠道会触发：改用备用","dry_none":"未选择渠道","dry_scen":"活动场景","dry_raw":"原始响应","dry_prio":"优先级","dry_would_n":"个渠道会发送","dry_nothing":"不会发送任何内容","dry_dupe":"与最近的通知重复：将被丢弃","dry_no_dupe":"未模拟重复检查，因此紧接着的真正发送不会被拦截。","dry_restart":"当前运行的 SuperNotify 无法模拟：演练需要 2.12，且更新后必须重启 Home Assistant。","dry_home":"在家","dry_empty":"SuperNotify 没有返回结果：是否为 2.12 或更高版本？","dry_reasons":{"NO_TARGET":"无可用目标","DUPE":"重复","PRIORITY":"不适用于此优先级","SNOOZED":"已暂停","DELIVERY_CONDITION":"推送条件为假","OCCUPANCY":"在家规则","TRANSPORT_DISABLED":"传输方式已关闭","DELIVERY_DISABLED":"已关闭","NO_SCENARIO":"所需场景未生效","NO_ACTION":"无操作","INVALID_ACTION_DATA":"数据无效","UNKNOWN":"未知原因","ERROR":"错误"},"prio_minimum":"最低","prio_low":"低","prio_medium":"中","prio_high":"高","prio_critical":"紧急","target_lbl":"目标 — 人员、设备、区域、楼层、标签","custom_target_lbl":"自定义目标（电子邮件、Telegram ID 等）— 以逗号分隔","adv_title":"高级选项","adv_spoken":"语音消息（Alexa、TTS）","adv_spoken_ph":"音箱播报的内容（如与文字不同）","adv_apply":"应用这些场景","adv_require":"仅当这些场景活动时发送","adv_constrain":"仅考虑这些场景","adv_snapshot":"来自 URL 的图片","adv_debug":"调试：记录完整的选择追踪（在“原因”卡片中显示）","custom_target_ph":"例如 user@example.com, 123456789","native_target_tag":"🎯 原生区域/楼层/标签","target_warn":"⚠️ 区域、楼层和标签仅由 notify_entity、alexa_devices、html5、ntfy、kodi、media_player、tts 和 chime 解析。使用其他任何渠道 — 或上方未选择渠道时的默认路由 — 通知可能会在无提示的情况下没有目标。请选择兼容的渠道，或直接添加人员/设备。","aut_search":"搜索自动化…","aut_all":"全部","aut_none":"无匹配项","aut_err":"未找到清单 — 请用 tools/genera_vista_automazioni.py 生成","aut_updated":"列表已更新","aut_count":"个自动化","aut_count_1":"个自动化","never":"从不","ago_now":"刚刚","ago_min":"分钟前","ago_h":"小时前","ago_d":"天前","aut_disabled_only":"仅已禁用","grp_active":"活动","repeat":"重复","skipped_n":"已跳过","left":"剩余","missed_n":"未发出","snz_all":"全部","snz_nc":"非紧急","snz_prio":"优先级","snz_transport":"传输方式","snz_for":"时长","snz_choose":"选择内容和时长","snz_title":"暂停通知","snz_what":"内容","snz_nc_l":"非紧急","snz_all_l":"全部","snz_ch":"一个渠道","snz_pr":"一个优先级","snz_who":"对象","snz_everyone":"所有人","snz_me":"仅我","snz_len":"时长","snz_forever":"直到我恢复","snz_go":"暂停","snz_close":"关闭","rs_hand":"手动","rs_voice":"通过语音","rs_assist":"通过助手","snz_voice_info":"你的暂停通过 SuperNotify 的语音命令执行：只对你生效。","snz_voice_off":"SuperNotify 的语音命令已关闭：请在集成选项中开启。","snz_resume_mine":"恢复我的","go_open":"显示","dl_probe":"试用此渠道","probe_msg":"来自仪表板的渠道测试","sc_why":"原因","sc_yes":"当前适用","sc_no":"当前不适用","sc_manual_why":"手动场景：手动应用","sc_no_cond":"无条件","sc_off_sw":"已关闭","sc_not_eval":"未检查","sc_now":"现在","sc_diff_btn_on":"如果适用会有什么变化","sc_diff_btn_off":"没有它会有什么变化","sc_diff_on":"如果它适用，对于现在的一条中优先级通知：","sc_diff_off":"没有它，对于现在的一条中优先级通知：","sc_diff_add":"还会发送","sc_diff_rem":"将不再发送","sc_diff_none":"没有区别","c_state":"{e} 为 {s}","c_template":"模板条件","c_time":"时间","c_after":"晚于","c_before":"早于","c_numeric":"{e}","c_above":"高于","c_below":"低于","c_and":"以下全部","c_or":"以下至少一项","c_not":"以下均不","c_or_join":" 或 ","sim_hint_dry":"SuperNotify 自己的回答（演练，不会发送任何内容）：现在的一条通知，使用上方选择的优先级，且仅包含上方选择的场景。","sim_msg":"模拟器测试","sim_prio":"优先级","sa_snooze":"{what}已暂停 {len}。","sa_silence":"{what}已静音，直到另行通知。","sa_resume":"{what}已恢复。","sa_resume_one":"暂停结束：{x}。","sa_resume_all":"通知已恢复。","sa_w_nc":"非紧急通知","sa_w_all":"所有通知","sa_w_ch":"渠道 {x}","sa_w_pr":"{x}优先级通知","sa_w_mine":"你的通知","sa_for":"给 {x}","sa_min":"{n} 分钟","sa_hour":"一小时","sa_hours":"{n} 小时","occ_title":"谁在家","occ_home_l":"在家","occ_ALL_HOME":"所有人在家","occ_ALL_AWAY":"所有人外出","occ_LONE_HOME":"只有一人在家","occ_MULTI_HOME":"部分人在家","occ_UNDEFINED_OCCUPANTS":"无人被跟踪","h_repairs":"个 SuperNotify 修复","h_repairs_1":"个 SuperNotify 修复","det_more":"所有属性","det_yes":"是","det_no":"否","det_action":"操作","det_target":"固定目标","det_target_req":"需要目标","det_target_use":"目标使用","det_inclusion":"使用时机","det_prio":"优先级","det_occ":"谁必须在家","det_transport":"传输方式","det_data":"数据","det_debug":"调试","det_err_last":"最后错误","det_err_in":"位置","det_err_n":"启动以来的错误","det_select":"选择","adv_html":"电子邮件文本（HTML）","adv_clip":"来自 URL 的视频片段","adv_actions":"通知上的按钮","adv_act_id":"操作 ID","adv_act_title":"按钮文字","adv_act_add":"+ 按钮","adv_groups":"按钮组（逗号分隔）","adv_dc":"此通知的渠道设置","adv_dc_ph":"键: 值，每行一个","adv_dc_add":"+ 渠道","snz_active":"当前已暂停","snz_resume":"恢复","snz_resume_all":"全部恢复","snz_until_resumed":"直到恢复","snz_done":"已暂停","snz_resumed":"已恢复","no_notif":"还没有通知","st_title":"使用情况","st_days":"天","st_days_short":"天","st_hist_note":"最近 {n} 天历史中的时段、渠道和优先级","st_total":"通知","st_avg":"每天","st_today":"今天","st_vs_avg":"与平均相比","st_peak_hour":"高峰时段","st_top_channel":"最常用渠道","st_errors":"渠道错误","st_of_sends":"的渠道发送","st_daily":"每天","st_hourly":"按一天中的时段","st_weekday":"按星期","st_channels":"渠道 — 最常用","st_priority":"优先级","st_period":"时段","st_insights":"洞察","st_no_data":"暂无历史 — 发送第一批通知后会显示数据。","st_unknown":"未知","st_loading":"正在加载…","st_versions":"版本","st_installed":"已安装","st_latest":"最新","st_uptodate":"已是最新","st_update":"有可用更新","st_restart":"需要重启","st_cards":"卡片","st_logged":"已记录","st_reading":"正在读取存档：第 {n} 天，共 {of} 天…","st_from_archive":"来自 SuperNotify 存档","st_archive_err":"存档仅部分读取","st_wd":["周一","周二","周三","周四","周五","周六","周日"],"st_i_share":"所有渠道发送中有 {p}% 通过 {c}。","st_i_peak":"最忙的时段是 {h}:00（{d} 天内 {n} 条通知）。","st_i_night":"{p}% 的通知在 23:00 到 07:00 之间到达 — 如果不希望这样，可以考虑设置一个勿扰场景。","st_i_night_ok":"只有 {p}% 的通知在夜间（23–07）到达：安静时段运作良好。","st_i_weekend":"周末的通知比工作日{dir} {p}%。","st_i_errors":"{d} 天内有 {n} 次渠道错误，主要发生在 {c}。","st_i_noerr":"最近 {d} 天没有渠道错误。","st_i_prio":"{p}% 的通知为{prio}优先级。","st_i_trend":"最近 7 天：{n}/天，比之前 7 天{dir} {p}%。","st_more":"多","st_less":"少","st_up":"增加","st_down":"减少"},"SN_STATS_STRINGS":{"st_title":"使用情况","st_days":"天","st_days_short":"天","st_hist_note":"最近 {n} 天历史中的时段、渠道和优先级","st_total":"通知","st_avg":"每天","st_today":"今天","st_vs_avg":"与平均相比","st_peak_hour":"高峰时段","st_top_channel":"最常用渠道","st_errors":"渠道错误","st_of_sends":"的渠道发送","st_daily":"每天","st_hourly":"按一天中的时段","st_weekday":"按星期","st_channels":"渠道 — 最常用","st_priority":"优先级","st_period":"时段","st_insights":"洞察","st_no_data":"暂无历史 — 发送第一批通知后会显示数据。","st_unknown":"未知","st_loading":"正在加载…","st_versions":"版本","st_installed":"已安装","st_latest":"最新","st_uptodate":"已是最新","st_update":"有可用更新","st_restart":"需要重启","st_cards":"卡片","st_logged":"已记录","st_reading":"正在读取存档：第 {n} 天，共 {of} 天…","st_from_archive":"来自 SuperNotify 存档","st_archive_err":"存档仅部分读取","st_wd":["周一","周二","周三","周四","周五","周六","周日"],"st_i_share":"所有渠道发送中有 {p}% 通过 {c}。","st_i_peak":"最忙的时段是 {h}:00（{d} 天内 {n} 条通知）。","st_i_night":"{p}% 的通知在 23:00 到 07:00 之间到达 — 如果不希望这样，可以考虑设置一个勿扰场景。","st_i_night_ok":"只有 {p}% 的通知在夜间（23–07）到达：安静时段运作良好。","st_i_weekend":"周末的通知比工作日{dir} {p}%。","st_i_errors":"{d} 天内有 {n} 次渠道错误，主要发生在 {c}。","st_i_noerr":"最近 {d} 天没有渠道错误。","st_i_prio":"{p}% 的通知为{prio}优先级。","st_i_trend":"最近 7 天：{n}/天，比之前 7 天{dir} {p}%。","st_more":"多","st_less":"少","st_up":"增加","st_down":"减少"},"SN_ARCH_STRINGS":{"title":"通知历史","search":"搜索标题或消息…","f_all":"全部","f_problems":"仅问题","f_today":"今天","f_whisper":"低语播报","wh":"低语","said":"Alexa 说","said_by":"{ch} 说","none":"没有匹配的通知","no_sensor":"未找到传感器","no_sensor_hint":"将 SuperNotify 更新到 2.10 或更高版本（包含 supernotify.enquire_archive 操作），或添加用于索引存档的 command_line 传感器（见 README）。","loading":"正在读取存档…","recent":"最新通知","read_at":"读取于","of":"/","in_archive":"在存档中","since":"最早","updated":"索引已更新","today":"今天","yesterday":"昨天","delivered":"已送达","failed":"失败","skipped":"已跳过","missed":"未发出","prio":{"critical":"紧急","high":"高","low":"低","minimum":"最低","medium":"中"},"reasons":{"doppione":"重复","nessun target":"无目标","errore":"错误","condizione":"条件","scenario":"场景","presenza":"在家情况","priorita":"优先级","spento":"已关闭","pausa":"已暂停","transport spento":"传输方式已关闭","nessuna azione":"无操作","dati non validi":"数据无效","sconosciuto":"未知"},"scenarios":"生效的场景","truncated":"消息在索引中被截断","dur":"耗时","id":"ID","why":"原因？- 完整详情","f_appliance":"家电","ap_scope":"仅限完整读取的最近 {n} 条，更早的无法识别"},"SN_WHY_STRINGS":{"title":"原因？","pick":"选择一条通知，查看它为何这样发送。","loading":"正在加载…","none":"无通知","no_sensor":"未找到传感器：","no_service":"缺少服务","no_service_hint":"将 SuperNotify 更新到 2.10 或更高版本（supernotify.enquire_archive），或添加 shell_command sn_archive_detail（见 README）并重启 Home Assistant。","gone":"这条通知已不在存档中","priority":"优先级","outcome":"结果","dupe":"重复","outcomes":{"success":"已送达","partial_delivery":"部分送达","dupe":"重复","failed":"失败","error":"失败","fallback_delivery":"由备用渠道送达","no_delivery":"未送达"},"missed":"未发出（已请求，未发送）","step_call":"调用","step_scen":"场景","step_people":"人员","step_ch":"渠道","call_auto":"未指定渠道：正常路由","call_named":"调用中指定：","call_debug":"带调试","nobody":"无人在家","ch_sent":"已发送","ch_problems":"需查看","ch_skipped":"已跳过","pb_failed":"失败","pb_missed":"已请求但未发送","grp_skipped":"被规则跳过：正常","grp_not":"未涉及","trace_title":"完整选择追踪","fix":{"NO_TARGET":"没有接收人拥有此渠道的地址：为某个接收人添加地址，为渠道设置固定目标，或在此调用中不使用它。","ERROR":"此渠道背后的集成返回了错误：请查看它自己的日志条目。","NO_ACTION":"该渠道没有可调用的操作：请在推送上设置 `action:`。","INVALID_ACTION_DATA":"传给操作的数据被拒绝：请检查调用或推送的 `data:`。"},"scenarios":"生效的场景","no_scenarios":"没有生效的场景","applied":"由调用强制","required":"调用要求","constrain":"调用限制为","presence":"在家情况","home":"在家","away":"外出","channels":"渠道","no_channels":"未选择任何渠道","st_ok":"已送达","st_err":"失败","st_skip":"已跳过","st_supp":"已抑制","calls":"次调用","calls_1":"次调用","target_required":"需要目标：","started_by":"选择者","scen_would_off":"被关闭（已被否决）","src_default":"始终开启（默认）","src_scen":"场景","src_call":"调用本身","src_recipient":"接收人","r_off_by":"关闭者","call_targets":"调用中的目标","cats":{"entity_id":"实体","mobile_app_id":"设备","person_id":"人员","email":"电子邮件","phone":"电话","device_id":"设备"},"not_started":"未启动的渠道","r_call_off":"被调用排除","r_scen_off":"被生效的场景关闭","r_disabled":"已关闭","r_transport_off":"其传输方式已关闭","r_only_scen":"仅在场景开启它时启动","r_only_fallback":"仅作备用","r_only_explicit":"仅在按名称请求时启动","r_priority":"不适用于此优先级","r_unknown":"没有追踪无法还原","from_config":"未启动渠道的原因是根据当前的配置还原的，而不是当时的配置。","from_trace":"原因来自随通知存档的选择追踪。","st_time":"耗时","st_slow":"最慢","st_rate":"的渠道成功","ua_title":"没有渠道接收的目标","ua_hint":"它们在调用中，但没有选中的渠道接受这类目标。","un_title":"不存在的名称","sent_by":"发送者","sent_auto":"自动化","sent_script":"脚本","sent_person":"","sent_unknown":"发送者未知（其上下文中没有自动化或人员）","trace":"选择追踪","no_trace":"只有当通知调用带有 debug: true 时才会记录完整的选择追踪，并在存档诊断包含它时存档。","reasons":{"NO_TARGET":"无可用目标","DUPE":"与最近的通知重复","PRIORITY":"不适用于此优先级","SNOOZE":"已暂停","SNOOZED":"已暂停","DELIVERY_CONDITION":"推送条件为假","OCCUPANCY":"在家规则","ERROR":"错误","DELIVERY_DISABLED":"已关闭","SCENARIO":"场景","TRANSPORT_DISABLED":"其传输方式已关闭","NO_SCENARIO":"所需场景未生效","NO_ACTION":"无可调用的操作","INVALID_ACTION_DATA":"操作数据无效","UNKNOWN":"未知原因"}},"SN_TOOLS_STRINGS":{"maint":"维护","enq":"询问 SuperNotify","refresh":"重新发布所有实体","refresh_btn":"刷新","resume_btn":"恢复","refreshed":"实体已重新发布。","resume_all":"恢复所有暂停","cleared_n":"个暂停已恢复","purge_arch":"清理存档","purge_media":"清理图片","older":"早于","days":"天","purge_btn":"清理","confirm":"再次点按以确认","purged":"已删除","remaining":"剩余","reset":"撤销手动所做的更改","reset_btn":"重置","reset_none":"无需重置：一切与配置一致。","reset_done":"已恢复为配置：","k_all":"全部","k_scenario":"场景","k_delivery":"渠道","k_recipient":"人员","k_transport":"传输方式","q_config":"配置","q_scen":"场景","q_active":"活动场景","q_by_scen":"按场景的渠道","q_implicit":"默认渠道","q_recipients":"接收人","q_occupancy":"谁在家","q_snoozes":"暂停","q_last":"最后一条通知","copy":"复制 JSON","copied":"已复制","close":"关闭","empty":"（空）","err":"SuperNotify 返回了错误：","err_config":"当某个渠道带有模板条件时，SuperNotify 2.12.0 无法返回其配置（rhizomatics/supernotify#241）。","settings":"集成设置","running":"处理中…","more":"更多"},"SN_FORM_LABELS":{"_common":"外观和文字","style":"颜色","icons":"图标","show_version":"显示卡片版本","intro":"顶部的介绍文字","title":"标题","dnd_entity":"勿扰开关","quiet_entity":"计算得出的安静状态（可选）","presence_entity":"状态栏中的人员","archive_days":"存档清理：早于（天）","media_days":"图片清理：早于（天）","occupancy":"谁在家（来自 SuperNotify）","repairs":"在健康列表中显示 SuperNotify 修复","snooze_announce":"大声播报暂停（播报渠道）","snooze_via":"暂停的执行方式","o_event":"推送按钮事件（管理员）","o_voice":"语音命令","snooze_minutes":"暂停时长（分钟）","snooze_panel":"暂停磁贴打开暂停面板","announce_delivery":"播报渠道","last_notification":"显示最后一条通知","last_channels":"最后一条通知中每个渠道一个标签","repeat_entity":"重复上一条按钮（可选）","tile_layout":"磁贴","tile_columns":"磁贴列数（留空 = 自动）","update_entity":"SuperNotify 更新实体","cards_update_entity":"卡片更新实体","sent_today_entity":"每日计数器（utility meter，可选）","count_entity":"SuperNotify 计数器（长期统计）","health":"顶部显示健康状况","stats":"数字","poll_seconds":"刷新间隔（秒）","group":"按渠道启动方式分组","hide_defaults":"隐藏自动的 DEFAULT_ 渠道","limit":"列表中的通知数","expand":"展开折叠部分","max_height":"最大高度（CSS，例如 70vh）","source":"存档来源","entity":"存档传感器（仅桥接）","trigger_entity":"此项变化时刷新","dry_run":"显示“试一下，不发送”","dry_run_dupe_check":"同时模拟重复检查","days":"默认显示天数","manifest_url":"自动化清单 URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant 主题","o_mdi":"Home Assistant 图标","o_emoji":"Emoji","o_row":"图标在左侧","o_stacked":"高型，图标在上方","o_three":"已发送、失败、渠道","o_full":"全部五项","o_auto":"自动","o_sensor":"传感器桥接（SuperNotify 2.10 之前）","o_archive":"SuperNotify 存档（2.12.1+）","o_history":"辅助元素的历史"},"SN_NATIVE_STR":{"all_good":"一切正常","paused":"已暂停","until":"直到","resume":"恢复","test":"发送测试","sure":"再次点按以发送","sent":"已发送","last":"最后","none":"还没有通知","ago":"前","min":"分钟","h":"小时","err":"个传输方式出错","off":"个渠道已关闭"},"SN_STRATEGY_TITLES":{"home":"主页","archive":"归档","send":"发送","setup":"设置","stats":"统计","tools":"工具","title":"SuperNotify","appliances":"家电"},"SN_APPL_STRINGS":{"title":"家电","loading":"读取中…","none":"没有家电：请在 Appliance Autonotify 中添加（设置 → 设备与服务）。","st_run":"运行中","st_cleaning":"清扫中","st_done":"已完成 · 待取出","st_done_other":"已完成","st_err":"需要帮助","m_switch_on":"打开插座","done_switch_on":"插座已打开。","done_action":"完成：{n}","confirm_action":"执行「{n}」？","open_entity":"打开以修改","chip_notifs":"通知","chip_device":"设备","not_found":"没有名为「{n}」的设备。","last7":"最近 7 天","col_day":"日期","col_cycles":"周期","col_time":"时间","col_energy":"能耗","source_h":"来源","manual_src":"手动添加:高于 {w} 时为运行中","tab_info":"概览","tab_stats":"能耗与周期","tab_cleans":"清扫","tab_prints":"打印","last_run":"上次周期","avg_run":"平均","reminders_h":"通知","power_h":"当前功率","plug":"插座","plug_on":"开","plug_off":"关","error_h":"错误","open_device":"Home Assistant 中的设备","prints":"次打印","print1":"次打印","per_print":"本月每次打印","last_prints":"最近的打印","no_print_month":"本月尚无打印","no_print":"尚无打印","col_fil":"耗材","failed":"失败","per_run":"本月每个周期","no_run":"尚无周期","dev_hist":"每一项来自 Home Assistant 的历史记录(最近 {n} 天);小时数来自设备自身的计数器(如有)。","cleans":"次清扫","clean1":"次清扫","per_clean":"本月每次清扫","avg_clean":"平均 {d}","col_area":"面积","last_cleans":"最近的清扫","no_clean_month":"本月尚无清扫","no_clean":"尚无清扫","vac_hist":"总计来自机器人的计数器;每次清扫来自 Home Assistant 的历史记录(最近 {n} 天)。","st_paused":"已暂停","st_returning":"正在返回基座","st_charging":"充电中","st_docked_w":"在基座上","st_idle":"空闲","st_off":"已关闭","stopped":"空闲","yesterday":"昨天","u_min":"分钟","u_h":"小时","start":"开始","so_far":"目前","no_cycle":"尚无周期","last_cycle":"上次周期 {d}","ended_at":"{t} 完成","reminders":"+{n} 次提醒，直到 {t}","reminder1":"{t} +1 次提醒","end_est":"预计结束","left":"还剩 {d}","almost":"即将完成","est_from_avg":"根据相似周期估计","running_for":"已运行 {d}","btn_empty":"已取出","btn_seen":"完成","btn_resume":"继续清扫","m_switch_off":"关闭插座","m_remind":"稍后提醒","details":"详情","settings":"设置","more":"更多","details_link":"详情、能耗和周期","done_empty":"完成：提醒已停止。","done_remind":"稍后会再提醒。","done_switch":"插座已关闭。","done_resume":"已继续清扫。","err":"错误","new_dev":"{n} 个新设备","new_dev1":"1 个新设备","battery":"电量","consumable":"{n} {p}%","maint_in":"还有 {c} 个周期","maint_next":"下个周期","maint_due":"现在需要","maint_of":"{d} / {e}","maint_done":"完成","confirm_maint":"将「{n}」标记为完成?计数将重新开始。","conn_lost":"连接中断:最后已知状态","cons_h":"耗材","commands":"命令","tap_again":"再点一次以确认","empty_since":"待取出已","done_since":"已完成","avg_cycle":"平均周期","maint_tab":"保养","tab_stats_short":"能耗","read_failed":"无法读取历史记录 ({e}),稍后重试。","retry":"重试","see_chart":"查看图表","back":"返回","avg_line":"平均 {v}","tap_bar":"点按柱形查看该周期","k_station":"基站","off_since":"已关闭","close":"关闭","power_now":"当前","p_today":"今天","p_week":"本周","p_month":"本月","p_year":"今年","cycles":"个周期","cycle1":"个周期","per_cycle":"本月每个周期的能耗","short":"短","long":"长","anomalous":"异常","avg":"平均 {d}，{k}","last_cycles":"最近的周期","col_start":"开始","col_dur":"时长","col_cost":"费用","no_cycle_month":"本月尚无周期","coarse":"10 天前的周期按小时统计。","open_notifs":"该家电的通知","no_power":"未找到功率传感器：请在 `appliances:` 中用 `power_entity` 指定。","no_power_vac":"扫地机器人没有功率传感器：不统计能耗和周期。","no_stats":"功率传感器没有统计数据（需要 state_class: measurement）。"}},"hi":{"SN_STRINGS":{"presence":"उपस्थिति","time_band":"समय खंड","quiet":"शांत","act_scen":"सक्रिय परिदृश्य","on":"चालू","off":"बंद","active":"सक्रिय","dnd":"परेशान न करें","tap_silence":"शांत करने के लिए टैप करें","snooze":"स्नूज़","min":"मिनट","pause_nc":"गैर-गंभीर रोकें","snoozed":"स्नूज़ किया गया","until":"तक","tap_clear":"हटाने के लिए टैप करें","announce":"घोषणा","intercom":"इंटरकॉम","announce_ph":"सभी स्पीकर पर घोषणा करें…","send":"भेजें","announced":"घोषित","cleared":"स्नूज़ हटाए गए","snoozed_for":"गैर-गंभीर सूचनाएँ स्नूज़ की गईं:","sent":"भेजी गईं","sent_today":"आज भेजी गईं","since_startup":"शुरू होने से","yesterday":"कल","failures":"विफलताएँ","fail_today":"आज विफल चैनल भेजना","deliveries":"डिलीवरी","enabled_total":"सक्षम/कुल","last_notif":"अंतिम सूचना","transports":"परिवहन","delivered":"पहुँचाई गई","failed":"विफल","channels":"चैनल","none":"कोई नहीं","no_transports":"कोई परिवहन entity नहीं मिली","tr_used":"इसके द्वारा उपयोग","tr_unused":"कोई चैनल इसका उपयोग नहीं करता","start":"शुरुआत","volume":"वॉल्यूम","now":"अभी","crosses":"आधी रात पार करता है","no_voice":"आवाज़ नहीं","mute_hint":"<b>0%</b> वाला खंड बिल्कुल <b>कोई आवाज़ घोषणा नहीं</b> भेजता (Alexa और TTS बंद, पुश और डैशबोर्ड फिर भी पहुँचते हैं)। गंभीर और उच्च प्राथमिकता वाली चेतावनियाँ हमेशा बोलती हैं।","enabled":"सक्षम","implicit":"हमेशा चालू","explicit":"माँगने पर","by_scenario":"केवल परिदृश्य से","fallback":"बैकअप","fallback_err":"त्रुटि पर बैकअप","inc_sum":"इन चैनलों में से","inc_always":"अपने आप शुरू होते हैं","inc_req":"केवल माँगने पर","inc_scen":"केवल किसी परिदृश्य के साथ","grp_auto":"अपने आप शुरू होते हैं","grp_named":"केवल जब कॉल में नाम हो","grp_scen":"केवल किसी परिदृश्य के साथ","grp_fallback":"बैकअप, जब बाकी विफल हों","ch_title":"चैनल","ch_count":"{tot} में से {on} चालू","off_manual":"बंद किया गया","paused_by":"अभी रोका गया:","on_by":"अभी चालू, इसके ज़रिए:","fixed_targets":"निश्चित लक्ष्य","no_deliveries":"कोई डिलीवरी entity नहीं मिली","home":"घर पर","away":"बाहर","devices":"डिवाइस","devices_1":"डिवाइस","rc_test":"परीक्षण भेजें","rc_test_confirm":"भेजने के लिए फिर टैप करें","rc_test_sent":"परीक्षण भेजा गया","rc_test_title":"SuperNotify परीक्षण","rc_test_msg":"डैशबोर्ड से परीक्षण संदेश,","overrides":"डिलीवरी ओवरराइड","overrides_1":"डिलीवरी ओवरराइड","no_contact":"कोई संपर्क बिंदु नहीं","no_recipients":"कोई प्राप्तकर्ता entity नहीं मिली","details":"विवरण","h_update":"अपडेट उपलब्ध:","h_restart":"अपडेट पूरा करने के लिए Home Assistant रीस्टार्ट करें","h_uptodate":"अद्यतित","h_transport_err":"त्रुटियों वाले परिवहन","h_channels_off":"चैनल बंद","h_all_good":"सब ठीक है","h_health":"स्वास्थ्य","h_failures":"विफलताएँ","h_failures_1":"विफलता","h_transport_err_1":"त्रुटि वाला परिवहन","h_channels_off_1":"चैनल बंद","channels_1":"चैनल","band_early_morning":"सुबह-सवेरे","band_morning":"सुबह","band_afternoon":"दोपहर","band_evening":"शाम","band_night":"रात","band_late_night":"देर रात","h_look_1":"1 चीज़ देखनी है","h_look_n":"{n} चीज़ें देखनी हैं","h_rest_ok":"बाकी सब काम कर रहा है","h_ch_on":"{tot} में से {on} चैनल चालू","h_open":"खोलें","ln_delivered":"पहुँचाई गई","ln_failed":"विफल","ln_why":"क्यों","tgt_loading":"चयनकर्ता लोड हो रहा है…","bands_empty_t":"अभी कोई समय खंड नहीं","bands_empty":"दिन के हर हिस्से के लिए एक खंड जोड़ें: उसकी शुरुआत के लिए एक input_datetime और आवाज़ के वॉल्यूम के लिए एक input_number।","active_now":"अभी सक्रिय","disabled":"अक्षम","other":"अन्य","manual":"मैनुअल","apply_now":"अभी लागू करें","applied":"लागू","apply_off":"लागू करना रोकने के लिए टैप करें","enabled_lbl":"सक्षम","reset_overrides":"ओवरराइड रीसेट करें","reset_done":"ओवरराइड रीसेट हुए","transport_off":"परिवहन बंद","last_notified":"अंतिम सूचना","never_notified":"कभी सूचना नहीं","media":"मीडिया","no_scenarios":"कोई परिदृश्य entity नहीं मिली","sim_pick":"🎬 परिदृश्य — सिम्युलेट करने के लिए टैप करें","sim_fire":"📤 चैनल","sim_hint":"इंजन का वास्तविक डेटा (enquire सेवाएँ)। प्राथमिकता के आधार पर डिलीवरी फ़िल्टरिंग इंजन में होती है और यहाँ सिम्युलेट नहीं की जाती। रनटाइम मर्ज की तरह, अक्षम सक्षम पर भारी पड़ता है।","sim_none":"कोई डिलीवरी नहीं चलेगी","scenario_tag":"परिदृश्य","sim_go":"भेजी जाएगी","sim_stop":"नहीं भेजी जाएगी","sim_r_default":"अपने आप शुरू होती है","sim_r_on":"चालू की गई:","sim_r_off":"बंद की गई:","sim_r_named":"केवल जब कॉल में नाम हो","sim_r_scen":"केवल ऐसे परिदृश्य के साथ जो इसे चालू करे","sim_r_fallback":"बैकअप, जब बाकी विफल हों","sim_r_switched":"बंद किया गया","title":"शीर्षक","message":"संदेश","priority":"प्राथमिकता","channels_lbl":"चैनल — कोई न चुना = सामान्य रूटिंग","camera_lbl":"कैमरा स्नैपशॉट","preview":"पूर्वावलोकन","no_title":"(कोई शीर्षक नहीं)","no_message":"(कोई संदेश नहीं)","default_prio":"डिफ़ॉल्ट (मध्यम)","comp_hint":"चुने गए चैनल delivery_selection: fixed के साथ भेजे जाते हैं (केवल वही चलते हैं)। गंभीर सचमुच गंभीर है — सायरन सहित।","critical_confirm":"गंभीर सूचना भेजें? सायरन और अधिकतम वॉल्यूम सहित।","write_first":"पहले एक संदेश लिखें","sent_toast":"भेजी गई","write_or_pick":"एक संदेश लिखें, या कोई कैमरा या चैनल चुनें","need_2111":"बिना टेक्स्ट की सूचना के लिए SuperNotify 2.11.1 चाहिए","send_err":"नहीं भेजी गई","dry_btn":"बिना भेजे आज़माएँ","dry_title":"अगर आप इसे अभी भेजते","dry_err":"ड्राई रन विफल","dry_would":"भेजेगा","dry_skip":"छोड़ा गया","dry_nobody":"कोई प्राप्तकर्ता नहीं, केवल सीधे लक्ष्य","dry_targets":"लक्ष्य","dry_suppressed":"सूचना दबा दी जाएगी","dry_fallback":"कोई चैनल नहीं चलेगा: फ़ॉलबैक","dry_none":"कोई चैनल नहीं चुना गया","dry_scen":"सक्रिय परिदृश्य","dry_raw":"कच्चा उत्तर","dry_prio":"प्राथमिकता","dry_would_n":"चैनल भेजेंगे","dry_nothing":"कुछ नहीं भेजा जाएगा","dry_dupe":"हाल की सूचना का डुप्लिकेट: इसे छोड़ दिया जाएगा","dry_no_dupe":"डुप्लिकेट जाँच सिम्युलेट नहीं हुई, इसलिए ठीक बाद का असली भेजना अवरुद्ध नहीं होगा।","dry_restart":"अभी चल रहा SuperNotify सिम्युलेट नहीं कर सकता: ड्राई रन के लिए 2.12 चाहिए, और अपडेट के बाद Home Assistant रीस्टार्ट करना ज़रूरी है।","dry_home":"घर पर","dry_empty":"SuperNotify ने कोई उत्तर नहीं दिया: क्या यह 2.12 या नया है?","dry_reasons":{"NO_TARGET":"कोई उपयोगी लक्ष्य नहीं","DUPE":"डुप्लिकेट","PRIORITY":"इस प्राथमिकता के लिए नहीं","SNOOZED":"स्नूज़ किया गया","DELIVERY_CONDITION":"डिलीवरी शर्त असत्य","OCCUPANCY":"उपस्थिति नियम","TRANSPORT_DISABLED":"परिवहन बंद","DELIVERY_DISABLED":"बंद किया गया","NO_SCENARIO":"आवश्यक परिदृश्य लागू नहीं","NO_ACTION":"कोई क्रिया नहीं","INVALID_ACTION_DATA":"अमान्य डेटा","UNKNOWN":"अज्ञात कारण","ERROR":"त्रुटि"},"prio_minimum":"न्यूनतम","prio_low":"कम","prio_medium":"मध्यम","prio_high":"उच्च","prio_critical":"गंभीर","target_lbl":"लक्ष्य — लोग, डिवाइस, क्षेत्र, मंज़िलें, लेबल","custom_target_lbl":"कस्टम लक्ष्य (ईमेल, Telegram ID, …) — कॉमा से अलग","adv_title":"उन्नत विकल्प","adv_spoken":"बोला जाने वाला संदेश (Alexa, TTS)","adv_spoken_ph":"स्पीकर क्या बोलें, अगर टेक्स्ट से अलग हो","adv_apply":"ये परिदृश्य लागू करें","adv_require":"केवल तभी भेजें जब ये परिदृश्य सक्रिय हों","adv_constrain":"केवल इन परिदृश्यों पर विचार करें","adv_snapshot":"URL से चित्र","adv_debug":"डीबग: पूरा चयन ट्रेस दर्ज करें (\"क्यों\" कार्ड में दिखता है)","custom_target_ph":"जैसे user@example.com, 123456789","native_target_tag":"🎯 नेटिव क्षेत्र/मंज़िल/लेबल","target_warn":"⚠️ क्षेत्र, मंज़िलें और लेबल केवल notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts और chime द्वारा हल किए जाते हैं। किसी अन्य चैनल के साथ — या ऊपर कोई चैनल न चुनने पर डिफ़ॉल्ट रूटिंग के साथ — सूचना चुपचाप बिना लक्ष्य के रह सकती है। कोई संगत चैनल चुनें, या सीधे कोई व्यक्ति/डिवाइस जोड़ें।","aut_search":"स्वचालन खोजें…","aut_all":"सभी","aut_none":"कोई मेल नहीं","aut_err":"मैनिफ़ेस्ट नहीं मिला — इसे tools/genera_vista_automazioni.py से बनाएँ","aut_updated":"सूची अपडेट हुई","aut_count":"स्वचालन","aut_count_1":"स्वचालन","never":"कभी नहीं","ago_now":"अभी","ago_min":"मिनट पहले","ago_h":"घंटे पहले","ago_d":"दिन पहले","aut_disabled_only":"केवल अक्षम","grp_active":"सक्रिय","repeat":"दोहराएँ","skipped_n":"छोड़ी गईं","left":"शेष","missed_n":"छूटी","snz_all":"सब कुछ","snz_nc":"गैर-गंभीर","snz_prio":"प्राथमिकता","snz_transport":"परिवहन","snz_for":"के लिए","snz_choose":"क्या और कितनी देर चुनें","snz_title":"सूचनाएँ रोकें","snz_what":"क्या","snz_nc_l":"गैर-गंभीर","snz_all_l":"सब कुछ","snz_ch":"एक चैनल","snz_pr":"एक प्राथमिकता","snz_who":"किसके लिए","snz_everyone":"सभी","snz_me":"केवल मैं","snz_len":"कितनी देर","snz_forever":"जब तक मैं फिर शुरू न करूँ","snz_go":"रोकें","snz_close":"बंद करें","rs_hand":"हाथ से","rs_voice":"आवाज़ से","rs_assist":"सहायक द्वारा","snz_voice_info":"आपके विराम SuperNotify के वॉइस कमांड से जाते हैं: वे केवल आपके हैं।","snz_voice_off":"SuperNotify के वॉइस कमांड बंद हैं: उन्हें इंटीग्रेशन विकल्पों में चालू करें।","snz_resume_mine":"मेरे फिर शुरू करें","go_open":"दिखाएँ","dl_probe":"यह चैनल आज़माएँ","probe_msg":"डैशबोर्ड से चैनल परीक्षण","sc_why":"क्यों","sc_yes":"अभी लागू","sc_no":"अभी लागू नहीं","sc_manual_why":"मैनुअल परिदृश्य: हाथ से लागू किया गया","sc_no_cond":"कोई शर्त नहीं","sc_off_sw":"बंद किया गया","sc_not_eval":"जाँचा नहीं गया","sc_now":"अभी","sc_diff_btn_on":"लागू होने पर क्या बदलेगा","sc_diff_btn_off":"इसके बिना क्या बदलेगा","sc_diff_on":"अगर यह लागू होता, अभी एक मध्यम सूचना के लिए:","sc_diff_off":"इसके बिना, अभी एक मध्यम सूचना के लिए:","sc_diff_add":"यह भी भेजेगा","sc_diff_rem":"अब नहीं भेजेगा","sc_diff_none":"कोई अंतर नहीं","c_state":"{e} {s} है","c_template":"टेम्पलेट शर्त","c_time":"समय","c_after":"के बाद","c_before":"से पहले","c_numeric":"{e}","c_above":"से ऊपर","c_below":"से नीचे","c_and":"ये सभी","c_or":"इनमें से कम से कम एक","c_not":"इनमें से कोई नहीं","c_or_join":" या ","sim_hint_dry":"SuperNotify का अपना उत्तर (ड्राई रन, कुछ नहीं भेजा जाता): अभी एक सूचना, ऊपर चुनी गई प्राथमिकता और केवल चुने गए परिदृश्यों के साथ।","sim_msg":"सिम्युलेटर परीक्षण","sim_prio":"प्राथमिकता","sa_snooze":"{what} {len} के लिए रोकी गईं।","sa_silence":"{what} अगली सूचना तक शांत।","sa_resume":"{what} फिर से चालू।","sa_resume_one":"विराम समाप्त: {x}।","sa_resume_all":"सूचनाएँ फिर से चालू।","sa_w_nc":"गैर-गंभीर सूचनाएँ","sa_w_all":"सभी सूचनाएँ","sa_w_ch":"चैनल {x}","sa_w_pr":"{x} प्राथमिकता की सूचनाएँ","sa_w_mine":"आपकी सूचनाएँ","sa_for":"{x} के लिए","sa_min":"{n} मिनट","sa_hour":"एक घंटा","sa_hours":"{n} घंटे","occ_title":"कौन घर पर है","occ_home_l":"घर पर","occ_ALL_HOME":"सभी घर पर","occ_ALL_AWAY":"सभी बाहर","occ_LONE_HOME":"केवल एक घर पर","occ_MULTI_HOME":"कुछ घर पर","occ_UNDEFINED_OCCUPANTS":"कोई ट्रैक नहीं","h_repairs":"SuperNotify मरम्मत","h_repairs_1":"SuperNotify मरम्मत","det_more":"सभी विशेषताएँ","det_yes":"हाँ","det_no":"नहीं","det_action":"क्रिया","det_target":"निश्चित लक्ष्य","det_target_req":"लक्ष्य चाहिए","det_target_use":"लक्ष्य उपयोग","det_inclusion":"कब उपयोग","det_prio":"प्राथमिकताएँ","det_occ":"किसे घर पर होना चाहिए","det_transport":"परिवहन","det_data":"डेटा","det_debug":"डीबग","det_err_last":"अंतिम त्रुटि","det_err_in":"में","det_err_n":"शुरू से त्रुटियाँ","det_select":"चयन","adv_html":"ईमेल के लिए टेक्स्ट (HTML)","adv_clip":"URL से वीडियो क्लिप","adv_actions":"सूचना पर बटन","adv_act_id":"क्रिया id","adv_act_title":"बटन टेक्स्ट","adv_act_add":"+ बटन","adv_groups":"बटन समूह (कॉमा)","adv_dc":"इस सूचना के लिए चैनल सेटिंग्स","adv_dc_ph":"key: value, हर पंक्ति में एक","adv_dc_add":"+ चैनल","snz_active":"अभी रुका हुआ","snz_resume":"फिर शुरू करें","snz_resume_all":"सब फिर शुरू करें","snz_until_resumed":"फिर शुरू होने तक","snz_done":"रोका गया","snz_resumed":"फिर शुरू हुआ","no_notif":"अभी कोई सूचना नहीं","st_title":"उपयोग","st_days":"दिन","st_days_short":"दि","st_hist_note":"इतिहास के पिछले {n} दिनों के घंटे, चैनल और प्राथमिकताएँ","st_total":"सूचनाएँ","st_avg":"प्रति दिन","st_today":"आज","st_vs_avg":"औसत की तुलना में","st_peak_hour":"सबसे व्यस्त घंटा","st_top_channel":"शीर्ष चैनल","st_errors":"चैनल त्रुटियाँ","st_of_sends":"चैनल भेजे गए में से","st_daily":"प्रति दिन","st_hourly":"दिन के घंटे के अनुसार","st_weekday":"सप्ताह के दिन के अनुसार","st_channels":"चैनल — सबसे अधिक उपयोग","st_priority":"प्राथमिकता","st_period":"दिन का समय","st_insights":"जानकारियाँ","st_no_data":"अभी कोई इतिहास नहीं — पहली सूचनाओं के बाद डेटा दिखेगा।","st_unknown":"अज्ञात","st_loading":"लोड हो रहा है…","st_versions":"संस्करण","st_installed":"इंस्टॉल","st_latest":"नवीनतम","st_uptodate":"अद्यतित","st_update":"अपडेट उपलब्ध","st_restart":"रीस्टार्ट आवश्यक","st_cards":"कार्ड","st_logged":"दर्ज","st_reading":"संग्रह पढ़ा जा रहा है: दिन {n} / {of}…","st_from_archive":"SuperNotify के संग्रह से","st_archive_err":"संग्रह आंशिक रूप से पढ़ा गया","st_wd":["सोम","मंगल","बुध","गुरु","शुक्र","शनि","रवि"],"st_i_share":"सभी चैनल भेजे गए में से {p}% {c} से जाते हैं।","st_i_peak":"सबसे व्यस्त घंटा {h}:00 है ({d} दिनों में {n} सूचनाएँ)।","st_i_night":"{p}% सूचनाएँ 23:00 और 07:00 के बीच आती हैं — अगर यह नहीं चाहिए तो DND परिदृश्य पर विचार करें।","st_i_night_ok":"केवल {p}% सूचनाएँ रात में (23–07) आती हैं: शांत घंटे काम कर रहे हैं।","st_i_weekend":"सप्ताहांत के दिनों में कार्यदिवसों की तुलना में {p}% {dir} सूचनाएँ आती हैं।","st_i_errors":"{d} दिनों में {n} चैनल त्रुटियाँ, ज़्यादातर {c} पर।","st_i_noerr":"पिछले {d} दिनों में कोई चैनल त्रुटि नहीं।","st_i_prio":"{p}% सूचनाएँ {prio} प्राथमिकता की हैं।","st_i_trend":"पिछले 7 दिन: {n}/दिन, पहले के 7 दिनों की तुलना में {p}% {dir}।","st_more":"अधिक","st_less":"कम","st_up":"ऊपर","st_down":"नीचे"},"SN_STATS_STRINGS":{"st_title":"उपयोग","st_days":"दिन","st_days_short":"दि","st_hist_note":"इतिहास के पिछले {n} दिनों के घंटे, चैनल और प्राथमिकताएँ","st_total":"सूचनाएँ","st_avg":"प्रति दिन","st_today":"आज","st_vs_avg":"औसत की तुलना में","st_peak_hour":"सबसे व्यस्त घंटा","st_top_channel":"शीर्ष चैनल","st_errors":"चैनल त्रुटियाँ","st_of_sends":"चैनल भेजे गए में से","st_daily":"प्रति दिन","st_hourly":"दिन के घंटे के अनुसार","st_weekday":"सप्ताह के दिन के अनुसार","st_channels":"चैनल — सबसे अधिक उपयोग","st_priority":"प्राथमिकता","st_period":"दिन का समय","st_insights":"जानकारियाँ","st_no_data":"अभी कोई इतिहास नहीं — पहली सूचनाओं के बाद डेटा दिखेगा।","st_unknown":"अज्ञात","st_loading":"लोड हो रहा है…","st_versions":"संस्करण","st_installed":"इंस्टॉल","st_latest":"नवीनतम","st_uptodate":"अद्यतित","st_update":"अपडेट उपलब्ध","st_restart":"रीस्टार्ट आवश्यक","st_cards":"कार्ड","st_logged":"दर्ज","st_reading":"संग्रह पढ़ा जा रहा है: दिन {n} / {of}…","st_from_archive":"SuperNotify के संग्रह से","st_archive_err":"संग्रह आंशिक रूप से पढ़ा गया","st_wd":["सोम","मंगल","बुध","गुरु","शुक्र","शनि","रवि"],"st_i_share":"सभी चैनल भेजे गए में से {p}% {c} से जाते हैं।","st_i_peak":"सबसे व्यस्त घंटा {h}:00 है ({d} दिनों में {n} सूचनाएँ)।","st_i_night":"{p}% सूचनाएँ 23:00 और 07:00 के बीच आती हैं — अगर यह नहीं चाहिए तो DND परिदृश्य पर विचार करें।","st_i_night_ok":"केवल {p}% सूचनाएँ रात में (23–07) आती हैं: शांत घंटे काम कर रहे हैं।","st_i_weekend":"सप्ताहांत के दिनों में कार्यदिवसों की तुलना में {p}% {dir} सूचनाएँ आती हैं।","st_i_errors":"{d} दिनों में {n} चैनल त्रुटियाँ, ज़्यादातर {c} पर।","st_i_noerr":"पिछले {d} दिनों में कोई चैनल त्रुटि नहीं।","st_i_prio":"{p}% सूचनाएँ {prio} प्राथमिकता की हैं।","st_i_trend":"पिछले 7 दिन: {n}/दिन, पहले के 7 दिनों की तुलना में {p}% {dir}।","st_more":"अधिक","st_less":"कम","st_up":"ऊपर","st_down":"नीचे"},"SN_ARCH_STRINGS":{"title":"सूचना इतिहास","search":"शीर्षक या संदेश खोजें…","f_all":"सभी","f_problems":"केवल समस्याएँ","f_today":"आज","f_whisper":"फुसफुसाई गईं","wh":"फुसफुसाई गई","said":"Alexa ने कहा","said_by":"{ch} ने कहा","none":"कोई सूचना मेल नहीं खाती","no_sensor":"सेंसर नहीं मिला","no_sensor_hint":"SuperNotify को 2.10 या नए संस्करण में अपडेट करें, जिसमें supernotify.enquire_archive क्रिया है, या संग्रह को इंडेक्स करने वाला command_line सेंसर जोड़ें (README देखें)।","loading":"संग्रह पढ़ा जा रहा है…","recent":"नवीनतम सूचनाएँ","read_at":"पढ़ा गया","of":"में से","in_archive":"संग्रह में","since":"सबसे पुरानी","updated":"इंडेक्स अपडेट हुआ","today":"आज","yesterday":"कल","delivered":"पहुँचाई गई","failed":"विफल","skipped":"छोड़ी गई","missed":"छूटी","prio":{"critical":"गंभीर","high":"उच्च","low":"कम","minimum":"न्यूनतम","medium":"मध्यम"},"reasons":{"doppione":"डुप्लिकेट","nessun target":"कोई लक्ष्य नहीं","errore":"त्रुटि","condizione":"शर्त","scenario":"परिदृश्य","presenza":"उपस्थिति","priorita":"प्राथमिकता","spento":"बंद","pausa":"स्नूज़ किया गया","transport spento":"परिवहन बंद","nessuna azione":"कोई क्रिया नहीं","dati non validi":"अमान्य डेटा","sconosciuto":"अज्ञात"},"scenarios":"लागू परिदृश्य","truncated":"इंडेक्स में संदेश छोटा किया गया","dur":"लगा समय","id":"id","why":"क्यों? - पूरा विवरण","f_appliance":"उपकरण","ap_scope":"पूरी पढ़ी गई पिछली {n} सूचनाओं में से - पुरानी पहचानी नहीं जातीं"},"SN_WHY_STRINGS":{"title":"क्यों?","pick":"कोई सूचना चुनें यह देखने के लिए कि वह जहाँ गई वहाँ क्यों गई।","loading":"लोड हो रहा है…","none":"कोई सूचना नहीं","no_sensor":"सेंसर नहीं मिला:","no_service":"सेवा नहीं मिली","no_service_hint":"SuperNotify को 2.10 या नए संस्करण में अपडेट करें (supernotify.enquire_archive), या shell_command sn_archive_detail जोड़ें (README देखें) और Home Assistant रीस्टार्ट करें।","gone":"यह सूचना अब संग्रह में नहीं है","priority":"प्राथमिकता","outcome":"परिणाम","dupe":"डुप्लिकेट","outcomes":{"success":"पहुँचाई गई","partial_delivery":"आंशिक रूप से पहुँचाई गई","dupe":"डुप्लिकेट","failed":"विफल","error":"विफल","fallback_delivery":"फ़ॉलबैक चैनल से पहुँचाई गई","no_delivery":"नहीं पहुँचाई गई"},"missed":"छूटी (माँगी गई, भेजी नहीं गई)","step_call":"कॉल","step_scen":"परिदृश्य","step_people":"लोग","step_ch":"चैनल","call_auto":"कोई चैनल नामित नहीं: सामान्य रूटिंग","call_named":"कॉल में नामित:","call_debug":"डीबग के साथ","nobody":"घर पर कोई नहीं","ch_sent":"भेजे गए","ch_problems":"देखने योग्य","ch_skipped":"छोड़े गए","pb_failed":"विफल","pb_missed":"माँगा गया पर भेजा नहीं गया","grp_skipped":"किसी नियम से छोड़े गए: सामान्य","grp_not":"शामिल नहीं","trace_title":"पूरा चयन ट्रेस","fix":{"NO_TARGET":"किसी प्राप्तकर्ता के पास इस चैनल का पता नहीं है: किसी प्राप्तकर्ता में एक जोड़ें, चैनल को निश्चित लक्ष्य दें, या इसे इस कॉल से हटा दें।","ERROR":"इस चैनल के पीछे के इंटीग्रेशन ने त्रुटि लौटाई: उसकी अपनी लॉग प्रविष्टि देखें।","NO_ACTION":"चैनल के पास कॉल करने के लिए कोई क्रिया नहीं है: डिलीवरी पर `action:` सेट करें।","INVALID_ACTION_DATA":"क्रिया को दिया गया डेटा अस्वीकार कर दिया गया: कॉल या डिलीवरी का `data:` जाँचें।"},"scenarios":"लागू परिदृश्य","no_scenarios":"कोई परिदृश्य लागू नहीं","applied":"कॉल द्वारा बाध्य","required":"कॉल द्वारा आवश्यक","constrain":"कॉल द्वारा सीमित:","presence":"उपस्थिति","home":"घर पर","away":"बाहर","channels":"चैनल","no_channels":"कोई चैनल नहीं चुना गया","st_ok":"पहुँचाई गई","st_err":"विफल","st_skip":"छोड़ी गई","st_supp":"दबाई गई","calls":"कॉल","calls_1":"कॉल","target_required":"लक्ष्य आवश्यक:","started_by":"इसके द्वारा चुना गया:","scen_would_off":"बंद करता (रद्द किया गया):","src_default":"हमेशा चालू (डिफ़ॉल्ट)","src_scen":"परिदृश्य","src_call":"कॉल स्वयं","src_recipient":"प्राप्तकर्ता","r_off_by":"बंद किया गया:","call_targets":"कॉल में लक्ष्य","cats":{"entity_id":"entities","mobile_app_id":"डिवाइस","person_id":"लोग","email":"ईमेल","phone":"फ़ोन","device_id":"डिवाइस"},"not_started":"चैनल जो शुरू नहीं हुए","r_call_off":"कॉल द्वारा बाहर रखा गया","r_scen_off":"लागू परिदृश्य द्वारा बंद किया गया","r_disabled":"बंद किया गया","r_transport_off":"इसका परिवहन बंद है","r_only_scen":"केवल तब शुरू होता है जब कोई परिदृश्य इसे चालू करे","r_only_fallback":"केवल फ़ॉलबैक","r_only_explicit":"केवल नाम से माँगने पर शुरू होता है","r_priority":"इस प्राथमिकता के लिए नहीं","r_unknown":"ट्रेस के बिना पुनर्निर्मित नहीं किया जा सकता","from_config":"शुरू न हुए चैनलों के कारण कॉन्फ़िगरेशन से पुनर्निर्मित किए जाते हैं जैसा वह अभी है, न कि जैसा तब था।","from_trace":"कारण सूचना के साथ संग्रहीत चयन ट्रेस से आते हैं।","st_time":"लगा समय","st_slow":"सबसे धीमा","st_rate":"चैनल सफल हुए","ua_title":"लक्ष्य जिन्हें किसी चैनल ने नहीं लिया","ua_hint":"वे कॉल में थे, पर कोई चुना गया चैनल इस प्रकार का लक्ष्य स्वीकार नहीं करता।","un_title":"नाम जो मौजूद नहीं हैं","sent_by":"भेजने वाला","sent_auto":"स्वचालन","sent_script":"स्क्रिप्ट","sent_person":"","sent_unknown":"भेजने वाला अज्ञात (इसके संदर्भ में कोई स्वचालन या व्यक्ति नहीं)","trace":"चयन ट्रेस","no_trace":"पूरा चयन ट्रेस केवल तभी दर्ज होता है जब notify कॉल में debug: true हो, और तभी संग्रहीत होता है जब संग्रह डायग्नोस्टिक्स में यह शामिल हो।","reasons":{"NO_TARGET":"कोई उपयोगी लक्ष्य नहीं","DUPE":"हाल की सूचना का डुप्लिकेट","PRIORITY":"इस प्राथमिकता के लिए नहीं","SNOOZE":"स्नूज़ किया गया","SNOOZED":"स्नूज़ किया गया","DELIVERY_CONDITION":"डिलीवरी शर्त असत्य","OCCUPANCY":"उपस्थिति नियम","ERROR":"त्रुटि","DELIVERY_DISABLED":"बंद किया गया","SCENARIO":"परिदृश्य","TRANSPORT_DISABLED":"इसका परिवहन बंद है","NO_SCENARIO":"एक आवश्यक परिदृश्य लागू नहीं है","NO_ACTION":"कॉल करने के लिए कोई क्रिया नहीं","INVALID_ACTION_DATA":"अमान्य क्रिया डेटा","UNKNOWN":"अज्ञात कारण"}},"SN_TOOLS_STRINGS":{"maint":"रखरखाव","enq":"SuperNotify से पूछें","refresh":"हर entity फिर से प्रकाशित करें","refresh_btn":"रीफ़्रेश","resume_btn":"फिर शुरू करें","refreshed":"Entities फिर से प्रकाशित हुईं।","resume_all":"हर विराम फिर शुरू करें","cleared_n":"विराम फिर शुरू हुए","purge_arch":"संग्रह साफ़ करें","purge_media":"चित्र साफ़ करें","older":"इससे पुराने","days":"दिन","purge_btn":"साफ़ करें","confirm":"पुष्टि के लिए फिर टैप करें","purged":"हटाए गए","remaining":"शेष","reset":"हाथ से किए गए बदलाव पूर्ववत करें","reset_btn":"रीसेट","reset_none":"रीसेट करने को कुछ नहीं: सब कुछ कॉन्फ़िगरेशन के अनुसार है।","reset_done":"कॉन्फ़िगरेशन पर वापस:","k_all":"सब कुछ","k_scenario":"परिदृश्य","k_delivery":"चैनल","k_recipient":"लोग","k_transport":"परिवहन","q_config":"कॉन्फ़िगरेशन","q_scen":"परिदृश्य","q_active":"सक्रिय परिदृश्य","q_by_scen":"परिदृश्य के अनुसार चैनल","q_implicit":"डिफ़ॉल्ट चैनल","q_recipients":"प्राप्तकर्ता","q_occupancy":"कौन घर पर है","q_snoozes":"विराम","q_last":"अंतिम सूचना","copy":"JSON कॉपी करें","copied":"कॉपी हुआ","close":"बंद करें","empty":"(खाली)","err":"SuperNotify ने त्रुटि के साथ उत्तर दिया:","err_config":"SuperNotify 2.12.0 अपना कॉन्फ़िगरेशन नहीं लौटा सकता जब किसी चैनल में टेम्पलेट शर्तें हों (rhizomatics/supernotify#241)।","settings":"इंटीग्रेशन सेटिंग्स","running":"काम चल रहा है…","more":"और"},"SN_FORM_LABELS":{"_common":"रूप और टेक्स्ट","style":"रंग","icons":"आइकन","show_version":"कार्ड संस्करण दिखाएँ","intro":"ऊपर परिचय टेक्स्ट","title":"शीर्षक","dnd_entity":"परेशान-न-करें स्विच","quiet_entity":"गणना की गई शांत स्थिति (वैकल्पिक)","presence_entity":"स्थिति पट्टी के लिए व्यक्ति","archive_days":"संग्रह सफ़ाई: इससे पुराने (दिन)","media_days":"चित्र सफ़ाई: इससे पुराने (दिन)","occupancy":"कौन घर पर है (SuperNotify से)","repairs":"स्वास्थ्य सूची में SuperNotify मरम्मत","snooze_announce":"विराम ज़ोर से बोलें (घोषणा चैनल)","snooze_via":"विराम इसके ज़रिए जाते हैं","o_event":"पुश बटन इवेंट (व्यवस्थापक)","o_voice":"वॉइस कमांड","snooze_minutes":"स्नूज़ अवधि (मिनट)","snooze_panel":"स्नूज़ टाइल विराम पैनल खोलती है","announce_delivery":"घोषणाओं के लिए चैनल","last_notification":"अंतिम सूचना दिखाएँ","last_channels":"अंतिम सूचना में हर चैनल के लिए एक चिप","repeat_entity":"अंतिम-दोहराएँ बटन (वैकल्पिक)","tile_layout":"टाइलें","tile_columns":"टाइल कॉलम (खाली = स्वचालित)","update_entity":"SuperNotify अपडेट entity","cards_update_entity":"कार्ड अपडेट entity","sent_today_entity":"दैनिक काउंटर (utility meter, वैकल्पिक)","count_entity":"SuperNotify काउंटर (दीर्घकालिक आँकड़े)","health":"ऊपर स्वास्थ्य","stats":"संख्याएँ","poll_seconds":"हर इतने में रीफ़्रेश (सेकंड)","group":"चैनल कैसे शुरू होता है उसके अनुसार समूह","hide_defaults":"स्वचालित DEFAULT_ चैनल छिपाएँ","limit":"सूची में सूचनाएँ","expand":"मुड़े हुए हिस्से खोलें","max_height":"अधिकतम ऊँचाई (CSS, जैसे 70vh)","source":"संग्रह स्रोत","entity":"संग्रह सेंसर (केवल ब्रिज)","trigger_entity":"इसके बदलने पर रीफ़्रेश करें","dry_run":"\"बिना भेजे आज़माएँ\" दिखाएँ","dry_run_dupe_check":"डुप्लिकेट जाँच भी सिम्युलेट करें","days":"डिफ़ॉल्ट रूप से दिखाए गए दिन","manifest_url":"स्वचालन मैनिफ़ेस्ट URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant थीम","o_mdi":"Home Assistant आइकन","o_emoji":"इमोजी","o_row":"बाईं ओर आइकन","o_stacked":"ऊँची, ऊपर आइकन","o_three":"भेजी गईं, विफलताएँ, चैनल","o_full":"सभी पाँच","o_auto":"स्वचालित","o_sensor":"सेंसर ब्रिज (SuperNotify 2.10 से पहले)","o_archive":"SuperNotify संग्रह (2.12.1+)","o_history":"सहायकों का इतिहास"},"SN_NATIVE_STR":{"all_good":"सब ठीक है","paused":"रुका हुआ","until":"तक","resume":"फिर शुरू करें","test":"परीक्षण भेजें","sure":"भेजने के लिए फिर टैप करें","sent":"भेजी गईं","last":"अंतिम","none":"अभी कोई सूचना नहीं","ago":"पहले","min":"मिनट","h":"घं","err":"त्रुटियों वाले परिवहन","off":"चैनल बंद"},"SN_STRATEGY_TITLES":{"home":"होम","archive":"संग्रह","send":"भेजें","setup":"सेटअप","stats":"आँकड़े","tools":"टूल","title":"SuperNotify","appliances":"उपकरण"},"SN_APPL_STRINGS":{"title":"उपकरण","loading":"पढ़ा जा रहा है…","none":"कोई उपकरण नहीं: Appliance Autonotify में जोड़ें (सेटिंग्स → डिवाइस और सेवाएँ)।","st_run":"चल रहा है","st_cleaning":"सफ़ाई कर रहा है","st_done":"पूरा · खाली करें","st_done_other":"पूरा","st_err":"मदद चाहिए","m_switch_on":"प्लग चालू करें","done_switch_on":"प्लग चालू हो गया।","done_action":"हो गया: {n}","confirm_action":"«{n}» चलाएँ?","open_entity":"बदलने के लिए खोलें","chip_notifs":"सूचनाएँ","chip_device":"डिवाइस","not_found":"«{n}» नाम का कोई उपकरण नहीं।","last7":"पिछले 7 दिन","col_day":"दिन","col_cycles":"चक्र","col_time":"समय","col_energy":"खपत","source_h":"स्रोत","manual_src":"हाथ से जोड़ा गया: {w} से ऊपर चालू","tab_info":"सारांश","tab_stats":"खपत और चक्र","tab_cleans":"सफ़ाइयाँ","tab_prints":"प्रिंट","last_run":"पिछला चक्र","avg_run":"औसत","reminders_h":"सूचनाएँ","power_h":"अभी की शक्ति","plug":"प्लग","plug_on":"चालू","plug_off":"बंद","error_h":"त्रुटि","open_device":"Home Assistant में डिवाइस","prints":"प्रिंट","print1":"प्रिंट","per_print":"इस महीने का हर प्रिंट","last_prints":"पिछले प्रिंट","no_print_month":"इस महीने अभी कोई प्रिंट नहीं","no_print":"अभी कोई प्रिंट नहीं","col_fil":"फ़िलामेंट","failed":"विफल","per_run":"इस महीने का हर चक्र","no_run":"अभी कोई चक्र नहीं","dev_hist":"हर एक Home Assistant के इतिहास से आता है (पिछले {n} दिन); घंटे उपकरण के अपने काउंटर से, अगर हो।","cleans":"सफ़ाइयाँ","clean1":"सफ़ाई","per_clean":"इस महीने की हर सफ़ाई","avg_clean":"औसत {d}","col_area":"क्षेत्रफल","last_cleans":"पिछली सफ़ाइयाँ","no_clean_month":"इस महीने अभी कोई सफ़ाई नहीं","no_clean":"अभी कोई सफ़ाई नहीं","vac_hist":"कुल योग रोबोट के काउंटर से आते हैं; हर सफ़ाई Home Assistant के इतिहास से (पिछले {n} दिन)।","st_paused":"रुका हुआ","st_returning":"डॉक पर लौट रहा है","st_charging":"चार्ज हो रहा है","st_docked_w":"डॉक पर","st_idle":"रुका हुआ","st_off":"बंद","stopped":"रुके हुए","yesterday":"कल","u_min":"मिनट","u_h":"घंटे","start":"शुरू","so_far":"अब तक","no_cycle":"अभी कोई चक्र नहीं","last_cycle":"पिछला चक्र {d}","ended_at":"{t} पर पूरा","reminders":"{t} तक +{n} रिमाइंडर","reminder1":"{t} पर +1 रिमाइंडर","end_est":"अनुमानित अंत","left":"{d} बाकी","almost":"बस पूरा होने वाला है","est_from_avg":"मिलते-जुलते चक्रों से अनुमान","running_for":"{d} से चल रहा है","btn_empty":"खाली किया","btn_seen":"हो गया","btn_resume":"सफ़ाई फिर शुरू करें","m_switch_off":"प्लग बंद करें","m_remind":"बाद में याद दिलाएँ","details":"विवरण","settings":"सेटिंग्स","more":"और","details_link":"विवरण, खपत और चक्र","done_empty":"हो गया: रिमाइंडर बंद।","done_remind":"बाद में याद दिलाएगा।","done_switch":"प्लग बंद किया गया।","done_resume":"सफ़ाई फिर शुरू हुई।","err":"त्रुटि","new_dev":"{n} नए डिवाइस","new_dev1":"1 नया डिवाइस","battery":"बैटरी","consumable":"{n} {p}%","maint_in":"{c} चक्र बाकी","maint_next":"अगले चक्र पर","maint_due":"अभी करना है","maint_of":"{e} में से {d}","maint_done":"हो गया","confirm_maint":"«{n}» को हो गया मानें? गिनती फिर से शुरू होगी।","conn_lost":"कनेक्शन टूटा: आख़िरी ज्ञात स्थिति","cons_h":"उपभोग्य सामग्री","commands":"आदेश","tap_again":"पुष्टि के लिए फिर से टैप करें","empty_since":"खाली करना बाकी","done_since":"पूरा हुए","avg_cycle":"औसत चक्र","maint_tab":"रखरखाव","tab_stats_short":"खपत","read_failed":"इतिहास नहीं पढ़ा जा सका ({e}); थोड़ी देर में फिर कोशिश करेंगे।","retry":"फिर कोशिश करें","see_chart":"चार्ट देखें","back":"वापस","avg_line":"औसत {v}","tap_bar":"उस चक्र को देखने के लिए बार पर टैप करें","k_station":"डॉक","off_since":"बंद है","close":"बंद करें","power_now":"अभी","p_today":"आज","p_week":"सप्ताह","p_month":"महीना","p_year":"साल","cycles":"चक्र","cycle1":"चक्र","per_cycle":"इस महीने प्रति चक्र खपत","short":"छोटे","long":"लंबे","anomalous":"असामान्य","avg":"औसत {d}, {k}","last_cycles":"हाल के चक्र","col_start":"शुरू","col_dur":"अवधि","col_cost":"लागत","no_cycle_month":"इस महीने अभी कोई चक्र नहीं","coarse":"10 दिन से पुराने चक्र घंटे के हिसाब से गिने जाते हैं।","open_notifs":"उपकरण की सूचनाएँ","no_power":"पावर सेंसर नहीं मिला: `appliances:` में `power_entity` से बताएँ।","no_power_vac":"रोबोट वैक्यूम में पावर सेंसर नहीं होता: खपत और चक्र नहीं गिने जाते।","no_stats":"पावर सेंसर के आँकड़े नहीं हैं (state_class: measurement चाहिए)।"}}};
+/**
+ * 0.73.0: the other languages SuperNotify itself is translated into. Merged over English at load,
+ * so a string a language does not have yet shows in English. Keys: the language part of
+ * hass.language (zh-Hans -> zh, pt-BR -> pt).
+ */
+const SN_I18N_EXTRA = {"de":{"SN_STRINGS":{"presence":"Anwesenheit","time_band":"Zeitfenster","quiet":"Ruhe","act_scen":"Aktive Szenarien","on":"an","off":"aus","active":"aktiv","dnd":"Nicht stören","tap_silence":"tippen zum Stummschalten","snooze":"Pause","min":"Min.","pause_nc":"Nicht-Kritisches pausieren","snoozed":"Pausiert","until":"bis","tap_clear":"tippen zum Aufheben","announce":"Durchsage","intercom":"Gegensprechen","announce_ph":"Auf allen Lautsprechern durchsagen…","send":"Senden","announced":"Durchgesagt","cleared":"Pausen aufgehoben","snoozed_for":"Nicht-kritische Benachrichtigungen pausiert für","sent":"Gesendet","yesterday":"gestern","deliveries":"Kanäle","last_notif":"Letzte Benachrichtigung","transports":"Transporte","delivered":"zugestellt","failed":"fehlgeschlagen","channels":"Kanäle","none":"keine","no_transports":"keine Transport-Entitäten gefunden","tr_used":"genutzt von","tr_unused":"kein Kanal nutzt ihn","start":"Start","volume":"Lautstärke","now":"jetzt","crosses":"über Mitternacht","no_voice":"keine Sprache","mute_hint":"Ein Zeitfenster mit <b>0%</b> sendet <b>keine Sprachdurchsage</b> (Alexa und TTS aus, Push und Dashboard werden trotzdem zugestellt). Kritische und hohe Priorität werden immer gesprochen.","enabled":"aktiv","grp_auto":"Starten von selbst","grp_named":"Nur wenn im Aufruf genannt","grp_scen":"Nur mit einem Szenario","grp_fallback":"Reserve, wenn die anderen scheitern","ch_title":"Kanäle","ch_count":"{on} von {tot} an","off_manual":"ausgeschaltet","paused_by":"gerade pausiert durch","on_by":"gerade an durch","fixed_targets":"feste Ziele","no_deliveries":"keine Zustellungs-Entitäten gefunden","home":"zu Hause","away":"unterwegs","devices":"Geräte","devices_1":"Gerät","rc_test":"Test senden","rc_test_confirm":"Zum Senden erneut tippen","rc_test_sent":"Test gesendet","rc_test_title":"SuperNotify-Test","rc_test_msg":"Testnachricht vom Dashboard,","overrides":"Zustellungs-Übersteuerungen","overrides_1":"Zustellungs-Übersteuerung","no_contact":"keine Kontaktpunkte","no_recipients":"keine Empfänger-Entitäten gefunden","details":"Details","h_update":"Update verfügbar:","h_restart":"Home Assistant neu starten, um das Update abzuschließen","h_uptodate":"aktuell","h_transport_err":"Transporte mit Fehlern","h_channels_off":"Kanäle aus","h_all_good":"Alles in Ordnung","h_failures":"Fehler","h_failures_1":"Fehler","h_transport_err_1":"Transport mit Fehlern","h_channels_off_1":"Kanal aus","channels_1":"Kanal","band_early_morning":"Früher Morgen","band_morning":"Morgen","band_afternoon":"Nachmittag","band_evening":"Abend","band_night":"Nacht","band_late_night":"Späte Nacht","h_look_1":"1 Sache zum Ansehen","h_look_n":"{n} Sachen zum Ansehen","h_rest_ok":"alles andere funktioniert","h_ch_on":"{on} von {tot} Kanälen an","h_open":"Öffnen","ln_delivered":"zugestellt","ln_failed":"fehlgeschlagen","ln_why":"Warum","tgt_loading":"Auswahl wird geladen…","bands_empty_t":"Noch keine Zeitfenster","bands_empty":"Füge ein Zeitfenster pro Tagesabschnitt hinzu: ein input_datetime für den Beginn und ein input_number für die Sprachlautstärke.","active_now":"gerade aktiv","disabled":"deaktiviert","other":"Sonstige","manual":"manuell","apply_now":"jetzt anwenden","applied":"Angewendet","apply_off":"tippen, um es nicht mehr anzuwenden","enabled_lbl":"aktiviert","reset_overrides":"Übersteuerungen zurücksetzen","reset_done":"Übersteuerungen zurückgesetzt","transport_off":"Transport aus","last_notified":"zuletzt benachrichtigt","never_notified":"nie benachrichtigt","media":"Medien","no_scenarios":"keine Szenario-Entitäten gefunden","sim_pick":"🎬 Szenarien — zum Simulieren tippen","sim_fire":"📤 Kanäle","sim_hint":"Echte Daten der Engine (enquire-Dienste). Die Filterung nach Priorität passiert in der Engine und wird hier nicht simuliert. Deaktiviert gewinnt gegen aktiviert, wie beim Zusammenführen zur Laufzeit.","sim_none":"keine Zustellung würde ausgelöst","sim_go":"Würde gesendet","sim_stop":"Würde nicht gesendet","sim_r_default":"startet von selbst","sim_r_on":"eingeschaltet durch","sim_r_off":"ausgeschaltet durch","sim_r_named":"nur wenn im Aufruf genannt","sim_r_scen":"nur mit einem Szenario, das ihn einschaltet","sim_r_fallback":"Reserve, wenn die anderen scheitern","sim_r_switched":"ausgeschaltet","title":"Titel","message":"Nachricht","priority":"Priorität","channels_lbl":"Kanäle — keiner gewählt = normales Routing","camera_lbl":"Kamera-Schnappschuss","preview":"Vorschau","no_title":"(kein Titel)","no_message":"(keine Nachricht)","default_prio":"Standard (mittel)","comp_hint":"Gewählte Kanäle werden mit delivery_selection: fixed gesendet (nur diese lösen aus). Kritisch ist wirklich kritisch — Sirenen inklusive.","critical_confirm":"Eine KRITISCHE Benachrichtigung senden? Sirenen und maximale Lautstärke inklusive.","sent_toast":"Gesendet","write_or_pick":"Schreib eine Nachricht oder wähle eine Kamera oder einen Kanal","send_err":"Nicht gesendet","dry_btn":"Testen ohne Senden","dry_title":"Wenn du es jetzt sendest","dry_err":"Testlauf fehlgeschlagen","dry_nobody":"kein Empfänger, nur direkte Ziele","dry_none":"Kein Kanal ausgewählt","dry_scen":"Aktive Szenarien","dry_raw":"Rohe Antwort","dry_prio":"Priorität","dry_would_n":"Kanäle würden senden","dry_nothing":"Es würde nichts gesendet","dry_dupe":"Duplikat einer kürzlichen Benachrichtigung: sie würde verworfen","dry_no_dupe":"Duplikatprüfung nicht simuliert, damit das echte Senden direkt danach nicht blockiert wird.","dry_home":"Zu Hause","dry_empty":"SuperNotify hat nicht geantwortet: ist es 2.12 oder neuer?","prio_minimum":"Minimal","prio_low":"Niedrig","prio_medium":"Mittel","prio_high":"Hoch","prio_critical":"Kritisch","target_lbl":"Ziel — Personen, Geräte, Bereiche, Etagen, Labels","custom_target_lbl":"Eigene Ziele (E-Mail, Telegram-IDs, …) — durch Komma getrennt","adv_title":"Erweiterte Optionen","adv_spoken":"Gesprochene Nachricht (Alexa, TTS)","adv_spoken_ph":"was die Lautsprecher sagen, falls anders als der Text","adv_apply":"Diese Szenarien anwenden","adv_require":"Nur senden, wenn diese Szenarien aktiv sind","adv_constrain":"Nur diese Szenarien berücksichtigen","adv_snapshot":"Bild von einer URL","adv_debug":"Debug: vollständige Auswahl-Ablaufverfolgung aufzeichnen (in der Warum-Karte angezeigt)","custom_target_ph":"z. B. user@example.com, 123456789","native_target_tag":"🎯 nativer Bereich/Etage/Label","target_warn":"⚠️ Bereiche, Etagen und Labels werden nur von notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts und chime aufgelöst. Mit jedem anderen Kanal — oder dem Standard-Routing, wenn oben kein Kanal gewählt ist — kann die Benachrichtigung unbemerkt ohne Ziel bleiben. Wähle einen kompatiblen Kanal oder füge direkt eine Person bzw. ein Gerät hinzu.","aut_search":"Automationen suchen…","aut_all":"Alle","aut_none":"Keine Treffer","aut_err":"Manifest nicht gefunden — erzeuge es mit tools/genera_vista_automazioni.py","aut_updated":"Liste aktualisiert","aut_count":"Automationen","aut_count_1":"Automation","never":"nie","ago_now":"jetzt","ago_min":"Min. her","ago_h":"Std. her","ago_d":"T. her","aut_disabled_only":"Nur deaktivierte","grp_active":"aktiv","repeat":"Wiederholen","skipped_n":"übersprungen","left":"übrig","missed_n":"verpasst","snz_all":"alles","snz_nc":"nicht kritisch","snz_prio":"Priorität","snz_transport":"Transport","snz_for":"für","snz_choose":"wähle was und wie lange","snz_title":"Benachrichtigungen pausieren","snz_what":"Was","snz_nc_l":"Nicht kritisch","snz_all_l":"Alles","snz_ch":"Ein Kanal","snz_pr":"Eine Priorität","snz_who":"Für wen","snz_everyone":"Alle","snz_me":"Nur ich","snz_len":"Wie lange","snz_forever":"Bis ich fortsetze","snz_go":"Pausieren","snz_close":"Schließen","rs_hand":"von Hand","rs_voice":"per Sprache","rs_assist":"vom Assistenten","snz_voice_info":"Deine Pausen laufen über die Sprachbefehle von SuperNotify: sie gelten nur für dich.","snz_voice_off":"Die Sprachbefehle von SuperNotify sind aus: schalte sie in den Integrationsoptionen ein.","snz_resume_mine":"Meine fortsetzen","go_open":"Anzeigen","dl_probe":"Diesen Kanal testen","probe_msg":"Kanaltest vom Dashboard","sc_why":"Warum","sc_yes":"Gilt jetzt","sc_no":"Gilt jetzt nicht","sc_manual_why":"Manuelles Szenario: von Hand angewendet","sc_no_cond":"Keine Bedingungen","sc_off_sw":"Ausgeschaltet","sc_not_eval":"nicht geprüft","sc_now":"jetzt","sc_diff_btn_on":"Was sich ändert, wenn es gilt","sc_diff_btn_off":"Was sich ohne es ändert","sc_diff_on":"Wenn es gälte, für eine mittlere Benachrichtigung jetzt:","sc_diff_off":"Ohne es, für eine mittlere Benachrichtigung jetzt:","sc_diff_add":"würde zusätzlich senden","sc_diff_rem":"würde nicht mehr senden","sc_diff_none":"kein Unterschied","c_state":"{e} ist {s}","c_template":"Template-Bedingung","c_time":"Zeit","c_after":"nach","c_before":"vor","c_numeric":"{e}","c_above":"über","c_below":"unter","c_and":"alle davon","c_or":"mindestens eine davon","c_not":"keine davon","c_or_join":" oder ","sim_hint_dry":"Die Antwort von SuperNotify selbst (Testlauf, nichts wird gesendet): eine Benachrichtigung jetzt, mit der Priorität und nur den oben gewählten Szenarien.","sim_msg":"Simulator-Test","sim_prio":"Priorität","sa_snooze":"{what} pausiert für {len}.","sa_silence":"{what} bis auf Weiteres stummgeschaltet.","sa_resume":"{what} wieder an.","sa_resume_one":"Pause beendet: {x}.","sa_resume_all":"Benachrichtigungen wieder an.","sa_w_nc":"Nicht-kritische Benachrichtigungen","sa_w_all":"Alle Benachrichtigungen","sa_w_ch":"Kanal {x}","sa_w_pr":"Benachrichtigungen mit Priorität {x}","sa_w_mine":"Deine Benachrichtigungen","sa_for":"für {x}","sa_min":"{n} Minuten","sa_hour":"eine Stunde","sa_hours":"{n} Stunden","occ_title":"Wer ist zu Hause","occ_home_l":"Zu Hause","occ_ALL_HOME":"Alle zu Hause","occ_ALL_AWAY":"Alle unterwegs","occ_LONE_HOME":"Nur eine Person zu Hause","occ_MULTI_HOME":"Einige zu Hause","occ_UNDEFINED_OCCUPANTS":"Niemand erfasst","h_repairs":"SuperNotify-Reparaturen","h_repairs_1":"SuperNotify-Reparatur","det_more":"Alle Attribute","det_yes":"ja","det_no":"nein","det_action":"Aktion","det_target":"Feste Ziele","det_target_req":"Braucht ein Ziel","det_target_use":"Ziele nutzen","det_inclusion":"Verwendet, wenn","det_prio":"Prioritäten","det_occ":"Wer zu Hause sein muss","det_transport":"Transport","det_data":"Daten","det_debug":"Debug","det_err_last":"Letzter Fehler","det_err_in":"In","det_err_n":"Fehler seit Start","det_select":"Auswahl","adv_html":"Text für E-Mail (HTML)","adv_clip":"Videoclip von einer URL","adv_actions":"Schaltflächen in der Benachrichtigung","adv_act_id":"Aktions-ID","adv_act_title":"Schaltflächentext","adv_act_add":"+ Schaltfläche","adv_groups":"Schaltflächengruppen (Komma)","adv_dc":"Kanaleinstellungen für diese Benachrichtigung","adv_dc_ph":"schlüssel: wert, einer pro Zeile","adv_dc_add":"+ Kanal","snz_active":"Gerade pausiert","snz_resume":"Fortsetzen","snz_resume_all":"Alles fortsetzen","snz_until_resumed":"bis zur Fortsetzung","snz_done":"Pausiert","snz_resumed":"Fortgesetzt","no_notif":"noch keine Benachrichtigung","st_title":"Nutzung","st_days_short":"T","st_total":"Benachrichtigungen","st_avg":"pro Tag","st_today":"Heute","st_vs_avg":"ggü. Durchschnitt","st_peak_hour":"Spitzenstunde","st_top_channel":"Top-Kanal","st_errors":"Kanalfehler","st_of_sends":"der Kanal-Sendungen","st_daily":"Pro Tag","st_hourly":"Nach Tageszeit","st_weekday":"Nach Wochentag","st_channels":"Kanäle — meistgenutzt","st_priority":"Priorität","st_period":"Tagesabschnitt","st_insights":"Erkenntnisse","st_no_data":"Noch kein Verlauf — Daten erscheinen nach den ersten Benachrichtigungen.","st_loading":"wird geladen…","st_installed":"installiert","st_latest":"neueste","st_uptodate":"aktuell","st_update":"Update verfügbar","st_restart":"Neustart erforderlich","st_logged":"erfasst","st_from_archive":"aus dem SuperNotify-Archiv","st_archive_err":"Archiv teilweise gelesen","st_wd":["Mo","Di","Mi","Do","Fr","Sa","So"],"st_i_share":"{p}% aller Kanal-Sendungen laufen über {c}.","st_i_peak":"Die meisten Benachrichtigungen kommen um {h}:00 ({n} in {d} Tagen).","st_i_night":"{p}% der Benachrichtigungen kommen zwischen 23:00 und 07:00 — erwäge ein Nicht-stören-Szenario, falls das unerwünscht ist.","st_i_night_ok":"Nur {p}% der Benachrichtigungen kommen nachts (23–07): die Ruhezeiten funktionieren.","st_i_weekend":"Am Wochenende gibt es {p}% {dir} Benachrichtigungen als an Werktagen.","st_i_errors":"{n} Kanalfehler in {d} Tagen, vor allem bei {c}.","st_i_noerr":"Keine Kanalfehler in den letzten {d} Tagen.","st_i_prio":"{p}% der Benachrichtigungen haben Priorität {prio}.","st_i_trend":"Letzte 7 Tage: {n}/Tag, {dir} {p}% ggü. den 7 davor.","st_more":"mehr","st_less":"weniger","st_up":"plus","st_down":"minus"},"SN_ARCH_STRINGS":{"search":"Titel oder Nachricht suchen…","f_all":"Alle","f_today":"Heute","f_whisper":"Geflüstert","wh":"geflüstert","said":"Alexa sagte","said_by":"{ch} sagte","none":"keine passende Benachrichtigung","loading":"Archiv wird gelesen…","recent":"neueste Benachrichtigungen","read_at":"gelesen um","today":"Heute","yesterday":"Gestern","failed":"fehlgeschlagen","missed":"verpasst","reasons":{"doppione":"Duplikat","nessun target":"kein Ziel","errore":"Fehler","condizione":"Bedingung","scenario":"Szenario","presenza":"Anwesenheit","priorita":"Priorität","spento":"aus","pausa":"pausiert","transport spento":"Transport aus","nessuna azione":"keine Aktion","dati non validi":"ungültige Daten","sconosciuto":"unbekannt"},"f_appliance":"Haushaltsgeräte","ap_scope":"unter den letzten {n} vollständig gelesenen – ältere werden nicht erkannt"},"SN_WHY_STRINGS":{"pick":"Wähle eine Benachrichtigung, um zu sehen, warum sie dorthin ging, wo sie hinging.","loading":"wird geladen…","none":"keine Benachrichtigung","gone":"diese Benachrichtigung ist nicht mehr im Archiv","priority":"Priorität","dupe":"Duplikat","outcomes":{"success":"zugestellt","partial_delivery":"teilweise zugestellt","dupe":"Duplikat","failed":"fehlgeschlagen","error":"fehlgeschlagen","fallback_delivery":"über den Fallback-Kanal zugestellt","no_delivery":"nicht zugestellt"},"step_call":"Aufruf","step_scen":"Szenarien","step_people":"Personen","step_ch":"Kanäle","call_auto":"kein Kanal genannt: normales Routing","call_named":"im Aufruf genannt:","call_debug":"mit Debug","nobody":"niemand zu Hause","ch_sent":"gesendet","ch_problems":"zum Ansehen","ch_skipped":"übersprungen","pb_failed":"fehlgeschlagen","pb_missed":"angefordert, aber nicht gesendet","grp_skipped":"per Regel übersprungen: normal","grp_not":"nicht beteiligt","trace_title":"Vollständige Auswahl-Ablaufverfolgung","fix":{"NO_TARGET":"Kein Empfänger hat eine Adresse für diesen Kanal: füge einem Empfänger eine hinzu, gib dem Kanal feste Ziele oder lass ihn bei diesem Aufruf weg.","ERROR":"Die Integration hinter diesem Kanal hat mit einem Fehler geantwortet: sieh in ihrem eigenen Logeintrag nach.","NO_ACTION":"Der Kanal hat keine Aktion zum Aufrufen: setze `action:` in der Zustellung.","INVALID_ACTION_DATA":"Die an die Aktion übergebenen Daten wurden abgelehnt: prüfe `data:` im Aufruf oder in der Zustellung."},"no_scenarios":"kein Szenario aktiv","applied":"vom Aufruf erzwungen","required":"vom Aufruf verlangt","constrain":"vom Aufruf beschränkt auf","home":"zu Hause","away":"unterwegs","no_channels":"kein Kanal wurde ausgewählt","st_ok":"zugestellt","st_err":"fehlgeschlagen","st_skip":"übersprungen","calls":"Aufrufe","calls_1":"Aufruf","target_required":"Ziel erforderlich:","started_by":"ausgewählt durch","scen_would_off":"ausgeschaltet durch (überstimmt)","src_default":"immer an (Standard)","src_scen":"Szenario","src_call":"den Aufruf selbst","src_recipient":"Empfänger","r_off_by":"ausgeschaltet durch","call_targets":"Ziele im Aufruf","cats":{"entity_id":"Entitäten","mobile_app_id":"Geräte","person_id":"Personen","email":"E-Mail","phone":"Telefon","device_id":"Geräte"},"r_call_off":"vom Aufruf ausgeschlossen","r_scen_off":"von einem aktiven Szenario ausgeschaltet","r_disabled":"ausgeschaltet","r_transport_off":"sein Transport ist aus","r_only_scen":"startet nur, wenn ein Szenario ihn einschaltet","r_only_fallback":"nur ein Fallback","r_only_explicit":"startet nur, wenn namentlich angefordert","r_priority":"nicht für diese Priorität","r_unknown":"ohne Ablaufverfolgung nicht rekonstruierbar","from_config":"Gründe für nicht gestartete Kanäle werden aus der Konfiguration rekonstruiert, wie sie JETZT ist, nicht wie sie damals war.","from_trace":"Die Gründe stammen aus der Auswahl-Ablaufverfolgung, die mit der Benachrichtigung archiviert wurde.","st_time":"Dauer","st_slow":"langsamster","st_rate":"der Kanäle erfolgreich","ua_title":"Ziele, die kein Kanal übernommen hat","ua_hint":"Sie waren im Aufruf, aber kein ausgewählter Kanal akzeptiert diese Art von Ziel.","un_title":"Namen, die nicht existieren","sent_by":"Gesendet von","sent_auto":"Automation","sent_script":"Skript","sent_person":"","sent_unknown":"Absender unbekannt (keine Automation oder Person im Kontext)","no_trace":"Die vollständige Auswahl-Ablaufverfolgung wird nur aufgezeichnet, wenn der notify-Aufruf debug: true hat, und archiviert, wenn die Archiv-Diagnose sie einschließt.","reasons":{"NO_TARGET":"kein nutzbares Ziel","DUPE":"Duplikat einer kürzlichen Benachrichtigung","PRIORITY":"nicht für diese Priorität","SNOOZE":"pausiert","SNOOZED":"pausiert","DELIVERY_CONDITION":"Zustellungsbedingung falsch","OCCUPANCY":"Anwesenheitsregel","ERROR":"Fehler","DELIVERY_DISABLED":"ausgeschaltet","SCENARIO":"Szenario","TRANSPORT_DISABLED":"sein Transport ist aus","NO_SCENARIO":"ein erforderliches Szenario ist nicht aktiv","NO_ACTION":"keine Aktion zum Aufrufen","INVALID_ACTION_DATA":"ungültige Aktionsdaten","UNKNOWN":"unbekannter Grund"}},"SN_TOOLS_STRINGS":{"maint":"Wartung","enq":"SuperNotify fragen","refresh":"Alle Entitäten neu veröffentlichen","refresh_btn":"Aktualisieren","resume_btn":"Fortsetzen","refreshed":"Entitäten neu veröffentlicht.","resume_all":"Alle Pausen fortsetzen","cleared_n":"Pausen fortgesetzt","purge_arch":"Archiv bereinigen","purge_media":"Bilder bereinigen","older":"älter als","days":"Tage","purge_btn":"Bereinigen","confirm":"Zum Bestätigen erneut tippen","purged":"gelöscht","remaining":"übrig","reset":"Manuelle Änderungen rückgängig machen","reset_btn":"Zurücksetzen","reset_none":"Nichts zurückzusetzen: alles ist wie konfiguriert.","reset_done":"Zurück zur Konfiguration:","k_all":"alles","k_scenario":"Szenarien","k_delivery":"Kanäle","k_recipient":"Personen","k_transport":"Transporte","q_config":"Konfiguration","q_scen":"Szenarien","q_active":"Aktive Szenarien","q_by_scen":"Kanäle nach Szenario","q_implicit":"Standardkanäle","q_recipients":"Empfänger","q_occupancy":"Wer ist zu Hause","q_snoozes":"Pausen","q_last":"Letzte Benachrichtigung","copy":"JSON kopieren","copied":"Kopiert","close":"Schließen","empty":"(leer)","err":"SuperNotify hat mit einem Fehler geantwortet:","settings":"Integrationseinstellungen","running":"läuft…","more":"mehr"},"SN_FORM_LABELS":{"_common":"Aussehen und Text","style":"Farben","icons":"Symbole","show_version":"Kartenversion anzeigen","intro":"Einleitungstext oben","title":"Titel","dnd_entity":"Nicht-stören-Schalter","quiet_entity":"Berechneter Ruhezustand (optional)","presence_entity":"Person für die Statusleiste","archive_days":"Archivbereinigung: älter als (Tage)","media_days":"Bilderbereinigung: älter als (Tage)","occupancy":"Wer ist zu Hause (von SuperNotify)","repairs":"SuperNotify-Reparaturen in der Zustandsliste","snooze_announce":"Pausen laut ansagen (Durchsage-Kanal)","snooze_via":"Pausen laufen über","o_event":"das Push-Schaltflächen-Ereignis (Admin)","o_voice":"die Sprachbefehle","snooze_minutes":"Pausendauer (Minuten)","snooze_panel":"Pause-Kachel öffnet das Pausen-Panel","announce_delivery":"Kanal für Durchsagen","last_notification":"Letzte Benachrichtigung anzeigen","last_channels":"Ein Chip pro Kanal der letzten Benachrichtigung","repeat_entity":"Schaltfläche „Letzte wiederholen“ (optional)","tile_layout":"Kacheln","tile_columns":"Kachelspalten (leer = automatisch)","update_entity":"SuperNotify-Update-Entität","cards_update_entity":"Karten-Update-Entität","health":"Zustand oben","poll_seconds":"Aktualisieren alle (Sekunden)","group":"Nach Startart der Kanäle gruppieren","hide_defaults":"Automatische DEFAULT_-Kanäle ausblenden","limit":"Benachrichtigungen in der Liste","expand":"Eingeklappte Teile öffnen","max_height":"Maximale Höhe (CSS, z. B. 70vh)","trigger_entity":"Aktualisieren, wenn sich dies ändert","dry_run":"„Testen ohne Senden“ anzeigen","dry_run_dupe_check":"Auch die Duplikatprüfung simulieren","days":"Standardmäßig angezeigte Tage","manifest_url":"URL des Automationen-Manifests","o_supernotify":"SuperNotify","o_theme":"Home Assistant-Design","o_mdi":"Home Assistant-Symbole","o_emoji":"Emoji","o_row":"Symbol links","o_stacked":"Hoch, Symbol oben","o_auto":"Automatisch"},"SN_NATIVE_STR":{"all_good":"Alles in Ordnung","paused":"Pausiert","resume":"Fortsetzen","test":"Test senden","sure":"Zum Senden erneut tippen","sent":"Gesendet","last":"Zuletzt","none":"Noch keine Benachrichtigung","ago":"her","h":"Std.","err":"Transporte mit Fehlern","off":"Kanäle aus"},"SN_STRATEGY_TITLES":{"home":"Start","archive":"Archiv","send":"Senden","setup":"Einrichtung","stats":"Statistik","tools":"Werkzeuge","title":"SuperNotify","appliances":"Haushaltsgeräte"},"SN_APPL_STRINGS":{"title":"Haushaltsgeräte","loading":"wird gelesen…","none":"Keine Geräte: richte eines in Appliance Autonotify ein (Einstellungen → Geräte & Dienste).","st_run":"Läuft","st_cleaning":"Reinigt","st_done":"Fertig · ausräumen","st_done_other":"Fertig","st_err":"Braucht Hilfe","m_switch_on":"Steckdose einschalten","done_switch_on":"Steckdose eingeschaltet.","done_action":"Erledigt: {n}.","confirm_action":"«{n}» ausführen?","open_entity":"Zum Ändern öffnen","chip_notifs":"Benachrichtigungen","chip_device":"Gerät","not_found":"Kein Gerät mit dem Namen «{n}».","last7":"Letzte 7 Tage","col_day":"Tag","col_cycles":"Zyklen","col_time":"Zeit","col_energy":"Verbrauch","source_h":"Quelle","manual_src":"von Hand hinzugefügt: läuft über {w}","tab_info":"Übersicht","tab_stats":"Verbrauch und Zyklen","tab_cleans":"Reinigungen","tab_prints":"Drucke","last_run":"Letzter Zyklus","avg_run":"Durchschnitt","reminders_h":"Benachrichtigungen","plug":"Steckdose","plug_on":"an","plug_off":"aus","error_h":"Fehler","open_device":"Das Gerät in Home Assistant","prints":"Drucke","print1":"Druck","per_print":"Jeder Druck in diesem Monat","last_prints":"Letzte Drucke","no_print_month":"Noch kein Druck in diesem Monat","no_print":"Noch kein Druck","col_fil":"Filament","failed":"fehlgeschlagen","per_run":"Jeder Zyklus in diesem Monat","dev_hist":"Jeder Eintrag stammt aus dem Verlauf von Home Assistant (letzte {n} Tage); die Stunden aus dem Zähler des Geräts, wenn es einen hat.","cleans":"Reinigungen","clean1":"Reinigung","per_clean":"Jede Reinigung in diesem Monat","avg_clean":"Durchschnitt {d}","col_area":"Fläche","last_cleans":"Letzte Reinigungen","no_clean_month":"Noch keine Reinigung in diesem Monat","no_clean":"Noch keine Reinigung","vac_hist":"Die Summen stammen aus den Zählern des Roboters, die einzelnen Reinigungen aus dem Verlauf von Home Assistant (letzte {n} Tage).","st_paused":"Pausiert","st_returning":"Fährt zur Station","st_charging":"Lädt","st_docked_w":"In der Station","st_idle":"Aus","st_off":"Ausgeschaltet","stopped":"Inaktiv","yesterday":"gestern","u_min":"Min.","u_h":"Std.","start":"Start","so_far":"bisher","no_cycle":"Noch kein Durchlauf","last_cycle":"Letzter Durchlauf {d}","ended_at":"Fertig um {t}","reminders":"+{n} Erinnerungen bis {t}","reminder1":"+1 Erinnerung um {t}","end_est":"Voraussichtliches Ende","left":"noch {d}","almost":"gleich fertig","est_from_avg":"geschätzt aus ähnlichen Durchläufen","running_for":"Läuft seit {d}","btn_empty":"Ausgeräumt","btn_seen":"Erledigt","btn_resume":"Reinigung fortsetzen","m_switch_off":"Steckdose ausschalten","m_remind":"Später erinnern","details":"Details","settings":"Einstellungen","more":"Mehr","details_link":"Details, Verbrauch und Durchläufe","done_empty":"Erledigt: keine Erinnerungen mehr.","done_remind":"Es erinnert dich später.","done_switch":"Steckdose ausgeschaltet.","done_resume":"Reinigung fortgesetzt.","err":"Fehler","new_dev":"{n} neue Geräte","new_dev1":"1 neues Gerät","battery":"Akku","consumable":"{n} bei {p}%","maint_in":"in {c} Zyklen","maint_next":"beim nächsten Zyklus","maint_due":"fällig","maint_of":"{d} von {e}","maint_done":"Erledigt","confirm_maint":"«{n}» als erledigt markieren? Die Zählung beginnt neu.","conn_lost":"Verbindung verloren: letzter bekannter Zustand","cons_h":"Verbrauchsmaterial","commands":"Befehle","tap_again":"Zum Bestätigen erneut tippen","empty_since":"Auszuräumen seit","done_since":"Fertig seit","avg_cycle":"Durchschnittlicher Zyklus","maint_tab":"Wartung","tab_stats_short":"Verbrauch","read_failed":"Der Verlauf konnte nicht gelesen werden ({e}); neuer Versuch in Kürze.","retry":"Erneut versuchen","see_chart":"Diagramm anzeigen","back":"Zurück","avg_line":"Schnitt {v}","tap_bar":"Tippe auf einen Balken für den Zyklus","k_station":"Station","off_since":"Aus seit","close":"Schließen","power_now":"jetzt","p_today":"Heute","p_week":"Woche","p_month":"Monat","p_year":"Jahr","cycles":"Durchläufe","cycle1":"Durchlauf","per_cycle":"Verbrauch pro Durchlauf in diesem Monat","short":"Kurz","long":"Lang","anomalous":"Ungewöhnlich","avg":"Ø {d}, {k}","last_cycles":"Letzte Durchläufe","col_start":"Start","col_dur":"Dauer","col_cost":"Kosten","no_cycle_month":"Diesen Monat noch kein Durchlauf","coarse":"Durchläufe vor mehr als 10 Tagen werden stundenweise gezählt.","open_notifs":"Benachrichtigungen des Geräts","no_power":"Kein Leistungssensor gefunden: gib ihn mit `power_entity` in `appliances:` an.","no_power_vac":"Ein Saugroboter hat keinen Leistungssensor: Verbrauch und Durchläufe werden nicht gezählt."}},"es":{"SN_STRINGS":{"presence":"Presencia","time_band":"Franja horaria","quiet":"Silencio","act_scen":"Escenarios activos","on":"sí","off":"no","active":"activo","dnd":"No molestar","tap_silence":"toca para silenciar","snooze":"Pausa","min":"min","pause_nc":"pausar las no críticas","snoozed":"En pausa","until":"hasta","tap_clear":"toca para quitar","announce":"Anunciar","intercom":"intercomunicador","announce_ph":"Anunciar en todos los altavoces…","send":"Enviar","announced":"Anunciado","cleared":"Pausas quitadas","snoozed_for":"Notificaciones no críticas en pausa durante","sent":"Enviadas","yesterday":"ayer","deliveries":"Entregas","last_notif":"Última notificación","transports":"Transportes","delivered":"entregada","failed":"fallida","channels":"canales","none":"ninguno","no_transports":"no se encontraron entidades de transporte","tr_used":"usado por","tr_unused":"ningún canal lo usa","start":"inicio","volume":"volumen","now":"ahora","crosses":"pasa la medianoche","no_voice":"sin voz","mute_hint":"Una franja al <b>0%</b> no envía <b>ningún anuncio de voz</b> (Alexa y TTS apagados; push y panel siguen recibiendo). Las alertas críticas y de prioridad alta siempre hablan.","enabled":"activo","grp_auto":"Arrancan solos","grp_named":"Solo si se nombran en la llamada","grp_scen":"Solo con un escenario","grp_fallback":"Respaldo, cuando los demás fallan","ch_title":"Canales","ch_count":"{on} de {tot} activos","off_manual":"apagado","paused_by":"en pausa ahora por","on_by":"activo ahora por","fixed_targets":"destinos fijos","no_deliveries":"no se encontraron entidades de entrega","home":"en casa","away":"fuera","devices":"dispositivos","devices_1":"dispositivo","rc_test":"Enviar una prueba","rc_test_confirm":"Toca otra vez para enviar","rc_test_sent":"Prueba enviada","rc_test_title":"Prueba de SuperNotify","rc_test_msg":"Mensaje de prueba desde el panel,","overrides":"ajustes de entrega","overrides_1":"ajuste de entrega","no_contact":"sin puntos de contacto","no_recipients":"no se encontraron entidades de destinatario","details":"Detalles","h_update":"actualización disponible:","h_restart":"reinicia Home Assistant para terminar la actualización","h_uptodate":"actualizado","h_transport_err":"transportes con errores","h_channels_off":"canales apagados","h_all_good":"Todo bien","h_failures":"fallos","h_failures_1":"fallo","h_transport_err_1":"transporte con errores","h_channels_off_1":"canal apagado","channels_1":"canal","band_early_morning":"Madrugada","band_morning":"Mañana","band_afternoon":"Tarde","band_evening":"Noche temprana","band_night":"Noche","band_late_night":"Noche cerrada","h_look_1":"1 cosa que revisar","h_look_n":"{n} cosas que revisar","h_rest_ok":"todo lo demás funciona","h_ch_on":"{on} de {tot} canales activos","h_open":"Abrir","ln_delivered":"entregada","ln_failed":"fallida","ln_why":"Por qué","tgt_loading":"cargando el selector…","bands_empty_t":"Aún no hay franjas horarias","bands_empty":"Añade una franja por cada parte del día: un input_datetime para su inicio y un input_number para el volumen de voz.","active_now":"activo ahora","disabled":"desactivado","other":"Otros","manual":"manual","apply_now":"aplicar ahora","applied":"Aplicado","apply_off":"toca para dejar de aplicarlo","enabled_lbl":"activado","reset_overrides":"Restablecer ajustes","reset_done":"ajustes restablecidos","transport_off":"transporte apagado","last_notified":"última notificación","never_notified":"nunca notificado","media":"multimedia","no_scenarios":"no se encontraron entidades de escenario","sim_pick":"🎬 Escenarios — toca para simular","sim_fire":"📤 Canales","sim_hint":"Datos reales del motor (servicios de consulta). El filtrado de entregas por prioridad lo hace el motor y no se simula aquí. Desactivado gana sobre activado, como en la fusión en tiempo real.","sim_none":"no saldría ninguna entrega","sim_go":"Saldrían","sim_stop":"No saldrían","sim_r_default":"arranca solo","sim_r_on":"activado por","sim_r_off":"desactivado por","sim_r_named":"solo si se nombra en la llamada","sim_r_scen":"solo con un escenario que lo active","sim_r_fallback":"respaldo, cuando los demás fallan","sim_r_switched":"apagado","title":"Título","message":"Mensaje","priority":"Prioridad","channels_lbl":"Canales — ninguno elegido = envío normal","camera_lbl":"Instantánea de cámara","preview":"Vista previa","no_title":"(sin título)","no_message":"(sin mensaje)","default_prio":"predeterminada (media)","comp_hint":"Los canales elegidos se envían con delivery_selection: fixed (solo salen esos). Crítica es crítica de verdad — sirenas incluidas.","critical_confirm":"¿Enviar una notificación CRÍTICA? Incluye sirenas y volumen máximo.","sent_toast":"Enviada","write_or_pick":"Escribe un mensaje, o elige una cámara o un canal","send_err":"No enviada","dry_btn":"Probar sin enviar","dry_title":"Si la enviaras ahora","dry_err":"La simulación falló","dry_nobody":"sin destinatario, solo destinos directos","dry_none":"Ningún canal elegido","dry_scen":"Escenarios activos","dry_raw":"Respuesta en bruto","dry_prio":"Prioridad","dry_would_n":"canales enviarían","dry_nothing":"No se enviaría nada","dry_dupe":"Duplicado de una notificación reciente: se descartaría","dry_no_dupe":"La comprobación de duplicados no se simula, así que el Enviar real justo después no se bloquea.","dry_home":"En casa","dry_empty":"SuperNotify no dio respuesta: ¿es la 2.12 o posterior?","prio_minimum":"Mínima","prio_low":"Baja","prio_medium":"Media","prio_high":"Alta","prio_critical":"Crítica","target_lbl":"Destino — personas, dispositivos, áreas, plantas, etiquetas","custom_target_lbl":"Destinos personalizados (correo, IDs de Telegram, …) — separados por comas","adv_title":"Opciones avanzadas","adv_spoken":"Mensaje hablado (Alexa, TTS)","adv_spoken_ph":"lo que dicen los altavoces, si es distinto del texto","adv_apply":"Aplicar estos escenarios","adv_require":"Enviar solo si estos escenarios están activos","adv_constrain":"Tener en cuenta solo estos escenarios","adv_snapshot":"Imagen desde una URL","adv_debug":"Depuración: registrar la traza de selección completa (la muestra la tarjeta del porqué)","custom_target_ph":"p. ej. user@example.com, 123456789","native_target_tag":"🎯 área/planta/etiqueta nativa","target_warn":"⚠️ Las áreas, plantas y etiquetas solo las resuelven notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts y chime. Con cualquier otro canal — o con el envío normal si no eliges canal arriba — la notificación puede quedarse sin destino sin avisar. Elige un canal compatible, o añade directamente una persona o un dispositivo.","aut_search":"Buscar automatizaciones…","aut_all":"Todas","aut_none":"Sin resultados","aut_err":"Manifiesto no encontrado — genéralo con tools/genera_vista_automazioni.py","aut_updated":"lista actualizada","aut_count":"automatizaciones","aut_count_1":"automatización","never":"nunca","ago_now":"ahora","ago_min":"min atrás","ago_h":"h atrás","ago_d":"d atrás","aut_disabled_only":"Solo desactivadas","grp_active":"activos","repeat":"Repetir","skipped_n":"omitidos","left":"restantes","missed_n":"perdidos","snz_all":"todo","snz_nc":"no críticas","snz_prio":"prioridad","snz_transport":"transporte","snz_for":"para","snz_choose":"elige qué y cuánto tiempo","snz_title":"Pausar notificaciones","snz_what":"Qué","snz_nc_l":"No críticas","snz_all_l":"Todo","snz_ch":"Un canal","snz_pr":"Una prioridad","snz_who":"Para quién","snz_everyone":"Todos","snz_me":"Solo yo","snz_len":"Cuánto tiempo","snz_forever":"Hasta que reanude","snz_go":"Pausar","snz_close":"Cerrar","rs_hand":"a mano","rs_voice":"por voz","rs_assist":"por el asistente","snz_voice_info":"Tus pausas pasan por los comandos de voz de SuperNotify: son solo tuyas.","snz_voice_off":"Los comandos de voz de SuperNotify están apagados: actívalos en las opciones de la integración.","snz_resume_mine":"Reanudar las mías","go_open":"Mostrar","dl_probe":"Probar este canal","probe_msg":"Prueba de canal desde el panel","sc_why":"Por qué","sc_yes":"Se aplica ahora","sc_no":"No se aplica ahora","sc_manual_why":"Escenario manual: se aplica a mano","sc_no_cond":"Sin condiciones","sc_off_sw":"Apagado","sc_not_eval":"no comprobado","sc_now":"ahora","sc_diff_btn_on":"Qué cambia si se aplica","sc_diff_btn_off":"Qué cambia sin él","sc_diff_on":"Si se aplicara, para una notificación media ahora:","sc_diff_off":"Sin él, para una notificación media ahora:","sc_diff_add":"también enviaría","sc_diff_rem":"ya no enviaría","sc_diff_none":"ninguna diferencia","c_state":"{e} está en {s}","c_template":"condición de plantilla","c_time":"hora","c_after":"después de","c_before":"antes de","c_numeric":"{e}","c_above":"por encima de","c_below":"por debajo de","c_and":"todas estas","c_or":"al menos una de estas","c_not":"ninguna de estas","c_or_join":" o ","sim_hint_dry":"La respuesta del propio SuperNotify (simulación, no se envía nada): una notificación ahora, con la prioridad y solo los escenarios elegidos arriba.","sim_msg":"Prueba del simulador","sim_prio":"Prioridad","sa_snooze":"{what} en pausa durante {len}.","sa_silence":"{what} silenciadas hasta nuevo aviso.","sa_resume":"{what} reactivadas.","sa_resume_one":"Pausa terminada: {x}.","sa_resume_all":"Notificaciones reactivadas.","sa_w_nc":"Las notificaciones no críticas","sa_w_all":"Todas las notificaciones","sa_w_ch":"Canal {x}","sa_w_pr":"Las notificaciones de prioridad {x}","sa_w_mine":"Tus notificaciones","sa_for":"para {x}","sa_min":"{n} minutos","sa_hour":"una hora","sa_hours":"{n} horas","occ_title":"Quién está en casa","occ_home_l":"En casa","occ_ALL_HOME":"Todos en casa","occ_ALL_AWAY":"Todos fuera","occ_LONE_HOME":"Solo uno en casa","occ_MULTI_HOME":"Algunos en casa","occ_UNDEFINED_OCCUPANTS":"Nadie con seguimiento","h_repairs":"reparaciones de SuperNotify","h_repairs_1":"reparación de SuperNotify","det_more":"Todos los atributos","det_yes":"sí","det_no":"no","det_action":"Acción","det_target":"Destinos fijos","det_target_req":"Necesita un destino","det_target_use":"Destinos usados","det_inclusion":"Se usa cuando","det_prio":"Prioridades","det_occ":"Quién debe estar en casa","det_transport":"Transporte","det_data":"Datos","det_debug":"Depuración","det_err_last":"Último error","det_err_in":"En","det_err_n":"Errores desde el arranque","det_select":"Selección","adv_html":"Texto para correo (HTML)","adv_clip":"Videoclip desde una URL","adv_actions":"Botones en la notificación","adv_act_id":"id de acción","adv_act_title":"texto del botón","adv_act_add":"+ botón","adv_groups":"Grupos de botones (comas)","adv_dc":"Ajustes de canal para esta notificación","adv_dc_ph":"clave: valor, uno por línea","adv_dc_add":"+ canal","snz_active":"En pausa ahora","snz_resume":"Reanudar","snz_resume_all":"Reanudar todo","snz_until_resumed":"hasta reanudar","snz_done":"En pausa","snz_resumed":"Reanudado","no_notif":"aún no hay notificaciones","st_title":"Uso","st_days_short":"d","st_total":"Notificaciones","st_avg":"al día","st_today":"Hoy","st_vs_avg":"vs. media","st_peak_hour":"Hora punta","st_top_channel":"Canal principal","st_errors":"Errores de canal","st_of_sends":"de los envíos a canales","st_daily":"Por día","st_hourly":"Por hora del día","st_weekday":"Por día de la semana","st_channels":"Canales — más usados","st_priority":"Prioridad","st_period":"Parte del día","st_insights":"Observaciones","st_no_data":"Aún no hay historial — los datos aparecen tras las primeras notificaciones.","st_loading":"cargando…","st_installed":"instalada","st_latest":"última","st_uptodate":"actualizado","st_update":"actualización disponible","st_restart":"hay que reiniciar","st_logged":"registradas","st_from_archive":"del archivo de SuperNotify","st_archive_err":"archivo leído en parte","st_wd":["lun","mar","mié","jue","vie","sáb","dom"],"st_i_share":"El {p}% de los envíos a canales pasa por {c}.","st_i_peak":"La hora con más actividad es las {h}:00 ({n} notificaciones en {d} días).","st_i_night":"El {p}% de las notificaciones llega entre las 23:00 y las 07:00 — plantéate un escenario de No molestar si no lo quieres.","st_i_night_ok":"Solo el {p}% de las notificaciones llega de noche (23–07): las horas de silencio funcionan.","st_i_weekend":"Los fines de semana tienen un {p}% {dir} notificaciones que los días laborables.","st_i_errors":"{n} errores de canal en {d} días, sobre todo en {c}.","st_i_noerr":"Ningún error de canal en los últimos {d} días.","st_i_prio":"El {p}% de las notificaciones son de prioridad {prio}.","st_i_trend":"Últimos 7 días: {n}/día, {dir} un {p}% respecto a los 7 anteriores.","st_more":"más","st_less":"menos","st_up":"sube","st_down":"baja"},"SN_ARCH_STRINGS":{"search":"Buscar en título o mensaje…","f_all":"Todas","f_today":"Hoy","f_whisper":"Susurradas","wh":"susurrada","said":"Alexa dijo","said_by":"{ch} dijo","none":"ninguna notificación coincide","loading":"leyendo el archivo…","recent":"últimas notificaciones","read_at":"leído a las","today":"Hoy","yesterday":"Ayer","failed":"fallida","missed":"perdida","reasons":{"doppione":"duplicado","nessun target":"sin destino","errore":"error","condizione":"condición","scenario":"escenario","presenza":"presencia","priorita":"prioridad","spento":"apagado","pausa":"en pausa","transport spento":"transporte apagado","nessuna azione":"sin acción","dati non validi":"datos no válidos","sconosciuto":"desconocido"},"f_appliance":"Electrodomésticos","ap_scope":"entre las últimas {n} leídas completas: las más antiguas no se reconocen"},"SN_WHY_STRINGS":{"pick":"Elige una notificación para ver por qué fue a donde fue.","loading":"cargando…","none":"ninguna notificación","gone":"esta notificación ya no está en el archivo","priority":"prioridad","dupe":"duplicado","outcomes":{"success":"entregada","partial_delivery":"entregada en parte","dupe":"duplicado","failed":"fallida","error":"fallida","fallback_delivery":"entregada por el canal de respaldo","no_delivery":"no entregada"},"step_call":"Llamada","step_scen":"Escenarios","step_people":"Personas","step_ch":"Canales","call_auto":"ningún canal nombrado: envío normal","call_named":"nombrados en la llamada:","call_debug":"con depuración","nobody":"nadie en casa","ch_sent":"enviados","ch_problems":"por revisar","ch_skipped":"omitidos","pb_failed":"fallido","pb_missed":"pedido pero no enviado","grp_skipped":"omitidos por una regla: normal","grp_not":"no implicados","trace_title":"Traza de selección completa","fix":{"NO_TARGET":"Ningún destinatario tiene una dirección para este canal: añade una a un destinatario, da al canal destinos fijos o déjalo fuera de esta llamada.","ERROR":"La integración detrás de este canal respondió con un error: revisa su propia entrada en el registro.","NO_ACTION":"El canal no tiene ninguna acción que llamar: define `action:` en la entrega.","INVALID_ACTION_DATA":"Los datos pasados a la acción fueron rechazados: revisa el `data:` de la llamada o de la entrega."},"no_scenarios":"ningún escenario vigente","applied":"forzado por la llamada","required":"requerido por la llamada","constrain":"limitado por la llamada a","home":"en casa","away":"fuera","no_channels":"no se eligió ningún canal","st_ok":"entregado","st_err":"fallido","st_skip":"omitido","calls":"llamadas","calls_1":"llamada","target_required":"destino requerido:","started_by":"elegido por","scen_would_off":"apagado por (anulado)","src_default":"siempre activo (predeterminado)","src_scen":"escenario","src_call":"la propia llamada","src_recipient":"destinatario","r_off_by":"apagado por","call_targets":"destinos en la llamada","cats":{"entity_id":"entidades","mobile_app_id":"dispositivos","person_id":"personas","email":"correo","phone":"teléfono","device_id":"dispositivos"},"r_call_off":"excluido por la llamada","r_scen_off":"apagado por un escenario vigente","r_disabled":"apagado","r_transport_off":"su transporte está apagado","r_only_scen":"solo arranca cuando un escenario lo activa","r_only_fallback":"solo de respaldo","r_only_explicit":"solo arranca si se pide por nombre","r_priority":"no para esta prioridad","r_unknown":"no se puede reconstruir sin la traza","from_config":"Los motivos de los canales que no arrancaron se reconstruyen a partir de la configuración ACTUAL, no de la de entonces.","from_trace":"Los motivos vienen de la traza de selección archivada con la notificación.","st_time":"tardó","st_slow":"el más lento","st_rate":"de los canales funcionaron","ua_title":"Destinos que ningún canal aceptó","ua_hint":"Estaban en la llamada, pero ningún canal elegido acepta este tipo de destino.","un_title":"Nombres que no existen","sent_by":"Enviada por","sent_auto":"automatización","sent_script":"script","sent_person":"","sent_unknown":"remitente desconocido (ninguna automatización ni persona en su contexto)","no_trace":"La traza de selección completa solo se registra cuando la llamada notify tiene debug: true, y se archiva cuando los diagnósticos del archivo la incluyen.","reasons":{"NO_TARGET":"sin destino utilizable","DUPE":"duplicado de una notificación reciente","PRIORITY":"no para esta prioridad","SNOOZE":"en pausa","SNOOZED":"en pausa","DELIVERY_CONDITION":"condición de entrega falsa","OCCUPANCY":"regla de presencia","ERROR":"error","DELIVERY_DISABLED":"apagado","SCENARIO":"escenario","TRANSPORT_DISABLED":"su transporte está apagado","NO_SCENARIO":"falta un escenario requerido","NO_ACTION":"ninguna acción que llamar","INVALID_ACTION_DATA":"datos de acción no válidos","UNKNOWN":"motivo desconocido"}},"SN_TOOLS_STRINGS":{"maint":"Mantenimiento","enq":"Preguntar a SuperNotify","refresh":"Volver a publicar todas las entidades","refresh_btn":"Actualizar","resume_btn":"Reanudar","refreshed":"Entidades publicadas de nuevo.","resume_all":"Reanudar todas las pausas","cleared_n":"pausas reanudadas","purge_arch":"Limpiar el archivo","purge_media":"Limpiar las imágenes","older":"más antiguos de","days":"días","purge_btn":"Limpiar","confirm":"Toca otra vez para confirmar","purged":"eliminados","remaining":"restantes","reset":"Deshacer los cambios hechos a mano","reset_btn":"Restablecer","reset_none":"Nada que restablecer: todo está como en la configuración.","reset_done":"De vuelta a la configuración:","k_all":"todo","k_scenario":"escenarios","k_delivery":"canales","k_recipient":"personas","k_transport":"transportes","q_config":"Configuración","q_scen":"Escenarios","q_active":"Escenarios activos","q_by_scen":"Canales por escenario","q_implicit":"Canales predeterminados","q_recipients":"Destinatarios","q_occupancy":"Quién está en casa","q_snoozes":"Pausas","q_last":"Última notificación","copy":"Copiar JSON","copied":"Copiado","close":"Cerrar","empty":"(vacío)","err":"SuperNotify respondió con un error:","settings":"Ajustes de la integración","running":"trabajando…","more":"más"},"SN_FORM_LABELS":{"_common":"Aspecto y texto","style":"Colores","icons":"Iconos","show_version":"Mostrar la versión de la tarjeta","intro":"Texto de introducción arriba","title":"Título","dnd_entity":"Interruptor de No molestar","quiet_entity":"Estado de silencio calculado (opcional)","presence_entity":"Persona para la barra de estado","archive_days":"Limpieza del archivo: más antiguos de (días)","media_days":"Limpieza de imágenes: más antiguas de (días)","occupancy":"Quién está en casa (de SuperNotify)","repairs":"Reparaciones de SuperNotify en la lista de estado","snooze_announce":"Decir las pausas en voz alta (canal de anuncios)","snooze_via":"Las pausas pasan por","o_event":"el evento de los botones push (admin)","o_voice":"los comandos de voz","snooze_minutes":"Duración de la pausa (minutos)","snooze_panel":"La ficha de pausa abre el panel de pausas","announce_delivery":"Canal para anuncios","last_notification":"Mostrar la última notificación","last_channels":"Una etiqueta por canal en la última notificación","repeat_entity":"Botón de repetir la última (opcional)","tile_layout":"Fichas","tile_columns":"Columnas de fichas (vacío = automático)","update_entity":"Entidad de actualización de SuperNotify","cards_update_entity":"Entidad de actualización de las tarjetas","health":"Estado arriba","poll_seconds":"Actualizar cada (segundos)","group":"Agrupar según cómo arranca un canal","hide_defaults":"Ocultar los canales automáticos DEFAULT_","limit":"Notificaciones en la lista","expand":"Abrir las partes plegadas","max_height":"Altura máxima (CSS, p. ej. 70vh)","trigger_entity":"Actualizar cuando esto cambie","dry_run":"Mostrar \"Probar sin enviar\"","dry_run_dupe_check":"Simular también la comprobación de duplicados","days":"Días mostrados por defecto","manifest_url":"URL del manifiesto de automatizaciones","o_supernotify":"SuperNotify","o_theme":"Tema de Home Assistant","o_mdi":"Iconos de Home Assistant","o_emoji":"Emoji","o_row":"Icono a la izquierda","o_stacked":"Alta, icono arriba","o_auto":"Automático"},"SN_NATIVE_STR":{"all_good":"Todo bien","paused":"En pausa","resume":"Reanudar","test":"Enviar una prueba","sure":"Toca otra vez para enviar","sent":"Enviadas","last":"Última","none":"Aún no hay notificaciones","ago":"atrás","h":"h","err":"transportes con errores","off":"canales apagados"},"SN_STRATEGY_TITLES":{"home":"Inicio","archive":"Archivo","send":"Enviar","setup":"Configuración","stats":"Estadísticas","tools":"Herramientas","title":"SuperNotify","appliances":"Electrodomésticos"},"SN_APPL_STRINGS":{"title":"Electrodomésticos","loading":"leyendo…","none":"No hay electrodomésticos: añade uno en Appliance Autonotify (Ajustes → Dispositivos y servicios).","st_run":"En marcha","st_cleaning":"Limpiando","st_done":"Terminado · por vaciar","st_done_other":"Terminado","st_err":"Necesita ayuda","m_switch_on":"Encender enchufe","done_switch_on":"Enchufe encendido.","done_action":"Hecho: {n}.","confirm_action":"¿Ejecutar «{n}»?","open_entity":"Abrir para cambiarlo","chip_notifs":"Notificaciones","chip_device":"Dispositivo","not_found":"Ningún aparato o dispositivo llamado «{n}».","last7":"Últimos 7 días","col_day":"Día","col_cycles":"Ciclos","col_time":"Tiempo","col_energy":"Consumo","source_h":"Origen","manual_src":"añadido a mano: en marcha por encima de {w}","tab_info":"Resumen","tab_stats":"Consumo y ciclos","tab_cleans":"Limpiezas","tab_prints":"Impresiones","last_run":"Último ciclo","avg_run":"Media","reminders_h":"Notificaciones","plug":"Enchufe","plug_on":"encendido","plug_off":"apagado","error_h":"Error","open_device":"El dispositivo en Home Assistant","prints":"impresiones","print1":"impresión","per_print":"Cada impresión del mes","last_prints":"Últimas impresiones","no_print_month":"Aún ninguna impresión este mes","no_print":"Aún ninguna impresión","col_fil":"Filamento","failed":"fallida","per_run":"Cada ciclo del mes","dev_hist":"Cada una viene del historial de Home Assistant (últimos {n} días); las horas, del contador del aparato cuando lo tiene.","cleans":"limpiezas","clean1":"limpieza","per_clean":"Cada limpieza del mes","avg_clean":"media {d}","col_area":"Área","last_cleans":"Últimas limpiezas","no_clean_month":"Aún ninguna limpieza este mes","no_clean":"Aún ninguna limpieza","vac_hist":"Los totales vienen de los contadores del robot; cada limpieza, del historial de Home Assistant (últimos {n} días).","st_paused":"En pausa","st_returning":"Vuelve a la base","st_charging":"Cargando","st_docked_w":"En la base","st_idle":"Parado","st_off":"Apagado","stopped":"Parados","yesterday":"ayer","u_min":"min","u_h":"h","start":"Inicio","so_far":"hasta ahora","no_cycle":"Aún ningún ciclo","last_cycle":"Último ciclo {d}","ended_at":"Terminó a las {t}","reminders":"+{n} recordatorios hasta las {t}","reminder1":"+1 recordatorio a las {t}","end_est":"Fin previsto","left":"faltan {d}","almost":"está por terminar","est_from_avg":"estimado por ciclos parecidos","running_for":"En marcha desde hace {d}","btn_empty":"Vaciado","btn_seen":"Hecho","btn_resume":"Reanudar limpieza","m_switch_off":"Apagar el enchufe","m_remind":"Recordármelo luego","details":"Detalles","settings":"Ajustes","more":"Más","details_link":"Detalles, consumo y ciclos","done_empty":"Hecho: los recordatorios se detienen.","done_remind":"Te lo recordará más tarde.","done_switch":"Enchufe apagado.","done_resume":"Limpieza reanudada.","err":"Error","new_dev":"{n} dispositivos nuevos","new_dev1":"1 dispositivo nuevo","battery":"Batería","consumable":"{n} al {p}%","maint_in":"en {c} ciclos","maint_next":"en el próximo ciclo","maint_due":"toca ahora","maint_of":"{d} de {e}","maint_done":"Hecho","confirm_maint":"¿Marcar «{n}» como hecho? La cuenta vuelve a empezar.","conn_lost":"conexión perdida: último estado conocido","cons_h":"Consumibles","commands":"Comandos","tap_again":"Toca otra vez para confirmar","empty_since":"Por vaciar desde hace","done_since":"Terminado hace","avg_cycle":"Ciclo medio","maint_tab":"Mantenimiento","tab_stats_short":"Consumo","read_failed":"No se pudo leer el historial ({e}); vuelvo a intentarlo en breve.","retry":"Reintentar","see_chart":"Ver gráfico","back":"Atrás","avg_line":"media {v}","tap_bar":"Toca una barra para ver ese ciclo","k_station":"Base","off_since":"Apagado desde hace","close":"Cerrar","power_now":"ahora","p_today":"Hoy","p_week":"Semana","p_month":"Mes","p_year":"Año","cycles":"ciclos","cycle1":"ciclo","per_cycle":"Consumo por ciclo este mes","short":"Cortos","long":"Largos","anomalous":"Anómalos","avg":"media {d}, {k}","last_cycles":"Últimos ciclos","col_start":"Inicio","col_dur":"Duración","col_cost":"Coste","no_cycle_month":"Aún ningún ciclo este mes","coarse":"Los ciclos de hace más de 10 días se cuentan por horas.","open_notifs":"Notificaciones del electrodoméstico","no_power":"No se encontró un sensor de potencia: indícalo con `power_entity` en `appliances:`.","no_power_vac":"Un robot aspirador no tiene sensor de potencia: no se cuentan consumo ni ciclos."}},"fr":{"SN_STRINGS":{"presence":"Présence","time_band":"Plage horaire","quiet":"Calme","act_scen":"Scénarios actifs","on":"activé","off":"désactivé","active":"actif","dnd":"Ne pas déranger","tap_silence":"touchez pour couper le son","snooze":"Pause","min":"min","pause_nc":"mettre en pause le non critique","snoozed":"En pause","until":"jusqu'à","tap_clear":"touchez pour annuler","announce":"Annonce","intercom":"interphone","announce_ph":"Annoncer sur toutes les enceintes…","send":"Envoyer","announced":"Annoncé","cleared":"Pauses annulées","snoozed_for":"Notifications non critiques en pause pendant","sent":"Envoyées","yesterday":"hier","deliveries":"Livraisons","last_notif":"Dernière notification","transports":"Transports","delivered":"livré","failed":"échoué","channels":"canaux","none":"aucun","no_transports":"aucune entité de transport trouvée","tr_used":"utilisé par","tr_unused":"aucun canal ne l'utilise","start":"début","volume":"volume","now":"maintenant","crosses":"passe minuit","no_voice":"pas de voix","mute_hint":"Une plage à <b>0 %</b> n'envoie <b>aucune annonce vocale</b> (Alexa et TTS coupés, push et tableau de bord toujours livrés). Les alertes critiques et de priorité haute parlent toujours.","enabled":"activé","grp_auto":"Partent d'eux-mêmes","grp_named":"Seulement si nommés dans l'appel","grp_scen":"Seulement avec un scénario","grp_fallback":"Secours, quand les autres échouent","ch_title":"Canaux","ch_count":"{on} sur {tot} actifs","off_manual":"désactivé","paused_by":"en pause à cause de","on_by":"actif grâce à","fixed_targets":"cibles fixes","no_deliveries":"aucune entité de livraison trouvée","home":"à la maison","away":"absent","devices":"appareils","devices_1":"appareil","rc_test":"Envoyer un test","rc_test_confirm":"Touchez encore pour envoyer","rc_test_sent":"Test envoyé","rc_test_title":"Test SuperNotify","rc_test_msg":"Message de test depuis le tableau de bord,","overrides":"modifications de livraison","overrides_1":"modification de livraison","no_contact":"aucun moyen de contact","no_recipients":"aucune entité de destinataire trouvée","details":"Détails","h_update":"mise à jour disponible :","h_restart":"redémarrez Home Assistant pour terminer la mise à jour","h_uptodate":"à jour","h_transport_err":"transports en erreur","h_channels_off":"canaux désactivés","h_all_good":"Tout va bien","h_failures":"échecs","h_failures_1":"échec","h_transport_err_1":"transport en erreur","h_channels_off_1":"canal désactivé","channels_1":"canal","band_early_morning":"Petit matin","band_morning":"Matin","band_afternoon":"Après-midi","band_evening":"Soir","band_night":"Nuit","band_late_night":"Tard dans la nuit","h_look_1":"1 point à vérifier","h_look_n":"{n} points à vérifier","h_rest_ok":"tout le reste fonctionne","h_ch_on":"{on} canaux actifs sur {tot}","h_open":"Ouvrir","ln_delivered":"livré","ln_failed":"échoué","ln_why":"Pourquoi","tgt_loading":"chargement du sélecteur…","bands_empty_t":"Aucune plage horaire","bands_empty":"Ajoutez une plage par moment de la journée : un input_datetime pour son début et un input_number pour le volume de la voix.","active_now":"actif maintenant","disabled":"désactivé","other":"Autre","manual":"manuel","apply_now":"appliquer maintenant","applied":"Appliqué","apply_off":"touchez pour ne plus l'appliquer","enabled_lbl":"activé","reset_overrides":"Réinitialiser les modifications","reset_done":"modifications réinitialisées","transport_off":"transport désactivé","last_notified":"dernière notification","never_notified":"jamais notifié","media":"médias","no_scenarios":"aucune entité de scénario trouvée","sim_pick":"🎬 Scénarios — touchez pour simuler","sim_fire":"📤 Canaux","sim_hint":"Données réelles du moteur (services enquire). Le filtrage des livraisons par priorité se fait dans le moteur et n'est pas simulé ici. Désactivé l'emporte sur activé, comme la fusion à l'exécution.","sim_none":"aucune livraison ne partirait","sim_go":"Partiraient","sim_stop":"Ne partiraient pas","sim_r_default":"part de lui-même","sim_r_on":"activé par","sim_r_off":"désactivé par","sim_r_named":"seulement si nommé dans l'appel","sim_r_scen":"seulement avec un scénario qui l'active","sim_r_fallback":"secours, quand les autres échouent","sim_r_switched":"désactivé","title":"Titre","message":"Message","priority":"Priorité","channels_lbl":"Canaux — aucun choisi = routage normal","camera_lbl":"Instantané de caméra","preview":"Aperçu","no_title":"(sans titre)","no_message":"(sans message)","default_prio":"par défaut (moyenne)","comp_hint":"Les canaux choisis sont envoyés avec delivery_selection: fixed (seuls ceux-ci partent). Critique veut vraiment dire critique — sirènes comprises.","critical_confirm":"Envoyer une notification CRITIQUE ? Sirènes et volume maximal compris.","sent_toast":"Envoyé","write_or_pick":"Écrivez un message, ou choisissez une caméra ou un canal","send_err":"Non envoyé","dry_btn":"Essayer sans envoyer","dry_title":"Si vous l'envoyiez maintenant","dry_err":"La simulation a échoué","dry_nobody":"aucun destinataire, cibles directes seulement","dry_none":"Aucun canal sélectionné","dry_scen":"Scénarios actifs","dry_raw":"Réponse brute","dry_prio":"Priorité","dry_would_n":"canaux enverraient","dry_nothing":"Rien ne serait envoyé","dry_dupe":"Doublon d'une notification récente : elle serait écartée","dry_no_dupe":"Contrôle des doublons non simulé, donc le vrai Envoyer juste après n'est pas bloqué.","dry_home":"À la maison","dry_empty":"SuperNotify n'a pas répondu : est-ce la 2.12 ou plus récente ?","prio_minimum":"Minimum","prio_low":"Faible","prio_medium":"Moyenne","prio_high":"Haute","prio_critical":"Critique","target_lbl":"Cible — personnes, appareils, pièces, étages, étiquettes","custom_target_lbl":"Cibles personnalisées (e-mail, ID Telegram, …) — séparées par des virgules","adv_title":"Options avancées","adv_spoken":"Message parlé (Alexa, TTS)","adv_spoken_ph":"ce que disent les enceintes, si différent du texte","adv_apply":"Appliquer ces scénarios","adv_require":"Envoyer seulement si ces scénarios sont actifs","adv_constrain":"Ne considérer que ces scénarios","adv_snapshot":"Image depuis une URL","adv_debug":"Débogage : enregistrer la trace complète de sélection (affichée par la carte Pourquoi)","custom_target_ph":"ex. user@example.com, 123456789","native_target_tag":"🎯 pièce/étage/étiquette natif","target_warn":"⚠️ Les pièces, étages et étiquettes ne sont résolus que par notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts et chime. Avec tout autre canal — ou le routage par défaut quand aucun canal n'est choisi ci-dessus — la notification peut se retrouver sans cible sans le signaler. Choisissez un canal compatible, ou ajoutez directement une personne/un appareil.","aut_search":"Rechercher des automatisations…","aut_all":"Toutes","aut_none":"Aucun résultat","aut_err":"Manifeste introuvable — générez-le avec tools/genera_vista_automazioni.py","aut_updated":"liste mise à jour","aut_count":"automatisations","aut_count_1":"automatisation","never":"jamais","ago_now":"maintenant","ago_min":"min","ago_h":"h","ago_d":"j","aut_disabled_only":"Désactivées seulement","grp_active":"actifs","repeat":"Répéter","skipped_n":"ignorés","left":"restant","missed_n":"manqués","snz_all":"tout","snz_nc":"non critique","snz_prio":"priorité","snz_transport":"transport","snz_for":"pour","snz_choose":"choisir quoi et combien de temps","snz_title":"Mettre les notifications en pause","snz_what":"Quoi","snz_nc_l":"Non critiques","snz_all_l":"Tout","snz_ch":"Un canal","snz_pr":"Une priorité","snz_who":"Pour qui","snz_everyone":"Tout le monde","snz_me":"Moi seulement","snz_len":"Combien de temps","snz_forever":"Jusqu'à ce que je reprenne","snz_go":"Pause","snz_close":"Fermer","rs_hand":"à la main","rs_voice":"à la voix","rs_assist":"par l'assistant","snz_voice_info":"Vos pauses passent par les commandes vocales de SuperNotify : elles ne concernent que vous.","snz_voice_off":"Les commandes vocales de SuperNotify sont désactivées : activez-les dans les options de l'intégration.","snz_resume_mine":"Reprendre les miennes","go_open":"Afficher","dl_probe":"Essayer ce canal","probe_msg":"Test du canal depuis le tableau de bord","sc_why":"Pourquoi","sc_yes":"S'applique maintenant","sc_no":"Ne s'applique pas maintenant","sc_manual_why":"Scénario manuel : appliqué à la main","sc_no_cond":"Aucune condition","sc_off_sw":"Désactivé","sc_not_eval":"non vérifié","sc_now":"maintenant","sc_diff_btn_on":"Ce qui change s'il s'applique","sc_diff_btn_off":"Ce qui change sans lui","sc_diff_on":"S'il s'appliquait, pour une notification moyenne maintenant :","sc_diff_off":"Sans lui, pour une notification moyenne maintenant :","sc_diff_add":"enverrait aussi","sc_diff_rem":"n'enverrait plus","sc_diff_none":"aucune différence","c_state":"{e} est {s}","c_template":"condition de modèle","c_time":"heure","c_after":"après","c_before":"avant","c_numeric":"{e}","c_above":"au-dessus de","c_below":"en dessous de","c_and":"toutes celles-ci","c_or":"au moins une de celles-ci","c_not":"aucune de celles-ci","c_or_join":" ou ","sim_hint_dry":"La réponse de SuperNotify lui-même (simulation, rien n'est envoyé) : une notification maintenant, avec la priorité et seulement les scénarios choisis ci-dessus.","sim_msg":"Test du simulateur","sim_prio":"Priorité","sa_snooze":"Pause de {len} : {what}.","sa_silence":"Silence jusqu'à nouvel ordre : {what}.","sa_resume":"Reprise : {what}.","sa_resume_one":"Fin de la pause : {x}.","sa_resume_all":"Notifications réactivées.","sa_w_nc":"Les notifications non critiques","sa_w_all":"Toutes les notifications","sa_w_ch":"Le canal {x}","sa_w_pr":"Les notifications de priorité {x}","sa_w_mine":"Vos notifications","sa_for":"pour {x}","sa_min":"{n} minutes","sa_hour":"une heure","sa_hours":"{n} heures","occ_title":"Qui est à la maison","occ_home_l":"À la maison","occ_ALL_HOME":"Tout le monde à la maison","occ_ALL_AWAY":"Tout le monde absent","occ_LONE_HOME":"Une seule personne à la maison","occ_MULTI_HOME":"Quelques-uns à la maison","occ_UNDEFINED_OCCUPANTS":"Personne n'est suivi","h_repairs":"réparations SuperNotify","h_repairs_1":"réparation SuperNotify","det_more":"Tous les attributs","det_yes":"oui","det_no":"non","det_action":"Action","det_target":"Cibles fixes","det_target_req":"Nécessite une cible","det_target_use":"Cibles utilisées","det_inclusion":"Utilisé quand","det_prio":"Priorités","det_occ":"Qui doit être à la maison","det_transport":"Transport","det_data":"Données","det_debug":"Débogage","det_err_last":"Dernière erreur","det_err_in":"Dans","det_err_n":"Erreurs depuis le démarrage","det_select":"Sélection","adv_html":"Texte pour l'e-mail (HTML)","adv_clip":"Clip vidéo depuis une URL","adv_actions":"Boutons sur la notification","adv_act_id":"id de l'action","adv_act_title":"texte du bouton","adv_act_add":"+ bouton","adv_groups":"Groupes de boutons (virgule)","adv_dc":"Réglages des canaux pour cette notification","adv_dc_ph":"clé: valeur, une par ligne","adv_dc_add":"+ canal","snz_active":"En pause maintenant","snz_resume":"Reprendre","snz_resume_all":"Tout reprendre","snz_until_resumed":"jusqu'à la reprise","snz_done":"En pause","snz_resumed":"Repris","no_notif":"aucune notification pour l'instant","st_title":"Utilisation","st_days_short":"j","st_total":"Notifications","st_avg":"par jour","st_today":"Aujourd'hui","st_vs_avg":"vs moyenne","st_peak_hour":"Heure de pointe","st_top_channel":"Canal principal","st_errors":"Erreurs de canal","st_of_sends":"des envois par canal","st_daily":"Par jour","st_hourly":"Par heure de la journée","st_weekday":"Par jour de la semaine","st_channels":"Canaux — les plus utilisés","st_priority":"Priorité","st_period":"Moment de la journée","st_insights":"Observations","st_no_data":"Pas encore d'historique — les données apparaissent après les premières notifications.","st_loading":"chargement…","st_installed":"installée","st_latest":"dernière","st_uptodate":"à jour","st_update":"mise à jour disponible","st_restart":"redémarrage requis","st_logged":"enregistrées","st_from_archive":"depuis l'archive de SuperNotify","st_archive_err":"archive lue en partie","st_wd":["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"],"st_i_share":"{p} % de tous les envois passent par {c}.","st_i_peak":"L'heure la plus chargée est {h}:00 ({n} notifications en {d} jours).","st_i_night":"{p} % des notifications arrivent entre 23:00 et 07:00 — envisagez un scénario Ne pas déranger si ce n'est pas voulu.","st_i_night_ok":"Seulement {p} % des notifications arrivent la nuit (23–07) : les heures calmes fonctionnent.","st_i_weekend":"Le week-end compte {p} % de notifications {dir} qu'en semaine.","st_i_errors":"{n} erreurs de canal en {d} jours, surtout sur {c}.","st_i_noerr":"Aucune erreur de canal ces {d} derniers jours.","st_i_prio":"{p} % des notifications sont de priorité {prio}.","st_i_trend":"7 derniers jours : {n}/jour, {dir} de {p} % par rapport aux 7 précédents.","st_more":"en plus","st_less":"en moins","st_up":"en hausse","st_down":"en baisse"},"SN_ARCH_STRINGS":{"search":"Rechercher dans le titre ou le message…","f_all":"Toutes","f_today":"Aujourd'hui","f_whisper":"Chuchotées","wh":"chuchoté","said":"Alexa a dit","said_by":"{ch} a dit","none":"aucune notification ne correspond","loading":"lecture de l'archive…","recent":"dernières notifications","read_at":"lu à","today":"Aujourd'hui","yesterday":"Hier","failed":"échoué","missed":"manqué","reasons":{"doppione":"doublon","nessun target":"aucune cible","errore":"erreur","condizione":"condition","scenario":"scénario","presenza":"présence","priorita":"priorité","spento":"désactivé","pausa":"en pause","transport spento":"transport désactivé","nessuna azione":"aucune action","dati non validi":"données non valides","sconosciuto":"inconnu"},"f_appliance":"Électroménager","ap_scope":"parmi les {n} dernières lues en entier : les plus anciennes ne sont pas reconnues"},"SN_WHY_STRINGS":{"pick":"Choisissez une notification pour voir pourquoi elle est allée là où elle est allée.","loading":"chargement…","none":"aucune notification","gone":"cette notification n'est plus dans l'archive","priority":"priorité","dupe":"doublon","outcomes":{"success":"livrée","partial_delivery":"livrée en partie","dupe":"doublon","failed":"échouée","error":"échouée","fallback_delivery":"livrée par le canal de secours","no_delivery":"non livrée"},"step_call":"Appel","step_scen":"Scénarios","step_people":"Personnes","step_ch":"Canaux","call_auto":"aucun canal nommé : routage normal","call_named":"nommés dans l'appel :","call_debug":"avec débogage","nobody":"personne à la maison","ch_sent":"envoyé","ch_problems":"à vérifier","ch_skipped":"ignoré","pb_failed":"échoué","pb_missed":"demandé mais non envoyé","grp_skipped":"ignoré par une règle : normal","grp_not":"non concerné","trace_title":"Trace complète de sélection","fix":{"NO_TARGET":"Aucun destinataire n'a d'adresse pour ce canal : ajoutez-en une à un destinataire, donnez des cibles fixes au canal, ou laissez-le hors de cet appel.","ERROR":"L'intégration derrière ce canal a répondu par une erreur : consultez sa propre entrée dans le journal.","NO_ACTION":"Le canal n'a aucune action à appeler : définissez `action:` sur la livraison.","INVALID_ACTION_DATA":"Les données passées à l'action ont été refusées : vérifiez le `data:` de l'appel ou de la livraison."},"no_scenarios":"aucun scénario actif","applied":"forcé par l'appel","required":"requis par l'appel","constrain":"limité par l'appel à","home":"à la maison","away":"absent","no_channels":"aucun canal n'a été sélectionné","st_ok":"livré","st_err":"échoué","st_skip":"ignoré","calls":"appels","calls_1":"appel","target_required":"cible requise :","started_by":"sélectionné par","scen_would_off":"désactivé par (outrepassé)","src_default":"toujours actif (par défaut)","src_scen":"scénario","src_call":"l'appel lui-même","src_recipient":"destinataire","r_off_by":"désactivé par","call_targets":"cibles dans l'appel","cats":{"entity_id":"entités","mobile_app_id":"appareils","person_id":"personnes","email":"e-mail","phone":"téléphone","device_id":"appareils"},"r_call_off":"exclu par l'appel","r_scen_off":"désactivé par un scénario actif","r_disabled":"désactivé","r_transport_off":"son transport est désactivé","r_only_scen":"ne part que si un scénario l'active","r_only_fallback":"secours uniquement","r_only_explicit":"ne part que si demandé par son nom","r_priority":"pas pour cette priorité","r_unknown":"impossible à reconstituer sans la trace","from_config":"Les raisons des canaux qui ne sont pas partis sont reconstituées à partir de la configuration ACTUELLE, pas de celle de l'époque.","from_trace":"Les raisons proviennent de la trace de sélection archivée avec la notification.","st_time":"durée","st_slow":"le plus lent","st_rate":"des canaux ont réussi","ua_title":"Cibles qu'aucun canal n'a prises","ua_hint":"Elles étaient dans l'appel, mais aucun canal sélectionné n'accepte ce type de cible.","un_title":"Noms qui n'existent pas","sent_by":"Envoyé par","sent_auto":"automatisation","sent_script":"script","sent_person":"","sent_unknown":"expéditeur inconnu (aucune automatisation ni personne dans son contexte)","no_trace":"La trace complète de sélection n'est enregistrée que lorsque l'appel notify contient debug: true, et archivée lorsque les diagnostics de l'archive l'incluent.","reasons":{"NO_TARGET":"aucune cible utilisable","DUPE":"doublon d'une notification récente","PRIORITY":"pas pour cette priorité","SNOOZE":"en pause","SNOOZED":"en pause","DELIVERY_CONDITION":"condition de livraison fausse","OCCUPANCY":"règle de présence","ERROR":"erreur","DELIVERY_DISABLED":"désactivé","SCENARIO":"scénario","TRANSPORT_DISABLED":"son transport est désactivé","NO_SCENARIO":"un scénario requis n'est pas actif","NO_ACTION":"aucune action à appeler","INVALID_ACTION_DATA":"données d'action non valides","UNKNOWN":"raison inconnue"}},"SN_TOOLS_STRINGS":{"maint":"Maintenance","enq":"Interroger SuperNotify","refresh":"Republier toutes les entités","refresh_btn":"Actualiser","resume_btn":"Reprendre","refreshed":"Entités republiées.","resume_all":"Reprendre toutes les pauses","cleared_n":"pauses reprises","purge_arch":"Nettoyer l'archive","purge_media":"Nettoyer les images","older":"plus anciennes que","days":"jours","purge_btn":"Nettoyer","confirm":"Touchez encore pour confirmer","purged":"supprimés","remaining":"restants","reset":"Annuler les modifications faites à la main","reset_btn":"Réinitialiser","reset_none":"Rien à réinitialiser : tout est comme configuré.","reset_done":"Retour à la configuration :","k_all":"tout","k_scenario":"scénarios","k_delivery":"canaux","k_recipient":"personnes","k_transport":"transports","q_config":"Configuration","q_scen":"Scénarios","q_active":"Scénarios actifs","q_by_scen":"Canaux par scénario","q_implicit":"Canaux par défaut","q_recipients":"Destinataires","q_occupancy":"Qui est à la maison","q_snoozes":"Pauses","q_last":"Dernière notification","copy":"Copier le JSON","copied":"Copié","close":"Fermer","empty":"(vide)","err":"SuperNotify a répondu par une erreur :","settings":"Paramètres de l'intégration","running":"en cours…","more":"plus"},"SN_FORM_LABELS":{"_common":"Apparence et textes","style":"Couleurs","icons":"Icônes","show_version":"Afficher la version de la carte","intro":"Texte d'introduction en haut","title":"Titre","dnd_entity":"Interrupteur Ne pas déranger","quiet_entity":"État calme calculé (facultatif)","presence_entity":"Personne pour la barre d'état","archive_days":"Nettoyage de l'archive : plus ancien que (jours)","media_days":"Nettoyage des images : plus ancien que (jours)","occupancy":"Qui est à la maison (depuis SuperNotify)","repairs":"Réparations SuperNotify dans la liste d'état","snooze_announce":"Annoncer les pauses à voix haute (canal d'annonce)","snooze_via":"Les pauses passent par","o_event":"l'événement des boutons push (admin)","o_voice":"les commandes vocales","snooze_minutes":"Durée de la pause (minutes)","snooze_panel":"La tuile Pause ouvre le panneau des pauses","announce_delivery":"Canal pour les annonces","last_notification":"Afficher la dernière notification","last_channels":"Une puce par canal dans la dernière notification","repeat_entity":"Bouton Répéter la dernière (facultatif)","tile_layout":"Tuiles","tile_columns":"Colonnes de tuiles (vide = automatique)","update_entity":"Entité de mise à jour SuperNotify","cards_update_entity":"Entité de mise à jour des cartes","health":"État en haut","poll_seconds":"Actualiser toutes les (secondes)","group":"Grouper selon la façon dont un canal part","hide_defaults":"Masquer les canaux automatiques DEFAULT_","limit":"Notifications dans la liste","expand":"Ouvrir les parties repliées","max_height":"Hauteur maximale (CSS, ex. 70vh)","trigger_entity":"Actualiser quand ceci change","dry_run":"Afficher « Essayer sans envoyer »","dry_run_dupe_check":"Simuler aussi le contrôle des doublons","days":"Jours affichés par défaut","manifest_url":"URL du manifeste des automatisations","o_supernotify":"SuperNotify","o_theme":"Thème Home Assistant","o_mdi":"Icônes Home Assistant","o_emoji":"Emoji","o_row":"Icône à gauche","o_stacked":"Haute, icône en haut","o_auto":"Automatique"},"SN_NATIVE_STR":{"all_good":"Tout va bien","paused":"En pause","resume":"Reprendre","test":"Envoyer un test","sure":"Touchez encore pour envoyer","sent":"Envoyé","last":"Dernière","none":"Aucune notification pour l'instant","ago":"il y a","h":"h","err":"transports en erreur","off":"canaux désactivés"},"SN_STRATEGY_TITLES":{"home":"Accueil","archive":"Archives","send":"Envoyer","setup":"Configuration","stats":"Statistiques","tools":"Outils","title":"SuperNotify","appliances":"Électroménager"},"SN_APPL_STRINGS":{"title":"Électroménager","loading":"lecture…","none":"Aucun appareil : ajoutez-en un dans Appliance Autonotify (Paramètres → Appareils et services).","st_run":"En marche","st_cleaning":"Nettoie","st_done":"Terminé · à vider","st_done_other":"Terminé","st_err":"A besoin d'aide","m_switch_on":"Allumer la prise","done_switch_on":"Prise allumée.","done_action":"Fait : {n}.","confirm_action":"Lancer « {n} » ?","open_entity":"Ouvrir pour le modifier","chip_notifs":"Notifications","chip_device":"Appareil","not_found":"Aucun appareil nommé « {n} ».","last7":"7 derniers jours","col_day":"Jour","col_cycles":"Cycles","col_time":"Durée","col_energy":"Consommation","source_h":"Origine","manual_src":"ajouté à la main : en marche au-dessus de {w}","tab_info":"Aperçu","tab_stats":"Consommation et cycles","tab_cleans":"Nettoyages","tab_prints":"Impressions","last_run":"Dernier cycle","avg_run":"Moyenne","reminders_h":"Notifications","plug":"Prise","plug_on":"allumée","plug_off":"éteinte","error_h":"Erreur","open_device":"L'appareil dans Home Assistant","prints":"impressions","print1":"impression","per_print":"Chaque impression du mois","last_prints":"Dernières impressions","no_print_month":"Pas encore d'impression ce mois-ci","no_print":"Pas encore d'impression","col_fil":"Filament","failed":"échouée","per_run":"Chaque cycle du mois","dev_hist":"Chacune vient de l'historique de Home Assistant ({n} derniers jours) ; les heures, du compteur de l'appareil quand il en a un.","cleans":"nettoyages","clean1":"nettoyage","per_clean":"Chaque nettoyage du mois","avg_clean":"moyenne {d}","col_area":"Surface","last_cleans":"Derniers nettoyages","no_clean_month":"Pas encore de nettoyage ce mois-ci","no_clean":"Pas encore de nettoyage","vac_hist":"Les totaux viennent des compteurs du robot ; chaque nettoyage, de l'historique de Home Assistant ({n} derniers jours).","st_paused":"En pause","st_returning":"Retourne à la base","st_charging":"En charge","st_docked_w":"Sur sa base","st_idle":"À l'arrêt","st_off":"Éteint","stopped":"À l'arrêt","yesterday":"hier","u_min":"min","u_h":"h","start":"Début","so_far":"jusqu'ici","no_cycle":"Aucun cycle pour l'instant","last_cycle":"Dernier cycle {d}","ended_at":"Terminé à {t}","reminders":"+{n} rappels jusqu'à {t}","reminder1":"+1 rappel à {t}","end_est":"Fin prévue","left":"encore {d}","almost":"presque fini","est_from_avg":"estimé d'après des cycles similaires","running_for":"En marche depuis {d}","btn_empty":"Vidé","btn_seen":"Fait","btn_resume":"Reprendre le nettoyage","m_switch_off":"Éteindre la prise","m_remind":"Me le rappeler plus tard","details":"Détails","settings":"Paramètres","more":"Plus","details_link":"Détails, consommation et cycles","done_empty":"Fait : les rappels s'arrêtent.","done_remind":"Il vous le rappellera plus tard.","done_switch":"Prise éteinte.","done_resume":"Nettoyage repris.","err":"Erreur","new_dev":"{n} nouveaux appareils","new_dev1":"1 nouvel appareil","battery":"Batterie","consumable":"{n} à {p} %","maint_in":"dans {c} cycles","maint_next":"au prochain cycle","maint_due":"à faire","maint_of":"{d} sur {e}","maint_done":"Fait","confirm_maint":"Marquer « {n} » comme fait ? Le compte repart de zéro.","conn_lost":"connexion perdue : dernier état connu","cons_h":"Consommables","commands":"Commandes","tap_again":"Touchez encore pour confirmer","empty_since":"À vider depuis","done_since":"Terminé depuis","avg_cycle":"Cycle moyen","maint_tab":"Entretien","tab_stats_short":"Consommation","read_failed":"Impossible de lire l'historique ({e}) ; nouvel essai sous peu.","retry":"Réessayer","see_chart":"Voir le graphique","back":"Retour","avg_line":"moyenne {v}","tap_bar":"Touchez une barre pour voir ce cycle","k_station":"Station","off_since":"Éteint depuis","close":"Fermer","power_now":"maintenant","p_today":"Aujourd'hui","p_week":"Semaine","p_month":"Mois","p_year":"Année","cycles":"cycles","cycle1":"cycle","per_cycle":"Consommation par cycle ce mois-ci","short":"Courts","long":"Longs","anomalous":"Inhabituels","avg":"moy. {d}, {k}","last_cycles":"Derniers cycles","col_start":"Début","col_dur":"Durée","col_cost":"Coût","no_cycle_month":"Aucun cycle ce mois-ci pour l'instant","coarse":"Les cycles de plus de 10 jours sont comptés à l'heure.","open_notifs":"Notifications de l'appareil","no_power":"Aucun capteur de puissance trouvé : indiquez-le avec `power_entity` dans `appliances:`.","no_power_vac":"Un robot aspirateur n'a pas de capteur de puissance : consommation et cycles ne sont pas comptés."}},"nl":{"SN_STRINGS":{"presence":"Aanwezigheid","time_band":"Tijdvak","quiet":"Stil","act_scen":"Actieve scenario's","on":"aan","off":"uit","active":"actief","dnd":"Niet storen","tap_silence":"tik om te dempen","snooze":"Pauzeren","min":"min","pause_nc":"niet-kritieke pauzeren","snoozed":"Gepauzeerd","until":"tot","tap_clear":"tik om te wissen","announce":"Omroepen","intercom":"intercom","announce_ph":"Omroepen op alle speakers…","send":"Versturen","announced":"Omgeroepen","cleared":"Pauzes gewist","snoozed_for":"Niet-kritieke meldingen gepauzeerd voor","sent":"Verstuurd","yesterday":"gisteren","deliveries":"Bezorgingen","last_notif":"Laatste melding","transports":"Transporten","delivered":"bezorgd","failed":"mislukt","channels":"kanalen","none":"geen","no_transports":"geen transport-entiteiten gevonden","tr_used":"gebruikt door","tr_unused":"geen kanaal gebruikt het","start":"start","volume":"volume","now":"nu","crosses":"gaat over middernacht","no_voice":"geen stem","mute_hint":"Een tijdvak op <b>0%</b> stuurt <b>helemaal geen gesproken melding</b> (Alexa en TTS uit, push en dashboard worden nog wel bezorgd). Kritieke meldingen en meldingen met hoge prioriteit spreken altijd.","enabled":"ingeschakeld","grp_auto":"Starten vanzelf","grp_named":"Alleen als genoemd in de aanroep","grp_scen":"Alleen met een scenario","grp_fallback":"Reserve, als de andere mislukken","ch_title":"Kanalen","ch_count":"{on} van {tot} aan","off_manual":"uitgeschakeld","paused_by":"nu gepauzeerd door","on_by":"nu aan via","fixed_targets":"vaste doelen","no_deliveries":"geen bezorging-entiteiten gevonden","home":"thuis","away":"afwezig","devices":"apparaten","devices_1":"apparaat","rc_test":"Test versturen","rc_test_confirm":"Tik nogmaals om te versturen","rc_test_sent":"Test verstuurd","rc_test_title":"SuperNotify-test","rc_test_msg":"Testbericht vanaf het dashboard,","overrides":"bezorgingsaanpassingen","overrides_1":"bezorgingsaanpassing","no_contact":"geen contactpunten","no_recipients":"geen ontvanger-entiteiten gevonden","details":"Details","h_update":"update beschikbaar:","h_restart":"herstart Home Assistant om de update af te ronden","h_uptodate":"up-to-date","h_transport_err":"transporten met fouten","h_channels_off":"kanalen uit","h_all_good":"Alles in orde","h_failures":"mislukkingen","h_failures_1":"mislukking","h_transport_err_1":"transport met fouten","h_channels_off_1":"kanaal uit","channels_1":"kanaal","band_early_morning":"Vroege ochtend","band_morning":"Ochtend","band_afternoon":"Middag","band_evening":"Avond","band_night":"Nacht","band_late_night":"Late nacht","h_look_1":"1 ding om naar te kijken","h_look_n":"{n} dingen om naar te kijken","h_rest_ok":"de rest werkt","h_ch_on":"{on} van {tot} kanalen aan","h_open":"Openen","ln_delivered":"bezorgd","ln_failed":"mislukt","ln_why":"Waarom","tgt_loading":"kiezer laden…","bands_empty_t":"Nog geen tijdvakken","bands_empty":"Voeg één tijdvak per dagdeel toe: een input_datetime voor de start en een input_number voor het stemvolume.","active_now":"nu actief","disabled":"uitgeschakeld","other":"Overig","manual":"handmatig","apply_now":"nu toepassen","applied":"Toegepast","apply_off":"tik om niet meer toe te passen","enabled_lbl":"ingeschakeld","reset_overrides":"Aanpassingen resetten","reset_done":"aanpassingen gereset","transport_off":"transport uit","last_notified":"laatst gemeld","never_notified":"nooit gemeld","media":"media","no_scenarios":"geen scenario-entiteiten gevonden","sim_pick":"🎬 Scenario's — tik om te simuleren","sim_fire":"📤 Kanalen","sim_hint":"Echte gegevens van de engine (opvraagacties). Filteren van bezorgingen op prioriteit gebeurt in de engine en wordt hier niet gesimuleerd. Uitgeschakeld wint van ingeschakeld, net als bij het samenvoegen tijdens gebruik.","sim_none":"er zouden geen bezorgingen starten","sim_go":"Zou verstuurd worden","sim_stop":"Zou niet verstuurd worden","sim_r_default":"start vanzelf","sim_r_on":"aangezet door","sim_r_off":"uitgezet door","sim_r_named":"alleen als genoemd in de aanroep","sim_r_scen":"alleen met een scenario dat het aanzet","sim_r_fallback":"reserve, als de andere mislukken","sim_r_switched":"uitgeschakeld","title":"Titel","message":"Bericht","priority":"Prioriteit","channels_lbl":"Kanalen — niets gekozen = normale routering","camera_lbl":"Camera-snapshot","preview":"Voorbeeld","no_title":"(geen titel)","no_message":"(geen bericht)","default_prio":"standaard (gemiddeld)","comp_hint":"Gekozen kanalen worden verstuurd met delivery_selection: fixed (alleen die starten). Kritiek is echt kritiek — sirenes inbegrepen.","critical_confirm":"Een KRITIEKE melding versturen? Sirenes en maximaal volume inbegrepen.","sent_toast":"Verstuurd","write_or_pick":"Schrijf een bericht, of kies een camera of een kanaal","send_err":"Niet verstuurd","dry_btn":"Proberen zonder versturen","dry_title":"Als je het nu verstuurde","dry_err":"Testrun mislukt","dry_nobody":"geen ontvanger, alleen directe doelen","dry_none":"Geen kanaal geselecteerd","dry_scen":"Actieve scenario's","dry_raw":"Ruw antwoord","dry_prio":"Prioriteit","dry_would_n":"kanalen zouden versturen","dry_nothing":"Er zou niets worden verstuurd","dry_dupe":"Duplicaat van een recente melding: zou worden weggegooid","dry_no_dupe":"Duplicaatcontrole niet gesimuleerd, dus het echte Versturen direct daarna wordt niet geblokkeerd.","dry_home":"Thuis","dry_empty":"SuperNotify gaf geen antwoord: is het 2.12 of nieuwer?","prio_minimum":"Minimaal","prio_low":"Laag","prio_medium":"Gemiddeld","prio_high":"Hoog","prio_critical":"Kritiek","target_lbl":"Doel — personen, apparaten, ruimtes, verdiepingen, labels","custom_target_lbl":"Eigen doelen (e-mail, Telegram-ID's, …) — gescheiden door komma's","adv_title":"Geavanceerde opties","adv_spoken":"Gesproken bericht (Alexa, TTS)","adv_spoken_ph":"wat de speakers zeggen, als het anders is dan de tekst","adv_apply":"Deze scenario's toepassen","adv_require":"Alleen versturen als deze scenario's actief zijn","adv_constrain":"Alleen deze scenario's meenemen","adv_snapshot":"Afbeelding van een URL","adv_debug":"Debug: volledige selectietrace vastleggen (getoond door de waarom-kaart)","custom_target_ph":"bijv. user@example.com, 123456789","native_target_tag":"🎯 native ruimte/verdieping/label","target_warn":"⚠️ Ruimtes, verdiepingen en labels worden alleen opgelost door notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts en chime. Met elk ander kanaal — of de standaardroutering als hierboven geen kanaal is gekozen — kan de melding ongemerkt zonder doel eindigen. Kies een compatibel kanaal, of voeg direct een persoon/apparaat toe.","aut_search":"Automatiseringen zoeken…","aut_all":"Alle","aut_none":"Geen resultaten","aut_err":"Manifest niet gevonden — genereer het met tools/genera_vista_automazioni.py","aut_updated":"lijst bijgewerkt","aut_count":"automatiseringen","aut_count_1":"automatisering","never":"nooit","ago_now":"nu","ago_min":"min geleden","ago_h":"u geleden","ago_d":"d geleden","aut_disabled_only":"Alleen uitgeschakeld","grp_active":"actief","repeat":"Herhalen","skipped_n":"overgeslagen","left":"over","missed_n":"gemist","snz_all":"alles","snz_nc":"niet-kritiek","snz_prio":"prioriteit","snz_transport":"transport","snz_for":"voor","snz_choose":"kies wat en hoe lang","snz_title":"Meldingen pauzeren","snz_what":"Wat","snz_nc_l":"Niet-kritiek","snz_all_l":"Alles","snz_ch":"Een kanaal","snz_pr":"Een prioriteit","snz_who":"Voor wie","snz_everyone":"Iedereen","snz_me":"Alleen ik","snz_len":"Hoe lang","snz_forever":"Tot ik hervat","snz_go":"Pauzeren","snz_close":"Sluiten","rs_hand":"handmatig","rs_voice":"met spraak","rs_assist":"door de assistent","snz_voice_info":"Je pauzes lopen via de spraakopdrachten van SuperNotify: ze gelden alleen voor jou.","snz_voice_off":"De spraakopdrachten van SuperNotify staan uit: zet ze aan in de integratie-opties.","snz_resume_mine":"Mijn pauzes hervatten","go_open":"Tonen","dl_probe":"Dit kanaal proberen","probe_msg":"Kanaaltest vanaf het dashboard","sc_why":"Waarom","sc_yes":"Geldt nu","sc_no":"Geldt nu niet","sc_manual_why":"Handmatig scenario: met de hand toegepast","sc_no_cond":"Geen voorwaarden","sc_off_sw":"Uitgeschakeld","sc_not_eval":"niet gecontroleerd","sc_now":"nu","sc_diff_btn_on":"Wat verandert als het geldt","sc_diff_btn_off":"Wat verandert zonder","sc_diff_on":"Als het gold, voor een gemiddelde melding nu:","sc_diff_off":"Zonder, voor een gemiddelde melding nu:","sc_diff_add":"zou ook versturen","sc_diff_rem":"zou niet meer versturen","sc_diff_none":"geen verschil","c_state":"{e} is {s}","c_template":"sjabloonvoorwaarde","c_time":"tijd","c_after":"na","c_before":"voor","c_numeric":"{e}","c_above":"boven","c_below":"onder","c_and":"al deze","c_or":"minstens één hiervan","c_not":"geen van deze","c_or_join":" of ","sim_hint_dry":"Het eigen antwoord van SuperNotify (testrun, er wordt niets verstuurd): een melding nu, met de prioriteit en alleen de scenario's die hierboven zijn gekozen.","sim_msg":"Simulatortest","sim_prio":"Prioriteit","sa_snooze":"{what} gepauzeerd voor {len}.","sa_silence":"{what} gedempt tot nader order.","sa_resume":"{what} weer aan.","sa_resume_one":"Pauze voorbij: {x}.","sa_resume_all":"Meldingen weer aan.","sa_w_nc":"Niet-kritieke meldingen","sa_w_all":"Alle meldingen","sa_w_ch":"Kanaal {x}","sa_w_pr":"Meldingen met prioriteit {x}","sa_w_mine":"Je meldingen","sa_for":"voor {x}","sa_min":"{n} minuten","sa_hour":"een uur","sa_hours":"{n} uur","occ_title":"Wie is er thuis","occ_home_l":"Thuis","occ_ALL_HOME":"Iedereen thuis","occ_ALL_AWAY":"Iedereen weg","occ_LONE_HOME":"Eén persoon thuis","occ_MULTI_HOME":"Enkelen thuis","occ_UNDEFINED_OCCUPANTS":"Niemand gevolgd","h_repairs":"SuperNotify-reparaties","h_repairs_1":"SuperNotify-reparatie","det_more":"Alle attributen","det_yes":"ja","det_no":"nee","det_action":"Actie","det_target":"Vaste doelen","det_target_req":"Vereist een doel","det_target_use":"Doelen gebruiken","det_inclusion":"Gebruikt wanneer","det_prio":"Prioriteiten","det_occ":"Wie thuis moet zijn","det_transport":"Transport","det_data":"Gegevens","det_debug":"Debug","det_err_last":"Laatste fout","det_err_in":"In","det_err_n":"Fouten sinds start","det_select":"Selectie","adv_html":"Tekst voor e-mail (HTML)","adv_clip":"Videoclip van een URL","adv_actions":"Knoppen op de melding","adv_act_id":"actie-id","adv_act_title":"knoptekst","adv_act_add":"+ knop","adv_groups":"Knopgroepen (komma)","adv_dc":"Kanaalinstellingen voor deze melding","adv_dc_ph":"sleutel: waarde, één per regel","adv_dc_add":"+ kanaal","snz_active":"Nu gepauzeerd","snz_resume":"Hervatten","snz_resume_all":"Alles hervatten","snz_until_resumed":"tot hervat","snz_done":"Gepauzeerd","snz_resumed":"Hervat","no_notif":"nog geen melding","st_title":"Gebruik","st_days_short":"d","st_total":"Meldingen","st_avg":"per dag","st_today":"Vandaag","st_vs_avg":"t.o.v. gemiddelde","st_peak_hour":"Piekuur","st_top_channel":"Topkanaal","st_errors":"Kanaalfouten","st_of_sends":"van de kanaalverzendingen","st_daily":"Per dag","st_hourly":"Per uur van de dag","st_weekday":"Per weekdag","st_channels":"Kanalen — meest gebruikt","st_priority":"Prioriteit","st_period":"Dagdeel","st_insights":"Inzichten","st_no_data":"Nog geen geschiedenis — gegevens verschijnen na de eerste meldingen.","st_loading":"laden…","st_installed":"geïnstalleerd","st_latest":"nieuwste","st_uptodate":"up-to-date","st_update":"update beschikbaar","st_restart":"herstart vereist","st_logged":"vastgelegd","st_from_archive":"uit het archief van SuperNotify","st_archive_err":"archief deels gelezen","st_wd":["ma","di","wo","do","vr","za","zo"],"st_i_share":"{p}% van alle kanaalverzendingen gaat via {c}.","st_i_peak":"Drukste uur is {h}:00 ({n} meldingen in {d} dagen).","st_i_night":"{p}% van de meldingen komt binnen tussen 23:00 en 07:00 — overweeg een niet-storen-scenario als je dat niet wilt.","st_i_night_ok":"Slechts {p}% van de meldingen komt 's nachts binnen (23–07): de stille uren werken.","st_i_weekend":"Weekenddagen hebben {p}% {dir} meldingen dan doordeweekse dagen.","st_i_errors":"{n} kanaalfouten in {d} dagen, vooral bij {c}.","st_i_noerr":"Geen kanaalfouten in de laatste {d} dagen.","st_i_prio":"{p}% van de meldingen heeft prioriteit {prio}.","st_i_trend":"Laatste 7 dagen: {n}/dag, {dir} {p}% t.o.v. de 7 daarvoor.","st_more":"meer","st_less":"minder","st_up":"omhoog","st_down":"omlaag"},"SN_ARCH_STRINGS":{"search":"Zoek in titel of bericht…","f_all":"Alle","f_today":"Vandaag","f_whisper":"Gefluisterd","wh":"gefluisterd","said":"Alexa zei","said_by":"{ch} zei","none":"geen melding komt overeen","loading":"archief lezen…","recent":"laatste meldingen","read_at":"gelezen om","today":"Vandaag","yesterday":"Gisteren","failed":"mislukt","missed":"gemist","reasons":{"doppione":"duplicaat","nessun target":"geen doel","errore":"fout","condizione":"voorwaarde","scenario":"scenario","presenza":"aanwezigheid","priorita":"prioriteit","spento":"uit","pausa":"gepauzeerd","transport spento":"transport uit","nessuna azione":"geen actie","dati non validi":"ongeldige gegevens","sconosciuto":"onbekend"},"f_appliance":"Huishoudapparaten","ap_scope":"bij de laatste {n} die volledig zijn gelezen – oudere worden niet herkend"},"SN_WHY_STRINGS":{"pick":"Kies een melding om te zien waarom die ging waar die heen ging.","loading":"laden…","none":"geen melding","gone":"deze melding staat niet meer in het archief","priority":"prioriteit","dupe":"duplicaat","outcomes":{"success":"bezorgd","partial_delivery":"deels bezorgd","dupe":"duplicaat","failed":"mislukt","error":"mislukt","fallback_delivery":"bezorgd via het reservekanaal","no_delivery":"niet bezorgd"},"step_call":"Aanroep","step_scen":"Scenario's","step_people":"Personen","step_ch":"Kanalen","call_auto":"geen kanaal genoemd: normale routering","call_named":"genoemd in de aanroep:","call_debug":"met debug","nobody":"niemand thuis","ch_sent":"verstuurd","ch_problems":"om naar te kijken","ch_skipped":"overgeslagen","pb_failed":"mislukt","pb_missed":"gevraagd maar niet verstuurd","grp_skipped":"overgeslagen door een regel: normaal","grp_not":"niet betrokken","trace_title":"Volledige selectietrace","fix":{"NO_TARGET":"Geen enkele ontvanger heeft een adres voor dit kanaal: voeg er een toe aan een ontvanger, geef het kanaal vaste doelen, of laat het weg uit deze aanroep.","ERROR":"De integratie achter dit kanaal gaf een fout: bekijk de eigen logregel ervan.","NO_ACTION":"Het kanaal heeft geen actie om aan te roepen: stel `action:` in op de bezorging.","INVALID_ACTION_DATA":"De gegevens die aan de actie zijn doorgegeven werden geweigerd: controleer de `data:` van de aanroep of van de bezorging."},"no_scenarios":"geen scenario actief","applied":"geforceerd door de aanroep","required":"vereist door de aanroep","constrain":"door de aanroep beperkt tot","home":"thuis","away":"afwezig","no_channels":"er is geen kanaal geselecteerd","st_ok":"bezorgd","st_err":"mislukt","st_skip":"overgeslagen","calls":"aanroepen","calls_1":"aanroep","target_required":"doel vereist:","started_by":"geselecteerd door","scen_would_off":"uitgezet door (overruled)","src_default":"altijd aan (standaard)","src_scen":"scenario","src_call":"de aanroep zelf","src_recipient":"ontvanger","r_off_by":"uitgezet door","call_targets":"doelen in de aanroep","cats":{"entity_id":"entiteiten","mobile_app_id":"apparaten","person_id":"personen","email":"e-mail","phone":"telefoon","device_id":"apparaten"},"r_call_off":"uitgesloten door de aanroep","r_scen_off":"uitgezet door een actief scenario","r_disabled":"uitgeschakeld","r_transport_off":"het transport staat uit","r_only_scen":"start alleen als een scenario het aanzet","r_only_fallback":"alleen reserve","r_only_explicit":"start alleen als het bij naam wordt gevraagd","r_priority":"niet voor deze prioriteit","r_unknown":"niet te reconstrueren zonder de trace","from_config":"Redenen voor kanalen die niet zijn gestart, zijn gereconstrueerd uit de configuratie zoals die NU is, niet zoals die toen was.","from_trace":"Redenen komen uit de selectietrace die met de melding is gearchiveerd.","st_time":"duurde","st_slow":"traagste","st_rate":"van de kanalen gelukt","ua_title":"Doelen die geen kanaal oppakte","ua_hint":"Ze stonden in de aanroep, maar geen geselecteerd kanaal accepteert dit soort doel.","un_title":"Namen die niet bestaan","sent_by":"Verstuurd door","sent_auto":"automatisering","sent_script":"script","sent_person":"","sent_unknown":"afzender onbekend (geen automatisering of persoon in de context)","no_trace":"De volledige selectietrace wordt alleen vastgelegd als de notify-aanroep debug: true heeft, en gearchiveerd als de archiefdiagnostiek die bevat.","reasons":{"NO_TARGET":"geen bruikbaar doel","DUPE":"duplicaat van een recente melding","PRIORITY":"niet voor deze prioriteit","SNOOZE":"gepauzeerd","SNOOZED":"gepauzeerd","DELIVERY_CONDITION":"bezorgingsvoorwaarde onwaar","OCCUPANCY":"aanwezigheidsregel","ERROR":"fout","DELIVERY_DISABLED":"uitgeschakeld","SCENARIO":"scenario","TRANSPORT_DISABLED":"het transport staat uit","NO_SCENARIO":"een vereist scenario is niet actief","NO_ACTION":"geen actie om aan te roepen","INVALID_ACTION_DATA":"ongeldige actiegegevens","UNKNOWN":"onbekende reden"}},"SN_TOOLS_STRINGS":{"maint":"Onderhoud","enq":"SuperNotify bevragen","refresh":"Alle entiteiten opnieuw publiceren","refresh_btn":"Vernieuwen","resume_btn":"Hervatten","refreshed":"Entiteiten opnieuw gepubliceerd.","resume_all":"Alle pauzes hervatten","cleared_n":"pauzes hervat","purge_arch":"Archief opschonen","purge_media":"Afbeeldingen opschonen","older":"ouder dan","days":"dagen","purge_btn":"Opschonen","confirm":"Tik nogmaals om te bevestigen","purged":"verwijderd","remaining":"over","reset":"Handmatige wijzigingen ongedaan maken","reset_btn":"Resetten","reset_none":"Niets te resetten: alles is zoals geconfigureerd.","reset_done":"Terug naar de configuratie:","k_all":"alles","k_scenario":"scenario's","k_delivery":"kanalen","k_recipient":"personen","k_transport":"transporten","q_config":"Configuratie","q_scen":"Scenario's","q_active":"Actieve scenario's","q_by_scen":"Kanalen per scenario","q_implicit":"Standaardkanalen","q_recipients":"Ontvangers","q_occupancy":"Wie is er thuis","q_snoozes":"Pauzes","q_last":"Laatste melding","copy":"JSON kopiëren","copied":"Gekopieerd","close":"Sluiten","empty":"(leeg)","err":"SuperNotify antwoordde met een fout:","settings":"Integratie-instellingen","running":"bezig…","more":"meer"},"SN_FORM_LABELS":{"_common":"Uiterlijk en tekst","style":"Kleuren","icons":"Pictogrammen","show_version":"Kaartversie tonen","intro":"Introtekst bovenaan","title":"Titel","dnd_entity":"Niet-storen-schakelaar","quiet_entity":"Berekende stille status (optioneel)","presence_entity":"Persoon voor de statusbalk","archive_days":"Archief opschonen: ouder dan (dagen)","media_days":"Afbeeldingen opschonen: ouder dan (dagen)","occupancy":"Wie is er thuis (van SuperNotify)","repairs":"SuperNotify-reparaties in de statuslijst","snooze_announce":"Pauzes hardop zeggen (omroepkanaal)","snooze_via":"Pauzes lopen via","o_event":"de gebeurtenis van de pushknoppen (beheerder)","o_voice":"de spraakopdrachten","snooze_minutes":"Pauzeduur (minuten)","snooze_panel":"Pauzetegel opent het pauzepaneel","announce_delivery":"Kanaal voor omroepen","last_notification":"Laatste melding tonen","last_channels":"Eén chip per kanaal in de laatste melding","repeat_entity":"Knop laatste herhalen (optioneel)","tile_layout":"Tegels","tile_columns":"Tegelkolommen (leeg = automatisch)","update_entity":"SuperNotify-update-entiteit","cards_update_entity":"Update-entiteit van de kaarten","health":"Status bovenaan","poll_seconds":"Vernieuwen elke (seconden)","group":"Groeperen op hoe een kanaal start","hide_defaults":"Automatische DEFAULT_-kanalen verbergen","limit":"Meldingen in de lijst","expand":"Ingeklapte delen openen","max_height":"Maximale hoogte (CSS, bijv. 70vh)","trigger_entity":"Vernieuwen als dit verandert","dry_run":"\"Proberen zonder versturen\" tonen","dry_run_dupe_check":"Ook de duplicaatcontrole simuleren","days":"Standaard getoonde dagen","manifest_url":"URL van het automatiseringsmanifest","o_supernotify":"SuperNotify","o_theme":"Home Assistant-thema","o_mdi":"Home Assistant-pictogrammen","o_emoji":"Emoji","o_row":"Pictogram links","o_stacked":"Hoog, pictogram bovenaan","o_auto":"Automatisch"},"SN_NATIVE_STR":{"all_good":"Alles in orde","paused":"Gepauzeerd","resume":"Hervatten","test":"Test versturen","sure":"Tik nogmaals om te versturen","sent":"Verstuurd","last":"Laatste","none":"Nog geen melding","ago":"geleden","h":"u","err":"transporten met fouten","off":"kanalen uit"},"SN_STRATEGY_TITLES":{"home":"Home","archive":"Archief","send":"Versturen","setup":"Instellingen","stats":"Statistieken","tools":"Hulpmiddelen","title":"SuperNotify","appliances":"Huishoudapparaten"},"SN_APPL_STRINGS":{"title":"Huishoudapparaten","loading":"lezen…","none":"Geen apparaten: stel er een in via Appliance Autonotify (Instellingen → Apparaten en diensten).","st_run":"Bezig","st_cleaning":"Maakt schoon","st_done":"Klaar · leeghalen","st_done_other":"Klaar","st_err":"Heeft hulp nodig","m_switch_on":"Stekker aanzetten","done_switch_on":"Stekker aangezet.","done_action":"Gedaan: {n}.","confirm_action":"«{n}» uitvoeren?","open_entity":"Openen om te wijzigen","chip_notifs":"Meldingen","chip_device":"Apparaat","not_found":"Geen apparaat met de naam «{n}».","last7":"Laatste 7 dagen","col_day":"Dag","col_cycles":"Cycli","col_time":"Tijd","col_energy":"Verbruik","source_h":"Bron","manual_src":"handmatig toegevoegd: draait boven {w}","tab_info":"Overzicht","tab_stats":"Verbruik en cycli","tab_cleans":"Schoonmaakbeurten","tab_prints":"Afdrukken","last_run":"Laatste cyclus","avg_run":"Gemiddeld","reminders_h":"Meldingen","plug":"Stekker","plug_on":"aan","plug_off":"uit","error_h":"Fout","open_device":"Het apparaat in Home Assistant","prints":"afdrukken","print1":"afdruk","per_print":"Elke afdruk deze maand","last_prints":"Laatste afdrukken","no_print_month":"Nog geen afdruk deze maand","no_print":"Nog geen afdruk","col_fil":"Filament","failed":"mislukt","per_run":"Elke cyclus deze maand","dev_hist":"Elk komt uit de geschiedenis van Home Assistant (laatste {n} dagen); de uren uit de teller van het apparaat als het die heeft.","cleans":"schoonmaakbeurten","clean1":"schoonmaakbeurt","per_clean":"Elke schoonmaakbeurt deze maand","avg_clean":"gemiddeld {d}","col_area":"Oppervlak","last_cleans":"Laatste schoonmaakbeurten","no_clean_month":"Nog geen schoonmaakbeurt deze maand","no_clean":"Nog geen schoonmaakbeurt","vac_hist":"De totalen komen uit de tellers van de robot; elke schoonmaakbeurt uit de geschiedenis van Home Assistant (laatste {n} dagen).","st_paused":"Gepauzeerd","st_returning":"Keert terug naar het dock","st_charging":"Laadt op","st_docked_w":"In het dock","st_idle":"Stil","st_off":"Uit","stopped":"Stil","yesterday":"gisteren","u_min":"min","u_h":"u","start":"Start","so_far":"tot nu toe","no_cycle":"Nog geen cyclus","last_cycle":"Laatste cyclus {d}","ended_at":"Klaar om {t}","reminders":"+{n} herinneringen tot {t}","reminder1":"+1 herinnering om {t}","end_est":"Verwacht einde","left":"nog {d}","almost":"bijna klaar","est_from_avg":"geschat uit vergelijkbare cycli","running_for":"Bezig sinds {d}","btn_empty":"Leeggehaald","btn_seen":"Gedaan","btn_resume":"Schoonmaken hervatten","m_switch_off":"Stekker uitschakelen","m_remind":"Herinner me later","details":"Details","settings":"Instellingen","more":"Meer","details_link":"Details, verbruik en cycli","done_empty":"Gedaan: de herinneringen stoppen.","done_remind":"Je wordt later herinnerd.","done_switch":"Stekker uitgeschakeld.","done_resume":"Schoonmaken hervat.","err":"Fout","new_dev":"{n} nieuwe apparaten","new_dev1":"1 nieuw apparaat","battery":"Batterij","consumable":"{n} op {p}%","maint_in":"over {c} cycli","maint_next":"bij de volgende cyclus","maint_due":"nu nodig","maint_of":"{d} van {e}","maint_done":"Gedaan","confirm_maint":"«{n}» als gedaan markeren? De telling begint opnieuw.","conn_lost":"verbinding verbroken: laatst bekende toestand","cons_h":"Verbruiksartikelen","commands":"Opdrachten","tap_again":"Tik nogmaals om te bevestigen","empty_since":"Uit te ruimen sinds","done_since":"Klaar sinds","avg_cycle":"Gemiddelde cyclus","maint_tab":"Onderhoud","tab_stats_short":"Verbruik","read_failed":"De geschiedenis kon niet worden gelezen ({e}); straks opnieuw.","retry":"Opnieuw","see_chart":"Grafiek bekijken","back":"Terug","avg_line":"gemiddeld {v}","tap_bar":"Tik op een balk voor die cyclus","k_station":"Station","off_since":"Uit sinds","close":"Sluiten","power_now":"nu","p_today":"Vandaag","p_week":"Week","p_month":"Maand","p_year":"Jaar","cycles":"cycli","cycle1":"cyclus","per_cycle":"Verbruik per cyclus deze maand","short":"Kort","long":"Lang","anomalous":"Afwijkend","avg":"gem. {d}, {k}","last_cycles":"Laatste cycli","col_start":"Start","col_dur":"Duur","col_cost":"Kosten","no_cycle_month":"Deze maand nog geen cyclus","coarse":"Cycli van meer dan 10 dagen geleden worden per uur geteld.","open_notifs":"Meldingen van het apparaat","no_power":"Geen vermogenssensor gevonden: geef hem op met `power_entity` in `appliances:`.","no_power_vac":"Een robotstofzuiger heeft geen vermogenssensor: verbruik en cycli worden niet geteld."}},"pl":{"SN_STRINGS":{"presence":"Obecność","time_band":"Pora dnia","quiet":"Cisza","act_scen":"Aktywne scenariusze","on":"wł.","off":"wył.","active":"aktywny","dnd":"Nie przeszkadzać","tap_silence":"dotknij, aby wyciszyć","snooze":"Drzemka","min":"min","pause_nc":"wstrzymaj niekrytyczne","snoozed":"Wstrzymane","until":"do","tap_clear":"dotknij, aby wyczyścić","announce":"Ogłoś","intercom":"interkom","announce_ph":"Ogłoś na wszystkich głośnikach…","send":"Wyślij","announced":"Ogłoszono","cleared":"Drzemki wyczyszczone","snoozed_for":"Wstrzymano niekrytyczne powiadomienia na","sent":"Wysłane","yesterday":"wczoraj","deliveries":"Dostarczenia","last_notif":"Ostatnie powiadomienie","transports":"Transporty","delivered":"dostarczone","failed":"nieudane","channels":"kanałów","none":"brak","no_transports":"nie znaleziono encji transportów","tr_used":"używany przez","tr_unused":"żaden kanał go nie używa","start":"początek","volume":"głośność","now":"teraz","crosses":"przechodzi przez północ","no_voice":"bez głosu","mute_hint":"Pora z <b>0%</b> nie wysyła <b>żadnego ogłoszenia głosowego</b> (Alexa i TTS wyłączone, push i pulpit nadal dostarczane). Alerty krytyczne i o wysokim priorytecie zawsze są wypowiadane.","enabled":"włączone","grp_auto":"Startują same","grp_named":"Tylko gdy wskazane w wywołaniu","grp_scen":"Tylko ze scenariuszem","grp_fallback":"Zapasowe, gdy inne zawiodą","ch_title":"Kanały","ch_count":"{on} z {tot} wł.","off_manual":"wyłączony","paused_by":"teraz wstrzymany przez","on_by":"teraz włączony przez","fixed_targets":"stałe cele","no_deliveries":"nie znaleziono encji dostarczeń","home":"w domu","away":"poza domem","devices":"urządzeń","devices_1":"urządzenie","rc_test":"Wyślij test","rc_test_confirm":"Dotknij ponownie, aby wysłać","rc_test_sent":"Test wysłany","rc_test_title":"Test SuperNotify","rc_test_msg":"Wiadomość testowa z pulpitu,","overrides":"nadpisań dostarczeń","overrides_1":"nadpisanie dostarczenia","no_contact":"brak danych kontaktowych","no_recipients":"nie znaleziono encji odbiorców","details":"Szczegóły","h_update":"dostępna aktualizacja:","h_restart":"uruchom ponownie Home Assistant, aby dokończyć aktualizację","h_uptodate":"aktualne","h_transport_err":"transportów z błędami","h_channels_off":"kanałów wył.","h_all_good":"Wszystko w porządku","h_failures":"błędów","h_failures_1":"błąd","h_transport_err_1":"transport z błędami","h_channels_off_1":"kanał wył.","channels_1":"kanał","band_early_morning":"Wczesny ranek","band_morning":"Rano","band_afternoon":"Popołudnie","band_evening":"Wieczór","band_night":"Noc","band_late_night":"Późna noc","h_look_1":"1 rzecz do sprawdzenia","h_look_n":"Rzeczy do sprawdzenia: {n}","h_rest_ok":"reszta działa","h_ch_on":"{on} z {tot} kanałów wł.","h_open":"Otwórz","ln_delivered":"dostarczone","ln_failed":"nieudane","ln_why":"Dlaczego","tgt_loading":"ładowanie selektora…","bands_empty_t":"Brak pór dnia","bands_empty":"Dodaj jedną porę na każdą część dnia: input_datetime dla jej początku i input_number dla głośności głosu.","active_now":"aktywny teraz","disabled":"wyłączony","other":"Inne","manual":"ręczny","apply_now":"zastosuj teraz","applied":"Zastosowany","apply_off":"dotknij, aby przestać stosować","enabled_lbl":"włączony","reset_overrides":"Resetuj nadpisania","reset_done":"nadpisania zresetowane","transport_off":"transport wył.","last_notified":"ostatnio powiadomiony","never_notified":"nigdy nie powiadomiony","media":"media","no_scenarios":"nie znaleziono encji scenariuszy","sim_pick":"🎬 Scenariusze — dotknij, aby zasymulować","sim_fire":"📤 Kanały","sim_hint":"Prawdziwe dane silnika (usługi enquire). Filtrowanie dostarczeń według priorytetu odbywa się w silniku i nie jest tu symulowane. Wyłączenie wygrywa z włączeniem, jak przy scalaniu w trakcie działania.","sim_none":"żadne dostarczenie by nie ruszyło","sim_go":"Zostałoby wysłane","sim_stop":"Nie zostałoby wysłane","sim_r_default":"startuje samo","sim_r_on":"włączony przez","sim_r_off":"wyłączony przez","sim_r_named":"tylko gdy wskazany w wywołaniu","sim_r_scen":"tylko ze scenariuszem, który go włącza","sim_r_fallback":"zapasowy, gdy inne zawiodą","sim_r_switched":"wyłączony","title":"Tytuł","message":"Wiadomość","priority":"Priorytet","channels_lbl":"Kanały — brak wyboru = zwykłe kierowanie","camera_lbl":"Zrzut z kamery","preview":"Podgląd","no_title":"(bez tytułu)","no_message":"(bez wiadomości)","default_prio":"domyślny (średni)","comp_hint":"Wybrane kanały są wysyłane z delivery_selection: fixed (tylko one ruszają). Krytyczny naprawdę jest krytyczny — łącznie z syrenami.","critical_confirm":"Wysłać KRYTYCZNE powiadomienie? Łącznie z syrenami i maksymalną głośnością.","sent_toast":"Wysłano","write_or_pick":"Napisz wiadomość albo wybierz kamerę lub kanał","send_err":"Nie wysłano","dry_btn":"Wypróbuj bez wysyłania","dry_title":"Gdybyś wysłał je teraz","dry_err":"Próba nie powiodła się","dry_nobody":"brak odbiorcy, tylko cele bezpośrednie","dry_none":"Nie wybrano kanału","dry_scen":"Aktywne scenariusze","dry_raw":"Surowa odpowiedź","dry_prio":"Priorytet","dry_would_n":"kanałów by wysłało","dry_nothing":"Nic nie zostałoby wysłane","dry_dupe":"Duplikat niedawnego powiadomienia: zostałoby odrzucone","dry_no_dupe":"Wykrywanie duplikatów nie jest symulowane, więc prawdziwe Wyślij zaraz potem nie zostanie zablokowane.","dry_home":"W domu","dry_empty":"SuperNotify nie odpowiedział: czy to wersja 2.12 lub nowsza?","prio_minimum":"Minimalny","prio_low":"Niski","prio_medium":"Średni","prio_high":"Wysoki","prio_critical":"Krytyczny","target_lbl":"Cel — osoby, urządzenia, obszary, piętra, etykiety","custom_target_lbl":"Własne cele (e-mail, ID Telegram, …) — oddzielone przecinkami","adv_title":"Opcje zaawansowane","adv_spoken":"Wiadomość mówiona (Alexa, TTS)","adv_spoken_ph":"co mówią głośniki, jeśli inaczej niż tekst","adv_apply":"Zastosuj te scenariusze","adv_require":"Wyślij tylko, gdy te scenariusze są aktywne","adv_constrain":"Uwzględnij tylko te scenariusze","adv_snapshot":"Obraz z adresu URL","adv_debug":"Debug: zapisz pełny ślad wyboru (pokazywany przez kartę Dlaczego)","custom_target_ph":"np. user@example.com, 123456789","native_target_tag":"🎯 natywny obszar/piętro/etykieta","target_warn":"⚠️ Obszary, piętra i etykiety są rozwiązywane tylko przez notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts i chime. Z każdym innym kanałem — albo przy domyślnym kierowaniu, gdy powyżej nie wybrano kanału — powiadomienie może po cichu zostać bez celu. Wybierz zgodny kanał albo dodaj osobę/urządzenie bezpośrednio.","aut_search":"Szukaj automatyzacji…","aut_all":"Wszystkie","aut_none":"Brak wyników","aut_err":"Nie znaleziono manifestu — wygeneruj go przez tools/genera_vista_automazioni.py","aut_updated":"lista zaktualizowana","aut_count":"automatyzacji","aut_count_1":"automatyzacja","never":"nigdy","ago_now":"teraz","ago_min":"min temu","ago_h":"godz. temu","ago_d":"dni temu","aut_disabled_only":"Tylko wyłączone","grp_active":"aktywne","repeat":"Powtórz","skipped_n":"pominięte","left":"zostało","missed_n":"nieodebrane","snz_all":"wszystko","snz_nc":"niekrytyczne","snz_prio":"priorytet","snz_transport":"transport","snz_for":"na","snz_choose":"wybierz co i na jak długo","snz_title":"Wstrzymaj powiadomienia","snz_what":"Co","snz_nc_l":"Niekrytyczne","snz_all_l":"Wszystko","snz_ch":"Kanał","snz_pr":"Priorytet","snz_who":"Dla kogo","snz_everyone":"Wszyscy","snz_me":"Tylko ja","snz_len":"Jak długo","snz_forever":"Aż wznowię","snz_go":"Wstrzymaj","snz_close":"Zamknij","rs_hand":"ręcznie","rs_voice":"głosem","rs_assist":"przez asystenta","snz_voice_info":"Twoje pauzy idą przez komendy głosowe SuperNotify: dotyczą tylko ciebie.","snz_voice_off":"Komendy głosowe SuperNotify są wyłączone: włącz je w opcjach integracji.","snz_resume_mine":"Wznów moje","go_open":"Pokaż","dl_probe":"Wypróbuj ten kanał","probe_msg":"Test kanału z pulpitu","sc_why":"Dlaczego","sc_yes":"Obowiązuje teraz","sc_no":"Teraz nie obowiązuje","sc_manual_why":"Scenariusz ręczny: stosowany ręcznie","sc_no_cond":"Brak warunków","sc_off_sw":"Wyłączony","sc_not_eval":"nie sprawdzono","sc_now":"teraz","sc_diff_btn_on":"Co się zmieni, jeśli obowiązuje","sc_diff_btn_off":"Co się zmieni bez niego","sc_diff_on":"Gdyby obowiązywał, dla średniego powiadomienia teraz:","sc_diff_off":"Bez niego, dla średniego powiadomienia teraz:","sc_diff_add":"wysłałby też","sc_diff_rem":"już by nie wysłał","sc_diff_none":"bez różnicy","c_state":"{e} to {s}","c_template":"warunek szablonu","c_time":"czas","c_after":"po","c_before":"przed","c_numeric":"{e}","c_above":"powyżej","c_below":"poniżej","c_and":"wszystkie z tych","c_or":"co najmniej jeden z tych","c_not":"żaden z tych","c_or_join":" lub ","sim_hint_dry":"Własna odpowiedź SuperNotify (próba, nic nie jest wysyłane): powiadomienie teraz, z priorytetem i tylko scenariuszami wybranymi powyżej.","sim_msg":"Test symulatora","sim_prio":"Priorytet","sa_snooze":"{what} wstrzymane na {len}.","sa_silence":"{what} wyciszone do odwołania.","sa_resume":"{what} znów włączone.","sa_resume_one":"Koniec pauzy: {x}.","sa_resume_all":"Powiadomienia znów włączone.","sa_w_nc":"Niekrytyczne powiadomienia","sa_w_all":"Wszystkie powiadomienia","sa_w_ch":"Kanał {x}","sa_w_pr":"Powiadomienia o priorytecie {x}","sa_w_mine":"Twoje powiadomienia","sa_for":"dla {x}","sa_min":"{n} minut","sa_hour":"jedną godzinę","sa_hours":"{n} godz.","occ_title":"Kto jest w domu","occ_home_l":"W domu","occ_ALL_HOME":"Wszyscy w domu","occ_ALL_AWAY":"Wszyscy poza domem","occ_LONE_HOME":"Tylko jedna osoba w domu","occ_MULTI_HOME":"Kilka osób w domu","occ_UNDEFINED_OCCUPANTS":"Nikt nie jest śledzony","h_repairs":"naprawy SuperNotify","h_repairs_1":"naprawa SuperNotify","det_more":"Wszystkie atrybuty","det_yes":"tak","det_no":"nie","det_action":"Akcja","det_target":"Stałe cele","det_target_req":"Wymaga celu","det_target_use":"Cele używają","det_inclusion":"Używany, gdy","det_prio":"Priorytety","det_occ":"Kto musi być w domu","det_transport":"Transport","det_data":"Dane","det_debug":"Debug","det_err_last":"Ostatni błąd","det_err_in":"W","det_err_n":"Błędy od uruchomienia","det_select":"Wybór","adv_html":"Tekst do e-maila (HTML)","adv_clip":"Klip wideo z adresu URL","adv_actions":"Przyciski w powiadomieniu","adv_act_id":"id akcji","adv_act_title":"tekst przycisku","adv_act_add":"+ przycisk","adv_groups":"Grupy przycisków (przecinek)","adv_dc":"Ustawienia kanałów dla tego powiadomienia","adv_dc_ph":"klucz: wartość, jedno na linię","adv_dc_add":"+ kanał","snz_active":"Teraz wstrzymane","snz_resume":"Wznów","snz_resume_all":"Wznów wszystko","snz_until_resumed":"do wznowienia","snz_done":"Wstrzymano","snz_resumed":"Wznowiono","no_notif":"brak powiadomień","st_title":"Użycie","st_days_short":"d","st_total":"Powiadomienia","st_avg":"dziennie","st_today":"Dzisiaj","st_vs_avg":"vs. średnia","st_peak_hour":"Godzina szczytu","st_top_channel":"Główny kanał","st_errors":"Błędy kanałów","st_of_sends":"wysyłek kanałów","st_daily":"Dziennie","st_hourly":"Według godziny","st_weekday":"Według dnia tygodnia","st_channels":"Kanały — najczęściej używane","st_priority":"Priorytet","st_period":"Pora dnia","st_insights":"Wnioski","st_no_data":"Brak historii — dane pojawią się po pierwszych powiadomieniach.","st_loading":"ładowanie…","st_installed":"zainstalowana","st_latest":"najnowsza","st_uptodate":"aktualna","st_update":"dostępna aktualizacja","st_restart":"wymagany restart","st_logged":"zapisane","st_from_archive":"z archiwum SuperNotify","st_archive_err":"archiwum odczytane częściowo","st_wd":["Pn","Wt","Śr","Cz","Pt","So","Nd"],"st_i_share":"{p}% wszystkich wysyłek kanałów idzie przez {c}.","st_i_peak":"Najbardziej ruchliwa godzina to {h}:00 ({n} powiadomień w {d} dni).","st_i_night":"{p}% powiadomień przychodzi między 23:00 a 07:00 — rozważ scenariusz „Nie przeszkadzać”, jeśli to niepożądane.","st_i_night_ok":"Tylko {p}% powiadomień przychodzi w nocy (23–07): godziny ciszy działają.","st_i_weekend":"W weekendy jest {p}% {dir} powiadomień niż w dni robocze.","st_i_errors":"{n} błędów kanałów w {d} dni, głównie na {c}.","st_i_noerr":"Brak błędów kanałów w ostatnich {d} dniach.","st_i_prio":"{p}% powiadomień ma priorytet {prio}.","st_i_trend":"Ostatnie 7 dni: {n}/dzień, {dir} o {p}% względem 7 poprzednich.","st_more":"więcej","st_less":"mniej","st_up":"wzrost","st_down":"spadek"},"SN_ARCH_STRINGS":{"search":"Szukaj w tytule lub wiadomości…","f_all":"Wszystkie","f_today":"Dzisiaj","f_whisper":"Szeptane","wh":"szeptem","said":"Alexa powiedziała","said_by":"{ch} powiedział","none":"żadne powiadomienie nie pasuje","loading":"czytanie archiwum…","recent":"ostatnie powiadomienia","read_at":"odczytano o","today":"Dzisiaj","yesterday":"Wczoraj","failed":"nieudane","missed":"nieodebrane","reasons":{"doppione":"duplikat","nessun target":"brak celu","errore":"błąd","condizione":"warunek","scenario":"scenariusz","presenza":"obecność","priorita":"priorytet","spento":"wył.","pausa":"drzemka","transport spento":"transport wył.","nessuna azione":"brak akcji","dati non validi":"nieprawidłowe dane","sconosciuto":"nieznany"},"f_appliance":"AGD","ap_scope":"wśród ostatnich {n} odczytanych w całości – starsze nie są rozpoznawane"},"SN_WHY_STRINGS":{"pick":"Wybierz powiadomienie, aby zobaczyć, dlaczego trafiło tam, gdzie trafiło.","loading":"ładowanie…","none":"brak powiadomienia","gone":"tego powiadomienia nie ma już w archiwum","priority":"priorytet","dupe":"duplikat","outcomes":{"success":"dostarczone","partial_delivery":"częściowo dostarczone","dupe":"duplikat","failed":"nieudane","error":"nieudane","fallback_delivery":"dostarczone przez kanał zapasowy","no_delivery":"niedostarczone"},"step_call":"Wywołanie","step_scen":"Scenariusze","step_people":"Osoby","step_ch":"Kanały","call_auto":"nie wskazano kanału: zwykłe kierowanie","call_named":"wskazane w wywołaniu:","call_debug":"z debugiem","nobody":"nikogo nie ma w domu","ch_sent":"wysłane","ch_problems":"do sprawdzenia","ch_skipped":"pominięte","pb_failed":"nieudane","pb_missed":"żądane, ale nie wysłane","grp_skipped":"pominięte przez regułę: normalne","grp_not":"niezaangażowane","trace_title":"Pełny ślad wyboru","fix":{"NO_TARGET":"Żaden odbiorca nie ma adresu dla tego kanału: dodaj go odbiorcy, nadaj kanałowi stałe cele albo pomiń go w tym wywołaniu.","ERROR":"Integracja stojąca za tym kanałem odpowiedziała błędem: sprawdź jej wpis w logu.","NO_ACTION":"Kanał nie ma akcji do wywołania: ustaw `action:` w dostarczeniu.","INVALID_ACTION_DATA":"Dane przekazane do akcji zostały odrzucone: sprawdź `data:` wywołania lub dostarczenia."},"no_scenarios":"żaden scenariusz nie obowiązuje","applied":"wymuszony przez wywołanie","required":"wymagany przez wywołanie","constrain":"ograniczony przez wywołanie do","home":"w domu","away":"poza domem","no_channels":"nie wybrano żadnego kanału","st_ok":"dostarczone","st_err":"nieudane","st_skip":"pominięte","calls":"wywołań","calls_1":"wywołanie","target_required":"wymagany cel:","started_by":"wybrany przez","scen_would_off":"wyłączony przez (uchylone)","src_default":"zawsze wł. (domyślnie)","src_scen":"scenariusz","src_call":"samo wywołanie","src_recipient":"odbiorca","r_off_by":"wyłączony przez","call_targets":"cele w wywołaniu","cats":{"entity_id":"encje","mobile_app_id":"urządzenia","person_id":"osoby","email":"e-mail","phone":"telefon","device_id":"urządzenia"},"r_call_off":"wykluczony przez wywołanie","r_scen_off":"wyłączony przez obowiązujący scenariusz","r_disabled":"wyłączony","r_transport_off":"jego transport jest wyłączony","r_only_scen":"startuje tylko, gdy włączy go scenariusz","r_only_fallback":"tylko zapasowy","r_only_explicit":"startuje tylko, gdy wskazany z nazwy","r_priority":"nie dla tego priorytetu","r_unknown":"nie do odtworzenia bez śladu","from_config":"Powody dla kanałów, które nie ruszyły, są odtwarzane z konfiguracji w jej OBECNYM stanie, nie takim, jaki był wtedy.","from_trace":"Powody pochodzą ze śladu wyboru zarchiwizowanego z powiadomieniem.","st_time":"trwało","st_slow":"najwolniejszy","st_rate":"kanałów się powiodło","ua_title":"Cele, których nie przyjął żaden kanał","ua_hint":"Były w wywołaniu, ale żaden wybrany kanał nie przyjmuje tego rodzaju celu.","un_title":"Nazwy, które nie istnieją","sent_by":"Wysłane przez","sent_auto":"automatyzacja","sent_script":"skrypt","sent_person":"","sent_unknown":"nadawca nieznany (brak automatyzacji lub osoby w kontekście)","no_trace":"Pełny ślad wyboru jest zapisywany tylko, gdy wywołanie notify ma debug: true, i archiwizowany, gdy diagnostyka archiwum go uwzględnia.","reasons":{"NO_TARGET":"brak użytecznego celu","DUPE":"duplikat niedawnego powiadomienia","PRIORITY":"nie dla tego priorytetu","SNOOZE":"drzemka","SNOOZED":"drzemka","DELIVERY_CONDITION":"warunek dostarczenia niespełniony","OCCUPANCY":"reguła obecności","ERROR":"błąd","DELIVERY_DISABLED":"wyłączony","SCENARIO":"scenariusz","TRANSPORT_DISABLED":"jego transport jest wyłączony","NO_SCENARIO":"wymagany scenariusz nie obowiązuje","NO_ACTION":"brak akcji do wywołania","INVALID_ACTION_DATA":"nieprawidłowe dane akcji","UNKNOWN":"nieznany powód"}},"SN_TOOLS_STRINGS":{"maint":"Konserwacja","enq":"Zapytaj SuperNotify","refresh":"Opublikuj ponownie każdą encję","refresh_btn":"Odśwież","resume_btn":"Wznów","refreshed":"Encje opublikowane ponownie.","resume_all":"Wznów każdą pauzę","cleared_n":"pauz wznowionych","purge_arch":"Wyczyść archiwum","purge_media":"Wyczyść obrazy","older":"starsze niż","days":"dni","purge_btn":"Wyczyść","confirm":"Dotknij ponownie, aby potwierdzić","purged":"usunięte","remaining":"zostało","reset":"Cofnij zmiany wprowadzone ręcznie","reset_btn":"Resetuj","reset_none":"Nic do zresetowania: wszystko jest zgodne z konfiguracją.","reset_done":"Przywrócono konfigurację:","k_all":"wszystko","k_scenario":"scenariusze","k_delivery":"kanały","k_recipient":"osoby","k_transport":"transporty","q_config":"Konfiguracja","q_scen":"Scenariusze","q_active":"Aktywne scenariusze","q_by_scen":"Kanały według scenariusza","q_implicit":"Kanały domyślne","q_recipients":"Odbiorcy","q_occupancy":"Kto jest w domu","q_snoozes":"Pauzy","q_last":"Ostatnie powiadomienie","copy":"Kopiuj JSON","copied":"Skopiowano","close":"Zamknij","empty":"(puste)","err":"SuperNotify odpowiedział błędem:","settings":"Ustawienia integracji","running":"w toku…","more":"więcej"},"SN_FORM_LABELS":{"_common":"Wygląd i tekst","style":"Kolory","icons":"Ikony","show_version":"Pokaż wersję karty","intro":"Tekst wprowadzający na górze","title":"Tytuł","dnd_entity":"Przełącznik Nie przeszkadzać","quiet_entity":"Obliczony stan ciszy (opcjonalnie)","presence_entity":"Osoba na pasku stanu","archive_days":"Czyszczenie archiwum: starsze niż (dni)","media_days":"Czyszczenie obrazów: starsze niż (dni)","occupancy":"Kto jest w domu (z SuperNotify)","repairs":"Naprawy SuperNotify na liście stanu","snooze_announce":"Ogłaszaj pauzy na głos (kanał ogłoszeń)","snooze_via":"Pauzy idą przez","o_event":"zdarzenie przycisków push (admin)","o_voice":"komendy głosowe","snooze_minutes":"Długość drzemki (minuty)","snooze_panel":"Kafelek drzemki otwiera panel pauzy","announce_delivery":"Kanał do ogłoszeń","last_notification":"Pokaż ostatnie powiadomienie","last_channels":"Jeden chip na kanał w ostatnim powiadomieniu","repeat_entity":"Przycisk powtórzenia ostatniego (opcjonalnie)","tile_layout":"Kafelki","tile_columns":"Kolumny kafelków (puste = automatycznie)","update_entity":"Encja aktualizacji SuperNotify","cards_update_entity":"Encja aktualizacji kart","health":"Stan na górze","poll_seconds":"Odświeżaj co (sekundy)","group":"Grupuj według sposobu startu kanału","hide_defaults":"Ukryj automatyczne kanały DEFAULT_","limit":"Powiadomienia na liście","expand":"Rozwiń zwinięte części","max_height":"Maksymalna wysokość (CSS, np. 70vh)","trigger_entity":"Odśwież, gdy to się zmieni","dry_run":"Pokaż „Wypróbuj bez wysyłania”","dry_run_dupe_check":"Symuluj też wykrywanie duplikatów","days":"Domyślnie pokazywane dni","manifest_url":"URL manifestu automatyzacji","o_supernotify":"SuperNotify","o_theme":"Motyw Home Assistant","o_mdi":"Ikony Home Assistant","o_emoji":"Emoji","o_row":"Ikona po lewej","o_stacked":"Wysokie, ikona na górze","o_auto":"Automatycznie"},"SN_NATIVE_STR":{"all_good":"Wszystko w porządku","paused":"Wstrzymane","resume":"Wznów","test":"Wyślij test","sure":"Dotknij ponownie, aby wysłać","sent":"Wysłane","last":"Ostatnie","none":"Brak powiadomień","ago":"temu","h":"godz.","err":"transportów z błędami","off":"kanałów wył."},"SN_STRATEGY_TITLES":{"home":"Główna","archive":"Archiwum","send":"Wyślij","setup":"Ustawienia","stats":"Statystyki","tools":"Narzędzia","title":"SuperNotify","appliances":"AGD"},"SN_APPL_STRINGS":{"title":"AGD","loading":"odczyt…","none":"Brak urządzeń: dodaj je w Appliance Autonotify (Ustawienia → Urządzenia i usługi).","st_run":"Pracuje","st_cleaning":"Sprząta","st_done":"Gotowe · do opróżnienia","st_done_other":"Gotowe","st_err":"Potrzebuje pomocy","m_switch_on":"Włącz gniazdko","done_switch_on":"Gniazdko włączone.","done_action":"Gotowe: {n}.","confirm_action":"Wykonać «{n}»?","open_entity":"Otwórz, aby zmienić","chip_notifs":"Powiadomienia","chip_device":"Urządzenie","not_found":"Brak urządzenia o nazwie «{n}».","last7":"Ostatnie 7 dni","col_day":"Dzień","col_cycles":"Cykle","col_time":"Czas","col_energy":"Zużycie","source_h":"Źródło","manual_src":"dodane ręcznie: pracuje powyżej {w}","tab_info":"Przegląd","tab_stats":"Zużycie i cykle","tab_cleans":"Sprzątania","tab_prints":"Wydruki","last_run":"Ostatni cykl","avg_run":"Średnio","reminders_h":"Powiadomienia","plug":"Gniazdko","plug_on":"włączone","plug_off":"wyłączone","error_h":"Błąd","open_device":"Urządzenie w Home Assistant","prints":"wydruki","print1":"wydruk","per_print":"Każdy wydruk w tym miesiącu","last_prints":"Ostatnie wydruki","no_print_month":"W tym miesiącu jeszcze bez wydruku","no_print":"Jeszcze bez wydruku","col_fil":"Filament","failed":"nieudany","per_run":"Każdy cykl w tym miesiącu","dev_hist":"Każdy pochodzi z historii Home Assistant (ostatnie {n} dni); godziny z licznika urządzenia, jeśli go ma.","cleans":"sprzątania","clean1":"sprzątanie","per_clean":"Każde sprzątanie w tym miesiącu","avg_clean":"średnio {d}","col_area":"Powierzchnia","last_cleans":"Ostatnie sprzątania","no_clean_month":"W tym miesiącu jeszcze bez sprzątania","no_clean":"Jeszcze bez sprzątania","vac_hist":"Sumy pochodzą z liczników robota, pojedyncze sprzątania z historii Home Assistant (ostatnie {n} dni).","st_paused":"Wstrzymane","st_returning":"Wraca do stacji","st_charging":"Ładuje się","st_docked_w":"W stacji","st_idle":"Bezczynne","st_off":"Wyłączone","stopped":"Bezczynne","yesterday":"wczoraj","u_min":"min","u_h":"godz.","start":"Start","so_far":"dotąd","no_cycle":"Jeszcze bez cyklu","last_cycle":"Ostatni cykl {d}","ended_at":"Skończone o {t}","reminders":"+{n} przypomnień do {t}","reminder1":"+1 przypomnienie o {t}","end_est":"Przewidywany koniec","left":"zostało {d}","almost":"zaraz skończy","est_from_avg":"szacunek z podobnych cykli","running_for":"Pracuje od {d}","btn_empty":"Opróżnione","btn_seen":"Zrobione","btn_resume":"Wznów sprzątanie","m_switch_off":"Wyłącz gniazdko","m_remind":"Przypomnij później","details":"Szczegóły","settings":"Ustawienia","more":"Więcej","details_link":"Szczegóły, zużycie i cykle","done_empty":"Zrobione: przypomnienia ustają.","done_remind":"Przypomni później.","done_switch":"Gniazdko wyłączone.","done_resume":"Sprzątanie wznowione.","err":"Błąd","new_dev":"Nowe urządzenia: {n}","new_dev1":"1 nowe urządzenie","battery":"Bateria","consumable":"{n}: {p}%","maint_in":"pozostało cykli: {c}","maint_next":"przy następnym cyklu","maint_due":"do zrobienia","maint_of":"{d} z {e}","maint_done":"Zrobione","confirm_maint":"Oznaczyć «{n}» jako zrobione? Liczenie zacznie się od nowa.","conn_lost":"utracono połączenie: ostatni znany stan","cons_h":"Materiały eksploatacyjne","commands":"Polecenia","tap_again":"Dotknij ponownie, aby potwierdzić","empty_since":"Do opróżnienia od","done_since":"Zakończono","avg_cycle":"Średni cykl","maint_tab":"Konserwacja","tab_stats_short":"Zużycie","read_failed":"Nie udało się odczytać historii ({e}); ponowię za chwilę.","retry":"Ponów","see_chart":"Pokaż wykres","back":"Wstecz","avg_line":"średnio {v}","tap_bar":"Dotknij słupka, aby zobaczyć cykl","k_station":"Stacja","off_since":"Wyłączone od","close":"Zamknij","power_now":"teraz","p_today":"Dziś","p_week":"Tydzień","p_month":"Miesiąc","p_year":"Rok","cycles":"cykli","cycle1":"cykl","per_cycle":"Zużycie na cykl w tym miesiącu","short":"Krótkie","long":"Długie","anomalous":"Nietypowe","avg":"śr. {d}, {k}","last_cycles":"Ostatnie cykle","col_start":"Start","col_dur":"Czas","col_cost":"Koszt","no_cycle_month":"W tym miesiącu jeszcze bez cyklu","coarse":"Cykle sprzed ponad 10 dni liczone są co godzinę.","open_notifs":"Powiadomienia urządzenia","no_power":"Nie znaleziono czujnika mocy: podaj go jako `power_entity` w `appliances:`.","no_power_vac":"Robot sprzątający nie ma czujnika mocy: zużycie i cykle nie są liczone."}},"pt":{"SN_STRINGS":{"presence":"Presença","time_band":"Faixa horária","quiet":"Silêncio","act_scen":"Cenários ativos","on":"ligado","off":"desligado","active":"ativo","dnd":"Não incomodar","tap_silence":"toque para silenciar","snooze":"Pausa","min":"min","pause_nc":"pausar não críticas","snoozed":"Em pausa","until":"até","tap_clear":"toque para limpar","announce":"Anunciar","intercom":"intercomunicador","announce_ph":"Anunciar em todos os altifalantes…","send":"Enviar","announced":"Anunciado","cleared":"Pausas removidas","snoozed_for":"Notificações não críticas em pausa durante","sent":"Enviadas","yesterday":"ontem","deliveries":"Entregas","last_notif":"Última notificação","transports":"Transportes","delivered":"entregue","failed":"falhou","channels":"canais","none":"nenhum","no_transports":"nenhuma entidade de transporte encontrada","tr_used":"usado por","tr_unused":"nenhum canal o usa","start":"início","volume":"volume","now":"agora","crosses":"passa a meia-noite","no_voice":"sem voz","mute_hint":"Uma faixa a <b>0%</b> não envia <b>nenhum anúncio por voz</b> (Alexa e TTS desligados, push e painel continuam a ser entregues). Os alertas críticos e de prioridade alta falam sempre.","enabled":"ativado","grp_auto":"Arrancam sozinhos","grp_named":"Só quando indicados na chamada","grp_scen":"Só com um cenário","grp_fallback":"Reserva, quando os outros falham","ch_title":"Canais","ch_count":"{on} de {tot} ligados","off_manual":"desligado","paused_by":"em pausa agora por","on_by":"ligado agora através de","fixed_targets":"destinos fixos","no_deliveries":"nenhuma entidade de entrega encontrada","home":"em casa","away":"fora","devices":"dispositivos","devices_1":"dispositivo","rc_test":"Enviar um teste","rc_test_confirm":"Toque de novo para enviar","rc_test_sent":"Teste enviado","rc_test_title":"Teste SuperNotify","rc_test_msg":"Mensagem de teste do painel,","overrides":"substituições de entrega","overrides_1":"substituição de entrega","no_contact":"sem contactos","no_recipients":"nenhuma entidade de destinatário encontrada","details":"Detalhes","h_update":"atualização disponível:","h_restart":"reinicie o Home Assistant para concluir a atualização","h_uptodate":"atualizado","h_transport_err":"transportes com erros","h_channels_off":"canais desligados","h_all_good":"Tudo bem","h_failures":"falhas","h_failures_1":"falha","h_transport_err_1":"transporte com erros","h_channels_off_1":"canal desligado","channels_1":"canal","band_early_morning":"Madrugada","band_morning":"Manhã","band_afternoon":"Tarde","band_evening":"Fim de tarde","band_night":"Noite","band_late_night":"Noite avançada","h_look_1":"1 coisa a verificar","h_look_n":"{n} coisas a verificar","h_rest_ok":"todo o resto funciona","h_ch_on":"{on} de {tot} canais ligados","h_open":"Abrir","ln_delivered":"entregue","ln_failed":"falhou","ln_why":"Porquê","tgt_loading":"a carregar o seletor…","bands_empty_t":"Ainda sem faixas horárias","bands_empty":"Adicione uma faixa por cada parte do dia: um input_datetime para o início e um input_number para o volume da voz.","active_now":"ativo agora","disabled":"desativado","other":"Outros","manual":"manual","apply_now":"aplicar agora","applied":"Aplicado","apply_off":"toque para deixar de aplicar","enabled_lbl":"ativado","reset_overrides":"Repor substituições","reset_done":"substituições repostas","transport_off":"transporte desligado","last_notified":"última notificação","never_notified":"nunca notificado","media":"multimédia","no_scenarios":"nenhuma entidade de cenário encontrada","sim_pick":"🎬 Cenários — toque para simular","sim_fire":"📤 Canais","sim_hint":"Dados reais do motor (serviços enquire). A filtragem de entregas por prioridade acontece no motor e não é simulada aqui. Desativado prevalece sobre ativado, como na combinação em execução.","sim_none":"nenhuma entrega seria acionada","sim_go":"Seria enviado","sim_stop":"Não seria enviado","sim_r_default":"arranca sozinho","sim_r_on":"ligado por","sim_r_off":"desligado por","sim_r_named":"só quando indicado na chamada","sim_r_scen":"só com um cenário que o ligue","sim_r_fallback":"reserva, quando os outros falham","sim_r_switched":"desligado","title":"Título","message":"Mensagem","priority":"Prioridade","channels_lbl":"Canais — nenhum escolhido = encaminhamento normal","camera_lbl":"Captura da câmara","preview":"Pré-visualização","no_title":"(sem título)","no_message":"(sem mensagem)","default_prio":"predefinida (média)","comp_hint":"Os canais escolhidos são enviados com delivery_selection: fixed (só esses são acionados). Crítica é mesmo crítica — sirenes incluídas.","critical_confirm":"Enviar uma notificação CRÍTICA? Sirenes e volume máximo incluídos.","sent_toast":"Enviado","write_or_pick":"Escreva uma mensagem, ou escolha uma câmara ou um canal","send_err":"Não enviado","dry_btn":"Experimentar sem enviar","dry_title":"Se o enviasse agora","dry_err":"A simulação falhou","dry_nobody":"nenhum destinatário, só destinos diretos","dry_none":"Nenhum canal selecionado","dry_scen":"Cenários ativos","dry_raw":"Resposta em bruto","dry_prio":"Prioridade","dry_would_n":"canais enviariam","dry_nothing":"Nada seria enviado","dry_dupe":"Duplicado de uma notificação recente: seria descartada","dry_no_dupe":"Verificação de duplicados não simulada, por isso o Enviar real logo a seguir não é bloqueado.","dry_home":"Casa","dry_empty":"O SuperNotify não deu resposta: é a 2.12 ou posterior?","prio_minimum":"Mínima","prio_low":"Baixa","prio_medium":"Média","prio_high":"Alta","prio_critical":"Crítica","target_lbl":"Destino — pessoas, dispositivos, áreas, pisos, etiquetas","custom_target_lbl":"Destinos personalizados (e-mail, IDs do Telegram, …) — separados por vírgulas","adv_title":"Opções avançadas","adv_spoken":"Mensagem falada (Alexa, TTS)","adv_spoken_ph":"o que os altifalantes dizem, se for diferente do texto","adv_apply":"Aplicar estes cenários","adv_require":"Enviar só se estes cenários estiverem ativos","adv_constrain":"Considerar só estes cenários","adv_snapshot":"Imagem a partir de um URL","adv_debug":"Depuração: registar o rastreio completo da seleção (mostrado pelo cartão Porquê)","custom_target_ph":"ex. user@example.com, 123456789","native_target_tag":"🎯 área/piso/etiqueta nativos","target_warn":"⚠️ Áreas, pisos e etiquetas só são resolvidos por notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts e chime. Com qualquer outro canal — ou com o encaminhamento predefinido quando nenhum canal é escolhido acima — a notificação pode ficar silenciosamente sem destino. Escolha um canal compatível, ou adicione diretamente uma pessoa/dispositivo.","aut_search":"Pesquisar automações…","aut_all":"Todas","aut_none":"Sem resultados","aut_err":"Manifesto não encontrado — gere-o com tools/genera_vista_automazioni.py","aut_updated":"lista atualizada","aut_count":"automações","aut_count_1":"automação","never":"nunca","ago_now":"agora","ago_min":"min atrás","ago_h":"h atrás","ago_d":"d atrás","aut_disabled_only":"Só desativadas","grp_active":"ativos","repeat":"Repetir","skipped_n":"ignorados","left":"restantes","missed_n":"perdidos","snz_all":"tudo","snz_nc":"não críticas","snz_prio":"prioridade","snz_transport":"transporte","snz_for":"durante","snz_choose":"escolha o quê e por quanto tempo","snz_title":"Pausar notificações","snz_what":"O quê","snz_nc_l":"Não críticas","snz_all_l":"Tudo","snz_ch":"Um canal","snz_pr":"Uma prioridade","snz_who":"Para quem","snz_everyone":"Todos","snz_me":"Só eu","snz_len":"Quanto tempo","snz_forever":"Até eu retomar","snz_go":"Pausar","snz_close":"Fechar","rs_hand":"à mão","rs_voice":"por voz","rs_assist":"pelo assistente","snz_voice_info":"As suas pausas passam pelos comandos de voz do SuperNotify: são só suas.","snz_voice_off":"Os comandos de voz do SuperNotify estão desligados: ative-os nas opções da integração.","snz_resume_mine":"Retomar as minhas","go_open":"Mostrar","dl_probe":"Experimentar este canal","probe_msg":"Teste de canal a partir do painel","sc_why":"Porquê","sc_yes":"Aplica-se agora","sc_no":"Não se aplica agora","sc_manual_why":"Cenário manual: aplicado à mão","sc_no_cond":"Sem condições","sc_off_sw":"Desligado","sc_not_eval":"não verificado","sc_now":"agora","sc_diff_btn_on":"O que muda se se aplicar","sc_diff_btn_off":"O que muda sem ele","sc_diff_on":"Se se aplicasse, para uma notificação média agora:","sc_diff_off":"Sem ele, para uma notificação média agora:","sc_diff_add":"também enviaria","sc_diff_rem":"deixaria de enviar","sc_diff_none":"sem diferença","c_state":"{e} está {s}","c_template":"condição de modelo","c_time":"hora","c_after":"depois de","c_before":"antes de","c_numeric":"{e}","c_above":"acima de","c_below":"abaixo de","c_and":"todas estas","c_or":"pelo menos uma destas","c_not":"nenhuma destas","c_or_join":" ou ","sim_hint_dry":"A resposta do próprio SuperNotify (simulação, nada é enviado): uma notificação agora, com a prioridade e só os cenários escolhidos acima.","sim_msg":"Teste do simulador","sim_prio":"Prioridade","sa_snooze":"{what} em pausa durante {len}.","sa_silence":"{what} silenciadas até nova ordem.","sa_resume":"{what} reativadas.","sa_resume_one":"Pausa terminada: {x}.","sa_resume_all":"Notificações reativadas.","sa_w_nc":"Notificações não críticas","sa_w_all":"Todas as notificações","sa_w_ch":"Canal {x}","sa_w_pr":"Notificações de prioridade {x}","sa_w_mine":"As suas notificações","sa_for":"para {x}","sa_min":"{n} minutos","sa_hour":"uma hora","sa_hours":"{n} horas","occ_title":"Quem está em casa","occ_home_l":"Em casa","occ_ALL_HOME":"Todos em casa","occ_ALL_AWAY":"Todos fora","occ_LONE_HOME":"Só um em casa","occ_MULTI_HOME":"Alguns em casa","occ_UNDEFINED_OCCUPANTS":"Ninguém monitorizado","h_repairs":"reparações do SuperNotify","h_repairs_1":"reparação do SuperNotify","det_more":"Todos os atributos","det_yes":"sim","det_no":"não","det_action":"Ação","det_target":"Destinos fixos","det_target_req":"Requer um destino","det_target_use":"Os destinos usam","det_inclusion":"Usado quando","det_prio":"Prioridades","det_occ":"Quem tem de estar em casa","det_transport":"Transporte","det_data":"Dados","det_debug":"Depuração","det_err_last":"Último erro","det_err_in":"Em","det_err_n":"Erros desde o arranque","det_select":"Seleção","adv_html":"Texto para e-mail (HTML)","adv_clip":"Clipe de vídeo a partir de um URL","adv_actions":"Botões na notificação","adv_act_id":"id da ação","adv_act_title":"texto do botão","adv_act_add":"+ botão","adv_groups":"Grupos de botões (vírgula)","adv_dc":"Definições do canal para esta notificação","adv_dc_ph":"chave: valor, um por linha","adv_dc_add":"+ canal","snz_active":"Em pausa agora","snz_resume":"Retomar","snz_resume_all":"Retomar tudo","snz_until_resumed":"até retomar","snz_done":"Em pausa","snz_resumed":"Retomado","no_notif":"ainda sem notificações","st_title":"Utilização","st_days_short":"d","st_total":"Notificações","st_avg":"por dia","st_today":"Hoje","st_vs_avg":"vs. média","st_peak_hour":"Hora de pico","st_top_channel":"Canal mais usado","st_errors":"Erros de canal","st_of_sends":"dos envios por canal","st_daily":"Por dia","st_hourly":"Por hora do dia","st_weekday":"Por dia da semana","st_channels":"Canais — mais usados","st_priority":"Prioridade","st_period":"Período do dia","st_insights":"Observações","st_no_data":"Ainda sem histórico — os dados aparecem após as primeiras notificações.","st_loading":"a carregar…","st_installed":"instalada","st_latest":"mais recente","st_uptodate":"atualizado","st_update":"atualização disponível","st_restart":"reinício necessário","st_logged":"registadas","st_from_archive":"do arquivo do SuperNotify","st_archive_err":"arquivo lido em parte","st_wd":["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"],"st_i_share":"{p}% de todos os envios por canal passam por {c}.","st_i_peak":"A hora mais movimentada é às {h}:00 ({n} notificações em {d} dias).","st_i_night":"{p}% das notificações chegam entre as 23:00 e as 07:00 — considere um cenário Não incomodar se não as quiser.","st_i_night_ok":"Apenas {p}% das notificações chegam à noite (23–07): as horas de silêncio estão a funcionar.","st_i_weekend":"Os dias de fim de semana têm {p}% {dir} notificações do que os dias úteis.","st_i_errors":"{n} erros de canal em {d} dias, sobretudo em {c}.","st_i_noerr":"Nenhum erro de canal nos últimos {d} dias.","st_i_prio":"{p}% das notificações têm prioridade {prio}.","st_i_trend":"Últimos 7 dias: {n}/dia, {dir} {p}% face aos 7 anteriores.","st_more":"mais","st_less":"menos","st_up":"subida de","st_down":"descida de"},"SN_ARCH_STRINGS":{"search":"Pesquisar título ou mensagem…","f_all":"Todas","f_today":"Hoje","f_whisper":"Sussurradas","wh":"sussurrada","said":"A Alexa disse","said_by":"{ch} disse","none":"nenhuma notificação corresponde","loading":"a ler o arquivo…","recent":"últimas notificações","read_at":"lido às","today":"Hoje","yesterday":"Ontem","failed":"falhou","missed":"perdido","reasons":{"doppione":"duplicado","nessun target":"sem destino","errore":"erro","condizione":"condição","scenario":"cenário","presenza":"presença","priorita":"prioridade","spento":"desligado","pausa":"em pausa","transport spento":"transporte desligado","nessuna azione":"sem ação","dati non validi":"dados inválidos","sconosciuto":"desconhecido"},"f_appliance":"Eletrodomésticos","ap_scope":"entre as últimas {n} lidas por completo: as mais antigas não são reconhecidas"},"SN_WHY_STRINGS":{"pick":"Escolha uma notificação para ver porque foi para onde foi.","loading":"a carregar…","none":"nenhuma notificação","gone":"esta notificação já não está no arquivo","priority":"prioridade","dupe":"duplicado","outcomes":{"success":"entregue","partial_delivery":"entregue em parte","dupe":"duplicado","failed":"falhou","error":"falhou","fallback_delivery":"entregue pelo canal de reserva","no_delivery":"não entregue"},"step_call":"Chamada","step_scen":"Cenários","step_people":"Pessoas","step_ch":"Canais","call_auto":"nenhum canal indicado: encaminhamento normal","call_named":"indicados na chamada:","call_debug":"com depuração","nobody":"ninguém em casa","ch_sent":"enviados","ch_problems":"a verificar","ch_skipped":"ignorados","pb_failed":"falhou","pb_missed":"pedido mas não enviado","grp_skipped":"ignorados por uma regra: normal","grp_not":"não envolvidos","trace_title":"Rastreio completo da seleção","fix":{"NO_TARGET":"Nenhum destinatário tem um endereço para este canal: adicione um a um destinatário, dê ao canal destinos fixos ou deixe-o fora desta chamada.","ERROR":"A integração por trás deste canal respondeu com um erro: verifique a respetiva entrada no registo.","NO_ACTION":"O canal não tem nenhuma ação a chamar: defina `action:` na entrega.","INVALID_ACTION_DATA":"Os dados passados à ação foram rejeitados: verifique o `data:` da chamada ou da entrega."},"no_scenarios":"nenhum cenário em vigor","applied":"forçado pela chamada","required":"exigido pela chamada","constrain":"limitado pela chamada a","home":"em casa","away":"fora","no_channels":"nenhum canal foi selecionado","st_ok":"entregue","st_err":"falhou","st_skip":"ignorado","calls":"chamadas","calls_1":"chamada","target_required":"destino exigido:","started_by":"selecionado por","scen_would_off":"desligado por (anulado)","src_default":"sempre ligado (predefinição)","src_scen":"cenário","src_call":"a própria chamada","src_recipient":"destinatário","r_off_by":"desligado por","call_targets":"destinos na chamada","cats":{"entity_id":"entidades","mobile_app_id":"dispositivos","person_id":"pessoas","email":"e-mail","phone":"telefone","device_id":"dispositivos"},"r_call_off":"excluído pela chamada","r_scen_off":"desligado por um cenário em vigor","r_disabled":"desligado","r_transport_off":"o seu transporte está desligado","r_only_scen":"só arranca quando um cenário o liga","r_only_fallback":"apenas reserva","r_only_explicit":"só arranca quando pedido pelo nome","r_priority":"não para esta prioridade","r_unknown":"não reconstituível sem o rastreio","from_config":"Os motivos dos canais que não arrancaram são reconstituídos a partir da configuração ATUAL, não da que existia na altura.","from_trace":"Os motivos vêm do rastreio da seleção arquivado com a notificação.","st_time":"demorou","st_slow":"mais lento","st_rate":"dos canais tiveram êxito","ua_title":"Destinos que nenhum canal aceitou","ua_hint":"Estavam na chamada, mas nenhum canal selecionado aceita este tipo de destino.","un_title":"Nomes que não existem","sent_by":"Enviado por","sent_auto":"automação","sent_script":"script","sent_person":"","sent_unknown":"remetente desconhecido (nenhuma automação ou pessoa no seu contexto)","no_trace":"O rastreio completo da seleção só é registado quando a chamada notify tem debug: true, e arquivado quando os diagnósticos do arquivo o incluem.","reasons":{"NO_TARGET":"sem destino utilizável","DUPE":"duplicado de uma notificação recente","PRIORITY":"não para esta prioridade","SNOOZE":"em pausa","SNOOZED":"em pausa","DELIVERY_CONDITION":"condição da entrega falsa","OCCUPANCY":"regra de presença","ERROR":"erro","DELIVERY_DISABLED":"desligado","SCENARIO":"cenário","TRANSPORT_DISABLED":"o seu transporte está desligado","NO_SCENARIO":"um cenário exigido não está em vigor","NO_ACTION":"nenhuma ação a chamar","INVALID_ACTION_DATA":"dados da ação inválidos","UNKNOWN":"motivo desconhecido"}},"SN_TOOLS_STRINGS":{"maint":"Manutenção","enq":"Perguntar ao SuperNotify","refresh":"Publicar de novo todas as entidades","refresh_btn":"Atualizar","resume_btn":"Retomar","refreshed":"Entidades publicadas de novo.","resume_all":"Retomar todas as pausas","cleared_n":"pausas retomadas","purge_arch":"Limpar o arquivo","purge_media":"Limpar as imagens","older":"com mais de","days":"dias","purge_btn":"Limpar","confirm":"Toque de novo para confirmar","purged":"eliminados","remaining":"restantes","reset":"Desfazer as alterações feitas à mão","reset_btn":"Repor","reset_none":"Nada a repor: está tudo como configurado.","reset_done":"De volta à configuração:","k_all":"tudo","k_scenario":"cenários","k_delivery":"canais","k_recipient":"pessoas","k_transport":"transportes","q_config":"Configuração","q_scen":"Cenários","q_active":"Cenários ativos","q_by_scen":"Canais por cenário","q_implicit":"Canais predefinidos","q_recipients":"Destinatários","q_occupancy":"Quem está em casa","q_snoozes":"Pausas","q_last":"Última notificação","copy":"Copiar JSON","copied":"Copiado","close":"Fechar","empty":"(vazio)","err":"O SuperNotify respondeu com um erro:","settings":"Definições da integração","running":"a processar…","more":"mais"},"SN_FORM_LABELS":{"_common":"Aspeto e texto","style":"Cores","icons":"Ícones","show_version":"Mostrar a versão do cartão","intro":"Texto de introdução no topo","title":"Título","dnd_entity":"Interruptor Não incomodar","quiet_entity":"Estado de silêncio calculado (opcional)","presence_entity":"Pessoa para a barra de estado","archive_days":"Limpeza do arquivo: com mais de (dias)","media_days":"Limpeza das imagens: com mais de (dias)","occupancy":"Quem está em casa (do SuperNotify)","repairs":"Reparações do SuperNotify na lista de estado","snooze_announce":"Dizer as pausas em voz alta (canal de anúncios)","snooze_via":"As pausas passam por","o_event":"o evento dos botões push (admin)","o_voice":"os comandos de voz","snooze_minutes":"Duração da pausa (minutos)","snooze_panel":"O mosaico Pausa abre o painel de pausa","announce_delivery":"Canal para anúncios","last_notification":"Mostrar a última notificação","last_channels":"Um chip por canal na última notificação","repeat_entity":"Botão repetir a última (opcional)","tile_layout":"Mosaicos","tile_columns":"Colunas de mosaicos (vazio = automático)","update_entity":"Entidade de atualização do SuperNotify","cards_update_entity":"Entidade de atualização dos cartões","health":"Estado no topo","poll_seconds":"Atualizar a cada (segundos)","group":"Agrupar pela forma como um canal arranca","hide_defaults":"Ocultar canais automáticos DEFAULT_","limit":"Notificações na lista","expand":"Abrir as partes recolhidas","max_height":"Altura máxima (CSS, ex. 70vh)","trigger_entity":"Atualizar quando isto mudar","dry_run":"Mostrar \"Experimentar sem enviar\"","dry_run_dupe_check":"Simular também a verificação de duplicados","days":"Dias mostrados por predefinição","manifest_url":"URL do manifesto das automações","o_supernotify":"SuperNotify","o_theme":"Tema do Home Assistant","o_mdi":"Ícones do Home Assistant","o_emoji":"Emoji","o_row":"Ícone à esquerda","o_stacked":"Alto, ícone em cima","o_auto":"Automático"},"SN_NATIVE_STR":{"all_good":"Tudo bem","paused":"Em pausa","resume":"Retomar","test":"Enviar um teste","sure":"Toque de novo para enviar","sent":"Enviado","last":"Última","none":"Ainda sem notificações","ago":"atrás","h":"h","err":"transportes com erros","off":"canais desligados"},"SN_STRATEGY_TITLES":{"home":"Início","archive":"Arquivo","send":"Enviar","setup":"Configuração","stats":"Estatísticas","tools":"Ferramentas","title":"SuperNotify","appliances":"Eletrodomésticos"},"SN_APPL_STRINGS":{"title":"Eletrodomésticos","loading":"a ler…","none":"Sem eletrodomésticos: adicione um no Appliance Autonotify (Definições → Dispositivos e serviços).","st_run":"A funcionar","st_cleaning":"A limpar","st_done":"Terminado · por esvaziar","st_done_other":"Terminado","st_err":"Precisa de ajuda","m_switch_on":"Ligar tomada","done_switch_on":"Tomada ligada.","done_action":"Feito: {n}.","confirm_action":"Executar «{n}»?","open_entity":"Abrir para alterar","chip_notifs":"Notificações","chip_device":"Dispositivo","not_found":"Nenhum aparelho ou dispositivo chamado «{n}».","last7":"Últimos 7 dias","col_day":"Dia","col_cycles":"Ciclos","col_time":"Tempo","col_energy":"Consumo","source_h":"Origem","manual_src":"adicionado à mão: a funcionar acima de {w}","tab_info":"Resumo","tab_stats":"Consumo e ciclos","tab_cleans":"Limpezas","tab_prints":"Impressões","last_run":"Último ciclo","avg_run":"Média","reminders_h":"Notificações","plug":"Tomada","plug_on":"ligada","plug_off":"desligada","error_h":"Erro","open_device":"O dispositivo no Home Assistant","prints":"impressões","print1":"impressão","per_print":"Cada impressão do mês","last_prints":"Últimas impressões","no_print_month":"Ainda nenhuma impressão este mês","no_print":"Ainda nenhuma impressão","col_fil":"Filamento","failed":"falhada","per_run":"Cada ciclo do mês","dev_hist":"Cada uma vem do histórico do Home Assistant (últimos {n} dias); as horas, do contador do aparelho quando o tem.","cleans":"limpezas","clean1":"limpeza","per_clean":"Cada limpeza do mês","avg_clean":"média {d}","col_area":"Área","last_cleans":"Últimas limpezas","no_clean_month":"Ainda nenhuma limpeza este mês","no_clean":"Ainda nenhuma limpeza","vac_hist":"Os totais vêm dos contadores do robô; cada limpeza, do histórico do Home Assistant (últimos {n} dias).","st_paused":"Em pausa","st_returning":"A voltar à base","st_charging":"A carregar","st_docked_w":"Na base","st_idle":"Parado","st_off":"Desligado","stopped":"Parados","yesterday":"ontem","u_min":"min","u_h":"h","start":"Início","so_far":"até agora","no_cycle":"Ainda nenhum ciclo","last_cycle":"Último ciclo {d}","ended_at":"Terminou às {t}","reminders":"+{n} lembretes até às {t}","reminder1":"+1 lembrete às {t}","end_est":"Fim previsto","left":"faltam {d}","almost":"quase a terminar","est_from_avg":"estimativa de ciclos parecidos","running_for":"A funcionar há {d}","btn_empty":"Esvaziado","btn_seen":"Feito","btn_resume":"Retomar limpeza","m_switch_off":"Desligar a tomada","m_remind":"Lembrar mais tarde","details":"Detalhes","settings":"Definições","more":"Mais","details_link":"Detalhes, consumo e ciclos","done_empty":"Feito: os lembretes param.","done_remind":"Vai lembrar mais tarde.","done_switch":"Tomada desligada.","done_resume":"Limpeza retomada.","err":"Erro","new_dev":"{n} dispositivos novos","new_dev1":"1 dispositivo novo","battery":"Bateria","consumable":"{n} a {p}%","maint_in":"daqui a {c} ciclos","maint_next":"no próximo ciclo","maint_due":"a fazer","maint_of":"{d} de {e}","maint_done":"Feito","confirm_maint":"Marcar «{n}» como feito? A contagem recomeça.","conn_lost":"ligação perdida: último estado conhecido","cons_h":"Consumíveis","commands":"Comandos","tap_again":"Toque de novo para confirmar","empty_since":"Por esvaziar há","done_since":"Terminado há","avg_cycle":"Ciclo médio","maint_tab":"Manutenção","tab_stats_short":"Consumo","read_failed":"Não foi possível ler o histórico ({e}); tento de novo em breve.","retry":"Tentar de novo","see_chart":"Ver gráfico","back":"Voltar","avg_line":"média {v}","tap_bar":"Toque numa barra para ver esse ciclo","k_station":"Base","off_since":"Desligado há","close":"Fechar","power_now":"agora","p_today":"Hoje","p_week":"Semana","p_month":"Mês","p_year":"Ano","cycles":"ciclos","cycle1":"ciclo","per_cycle":"Consumo por ciclo este mês","short":"Curtos","long":"Longos","anomalous":"Anómalos","avg":"média {d}, {k}","last_cycles":"Últimos ciclos","col_start":"Início","col_dur":"Duração","col_cost":"Custo","no_cycle_month":"Ainda nenhum ciclo este mês","coarse":"Os ciclos com mais de 10 dias são contados à hora.","open_notifs":"Notificações do eletrodoméstico","no_power":"Nenhum sensor de potência encontrado: indique-o com `power_entity` em `appliances:`.","no_power_vac":"Um robot aspirador não tem sensor de potência: consumo e ciclos não são contados."}},"ja":{"SN_STRINGS":{"presence":"在宅状況","time_band":"時間帯","quiet":"静音","act_scen":"有効なシナリオ","on":"オン","off":"オフ","active":"有効","dnd":"おやすみモード","tap_silence":"タップで消音","snooze":"一時停止","min":"分","pause_nc":"重要でない通知を停止","snoozed":"一時停止中","until":"まで","tap_clear":"タップで解除","announce":"アナウンス","intercom":"インターホン","announce_ph":"すべてのスピーカーでアナウンス…","send":"送信","announced":"アナウンスしました","cleared":"一時停止を解除しました","snoozed_for":"重要でない通知を一時停止しました:","sent":"送信済み","yesterday":"昨日","deliveries":"配信","last_notif":"最後の通知","transports":"トランスポート","delivered":"配信済み","failed":"失敗","channels":"チャンネル","none":"なし","no_transports":"トランスポートのエンティティが見つかりません","tr_used":"使用中:","tr_unused":"使用しているチャンネルなし","start":"開始","volume":"音量","now":"現在","crosses":"日付をまたぐ","no_voice":"音声なし","mute_hint":"<b>0%</b> の時間帯は<b>音声アナウンスを一切行いません</b>（Alexa と TTS はオフ、プッシュとダッシュボードには届きます）。緊急・高優先度の通知は常に読み上げます。","enabled":"有効","grp_auto":"自動で開始","grp_named":"呼び出しで指定されたときのみ","grp_scen":"シナリオがあるときのみ","grp_fallback":"予備（他が失敗したとき）","ch_title":"チャンネル","ch_count":"{tot} 件中 {on} 件オン","off_manual":"オフにされています","paused_by":"現在停止中:","on_by":"現在オン:","fixed_targets":"固定ターゲット","no_deliveries":"配信のエンティティが見つかりません","home":"在宅","away":"外出","devices":"台のデバイス","devices_1":"台のデバイス","rc_test":"テスト送信","rc_test_confirm":"もう一度タップで送信","rc_test_sent":"テストを送信しました","rc_test_title":"SuperNotify テスト","rc_test_msg":"ダッシュボードからのテストメッセージ、","overrides":"件の配信オーバーライド","overrides_1":"件の配信オーバーライド","no_contact":"連絡先なし","no_recipients":"受信者のエンティティが見つかりません","details":"詳細","h_update":"アップデートあり:","h_restart":"アップデートを完了するには Home Assistant を再起動してください","h_uptodate":"最新です","h_transport_err":"件のトランスポートでエラー","h_channels_off":"件のチャンネルがオフ","h_all_good":"問題なし","h_failures":"件の失敗","h_failures_1":"件の失敗","h_transport_err_1":"件のトランスポートでエラー","h_channels_off_1":"件のチャンネルがオフ","channels_1":"チャンネル","band_early_morning":"早朝","band_morning":"朝","band_afternoon":"午後","band_evening":"夕方","band_night":"夜","band_late_night":"深夜","h_look_1":"確認が必要な項目が1件","h_look_n":"確認が必要な項目が {n} 件","h_rest_ok":"その他は正常です","h_ch_on":"{tot} チャンネル中 {on} 件オン","h_open":"開く","ln_delivered":"配信済み","ln_failed":"失敗","ln_why":"理由","tgt_loading":"選択画面を読み込み中…","bands_empty_t":"時間帯がまだありません","bands_empty":"1日の区切りごとに時間帯を1つ追加します。開始時刻用の input_datetime と音声音量用の input_number を用意してください。","active_now":"現在有効","disabled":"無効","other":"その他","manual":"手動","apply_now":"今すぐ適用","applied":"適用中","apply_off":"タップで適用を解除","enabled_lbl":"有効","reset_overrides":"オーバーライドをリセット","reset_done":"オーバーライドをリセットしました","transport_off":"トランスポートがオフ","last_notified":"最終通知","never_notified":"通知履歴なし","media":"メディア","no_scenarios":"シナリオのエンティティが見つかりません","sim_pick":"🎬 シナリオ — タップでシミュレート","sim_fire":"📤 チャンネル","sim_hint":"エンジンの実データ（照会サービス）です。優先度による配信の絞り込みはエンジン側で行われ、ここではシミュレートされません。実行時の統合と同様に、無効が有効より優先されます。","sim_none":"送信される配信はありません","sim_go":"送信される","sim_stop":"送信されない","sim_r_default":"自動で開始","sim_r_on":"オンにしたもの:","sim_r_off":"オフにしたもの:","sim_r_named":"呼び出しで指定されたときのみ","sim_r_scen":"オンにするシナリオがあるときのみ","sim_r_fallback":"予備（他が失敗したとき）","sim_r_switched":"オフにされています","title":"タイトル","message":"メッセージ","priority":"優先度","channels_lbl":"チャンネル — 未選択なら通常のルーティング","camera_lbl":"カメラのスナップショット","preview":"プレビュー","no_title":"（タイトルなし）","no_message":"（メッセージなし）","default_prio":"デフォルト（中）","comp_hint":"選択したチャンネルは delivery_selection: fixed で送信されます（それらのみ送信）。「緊急」は本当に緊急扱いです — サイレンも鳴ります。","critical_confirm":"緊急通知を送信しますか？サイレンと最大音量を含みます。","sent_toast":"送信しました","write_or_pick":"メッセージを入力するか、カメラかチャンネルを選んでください","send_err":"送信されませんでした","dry_btn":"送信せずに試す","dry_title":"今送信した場合","dry_err":"ドライランに失敗しました","dry_nobody":"受信者なし、直接ターゲットのみ","dry_none":"チャンネルが選択されていません","dry_scen":"有効なシナリオ","dry_raw":"生の応答","dry_prio":"優先度","dry_would_n":"チャンネルで送信予定","dry_nothing":"何も送信されません","dry_dupe":"最近の通知と重複しています: 破棄されます","dry_no_dupe":"重複チェックはシミュレートしていないため、直後の実際の送信はブロックされません。","dry_home":"在宅","dry_empty":"SuperNotify から応答がありません: バージョンは 2.12 以降ですか？","prio_minimum":"最低","prio_low":"低","prio_medium":"中","prio_high":"高","prio_critical":"緊急","target_lbl":"ターゲット — 人、デバイス、エリア、フロア、ラベル","custom_target_lbl":"カスタムターゲット（メール、Telegram ID など）— カンマ区切り","adv_title":"詳細オプション","adv_spoken":"読み上げメッセージ（Alexa、TTS）","adv_spoken_ph":"本文と異なる場合にスピーカーで読み上げる内容","adv_apply":"これらのシナリオを適用","adv_require":"これらのシナリオが有効な場合のみ送信","adv_constrain":"これらのシナリオのみを考慮","adv_snapshot":"URL からの画像","adv_debug":"デバッグ: 選択トレースをすべて記録（理由カードに表示）","custom_target_ph":"例: user@example.com, 123456789","native_target_tag":"🎯 ネイティブのエリア/フロア/ラベル","target_warn":"⚠️ エリア、フロア、ラベルを解決できるのは notify_entity、alexa_devices、html5、ntfy、kodi、media_player、tts、chime だけです。他のチャンネル — または上でチャンネルを選ばない場合のデフォルトのルーティング — では、通知がターゲットなしで黙って失われることがあります。対応するチャンネルを選ぶか、人やデバイスを直接追加してください。","aut_search":"オートメーションを検索…","aut_all":"すべて","aut_none":"一致なし","aut_err":"マニフェストが見つかりません — tools/genera_vista_automazioni.py で生成してください","aut_updated":"リスト更新","aut_count":"件のオートメーション","aut_count_1":"件のオートメーション","never":"なし","ago_now":"たった今","ago_min":"分前","ago_h":"時間前","ago_d":"日前","aut_disabled_only":"無効のみ","grp_active":"有効","repeat":"繰り返し","skipped_n":"スキップ","left":"残り","missed_n":"未送信","snz_all":"すべて","snz_nc":"重要でない通知","snz_prio":"優先度","snz_transport":"トランスポート","snz_for":"対象","snz_choose":"対象と時間を選択","snz_title":"通知を一時停止","snz_what":"対象","snz_nc_l":"重要でない通知","snz_all_l":"すべて","snz_ch":"チャンネル","snz_pr":"優先度","snz_who":"誰の分","snz_everyone":"全員","snz_me":"自分のみ","snz_len":"期間","snz_forever":"再開するまで","snz_go":"一時停止","snz_close":"閉じる","rs_hand":"手動","rs_voice":"音声","rs_assist":"アシスタント","snz_voice_info":"一時停止は SuperNotify の音声コマンド経由で行われ、あなたの分だけに適用されます。","snz_voice_off":"SuperNotify の音声コマンドがオフです: 統合のオプションでオンにしてください。","snz_resume_mine":"自分の分を再開","go_open":"表示","dl_probe":"このチャンネルを試す","probe_msg":"ダッシュボードからのチャンネルテスト","sc_why":"理由","sc_yes":"現在適用中","sc_no":"現在は適用されていません","sc_manual_why":"手動シナリオ: 手動で適用","sc_no_cond":"条件なし","sc_off_sw":"オフにされています","sc_not_eval":"未評価","sc_now":"現在","sc_diff_btn_on":"適用されたら何が変わるか","sc_diff_btn_off":"なければ何が変わるか","sc_diff_on":"適用された場合、今の「中」優先度の通知では:","sc_diff_off":"なかった場合、今の「中」優先度の通知では:","sc_diff_add":"追加で送信","sc_diff_rem":"送信されなくなる","sc_diff_none":"違いなし","c_state":"{e} が {s}","c_template":"テンプレート条件","c_time":"時刻","c_after":"以降","c_before":"以前","c_numeric":"{e}","c_above":"より上","c_below":"より下","c_and":"以下のすべて","c_or":"以下のいずれか","c_not":"以下のいずれでもない","c_or_join":" または ","sim_hint_dry":"SuperNotify 自身の回答です（ドライラン、何も送信されません）: 上で選んだ優先度とシナリオのみで今通知した場合。","sim_msg":"シミュレーターのテスト","sim_prio":"優先度","sa_snooze":"{what}を {len} 一時停止しました。","sa_silence":"{what}を追って通知があるまで消音しました。","sa_resume":"{what}を再開しました。","sa_resume_one":"一時停止終了: {x}。","sa_resume_all":"通知を再開しました。","sa_w_nc":"重要でない通知","sa_w_all":"すべての通知","sa_w_ch":"チャンネル {x}","sa_w_pr":"優先度「{x}」の通知","sa_w_mine":"あなたの通知","sa_for":"{x} の分","sa_min":"{n} 分間","sa_hour":"1時間","sa_hours":"{n} 時間","occ_title":"在宅中の人","occ_home_l":"在宅","occ_ALL_HOME":"全員在宅","occ_ALL_AWAY":"全員外出","occ_LONE_HOME":"1人だけ在宅","occ_MULTI_HOME":"数人が在宅","occ_UNDEFINED_OCCUPANTS":"追跡対象なし","h_repairs":"件の SuperNotify 修復","h_repairs_1":"件の SuperNotify 修復","det_more":"すべての属性","det_yes":"はい","det_no":"いいえ","det_action":"アクション","det_target":"固定ターゲット","det_target_req":"ターゲットが必要","det_target_use":"ターゲットの用途","det_inclusion":"使用条件","det_prio":"優先度","det_occ":"在宅が必要な人","det_transport":"トランスポート","det_data":"データ","det_debug":"デバッグ","det_err_last":"最後のエラー","det_err_in":"発生箇所","det_err_n":"起動以降のエラー","det_select":"選択","adv_html":"メール用テキスト（HTML）","adv_clip":"URL からの動画クリップ","adv_actions":"通知のボタン","adv_act_id":"アクション ID","adv_act_title":"ボタンのテキスト","adv_act_add":"+ ボタン","adv_groups":"ボタングループ（カンマ区切り）","adv_dc":"この通知のチャンネル設定","adv_dc_ph":"key: value、1行に1つ","adv_dc_add":"+ チャンネル","snz_active":"現在一時停止中","snz_resume":"再開","snz_resume_all":"すべて再開","snz_until_resumed":"再開するまで","snz_done":"一時停止しました","snz_resumed":"再開しました","no_notif":"通知はまだありません","st_title":"利用状況","st_days_short":"日","st_total":"通知","st_avg":"1日あたり","st_today":"今日","st_vs_avg":"平均比","st_peak_hour":"ピーク時間","st_top_channel":"最多チャンネル","st_errors":"チャンネルエラー","st_of_sends":"（チャンネル送信中）","st_daily":"日別","st_hourly":"時間帯別","st_weekday":"曜日別","st_channels":"チャンネル — 利用の多い順","st_priority":"優先度","st_period":"時間帯","st_insights":"気づき","st_no_data":"履歴はまだありません — 最初の通知の後にデータが表示されます。","st_loading":"読み込み中…","st_installed":"インストール済み","st_latest":"最新","st_uptodate":"最新です","st_update":"アップデートあり","st_restart":"再起動が必要","st_logged":"記録済み","st_from_archive":"SuperNotify のアーカイブから","st_archive_err":"アーカイブを一部のみ読み込み","st_wd":["月","火","水","木","金","土","日"],"st_i_share":"チャンネル送信全体の {p}% が {c} 経由です。","st_i_peak":"最も多いのは {h}:00 台です（{d} 日間で {n} 件の通知）。","st_i_night":"通知の {p}% が 23:00〜07:00 に届いています — 不要なら「おやすみ」シナリオを検討してください。","st_i_night_ok":"夜間（23〜07時）に届く通知は {p}% だけです。静かな時間帯が機能しています。","st_i_weekend":"週末は平日より通知が {p}% {dir}です。","st_i_errors":"{d} 日間でチャンネルエラーが {n} 件、主に {c} です。","st_i_noerr":"過去 {d} 日間、チャンネルエラーはありません。","st_i_prio":"通知の {p}% が優先度「{prio}」です。","st_i_trend":"直近7日間: 1日 {n} 件、前の7日間より {p}% {dir}。","st_more":"多い","st_less":"少ない","st_up":"増加","st_down":"減少"},"SN_ARCH_STRINGS":{"search":"タイトルやメッセージを検索…","f_all":"すべて","f_today":"今日","f_whisper":"ささやき","wh":"ささやき","said":"Alexa の発話","said_by":"{ch} の発話","none":"一致する通知はありません","loading":"アーカイブを読み込み中…","recent":"最新の通知","read_at":"読み込み時刻","today":"今日","yesterday":"昨日","failed":"失敗","missed":"未送信","reasons":{"doppione":"重複","nessun target":"ターゲットなし","errore":"エラー","condizione":"条件","scenario":"シナリオ","presenza":"在宅状況","priorita":"優先度","spento":"オフ","pausa":"一時停止中","transport spento":"トランスポートがオフ","nessuna azione":"アクションなし","dati non validi":"無効なデータ","sconosciuto":"不明"},"f_appliance":"家電","ap_scope":"全文を読み込んだ最新{n}件のみ。それより古いものは識別されません"},"SN_WHY_STRINGS":{"pick":"通知を選ぶと、なぜその宛先に届いたのかを確認できます。","loading":"読み込み中…","none":"通知なし","gone":"この通知はもうアーカイブにありません","priority":"優先度","dupe":"重複","outcomes":{"success":"配信済み","partial_delivery":"一部配信","dupe":"重複","failed":"失敗","error":"失敗","fallback_delivery":"フォールバックチャンネルで配信","no_delivery":"未配信"},"step_call":"呼び出し","step_scen":"シナリオ","step_people":"人","step_ch":"チャンネル","call_auto":"チャンネル指定なし: 通常のルーティング","call_named":"呼び出しで指定:","call_debug":"デバッグあり","nobody":"誰も在宅していません","ch_sent":"送信済み","ch_problems":"要確認","ch_skipped":"スキップ","pb_failed":"失敗","pb_missed":"指定されたが送信されず","grp_skipped":"ルールによりスキップ: 正常","grp_not":"対象外","trace_title":"選択トレース全体","fix":{"NO_TARGET":"このチャンネル用のアドレスを持つ受信者がいません: 受信者にアドレスを追加するか、チャンネルに固定ターゲットを設定するか、この呼び出しから外してください。","ERROR":"このチャンネルの元になっている統合がエラーを返しました: その統合のログを確認してください。","NO_ACTION":"このチャンネルには呼び出すアクションがありません: 配信に `action:` を設定してください。","INVALID_ACTION_DATA":"アクションに渡したデータが拒否されました: 呼び出しまたは配信の `data:` を確認してください。"},"no_scenarios":"有効なシナリオなし","applied":"呼び出しで強制","required":"呼び出しで必須","constrain":"呼び出しで制限:","home":"在宅","away":"外出","no_channels":"選択されたチャンネルはありません","st_ok":"配信済み","st_err":"失敗","st_skip":"スキップ","calls":"回の呼び出し","calls_1":"回の呼び出し","target_required":"ターゲットが必要:","started_by":"選択元","scen_would_off":"オフにしようとしたもの（無効化）","src_default":"常にオン（デフォルト）","src_scen":"シナリオ","src_call":"呼び出し自体","src_recipient":"受信者","r_off_by":"オフにしたもの:","call_targets":"呼び出し内のターゲット","cats":{"entity_id":"エンティティ","mobile_app_id":"デバイス","person_id":"人","email":"メール","phone":"電話","device_id":"デバイス"},"r_call_off":"呼び出しで除外","r_scen_off":"有効なシナリオによりオフ","r_disabled":"オフにされています","r_transport_off":"トランスポートがオフ","r_only_scen":"シナリオでオンにされたときのみ開始","r_only_fallback":"フォールバック専用","r_only_explicit":"名前で指定されたときのみ開始","r_priority":"この優先度は対象外","r_unknown":"トレースなしでは再構成できません","from_config":"開始しなかったチャンネルの理由は、当時ではなく現在の設定から再構成しています。","from_trace":"理由は通知と一緒にアーカイブされた選択トレースに基づいています。","st_time":"所要時間","st_slow":"最も遅い","st_rate":"のチャンネルが成功","ua_title":"どのチャンネルも受け付けなかったターゲット","ua_hint":"呼び出しには含まれていましたが、選択されたチャンネルのどれもこの種類のターゲットを受け付けません。","un_title":"存在しない名前","sent_by":"送信元","sent_auto":"オートメーション","sent_script":"スクリプト","sent_person":"","sent_unknown":"送信元不明（コンテキストにオートメーションや人がありません）","no_trace":"選択トレース全体は notify 呼び出しに debug: true がある場合のみ記録され、アーカイブの診断に含まれる場合にアーカイブされます。","reasons":{"NO_TARGET":"使えるターゲットなし","DUPE":"最近の通知と重複","PRIORITY":"この優先度は対象外","SNOOZE":"一時停止中","SNOOZED":"一時停止中","DELIVERY_CONDITION":"配信条件が偽","OCCUPANCY":"在宅ルール","ERROR":"エラー","DELIVERY_DISABLED":"オフにされています","SCENARIO":"シナリオ","TRANSPORT_DISABLED":"トランスポートがオフ","NO_SCENARIO":"必須シナリオが有効でない","NO_ACTION":"呼び出すアクションなし","INVALID_ACTION_DATA":"無効なアクションデータ","UNKNOWN":"不明な理由"}},"SN_TOOLS_STRINGS":{"maint":"メンテナンス","enq":"SuperNotify に照会","refresh":"すべてのエンティティを再公開","refresh_btn":"更新","resume_btn":"再開","refreshed":"エンティティを再公開しました。","resume_all":"すべての一時停止を再開","cleared_n":"件の一時停止を再開しました","purge_arch":"アーカイブを整理","purge_media":"画像を整理","older":"次より古いもの:","days":"日","purge_btn":"整理","confirm":"もう一度タップで確定","purged":"削除","remaining":"残り","reset":"手動で行った変更を元に戻す","reset_btn":"リセット","reset_none":"リセットするものはありません: すべて設定どおりです。","reset_done":"設定に戻しました:","k_all":"すべて","k_scenario":"シナリオ","k_delivery":"チャンネル","k_recipient":"人","k_transport":"トランスポート","q_config":"設定","q_scen":"シナリオ","q_active":"有効なシナリオ","q_by_scen":"シナリオ別チャンネル","q_implicit":"デフォルトのチャンネル","q_recipients":"受信者","q_occupancy":"在宅中の人","q_snoozes":"一時停止","q_last":"最後の通知","copy":"JSON をコピー","copied":"コピーしました","close":"閉じる","empty":"（空）","err":"SuperNotify がエラーを返しました:","settings":"統合の設定","running":"処理中…","more":"もっと見る"},"SN_FORM_LABELS":{"_common":"外観とテキスト","style":"配色","icons":"アイコン","show_version":"カードのバージョンを表示","intro":"上部の説明文","title":"タイトル","dnd_entity":"おやすみモードのスイッチ","quiet_entity":"計算された静音状態（オプション）","presence_entity":"ステータスバーに表示する人","archive_days":"アーカイブ整理: 次の日数より古いもの","media_days":"画像整理: 次の日数より古いもの","occupancy":"在宅中の人（SuperNotify から）","repairs":"状態リストに SuperNotify の修復を表示","snooze_announce":"一時停止を読み上げる（アナウンスチャンネル）","snooze_via":"一時停止の経路","o_event":"プッシュボタンのイベント（管理者）","o_voice":"音声コマンド","snooze_minutes":"一時停止の長さ（分）","snooze_panel":"一時停止タイルで一時停止パネルを開く","announce_delivery":"アナウンス用のチャンネル","last_notification":"最後の通知を表示","last_channels":"最後の通知のチャンネルごとにチップを表示","repeat_entity":"最後を繰り返すボタン（オプション）","tile_layout":"タイル","tile_columns":"タイルの列数（空欄 = 自動）","update_entity":"SuperNotify のアップデートエンティティ","cards_update_entity":"カードのアップデートエンティティ","health":"上部に状態を表示","poll_seconds":"更新間隔（秒）","group":"チャンネルの開始方法でグループ化","hide_defaults":"自動の DEFAULT_ チャンネルを非表示","limit":"リストの通知数","expand":"折りたたまれた部分を開く","max_height":"最大の高さ（CSS、例: 70vh）","trigger_entity":"これが変化したら更新","dry_run":"「送信せずに試す」を表示","dry_run_dupe_check":"重複チェックもシミュレート","days":"デフォルトの表示日数","manifest_url":"オートメーションのマニフェスト URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant のテーマ","o_mdi":"Home Assistant のアイコン","o_emoji":"絵文字","o_row":"アイコンを左に","o_stacked":"縦長、アイコンを上に","o_auto":"自動"},"SN_NATIVE_STR":{"all_good":"問題なし","paused":"一時停止中","resume":"再開","test":"テスト送信","sure":"もう一度タップで送信","sent":"送信しました","last":"最後","none":"通知はまだありません","ago":"前","h":"時間","err":"件のトランスポートでエラー","off":"件のチャンネルがオフ"},"SN_STRATEGY_TITLES":{"home":"ホーム","archive":"アーカイブ","send":"送信","setup":"設定","stats":"統計","tools":"ツール","title":"SuperNotify","appliances":"家電"},"SN_APPL_STRINGS":{"title":"家電","loading":"読み込み中…","none":"家電がありません。Appliance Autonotify で追加してください（設定 → デバイスとサービス）。","st_run":"運転中","st_cleaning":"掃除中","st_done":"完了 · 取り出してください","st_done_other":"完了","st_err":"助けが必要","m_switch_on":"プラグをオン","done_switch_on":"プラグをオンにしました。","done_action":"完了: {n}","confirm_action":"「{n}」を実行しますか?","open_entity":"開いて変更","chip_notifs":"通知","chip_device":"デバイス","not_found":"「{n}」という機器はありません。","last7":"過去 7 日間","col_day":"日","col_cycles":"サイクル","col_time":"時間","col_energy":"消費","source_h":"ソース","manual_src":"手動で追加: {w} を超えると稼働中","tab_info":"概要","tab_stats":"消費とサイクル","tab_cleans":"掃除","tab_prints":"印刷","last_run":"前回のサイクル","avg_run":"平均","reminders_h":"通知","plug":"プラグ","plug_on":"オン","plug_off":"オフ","error_h":"エラー","open_device":"Home Assistant のデバイス","prints":"回の印刷","print1":"回の印刷","per_print":"今月の各印刷","last_prints":"最近の印刷","no_print_month":"今月はまだ印刷していません","no_print":"まだ印刷していません","col_fil":"フィラメント","failed":"失敗","per_run":"今月の各サイクル","dev_hist":"各項目は Home Assistant の履歴から(過去 {n} 日)、時間は機器のカウンターがあればそこから取得しています。","cleans":"回の掃除","clean1":"回の掃除","per_clean":"今月の各掃除","avg_clean":"平均 {d}","col_area":"面積","last_cleans":"最近の掃除","no_clean_month":"今月はまだ掃除していません","no_clean":"まだ掃除していません","vac_hist":"合計はロボットのカウンターから、各掃除は Home Assistant の履歴から取得しています(過去 {n} 日)。","st_paused":"一時停止中","st_returning":"ドックに戻っています","st_charging":"充電中","st_docked_w":"ドックにいます","st_idle":"停止中","st_off":"オフ","stopped":"停止中","yesterday":"昨日","u_min":"分","u_h":"時間","start":"開始","so_far":"これまで","no_cycle":"まだサイクルなし","last_cycle":"前回のサイクル {d}","ended_at":"{t} に完了","reminders":"{t} まで +{n} 件のリマインダー","reminder1":"{t} に +1 件のリマインダー","end_est":"終了予定","left":"残り {d}","almost":"まもなく終了","est_from_avg":"似たサイクルからの推定","running_for":"{d} 運転中","btn_empty":"取り出した","btn_seen":"完了","btn_resume":"掃除を再開","m_switch_off":"プラグをオフ","m_remind":"あとで通知","details":"詳細","settings":"設定","more":"その他","details_link":"詳細・消費電力・サイクル","done_empty":"完了: リマインダーを止めました。","done_remind":"あとでお知らせします。","done_switch":"プラグをオフにしました。","done_resume":"掃除を再開しました。","err":"エラー","new_dev":"新しいデバイス {n} 台","new_dev1":"新しいデバイス 1 台","battery":"バッテリー","consumable":"{n} {p}%","maint_in":"あと {c} サイクル","maint_next":"次のサイクルで","maint_due":"今すぐ必要","maint_of":"{d} / {e}","maint_done":"完了","confirm_maint":"「{n}」を完了にしますか?カウントは最初からになります。","conn_lost":"接続が切れました: 最後の状態","cons_h":"消耗品","commands":"操作","tap_again":"もう一度タップして確定","empty_since":"取り出し待ち","done_since":"完了から","avg_cycle":"平均サイクル","maint_tab":"メンテナンス","tab_stats_short":"消費","read_failed":"履歴を読み込めませんでした ({e})。まもなく再試行します。","retry":"再試行","see_chart":"グラフを表示","back":"戻る","avg_line":"平均 {v}","tap_bar":"棒をタップするとそのサイクルを表示","k_station":"ステーション","off_since":"オフになってから","close":"閉じる","power_now":"現在","p_today":"今日","p_week":"今週","p_month":"今月","p_year":"今年","cycles":"サイクル","cycle1":"サイクル","per_cycle":"今月のサイクルごとの消費","short":"短い","long":"長い","anomalous":"異常","avg":"平均 {d}、{k}","last_cycles":"最近のサイクル","col_start":"開始","col_dur":"時間","col_cost":"費用","no_cycle_month":"今月はまだサイクルなし","coarse":"10 日以上前のサイクルは 1 時間単位で数えます。","open_notifs":"この家電の通知","no_power":"電力センサーが見つかりません。`appliances:` の `power_entity` で指定してください。","no_power_vac":"ロボット掃除機には電力センサーがないため、消費とサイクルは数えません。"}},"zh":{"SN_STRINGS":{"presence":"在家情况","time_band":"时段","quiet":"安静","act_scen":"活动场景","on":"开","off":"关","active":"活动","dnd":"勿扰","tap_silence":"点按静音","snooze":"暂停","min":"分钟","pause_nc":"暂停非紧急通知","snoozed":"已暂停","until":"直到","tap_clear":"点按清除","announce":"播报","intercom":"对讲","announce_ph":"在所有音箱上播报…","send":"发送","announced":"已播报","cleared":"暂停已清除","snoozed_for":"已暂停非紧急通知，时长","sent":"已发送","yesterday":"昨天","deliveries":"推送","last_notif":"最后一条通知","transports":"传输方式","delivered":"已送达","failed":"失败","channels":"个渠道","none":"无","no_transports":"未找到传输方式实体","tr_used":"使用者","tr_unused":"没有渠道使用它","start":"开始","volume":"音量","now":"现在","crosses":"跨越午夜","no_voice":"无语音","mute_hint":"音量为 <b>0%</b> 的时段完全<b>不发送语音播报</b>（Alexa 和 TTS 关闭，推送通知和仪表板照常送达）。紧急和高优先级提醒始终会播报。","enabled":"已启用","grp_auto":"自动启动","grp_named":"仅在调用中指定时","grp_scen":"仅在有场景时","grp_fallback":"备用，其他渠道失败时","ch_title":"渠道","ch_count":"{tot} 个中 {on} 个开启","off_manual":"已关闭","paused_by":"当前被暂停，原因","on_by":"当前开启，通过","fixed_targets":"固定目标","no_deliveries":"未找到推送实体","home":"在家","away":"外出","devices":"个设备","devices_1":"个设备","rc_test":"发送测试","rc_test_confirm":"再次点按以发送","rc_test_sent":"测试已发送","rc_test_title":"SuperNotify 测试","rc_test_msg":"来自仪表板的测试消息，","overrides":"个推送覆盖","overrides_1":"个推送覆盖","no_contact":"无联系方式","no_recipients":"未找到接收人实体","details":"详情","h_update":"有可用更新：","h_restart":"重启 Home Assistant 以完成更新","h_uptodate":"已是最新","h_transport_err":"个传输方式出错","h_channels_off":"个渠道已关闭","h_all_good":"一切正常","h_failures":"次失败","h_failures_1":"次失败","h_transport_err_1":"个传输方式出错","h_channels_off_1":"个渠道已关闭","channels_1":"个渠道","band_early_morning":"清晨","band_morning":"上午","band_afternoon":"下午","band_evening":"傍晚","band_night":"夜间","band_late_night":"深夜","h_look_1":"有 1 项需要查看","h_look_n":"有 {n} 项需要查看","h_rest_ok":"其余一切正常","h_ch_on":"{tot} 个渠道中 {on} 个开启","h_open":"打开","ln_delivered":"已送达","ln_failed":"失败","ln_why":"原因","tgt_loading":"正在加载选择器…","bands_empty_t":"还没有时段","bands_empty":"为一天中的每个时段添加一项：用一个 input_datetime 设置开始时间，用一个 input_number 设置语音音量。","active_now":"当前活动","disabled":"已禁用","other":"其他","manual":"手动","apply_now":"立即应用","applied":"已应用","apply_off":"点按停止应用","enabled_lbl":"已启用","reset_overrides":"重置覆盖","reset_done":"覆盖已重置","transport_off":"传输方式已关闭","last_notified":"上次通知","never_notified":"从未通知","media":"媒体","no_scenarios":"未找到场景实体","sim_pick":"🎬 场景 — 点按以模拟","sim_fire":"📤 渠道","sim_hint":"真实引擎数据（查询服务）。基于优先级的推送筛选在引擎端进行，此处不模拟。与运行时合并一样，禁用优先于启用。","sim_none":"不会触发任何推送","sim_go":"会发出","sim_stop":"不会发出","sim_r_default":"自动启动","sim_r_on":"开启者","sim_r_off":"关闭者","sim_r_named":"仅在调用中指定时","sim_r_scen":"仅在有场景开启它时","sim_r_fallback":"备用，其他渠道失败时","sim_r_switched":"已关闭","title":"标题","message":"消息","priority":"优先级","channels_lbl":"渠道 — 不选 = 正常路由","camera_lbl":"摄像头快照","preview":"预览","no_title":"（无标题）","no_message":"（无消息）","default_prio":"默认（中）","comp_hint":"选中的渠道以 delivery_selection: fixed 发送（只有它们会触发）。紧急就是真的紧急 — 包括警报器。","critical_confirm":"发送一条紧急通知？包括警报器和最大音量。","sent_toast":"已发送","write_or_pick":"写一条消息，或选择一个摄像头或渠道","send_err":"未发送","dry_btn":"试一下，不发送","dry_title":"如果现在发送","dry_err":"演练失败","dry_nobody":"无接收人，仅直接目标","dry_none":"未选择渠道","dry_scen":"活动场景","dry_raw":"原始响应","dry_prio":"优先级","dry_would_n":"个渠道会发送","dry_nothing":"不会发送任何内容","dry_dupe":"与最近的通知重复：将被丢弃","dry_no_dupe":"未模拟重复检查，因此紧接着的真正发送不会被拦截。","dry_home":"在家","dry_empty":"SuperNotify 没有返回结果：是否为 2.12 或更高版本？","prio_minimum":"最低","prio_low":"低","prio_medium":"中","prio_high":"高","prio_critical":"紧急","target_lbl":"目标 — 人员、设备、区域、楼层、标签","custom_target_lbl":"自定义目标（电子邮件、Telegram ID 等）— 以逗号分隔","adv_title":"高级选项","adv_spoken":"语音消息（Alexa、TTS）","adv_spoken_ph":"音箱播报的内容（如与文字不同）","adv_apply":"应用这些场景","adv_require":"仅当这些场景活动时发送","adv_constrain":"仅考虑这些场景","adv_snapshot":"来自 URL 的图片","adv_debug":"调试：记录完整的选择追踪（在“原因”卡片中显示）","custom_target_ph":"例如 user@example.com, 123456789","native_target_tag":"🎯 原生区域/楼层/标签","target_warn":"⚠️ 区域、楼层和标签仅由 notify_entity、alexa_devices、html5、ntfy、kodi、media_player、tts 和 chime 解析。使用其他任何渠道 — 或上方未选择渠道时的默认路由 — 通知可能会在无提示的情况下没有目标。请选择兼容的渠道，或直接添加人员/设备。","aut_search":"搜索自动化…","aut_all":"全部","aut_none":"无匹配项","aut_err":"未找到清单 — 请用 tools/genera_vista_automazioni.py 生成","aut_updated":"列表已更新","aut_count":"个自动化","aut_count_1":"个自动化","never":"从不","ago_now":"刚刚","ago_min":"分钟前","ago_h":"小时前","ago_d":"天前","aut_disabled_only":"仅已禁用","grp_active":"活动","repeat":"重复","skipped_n":"已跳过","left":"剩余","missed_n":"未发出","snz_all":"全部","snz_nc":"非紧急","snz_prio":"优先级","snz_transport":"传输方式","snz_for":"时长","snz_choose":"选择内容和时长","snz_title":"暂停通知","snz_what":"内容","snz_nc_l":"非紧急","snz_all_l":"全部","snz_ch":"一个渠道","snz_pr":"一个优先级","snz_who":"对象","snz_everyone":"所有人","snz_me":"仅我","snz_len":"时长","snz_forever":"直到我恢复","snz_go":"暂停","snz_close":"关闭","rs_hand":"手动","rs_voice":"通过语音","rs_assist":"通过助手","snz_voice_info":"你的暂停通过 SuperNotify 的语音命令执行：只对你生效。","snz_voice_off":"SuperNotify 的语音命令已关闭：请在集成选项中开启。","snz_resume_mine":"恢复我的","go_open":"显示","dl_probe":"试用此渠道","probe_msg":"来自仪表板的渠道测试","sc_why":"原因","sc_yes":"当前适用","sc_no":"当前不适用","sc_manual_why":"手动场景：手动应用","sc_no_cond":"无条件","sc_off_sw":"已关闭","sc_not_eval":"未检查","sc_now":"现在","sc_diff_btn_on":"如果适用会有什么变化","sc_diff_btn_off":"没有它会有什么变化","sc_diff_on":"如果它适用，对于现在的一条中优先级通知：","sc_diff_off":"没有它，对于现在的一条中优先级通知：","sc_diff_add":"还会发送","sc_diff_rem":"将不再发送","sc_diff_none":"没有区别","c_state":"{e} 为 {s}","c_template":"模板条件","c_time":"时间","c_after":"晚于","c_before":"早于","c_numeric":"{e}","c_above":"高于","c_below":"低于","c_and":"以下全部","c_or":"以下至少一项","c_not":"以下均不","c_or_join":" 或 ","sim_hint_dry":"SuperNotify 自己的回答（演练，不会发送任何内容）：现在的一条通知，使用上方选择的优先级，且仅包含上方选择的场景。","sim_msg":"模拟器测试","sim_prio":"优先级","sa_snooze":"{what}已暂停 {len}。","sa_silence":"{what}已静音，直到另行通知。","sa_resume":"{what}已恢复。","sa_resume_one":"暂停结束：{x}。","sa_resume_all":"通知已恢复。","sa_w_nc":"非紧急通知","sa_w_all":"所有通知","sa_w_ch":"渠道 {x}","sa_w_pr":"{x}优先级通知","sa_w_mine":"你的通知","sa_for":"给 {x}","sa_min":"{n} 分钟","sa_hour":"一小时","sa_hours":"{n} 小时","occ_title":"谁在家","occ_home_l":"在家","occ_ALL_HOME":"所有人在家","occ_ALL_AWAY":"所有人外出","occ_LONE_HOME":"只有一人在家","occ_MULTI_HOME":"部分人在家","occ_UNDEFINED_OCCUPANTS":"无人被跟踪","h_repairs":"个 SuperNotify 修复","h_repairs_1":"个 SuperNotify 修复","det_more":"所有属性","det_yes":"是","det_no":"否","det_action":"操作","det_target":"固定目标","det_target_req":"需要目标","det_target_use":"目标使用","det_inclusion":"使用时机","det_prio":"优先级","det_occ":"谁必须在家","det_transport":"传输方式","det_data":"数据","det_debug":"调试","det_err_last":"最后错误","det_err_in":"位置","det_err_n":"启动以来的错误","det_select":"选择","adv_html":"电子邮件文本（HTML）","adv_clip":"来自 URL 的视频片段","adv_actions":"通知上的按钮","adv_act_id":"操作 ID","adv_act_title":"按钮文字","adv_act_add":"+ 按钮","adv_groups":"按钮组（逗号分隔）","adv_dc":"此通知的渠道设置","adv_dc_ph":"键: 值，每行一个","adv_dc_add":"+ 渠道","snz_active":"当前已暂停","snz_resume":"恢复","snz_resume_all":"全部恢复","snz_until_resumed":"直到恢复","snz_done":"已暂停","snz_resumed":"已恢复","no_notif":"还没有通知","st_title":"使用情况","st_days_short":"天","st_total":"通知","st_avg":"每天","st_today":"今天","st_vs_avg":"与平均相比","st_peak_hour":"高峰时段","st_top_channel":"最常用渠道","st_errors":"渠道错误","st_of_sends":"的渠道发送","st_daily":"每天","st_hourly":"按一天中的时段","st_weekday":"按星期","st_channels":"渠道 — 最常用","st_priority":"优先级","st_period":"时段","st_insights":"洞察","st_no_data":"暂无历史 — 发送第一批通知后会显示数据。","st_loading":"正在加载…","st_installed":"已安装","st_latest":"最新","st_uptodate":"已是最新","st_update":"有可用更新","st_restart":"需要重启","st_logged":"已记录","st_from_archive":"来自 SuperNotify 存档","st_archive_err":"存档仅部分读取","st_wd":["周一","周二","周三","周四","周五","周六","周日"],"st_i_share":"所有渠道发送中有 {p}% 通过 {c}。","st_i_peak":"最忙的时段是 {h}:00（{d} 天内 {n} 条通知）。","st_i_night":"{p}% 的通知在 23:00 到 07:00 之间到达 — 如果不希望这样，可以考虑设置一个勿扰场景。","st_i_night_ok":"只有 {p}% 的通知在夜间（23–07）到达：安静时段运作良好。","st_i_weekend":"周末的通知比工作日{dir} {p}%。","st_i_errors":"{d} 天内有 {n} 次渠道错误，主要发生在 {c}。","st_i_noerr":"最近 {d} 天没有渠道错误。","st_i_prio":"{p}% 的通知为{prio}优先级。","st_i_trend":"最近 7 天：{n}/天，比之前 7 天{dir} {p}%。","st_more":"多","st_less":"少","st_up":"增加","st_down":"减少"},"SN_ARCH_STRINGS":{"search":"搜索标题或消息…","f_all":"全部","f_today":"今天","f_whisper":"低语播报","wh":"低语","said":"Alexa 说","said_by":"{ch} 说","none":"没有匹配的通知","loading":"正在读取存档…","recent":"最新通知","read_at":"读取于","today":"今天","yesterday":"昨天","failed":"失败","missed":"未发出","reasons":{"doppione":"重复","nessun target":"无目标","errore":"错误","condizione":"条件","scenario":"场景","presenza":"在家情况","priorita":"优先级","spento":"已关闭","pausa":"已暂停","transport spento":"传输方式已关闭","nessuna azione":"无操作","dati non validi":"数据无效","sconosciuto":"未知"},"f_appliance":"家电","ap_scope":"仅限完整读取的最近 {n} 条，更早的无法识别"},"SN_WHY_STRINGS":{"pick":"选择一条通知，查看它为何这样发送。","loading":"正在加载…","none":"无通知","gone":"这条通知已不在存档中","priority":"优先级","dupe":"重复","outcomes":{"success":"已送达","partial_delivery":"部分送达","dupe":"重复","failed":"失败","error":"失败","fallback_delivery":"由备用渠道送达","no_delivery":"未送达"},"step_call":"调用","step_scen":"场景","step_people":"人员","step_ch":"渠道","call_auto":"未指定渠道：正常路由","call_named":"调用中指定：","call_debug":"带调试","nobody":"无人在家","ch_sent":"已发送","ch_problems":"需查看","ch_skipped":"已跳过","pb_failed":"失败","pb_missed":"已请求但未发送","grp_skipped":"被规则跳过：正常","grp_not":"未涉及","trace_title":"完整选择追踪","fix":{"NO_TARGET":"没有接收人拥有此渠道的地址：为某个接收人添加地址，为渠道设置固定目标，或在此调用中不使用它。","ERROR":"此渠道背后的集成返回了错误：请查看它自己的日志条目。","NO_ACTION":"该渠道没有可调用的操作：请在推送上设置 `action:`。","INVALID_ACTION_DATA":"传给操作的数据被拒绝：请检查调用或推送的 `data:`。"},"no_scenarios":"没有生效的场景","applied":"由调用强制","required":"调用要求","constrain":"调用限制为","home":"在家","away":"外出","no_channels":"未选择任何渠道","st_ok":"已送达","st_err":"失败","st_skip":"已跳过","calls":"次调用","calls_1":"次调用","target_required":"需要目标：","started_by":"选择者","scen_would_off":"被关闭（已被否决）","src_default":"始终开启（默认）","src_scen":"场景","src_call":"调用本身","src_recipient":"接收人","r_off_by":"关闭者","call_targets":"调用中的目标","cats":{"entity_id":"实体","mobile_app_id":"设备","person_id":"人员","email":"电子邮件","phone":"电话","device_id":"设备"},"r_call_off":"被调用排除","r_scen_off":"被生效的场景关闭","r_disabled":"已关闭","r_transport_off":"其传输方式已关闭","r_only_scen":"仅在场景开启它时启动","r_only_fallback":"仅作备用","r_only_explicit":"仅在按名称请求时启动","r_priority":"不适用于此优先级","r_unknown":"没有追踪无法还原","from_config":"未启动渠道的原因是根据当前的配置还原的，而不是当时的配置。","from_trace":"原因来自随通知存档的选择追踪。","st_time":"耗时","st_slow":"最慢","st_rate":"的渠道成功","ua_title":"没有渠道接收的目标","ua_hint":"它们在调用中，但没有选中的渠道接受这类目标。","un_title":"不存在的名称","sent_by":"发送者","sent_auto":"自动化","sent_script":"脚本","sent_person":"","sent_unknown":"发送者未知（其上下文中没有自动化或人员）","no_trace":"只有当通知调用带有 debug: true 时才会记录完整的选择追踪，并在存档诊断包含它时存档。","reasons":{"NO_TARGET":"无可用目标","DUPE":"与最近的通知重复","PRIORITY":"不适用于此优先级","SNOOZE":"已暂停","SNOOZED":"已暂停","DELIVERY_CONDITION":"推送条件为假","OCCUPANCY":"在家规则","ERROR":"错误","DELIVERY_DISABLED":"已关闭","SCENARIO":"场景","TRANSPORT_DISABLED":"其传输方式已关闭","NO_SCENARIO":"所需场景未生效","NO_ACTION":"无可调用的操作","INVALID_ACTION_DATA":"操作数据无效","UNKNOWN":"未知原因"}},"SN_TOOLS_STRINGS":{"maint":"维护","enq":"询问 SuperNotify","refresh":"重新发布所有实体","refresh_btn":"刷新","resume_btn":"恢复","refreshed":"实体已重新发布。","resume_all":"恢复所有暂停","cleared_n":"个暂停已恢复","purge_arch":"清理存档","purge_media":"清理图片","older":"早于","days":"天","purge_btn":"清理","confirm":"再次点按以确认","purged":"已删除","remaining":"剩余","reset":"撤销手动所做的更改","reset_btn":"重置","reset_none":"无需重置：一切与配置一致。","reset_done":"已恢复为配置：","k_all":"全部","k_scenario":"场景","k_delivery":"渠道","k_recipient":"人员","k_transport":"传输方式","q_config":"配置","q_scen":"场景","q_active":"活动场景","q_by_scen":"按场景的渠道","q_implicit":"默认渠道","q_recipients":"接收人","q_occupancy":"谁在家","q_snoozes":"暂停","q_last":"最后一条通知","copy":"复制 JSON","copied":"已复制","close":"关闭","empty":"（空）","err":"SuperNotify 返回了错误：","settings":"集成设置","running":"处理中…","more":"更多"},"SN_FORM_LABELS":{"_common":"外观和文字","style":"颜色","icons":"图标","show_version":"显示卡片版本","intro":"顶部的介绍文字","title":"标题","dnd_entity":"勿扰开关","quiet_entity":"计算得出的安静状态（可选）","presence_entity":"状态栏中的人员","archive_days":"存档清理：早于（天）","media_days":"图片清理：早于（天）","occupancy":"谁在家（来自 SuperNotify）","repairs":"在健康列表中显示 SuperNotify 修复","snooze_announce":"大声播报暂停（播报渠道）","snooze_via":"暂停的执行方式","o_event":"推送按钮事件（管理员）","o_voice":"语音命令","snooze_minutes":"暂停时长（分钟）","snooze_panel":"暂停磁贴打开暂停面板","announce_delivery":"播报渠道","last_notification":"显示最后一条通知","last_channels":"最后一条通知中每个渠道一个标签","repeat_entity":"重复上一条按钮（可选）","tile_layout":"磁贴","tile_columns":"磁贴列数（留空 = 自动）","update_entity":"SuperNotify 更新实体","cards_update_entity":"卡片更新实体","health":"顶部显示健康状况","poll_seconds":"刷新间隔（秒）","group":"按渠道启动方式分组","hide_defaults":"隐藏自动的 DEFAULT_ 渠道","limit":"列表中的通知数","expand":"展开折叠部分","max_height":"最大高度（CSS，例如 70vh）","trigger_entity":"此项变化时刷新","dry_run":"显示“试一下，不发送”","dry_run_dupe_check":"同时模拟重复检查","days":"默认显示天数","manifest_url":"自动化清单 URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant 主题","o_mdi":"Home Assistant 图标","o_emoji":"Emoji","o_row":"图标在左侧","o_stacked":"高型，图标在上方","o_auto":"自动"},"SN_NATIVE_STR":{"all_good":"一切正常","paused":"已暂停","resume":"恢复","test":"发送测试","sure":"再次点按以发送","sent":"已发送","last":"最后","none":"还没有通知","ago":"前","h":"小时","err":"个传输方式出错","off":"个渠道已关闭"},"SN_STRATEGY_TITLES":{"home":"主页","archive":"归档","send":"发送","setup":"设置","stats":"统计","tools":"工具","title":"SuperNotify","appliances":"家电"},"SN_APPL_STRINGS":{"title":"家电","loading":"读取中…","none":"没有家电：请在 Appliance Autonotify 中添加（设置 → 设备与服务）。","st_run":"运行中","st_cleaning":"清扫中","st_done":"已完成 · 待取出","st_done_other":"已完成","st_err":"需要帮助","m_switch_on":"打开插座","done_switch_on":"插座已打开。","done_action":"完成：{n}","confirm_action":"执行「{n}」？","open_entity":"打开以修改","chip_notifs":"通知","chip_device":"设备","not_found":"没有名为「{n}」的设备。","last7":"最近 7 天","col_day":"日期","col_cycles":"周期","col_time":"时间","col_energy":"能耗","source_h":"来源","manual_src":"手动添加:高于 {w} 时为运行中","tab_info":"概览","tab_stats":"能耗与周期","tab_cleans":"清扫","tab_prints":"打印","last_run":"上次周期","avg_run":"平均","reminders_h":"通知","plug":"插座","plug_on":"开","plug_off":"关","error_h":"错误","open_device":"Home Assistant 中的设备","prints":"次打印","print1":"次打印","per_print":"本月每次打印","last_prints":"最近的打印","no_print_month":"本月尚无打印","no_print":"尚无打印","col_fil":"耗材","failed":"失败","per_run":"本月每个周期","dev_hist":"每一项来自 Home Assistant 的历史记录(最近 {n} 天);小时数来自设备自身的计数器(如有)。","cleans":"次清扫","clean1":"次清扫","per_clean":"本月每次清扫","avg_clean":"平均 {d}","col_area":"面积","last_cleans":"最近的清扫","no_clean_month":"本月尚无清扫","no_clean":"尚无清扫","vac_hist":"总计来自机器人的计数器;每次清扫来自 Home Assistant 的历史记录(最近 {n} 天)。","st_paused":"已暂停","st_returning":"正在返回基座","st_charging":"充电中","st_docked_w":"在基座上","st_idle":"空闲","st_off":"已关闭","stopped":"空闲","yesterday":"昨天","u_min":"分钟","u_h":"小时","start":"开始","so_far":"目前","no_cycle":"尚无周期","last_cycle":"上次周期 {d}","ended_at":"{t} 完成","reminders":"+{n} 次提醒，直到 {t}","reminder1":"{t} +1 次提醒","end_est":"预计结束","left":"还剩 {d}","almost":"即将完成","est_from_avg":"根据相似周期估计","running_for":"已运行 {d}","btn_empty":"已取出","btn_seen":"完成","btn_resume":"继续清扫","m_switch_off":"关闭插座","m_remind":"稍后提醒","details":"详情","settings":"设置","more":"更多","details_link":"详情、能耗和周期","done_empty":"完成：提醒已停止。","done_remind":"稍后会再提醒。","done_switch":"插座已关闭。","done_resume":"已继续清扫。","err":"错误","new_dev":"{n} 个新设备","new_dev1":"1 个新设备","battery":"电量","consumable":"{n} {p}%","maint_in":"还有 {c} 个周期","maint_next":"下个周期","maint_due":"现在需要","maint_of":"{d} / {e}","maint_done":"完成","confirm_maint":"将「{n}」标记为完成?计数将重新开始。","conn_lost":"连接中断:最后已知状态","cons_h":"耗材","commands":"命令","tap_again":"再点一次以确认","empty_since":"待取出已","done_since":"已完成","avg_cycle":"平均周期","maint_tab":"保养","tab_stats_short":"能耗","read_failed":"无法读取历史记录 ({e}),稍后重试。","retry":"重试","see_chart":"查看图表","back":"返回","avg_line":"平均 {v}","tap_bar":"点按柱形查看该周期","k_station":"基站","off_since":"已关闭","close":"关闭","power_now":"当前","p_today":"今天","p_week":"本周","p_month":"本月","p_year":"今年","cycles":"个周期","cycle1":"个周期","per_cycle":"本月每个周期的能耗","short":"短","long":"长","anomalous":"异常","avg":"平均 {d}，{k}","last_cycles":"最近的周期","col_start":"开始","col_dur":"时长","col_cost":"费用","no_cycle_month":"本月尚无周期","coarse":"10 天前的周期按小时统计。","open_notifs":"该家电的通知","no_power":"未找到功率传感器：请在 `appliances:` 中用 `power_entity` 指定。","no_power_vac":"扫地机器人没有功率传感器：不统计能耗和周期。"}},"hi":{"SN_STRINGS":{"presence":"उपस्थिति","time_band":"समय खंड","quiet":"शांत","act_scen":"सक्रिय परिदृश्य","on":"चालू","off":"बंद","active":"सक्रिय","dnd":"परेशान न करें","tap_silence":"शांत करने के लिए टैप करें","snooze":"स्नूज़","min":"मिनट","pause_nc":"गैर-गंभीर रोकें","snoozed":"स्नूज़ किया गया","until":"तक","tap_clear":"हटाने के लिए टैप करें","announce":"घोषणा","intercom":"इंटरकॉम","announce_ph":"सभी स्पीकर पर घोषणा करें…","send":"भेजें","announced":"घोषित","cleared":"स्नूज़ हटाए गए","snoozed_for":"गैर-गंभीर सूचनाएँ स्नूज़ की गईं:","sent":"भेजी गईं","yesterday":"कल","deliveries":"डिलीवरी","last_notif":"अंतिम सूचना","transports":"परिवहन","delivered":"पहुँचाई गई","failed":"विफल","channels":"चैनल","none":"कोई नहीं","no_transports":"कोई परिवहन entity नहीं मिली","tr_used":"इसके द्वारा उपयोग","tr_unused":"कोई चैनल इसका उपयोग नहीं करता","start":"शुरुआत","volume":"वॉल्यूम","now":"अभी","crosses":"आधी रात पार करता है","no_voice":"आवाज़ नहीं","mute_hint":"<b>0%</b> वाला खंड बिल्कुल <b>कोई आवाज़ घोषणा नहीं</b> भेजता (Alexa और TTS बंद, पुश और डैशबोर्ड फिर भी पहुँचते हैं)। गंभीर और उच्च प्राथमिकता वाली चेतावनियाँ हमेशा बोलती हैं।","enabled":"सक्षम","grp_auto":"अपने आप शुरू होते हैं","grp_named":"केवल जब कॉल में नाम हो","grp_scen":"केवल किसी परिदृश्य के साथ","grp_fallback":"बैकअप, जब बाकी विफल हों","ch_title":"चैनल","ch_count":"{tot} में से {on} चालू","off_manual":"बंद किया गया","paused_by":"अभी रोका गया:","on_by":"अभी चालू, इसके ज़रिए:","fixed_targets":"निश्चित लक्ष्य","no_deliveries":"कोई डिलीवरी entity नहीं मिली","home":"घर पर","away":"बाहर","devices":"डिवाइस","devices_1":"डिवाइस","rc_test":"परीक्षण भेजें","rc_test_confirm":"भेजने के लिए फिर टैप करें","rc_test_sent":"परीक्षण भेजा गया","rc_test_title":"SuperNotify परीक्षण","rc_test_msg":"डैशबोर्ड से परीक्षण संदेश,","overrides":"डिलीवरी ओवरराइड","overrides_1":"डिलीवरी ओवरराइड","no_contact":"कोई संपर्क बिंदु नहीं","no_recipients":"कोई प्राप्तकर्ता entity नहीं मिली","details":"विवरण","h_update":"अपडेट उपलब्ध:","h_restart":"अपडेट पूरा करने के लिए Home Assistant रीस्टार्ट करें","h_uptodate":"अद्यतित","h_transport_err":"त्रुटियों वाले परिवहन","h_channels_off":"चैनल बंद","h_all_good":"सब ठीक है","h_failures":"विफलताएँ","h_failures_1":"विफलता","h_transport_err_1":"त्रुटि वाला परिवहन","h_channels_off_1":"चैनल बंद","channels_1":"चैनल","band_early_morning":"सुबह-सवेरे","band_morning":"सुबह","band_afternoon":"दोपहर","band_evening":"शाम","band_night":"रात","band_late_night":"देर रात","h_look_1":"1 चीज़ देखनी है","h_look_n":"{n} चीज़ें देखनी हैं","h_rest_ok":"बाकी सब काम कर रहा है","h_ch_on":"{tot} में से {on} चैनल चालू","h_open":"खोलें","ln_delivered":"पहुँचाई गई","ln_failed":"विफल","ln_why":"क्यों","tgt_loading":"चयनकर्ता लोड हो रहा है…","bands_empty_t":"अभी कोई समय खंड नहीं","bands_empty":"दिन के हर हिस्से के लिए एक खंड जोड़ें: उसकी शुरुआत के लिए एक input_datetime और आवाज़ के वॉल्यूम के लिए एक input_number।","active_now":"अभी सक्रिय","disabled":"अक्षम","other":"अन्य","manual":"मैनुअल","apply_now":"अभी लागू करें","applied":"लागू","apply_off":"लागू करना रोकने के लिए टैप करें","enabled_lbl":"सक्षम","reset_overrides":"ओवरराइड रीसेट करें","reset_done":"ओवरराइड रीसेट हुए","transport_off":"परिवहन बंद","last_notified":"अंतिम सूचना","never_notified":"कभी सूचना नहीं","media":"मीडिया","no_scenarios":"कोई परिदृश्य entity नहीं मिली","sim_pick":"🎬 परिदृश्य — सिम्युलेट करने के लिए टैप करें","sim_fire":"📤 चैनल","sim_hint":"इंजन का वास्तविक डेटा (enquire सेवाएँ)। प्राथमिकता के आधार पर डिलीवरी फ़िल्टरिंग इंजन में होती है और यहाँ सिम्युलेट नहीं की जाती। रनटाइम मर्ज की तरह, अक्षम सक्षम पर भारी पड़ता है।","sim_none":"कोई डिलीवरी नहीं चलेगी","sim_go":"भेजी जाएगी","sim_stop":"नहीं भेजी जाएगी","sim_r_default":"अपने आप शुरू होती है","sim_r_on":"चालू की गई:","sim_r_off":"बंद की गई:","sim_r_named":"केवल जब कॉल में नाम हो","sim_r_scen":"केवल ऐसे परिदृश्य के साथ जो इसे चालू करे","sim_r_fallback":"बैकअप, जब बाकी विफल हों","sim_r_switched":"बंद किया गया","title":"शीर्षक","message":"संदेश","priority":"प्राथमिकता","channels_lbl":"चैनल — कोई न चुना = सामान्य रूटिंग","camera_lbl":"कैमरा स्नैपशॉट","preview":"पूर्वावलोकन","no_title":"(कोई शीर्षक नहीं)","no_message":"(कोई संदेश नहीं)","default_prio":"डिफ़ॉल्ट (मध्यम)","comp_hint":"चुने गए चैनल delivery_selection: fixed के साथ भेजे जाते हैं (केवल वही चलते हैं)। गंभीर सचमुच गंभीर है — सायरन सहित।","critical_confirm":"गंभीर सूचना भेजें? सायरन और अधिकतम वॉल्यूम सहित।","sent_toast":"भेजी गई","write_or_pick":"एक संदेश लिखें, या कोई कैमरा या चैनल चुनें","send_err":"नहीं भेजी गई","dry_btn":"बिना भेजे आज़माएँ","dry_title":"अगर आप इसे अभी भेजते","dry_err":"ड्राई रन विफल","dry_nobody":"कोई प्राप्तकर्ता नहीं, केवल सीधे लक्ष्य","dry_none":"कोई चैनल नहीं चुना गया","dry_scen":"सक्रिय परिदृश्य","dry_raw":"कच्चा उत्तर","dry_prio":"प्राथमिकता","dry_would_n":"चैनल भेजेंगे","dry_nothing":"कुछ नहीं भेजा जाएगा","dry_dupe":"हाल की सूचना का डुप्लिकेट: इसे छोड़ दिया जाएगा","dry_no_dupe":"डुप्लिकेट जाँच सिम्युलेट नहीं हुई, इसलिए ठीक बाद का असली भेजना अवरुद्ध नहीं होगा।","dry_home":"घर पर","dry_empty":"SuperNotify ने कोई उत्तर नहीं दिया: क्या यह 2.12 या नया है?","prio_minimum":"न्यूनतम","prio_low":"कम","prio_medium":"मध्यम","prio_high":"उच्च","prio_critical":"गंभीर","target_lbl":"लक्ष्य — लोग, डिवाइस, क्षेत्र, मंज़िलें, लेबल","custom_target_lbl":"कस्टम लक्ष्य (ईमेल, Telegram ID, …) — कॉमा से अलग","adv_title":"उन्नत विकल्प","adv_spoken":"बोला जाने वाला संदेश (Alexa, TTS)","adv_spoken_ph":"स्पीकर क्या बोलें, अगर टेक्स्ट से अलग हो","adv_apply":"ये परिदृश्य लागू करें","adv_require":"केवल तभी भेजें जब ये परिदृश्य सक्रिय हों","adv_constrain":"केवल इन परिदृश्यों पर विचार करें","adv_snapshot":"URL से चित्र","adv_debug":"डीबग: पूरा चयन ट्रेस दर्ज करें (\"क्यों\" कार्ड में दिखता है)","custom_target_ph":"जैसे user@example.com, 123456789","native_target_tag":"🎯 नेटिव क्षेत्र/मंज़िल/लेबल","target_warn":"⚠️ क्षेत्र, मंज़िलें और लेबल केवल notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts और chime द्वारा हल किए जाते हैं। किसी अन्य चैनल के साथ — या ऊपर कोई चैनल न चुनने पर डिफ़ॉल्ट रूटिंग के साथ — सूचना चुपचाप बिना लक्ष्य के रह सकती है। कोई संगत चैनल चुनें, या सीधे कोई व्यक्ति/डिवाइस जोड़ें।","aut_search":"स्वचालन खोजें…","aut_all":"सभी","aut_none":"कोई मेल नहीं","aut_err":"मैनिफ़ेस्ट नहीं मिला — इसे tools/genera_vista_automazioni.py से बनाएँ","aut_updated":"सूची अपडेट हुई","aut_count":"स्वचालन","aut_count_1":"स्वचालन","never":"कभी नहीं","ago_now":"अभी","ago_min":"मिनट पहले","ago_h":"घंटे पहले","ago_d":"दिन पहले","aut_disabled_only":"केवल अक्षम","grp_active":"सक्रिय","repeat":"दोहराएँ","skipped_n":"छोड़ी गईं","left":"शेष","missed_n":"छूटी","snz_all":"सब कुछ","snz_nc":"गैर-गंभीर","snz_prio":"प्राथमिकता","snz_transport":"परिवहन","snz_for":"के लिए","snz_choose":"क्या और कितनी देर चुनें","snz_title":"सूचनाएँ रोकें","snz_what":"क्या","snz_nc_l":"गैर-गंभीर","snz_all_l":"सब कुछ","snz_ch":"एक चैनल","snz_pr":"एक प्राथमिकता","snz_who":"किसके लिए","snz_everyone":"सभी","snz_me":"केवल मैं","snz_len":"कितनी देर","snz_forever":"जब तक मैं फिर शुरू न करूँ","snz_go":"रोकें","snz_close":"बंद करें","rs_hand":"हाथ से","rs_voice":"आवाज़ से","rs_assist":"सहायक द्वारा","snz_voice_info":"आपके विराम SuperNotify के वॉइस कमांड से जाते हैं: वे केवल आपके हैं।","snz_voice_off":"SuperNotify के वॉइस कमांड बंद हैं: उन्हें इंटीग्रेशन विकल्पों में चालू करें।","snz_resume_mine":"मेरे फिर शुरू करें","go_open":"दिखाएँ","dl_probe":"यह चैनल आज़माएँ","probe_msg":"डैशबोर्ड से चैनल परीक्षण","sc_why":"क्यों","sc_yes":"अभी लागू","sc_no":"अभी लागू नहीं","sc_manual_why":"मैनुअल परिदृश्य: हाथ से लागू किया गया","sc_no_cond":"कोई शर्त नहीं","sc_off_sw":"बंद किया गया","sc_not_eval":"जाँचा नहीं गया","sc_now":"अभी","sc_diff_btn_on":"लागू होने पर क्या बदलेगा","sc_diff_btn_off":"इसके बिना क्या बदलेगा","sc_diff_on":"अगर यह लागू होता, अभी एक मध्यम सूचना के लिए:","sc_diff_off":"इसके बिना, अभी एक मध्यम सूचना के लिए:","sc_diff_add":"यह भी भेजेगा","sc_diff_rem":"अब नहीं भेजेगा","sc_diff_none":"कोई अंतर नहीं","c_state":"{e} {s} है","c_template":"टेम्पलेट शर्त","c_time":"समय","c_after":"के बाद","c_before":"से पहले","c_numeric":"{e}","c_above":"से ऊपर","c_below":"से नीचे","c_and":"ये सभी","c_or":"इनमें से कम से कम एक","c_not":"इनमें से कोई नहीं","c_or_join":" या ","sim_hint_dry":"SuperNotify का अपना उत्तर (ड्राई रन, कुछ नहीं भेजा जाता): अभी एक सूचना, ऊपर चुनी गई प्राथमिकता और केवल चुने गए परिदृश्यों के साथ।","sim_msg":"सिम्युलेटर परीक्षण","sim_prio":"प्राथमिकता","sa_snooze":"{what} {len} के लिए रोकी गईं।","sa_silence":"{what} अगली सूचना तक शांत।","sa_resume":"{what} फिर से चालू।","sa_resume_one":"विराम समाप्त: {x}।","sa_resume_all":"सूचनाएँ फिर से चालू।","sa_w_nc":"गैर-गंभीर सूचनाएँ","sa_w_all":"सभी सूचनाएँ","sa_w_ch":"चैनल {x}","sa_w_pr":"{x} प्राथमिकता की सूचनाएँ","sa_w_mine":"आपकी सूचनाएँ","sa_for":"{x} के लिए","sa_min":"{n} मिनट","sa_hour":"एक घंटा","sa_hours":"{n} घंटे","occ_title":"कौन घर पर है","occ_home_l":"घर पर","occ_ALL_HOME":"सभी घर पर","occ_ALL_AWAY":"सभी बाहर","occ_LONE_HOME":"केवल एक घर पर","occ_MULTI_HOME":"कुछ घर पर","occ_UNDEFINED_OCCUPANTS":"कोई ट्रैक नहीं","h_repairs":"SuperNotify मरम्मत","h_repairs_1":"SuperNotify मरम्मत","det_more":"सभी विशेषताएँ","det_yes":"हाँ","det_no":"नहीं","det_action":"क्रिया","det_target":"निश्चित लक्ष्य","det_target_req":"लक्ष्य चाहिए","det_target_use":"लक्ष्य उपयोग","det_inclusion":"कब उपयोग","det_prio":"प्राथमिकताएँ","det_occ":"किसे घर पर होना चाहिए","det_transport":"परिवहन","det_data":"डेटा","det_debug":"डीबग","det_err_last":"अंतिम त्रुटि","det_err_in":"में","det_err_n":"शुरू से त्रुटियाँ","det_select":"चयन","adv_html":"ईमेल के लिए टेक्स्ट (HTML)","adv_clip":"URL से वीडियो क्लिप","adv_actions":"सूचना पर बटन","adv_act_id":"क्रिया id","adv_act_title":"बटन टेक्स्ट","adv_act_add":"+ बटन","adv_groups":"बटन समूह (कॉमा)","adv_dc":"इस सूचना के लिए चैनल सेटिंग्स","adv_dc_ph":"key: value, हर पंक्ति में एक","adv_dc_add":"+ चैनल","snz_active":"अभी रुका हुआ","snz_resume":"फिर शुरू करें","snz_resume_all":"सब फिर शुरू करें","snz_until_resumed":"फिर शुरू होने तक","snz_done":"रोका गया","snz_resumed":"फिर शुरू हुआ","no_notif":"अभी कोई सूचना नहीं","st_title":"उपयोग","st_days_short":"दि","st_total":"सूचनाएँ","st_avg":"प्रति दिन","st_today":"आज","st_vs_avg":"औसत की तुलना में","st_peak_hour":"सबसे व्यस्त घंटा","st_top_channel":"शीर्ष चैनल","st_errors":"चैनल त्रुटियाँ","st_of_sends":"चैनल भेजे गए में से","st_daily":"प्रति दिन","st_hourly":"दिन के घंटे के अनुसार","st_weekday":"सप्ताह के दिन के अनुसार","st_channels":"चैनल — सबसे अधिक उपयोग","st_priority":"प्राथमिकता","st_period":"दिन का समय","st_insights":"जानकारियाँ","st_no_data":"अभी कोई इतिहास नहीं — पहली सूचनाओं के बाद डेटा दिखेगा।","st_loading":"लोड हो रहा है…","st_installed":"इंस्टॉल","st_latest":"नवीनतम","st_uptodate":"अद्यतित","st_update":"अपडेट उपलब्ध","st_restart":"रीस्टार्ट आवश्यक","st_logged":"दर्ज","st_from_archive":"SuperNotify के संग्रह से","st_archive_err":"संग्रह आंशिक रूप से पढ़ा गया","st_wd":["सोम","मंगल","बुध","गुरु","शुक्र","शनि","रवि"],"st_i_share":"सभी चैनल भेजे गए में से {p}% {c} से जाते हैं।","st_i_peak":"सबसे व्यस्त घंटा {h}:00 है ({d} दिनों में {n} सूचनाएँ)।","st_i_night":"{p}% सूचनाएँ 23:00 और 07:00 के बीच आती हैं — अगर यह नहीं चाहिए तो DND परिदृश्य पर विचार करें।","st_i_night_ok":"केवल {p}% सूचनाएँ रात में (23–07) आती हैं: शांत घंटे काम कर रहे हैं।","st_i_weekend":"सप्ताहांत के दिनों में कार्यदिवसों की तुलना में {p}% {dir} सूचनाएँ आती हैं।","st_i_errors":"{d} दिनों में {n} चैनल त्रुटियाँ, ज़्यादातर {c} पर।","st_i_noerr":"पिछले {d} दिनों में कोई चैनल त्रुटि नहीं।","st_i_prio":"{p}% सूचनाएँ {prio} प्राथमिकता की हैं।","st_i_trend":"पिछले 7 दिन: {n}/दिन, पहले के 7 दिनों की तुलना में {p}% {dir}।","st_more":"अधिक","st_less":"कम","st_up":"ऊपर","st_down":"नीचे"},"SN_ARCH_STRINGS":{"search":"शीर्षक या संदेश खोजें…","f_all":"सभी","f_today":"आज","f_whisper":"फुसफुसाई गईं","wh":"फुसफुसाई गई","said":"Alexa ने कहा","said_by":"{ch} ने कहा","none":"कोई सूचना मेल नहीं खाती","loading":"संग्रह पढ़ा जा रहा है…","recent":"नवीनतम सूचनाएँ","read_at":"पढ़ा गया","today":"आज","yesterday":"कल","failed":"विफल","missed":"छूटी","reasons":{"doppione":"डुप्लिकेट","nessun target":"कोई लक्ष्य नहीं","errore":"त्रुटि","condizione":"शर्त","scenario":"परिदृश्य","presenza":"उपस्थिति","priorita":"प्राथमिकता","spento":"बंद","pausa":"स्नूज़ किया गया","transport spento":"परिवहन बंद","nessuna azione":"कोई क्रिया नहीं","dati non validi":"अमान्य डेटा","sconosciuto":"अज्ञात"},"f_appliance":"उपकरण","ap_scope":"पूरी पढ़ी गई पिछली {n} सूचनाओं में से - पुरानी पहचानी नहीं जातीं"},"SN_WHY_STRINGS":{"pick":"कोई सूचना चुनें यह देखने के लिए कि वह जहाँ गई वहाँ क्यों गई।","loading":"लोड हो रहा है…","none":"कोई सूचना नहीं","gone":"यह सूचना अब संग्रह में नहीं है","priority":"प्राथमिकता","dupe":"डुप्लिकेट","outcomes":{"success":"पहुँचाई गई","partial_delivery":"आंशिक रूप से पहुँचाई गई","dupe":"डुप्लिकेट","failed":"विफल","error":"विफल","fallback_delivery":"फ़ॉलबैक चैनल से पहुँचाई गई","no_delivery":"नहीं पहुँचाई गई"},"step_call":"कॉल","step_scen":"परिदृश्य","step_people":"लोग","step_ch":"चैनल","call_auto":"कोई चैनल नामित नहीं: सामान्य रूटिंग","call_named":"कॉल में नामित:","call_debug":"डीबग के साथ","nobody":"घर पर कोई नहीं","ch_sent":"भेजे गए","ch_problems":"देखने योग्य","ch_skipped":"छोड़े गए","pb_failed":"विफल","pb_missed":"माँगा गया पर भेजा नहीं गया","grp_skipped":"किसी नियम से छोड़े गए: सामान्य","grp_not":"शामिल नहीं","trace_title":"पूरा चयन ट्रेस","fix":{"NO_TARGET":"किसी प्राप्तकर्ता के पास इस चैनल का पता नहीं है: किसी प्राप्तकर्ता में एक जोड़ें, चैनल को निश्चित लक्ष्य दें, या इसे इस कॉल से हटा दें।","ERROR":"इस चैनल के पीछे के इंटीग्रेशन ने त्रुटि लौटाई: उसकी अपनी लॉग प्रविष्टि देखें।","NO_ACTION":"चैनल के पास कॉल करने के लिए कोई क्रिया नहीं है: डिलीवरी पर `action:` सेट करें।","INVALID_ACTION_DATA":"क्रिया को दिया गया डेटा अस्वीकार कर दिया गया: कॉल या डिलीवरी का `data:` जाँचें।"},"no_scenarios":"कोई परिदृश्य लागू नहीं","applied":"कॉल द्वारा बाध्य","required":"कॉल द्वारा आवश्यक","constrain":"कॉल द्वारा सीमित:","home":"घर पर","away":"बाहर","no_channels":"कोई चैनल नहीं चुना गया","st_ok":"पहुँचाई गई","st_err":"विफल","st_skip":"छोड़ी गई","calls":"कॉल","calls_1":"कॉल","target_required":"लक्ष्य आवश्यक:","started_by":"इसके द्वारा चुना गया:","scen_would_off":"बंद करता (रद्द किया गया):","src_default":"हमेशा चालू (डिफ़ॉल्ट)","src_scen":"परिदृश्य","src_call":"कॉल स्वयं","src_recipient":"प्राप्तकर्ता","r_off_by":"बंद किया गया:","call_targets":"कॉल में लक्ष्य","cats":{"entity_id":"entities","mobile_app_id":"डिवाइस","person_id":"लोग","email":"ईमेल","phone":"फ़ोन","device_id":"डिवाइस"},"r_call_off":"कॉल द्वारा बाहर रखा गया","r_scen_off":"लागू परिदृश्य द्वारा बंद किया गया","r_disabled":"बंद किया गया","r_transport_off":"इसका परिवहन बंद है","r_only_scen":"केवल तब शुरू होता है जब कोई परिदृश्य इसे चालू करे","r_only_fallback":"केवल फ़ॉलबैक","r_only_explicit":"केवल नाम से माँगने पर शुरू होता है","r_priority":"इस प्राथमिकता के लिए नहीं","r_unknown":"ट्रेस के बिना पुनर्निर्मित नहीं किया जा सकता","from_config":"शुरू न हुए चैनलों के कारण कॉन्फ़िगरेशन से पुनर्निर्मित किए जाते हैं जैसा वह अभी है, न कि जैसा तब था।","from_trace":"कारण सूचना के साथ संग्रहीत चयन ट्रेस से आते हैं।","st_time":"लगा समय","st_slow":"सबसे धीमा","st_rate":"चैनल सफल हुए","ua_title":"लक्ष्य जिन्हें किसी चैनल ने नहीं लिया","ua_hint":"वे कॉल में थे, पर कोई चुना गया चैनल इस प्रकार का लक्ष्य स्वीकार नहीं करता।","un_title":"नाम जो मौजूद नहीं हैं","sent_by":"भेजने वाला","sent_auto":"स्वचालन","sent_script":"स्क्रिप्ट","sent_person":"","sent_unknown":"भेजने वाला अज्ञात (इसके संदर्भ में कोई स्वचालन या व्यक्ति नहीं)","no_trace":"पूरा चयन ट्रेस केवल तभी दर्ज होता है जब notify कॉल में debug: true हो, और तभी संग्रहीत होता है जब संग्रह डायग्नोस्टिक्स में यह शामिल हो।","reasons":{"NO_TARGET":"कोई उपयोगी लक्ष्य नहीं","DUPE":"हाल की सूचना का डुप्लिकेट","PRIORITY":"इस प्राथमिकता के लिए नहीं","SNOOZE":"स्नूज़ किया गया","SNOOZED":"स्नूज़ किया गया","DELIVERY_CONDITION":"डिलीवरी शर्त असत्य","OCCUPANCY":"उपस्थिति नियम","ERROR":"त्रुटि","DELIVERY_DISABLED":"बंद किया गया","SCENARIO":"परिदृश्य","TRANSPORT_DISABLED":"इसका परिवहन बंद है","NO_SCENARIO":"एक आवश्यक परिदृश्य लागू नहीं है","NO_ACTION":"कॉल करने के लिए कोई क्रिया नहीं","INVALID_ACTION_DATA":"अमान्य क्रिया डेटा","UNKNOWN":"अज्ञात कारण"}},"SN_TOOLS_STRINGS":{"maint":"रखरखाव","enq":"SuperNotify से पूछें","refresh":"हर entity फिर से प्रकाशित करें","refresh_btn":"रीफ़्रेश","resume_btn":"फिर शुरू करें","refreshed":"Entities फिर से प्रकाशित हुईं।","resume_all":"हर विराम फिर शुरू करें","cleared_n":"विराम फिर शुरू हुए","purge_arch":"संग्रह साफ़ करें","purge_media":"चित्र साफ़ करें","older":"इससे पुराने","days":"दिन","purge_btn":"साफ़ करें","confirm":"पुष्टि के लिए फिर टैप करें","purged":"हटाए गए","remaining":"शेष","reset":"हाथ से किए गए बदलाव पूर्ववत करें","reset_btn":"रीसेट","reset_none":"रीसेट करने को कुछ नहीं: सब कुछ कॉन्फ़िगरेशन के अनुसार है।","reset_done":"कॉन्फ़िगरेशन पर वापस:","k_all":"सब कुछ","k_scenario":"परिदृश्य","k_delivery":"चैनल","k_recipient":"लोग","k_transport":"परिवहन","q_config":"कॉन्फ़िगरेशन","q_scen":"परिदृश्य","q_active":"सक्रिय परिदृश्य","q_by_scen":"परिदृश्य के अनुसार चैनल","q_implicit":"डिफ़ॉल्ट चैनल","q_recipients":"प्राप्तकर्ता","q_occupancy":"कौन घर पर है","q_snoozes":"विराम","q_last":"अंतिम सूचना","copy":"JSON कॉपी करें","copied":"कॉपी हुआ","close":"बंद करें","empty":"(खाली)","err":"SuperNotify ने त्रुटि के साथ उत्तर दिया:","settings":"इंटीग्रेशन सेटिंग्स","running":"काम चल रहा है…","more":"और"},"SN_FORM_LABELS":{"_common":"रूप और टेक्स्ट","style":"रंग","icons":"आइकन","show_version":"कार्ड संस्करण दिखाएँ","intro":"ऊपर परिचय टेक्स्ट","title":"शीर्षक","dnd_entity":"परेशान-न-करें स्विच","quiet_entity":"गणना की गई शांत स्थिति (वैकल्पिक)","presence_entity":"स्थिति पट्टी के लिए व्यक्ति","archive_days":"संग्रह सफ़ाई: इससे पुराने (दिन)","media_days":"चित्र सफ़ाई: इससे पुराने (दिन)","occupancy":"कौन घर पर है (SuperNotify से)","repairs":"स्वास्थ्य सूची में SuperNotify मरम्मत","snooze_announce":"विराम ज़ोर से बोलें (घोषणा चैनल)","snooze_via":"विराम इसके ज़रिए जाते हैं","o_event":"पुश बटन इवेंट (व्यवस्थापक)","o_voice":"वॉइस कमांड","snooze_minutes":"स्नूज़ अवधि (मिनट)","snooze_panel":"स्नूज़ टाइल विराम पैनल खोलती है","announce_delivery":"घोषणाओं के लिए चैनल","last_notification":"अंतिम सूचना दिखाएँ","last_channels":"अंतिम सूचना में हर चैनल के लिए एक चिप","repeat_entity":"अंतिम-दोहराएँ बटन (वैकल्पिक)","tile_layout":"टाइलें","tile_columns":"टाइल कॉलम (खाली = स्वचालित)","update_entity":"SuperNotify अपडेट entity","cards_update_entity":"कार्ड अपडेट entity","health":"ऊपर स्वास्थ्य","poll_seconds":"हर इतने में रीफ़्रेश (सेकंड)","group":"चैनल कैसे शुरू होता है उसके अनुसार समूह","hide_defaults":"स्वचालित DEFAULT_ चैनल छिपाएँ","limit":"सूची में सूचनाएँ","expand":"मुड़े हुए हिस्से खोलें","max_height":"अधिकतम ऊँचाई (CSS, जैसे 70vh)","trigger_entity":"इसके बदलने पर रीफ़्रेश करें","dry_run":"\"बिना भेजे आज़माएँ\" दिखाएँ","dry_run_dupe_check":"डुप्लिकेट जाँच भी सिम्युलेट करें","days":"डिफ़ॉल्ट रूप से दिखाए गए दिन","manifest_url":"स्वचालन मैनिफ़ेस्ट URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant थीम","o_mdi":"Home Assistant आइकन","o_emoji":"इमोजी","o_row":"बाईं ओर आइकन","o_stacked":"ऊँची, ऊपर आइकन","o_auto":"स्वचालित"},"SN_NATIVE_STR":{"all_good":"सब ठीक है","paused":"रुका हुआ","resume":"फिर शुरू करें","test":"परीक्षण भेजें","sure":"भेजने के लिए फिर टैप करें","sent":"भेजी गईं","last":"अंतिम","none":"अभी कोई सूचना नहीं","ago":"पहले","h":"घं","err":"त्रुटियों वाले परिवहन","off":"चैनल बंद"},"SN_STRATEGY_TITLES":{"home":"होम","archive":"संग्रह","send":"भेजें","setup":"सेटअप","stats":"आँकड़े","tools":"टूल","title":"SuperNotify","appliances":"उपकरण"},"SN_APPL_STRINGS":{"title":"उपकरण","loading":"पढ़ा जा रहा है…","none":"कोई उपकरण नहीं: Appliance Autonotify में जोड़ें (सेटिंग्स → डिवाइस और सेवाएँ)।","st_run":"चल रहा है","st_cleaning":"सफ़ाई कर रहा है","st_done":"पूरा · खाली करें","st_done_other":"पूरा","st_err":"मदद चाहिए","m_switch_on":"प्लग चालू करें","done_switch_on":"प्लग चालू हो गया।","done_action":"हो गया: {n}","confirm_action":"«{n}» चलाएँ?","open_entity":"बदलने के लिए खोलें","chip_notifs":"सूचनाएँ","chip_device":"डिवाइस","not_found":"«{n}» नाम का कोई उपकरण नहीं।","last7":"पिछले 7 दिन","col_day":"दिन","col_cycles":"चक्र","col_time":"समय","col_energy":"खपत","source_h":"स्रोत","manual_src":"हाथ से जोड़ा गया: {w} से ऊपर चालू","tab_info":"सारांश","tab_stats":"खपत और चक्र","tab_cleans":"सफ़ाइयाँ","tab_prints":"प्रिंट","last_run":"पिछला चक्र","avg_run":"औसत","reminders_h":"सूचनाएँ","plug":"प्लग","plug_on":"चालू","plug_off":"बंद","error_h":"त्रुटि","open_device":"Home Assistant में डिवाइस","prints":"प्रिंट","print1":"प्रिंट","per_print":"इस महीने का हर प्रिंट","last_prints":"पिछले प्रिंट","no_print_month":"इस महीने अभी कोई प्रिंट नहीं","no_print":"अभी कोई प्रिंट नहीं","col_fil":"फ़िलामेंट","failed":"विफल","per_run":"इस महीने का हर चक्र","dev_hist":"हर एक Home Assistant के इतिहास से आता है (पिछले {n} दिन); घंटे उपकरण के अपने काउंटर से, अगर हो।","cleans":"सफ़ाइयाँ","clean1":"सफ़ाई","per_clean":"इस महीने की हर सफ़ाई","avg_clean":"औसत {d}","col_area":"क्षेत्रफल","last_cleans":"पिछली सफ़ाइयाँ","no_clean_month":"इस महीने अभी कोई सफ़ाई नहीं","no_clean":"अभी कोई सफ़ाई नहीं","vac_hist":"कुल योग रोबोट के काउंटर से आते हैं; हर सफ़ाई Home Assistant के इतिहास से (पिछले {n} दिन)।","st_paused":"रुका हुआ","st_returning":"डॉक पर लौट रहा है","st_charging":"चार्ज हो रहा है","st_docked_w":"डॉक पर","st_idle":"रुका हुआ","st_off":"बंद","stopped":"रुके हुए","yesterday":"कल","u_min":"मिनट","u_h":"घंटे","start":"शुरू","so_far":"अब तक","no_cycle":"अभी कोई चक्र नहीं","last_cycle":"पिछला चक्र {d}","ended_at":"{t} पर पूरा","reminders":"{t} तक +{n} रिमाइंडर","reminder1":"{t} पर +1 रिमाइंडर","end_est":"अनुमानित अंत","left":"{d} बाकी","almost":"बस पूरा होने वाला है","est_from_avg":"मिलते-जुलते चक्रों से अनुमान","running_for":"{d} से चल रहा है","btn_empty":"खाली किया","btn_seen":"हो गया","btn_resume":"सफ़ाई फिर शुरू करें","m_switch_off":"प्लग बंद करें","m_remind":"बाद में याद दिलाएँ","details":"विवरण","settings":"सेटिंग्स","more":"और","details_link":"विवरण, खपत और चक्र","done_empty":"हो गया: रिमाइंडर बंद।","done_remind":"बाद में याद दिलाएगा।","done_switch":"प्लग बंद किया गया।","done_resume":"सफ़ाई फिर शुरू हुई।","err":"त्रुटि","new_dev":"{n} नए डिवाइस","new_dev1":"1 नया डिवाइस","battery":"बैटरी","consumable":"{n} {p}%","maint_in":"{c} चक्र बाकी","maint_next":"अगले चक्र पर","maint_due":"अभी करना है","maint_of":"{e} में से {d}","maint_done":"हो गया","confirm_maint":"«{n}» को हो गया मानें? गिनती फिर से शुरू होगी।","conn_lost":"कनेक्शन टूटा: आख़िरी ज्ञात स्थिति","cons_h":"उपभोग्य सामग्री","commands":"आदेश","tap_again":"पुष्टि के लिए फिर से टैप करें","empty_since":"खाली करना बाकी","done_since":"पूरा हुए","avg_cycle":"औसत चक्र","maint_tab":"रखरखाव","tab_stats_short":"खपत","read_failed":"इतिहास नहीं पढ़ा जा सका ({e}); थोड़ी देर में फिर कोशिश करेंगे।","retry":"फिर कोशिश करें","see_chart":"चार्ट देखें","back":"वापस","avg_line":"औसत {v}","tap_bar":"उस चक्र को देखने के लिए बार पर टैप करें","k_station":"डॉक","off_since":"बंद है","close":"बंद करें","power_now":"अभी","p_today":"आज","p_week":"सप्ताह","p_month":"महीना","p_year":"साल","cycles":"चक्र","cycle1":"चक्र","per_cycle":"इस महीने प्रति चक्र खपत","short":"छोटे","long":"लंबे","anomalous":"असामान्य","avg":"औसत {d}, {k}","last_cycles":"हाल के चक्र","col_start":"शुरू","col_dur":"अवधि","col_cost":"लागत","no_cycle_month":"इस महीने अभी कोई चक्र नहीं","coarse":"10 दिन से पुराने चक्र घंटे के हिसाब से गिने जाते हैं।","open_notifs":"उपकरण की सूचनाएँ","no_power":"पावर सेंसर नहीं मिला: `appliances:` में `power_entity` से बताएँ।","no_power_vac":"रोबोट वैक्यूम में पावर सेंसर नहीं होता: खपत और चक्र नहीं गिने जाते।"}}};
 (() => {
-  const dicts = { SN_STRINGS, SN_STATS_STRINGS, SN_ARCH_STRINGS, SN_WHY_STRINGS, SN_TOOLS_STRINGS, SN_FORM_LABELS, SN_APPL_STRINGS,
+  const dicts = { SN_STRINGS, SN_ARCH_STRINGS, SN_WHY_STRINGS, SN_TOOLS_STRINGS, SN_FORM_LABELS, SN_APPL_STRINGS,
     SN_NATIVE_STR, SN_STRATEGY_TITLES };
   for (const [lang, byDict] of Object.entries(SN_I18N_EXTRA)) {
     for (const [name, d] of Object.entries(dicts)) {
       if (d && d.en && byDict[name] && !d[lang]) d[lang] = { ...d.en, ...byDict[name] };
     }
+  }
+  // 1.0.0: one table for what is said twice - the skip reasons (the why texts, also in dry runs and in a channel's
+  // last send), the priorities (the archive's badges), "until" and "min" of the tile features
+  for (const [lang, S] of Object.entries(SN_STRINGS)) {
+    S.dry_reasons = (SN_WHY_STRINGS[lang] || SN_WHY_STRINGS.en).reasons;
+    const A = SN_ARCH_STRINGS[lang], N = SN_NATIVE_STR[lang];
+    if (A) A.prio = Object.fromEntries(["critical", "high", "low", "minimum", "medium"].map((p) => [p, S["prio_" + p]]));
+    if (N) Object.assign(N, { until: S.until, min: S.min });
   }
 })();

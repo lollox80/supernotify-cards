@@ -1,17 +1,10 @@
 // CHANGELOG
 // 2026-10-05 v0.76.1: le letture hanno un tempo massimo, così una richiesta mai risposta non blocca la card.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { SRC, boot, load, ok, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true, url: "http://ha.local/" });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-const G = new dom.window.Function(SRC + "\nreturn { snWS };")();
+boot({ url: "http://ha.local/" });
+const G = load("snWS");
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const never = { callWS: () => new Promise(() => {}) };
 let err = null;
 try { await G.snWS(never, { type: "x" }, 50); } catch (e) { err = e; }

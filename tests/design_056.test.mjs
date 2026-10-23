@@ -1,16 +1,9 @@
 // v0.56.0: l'ultima notifica dell'overview si legge come quella della control, ed è disattivabile.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(SRC)();
+boot();
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const flush = () => new Promise((r) => setTimeout(r, 30));
 
 const created = new Date(Date.now() - 4 * 60000).toISOString();

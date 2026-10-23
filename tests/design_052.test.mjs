@@ -1,16 +1,9 @@
 // v0.52.0: control (riga di stato, tile con icona a sinistra, conteggi + Perché) e overview (frase + elenco).
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, fail } from "./_harness.mjs";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
+boot({ scroll: true });
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const tick = () => new Promise((r) => setTimeout(r, 40));
 const del = (name, fn, state = "on") => ({ state, attributes: { name, enabled: state === "on", transport: "mobile_push", inclusion: ["default"],
   transport_enabled: true, friendly_name: `SuperNotify Delivery ${fn} abilitata` } });
@@ -70,11 +63,12 @@ console.log("    righe:", rows.join(" | "));
 ok(rows.some((r) => /1 canale spento \/ SMS di riserva/.test(r)), "canali spenti con il nome leggibile");
 ok(rows.some((r) => /telegram: chat not found/.test(r)), "transport con errori con il messaggio");
 ok(rows.some((r) => /^In pausa: tutto \/ fino alle \d\d:\d\d$/.test(r)), "snooze attivo nell'elenco, con fino a quando (0.88.0)");
-ok(o.shadowRoot.querySelectorAll(".stat").length === 3, "tre numeri invece di cinque");
+// 1.0.0 (phase 5): the archive's four numbers always (the three / five of before SuperNotify 2.12.1 are gone)
+ok(o.shadowRoot.querySelectorAll(".stat").length === 4, "quattro numeri dall'archivio");
 const o2 = mount("supernotify-overview-card", { health: "chips", stats: "full" });
 await tick(); o2.hass = { ...hass }; await tick();
 ok(o2.shadowRoot.querySelectorAll(".hc").length > 0 && !o2.shadowRoot.querySelector(".band"), "health: chips = vecchi chip");
-ok(o2.shadowRoot.querySelectorAll(".stat").length === 5, "stats: full = cinque numeri");
+ok(o2.shadowRoot.querySelectorAll(".stat").length === 4, "stats: full ignorato, sempre quattro numeri");
 
 if (fail) { console.log(`\n${fail} FALLITI`); process.exit(1); }
 console.log("\nTUTTI I TEST OK");

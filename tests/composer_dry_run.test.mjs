@@ -1,6 +1,8 @@
 // v0.48.0: composer-card "Prova senza inviare" sul dry-run vero di SuperNotify 2.12
 // (supernotify.notify con dry_run: simulate, risposta = Notification.contents()).
 // Sostituisce il test della 0.44.0, scritto per un'azione enquire_dry_run mai esistita.
+// 1.0.0 (phase 5): SuperNotify 2.13 minimo - il dry run c'è sempre e ha la sua cache dei doppioni:
+// via i controlli di versione (2.11.1 / 2.12.0 / 2.12.1), il force_resend di default e il "riavvia".
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -31,7 +33,7 @@ const ws = [];
 const services = [];
 const ver = (v) => ({ "update.supernotify_update": { state: "off", attributes: { installed_version: v } } });
 const mkHass = (v) => ({
-  language: "it", themes: { darkMode: false }, services: { supernotify: { notify: v.includes("2.12") ? { response: { optional: true } } : {} } },
+  language: "it", themes: { darkMode: false }, services: v ? { supernotify: { notify: { response: { optional: true } } } } : {},
   states: {
     ...ver(v),
     "switch.supernotify_delivery_mobile_push": { entity_id: "switch.supernotify_delivery_mobile_push", state: "on",
@@ -49,21 +51,21 @@ const mkHass = (v) => ({
 const card = document.createElement("supernotify-composer-card");
 card.setConfig({});
 document.body.appendChild(card);
-card.hass = mkHass("v2.11.1");
+card.hass = mkHass("");
 const sr = card.shadowRoot;
-ok(sr.getElementById("dry").style.display === "none", "su 2.11.1 il pulsante è nascosto");
+ok(sr.getElementById("dry").style.display === "none", "SuperNotify non caricato: pulsante nascosto");
 
 sr.getElementById("m").value = "Porta aperta";
 sr.getElementById("p").value = "high";
-card.hass = mkHass("v2.12.0-beta1");
+card.hass = mkHass("v2.13.0");
 ok(sr.getElementById("m").value === "Porta aperta", "il modulo non si svuota");
-ok(sr.getElementById("dry").style.display === "", "su 2.12.0-beta1 il pulsante compare");
+ok(sr.getElementById("dry").style.display === "", "su 2.13 il pulsante compare");
 
 await card._dryRun();
 const call = ws[0] || {};
 ok(call.domain === "supernotify" && call.service === "notify" && call.return_response === true, "chiama supernotify.notify con la risposta");
 ok(call.service_data && call.service_data.dry_run === "simulate", "dry_run: simulate");
-ok(call.service_data && call.service_data.force_resend === true, "force_resend: niente cache dei doppioni");
+ok(call.service_data && !("force_resend" in call.service_data), "di default la prova controlla i doppioni (cache dei doppioni separata)");
 ok(call.service_data.message === "Porta aperta" && call.service_data.priority === "high", "stessi campi dell'Invia");
 ok(services.length === 0, "niente inviato davvero");
 const box = sr.getElementById("dryBox");
@@ -75,7 +77,7 @@ ok(/Notifica sul telefono/.test(txt) && /s23/.test(txt), "alias e destinatario d
 ok(/Echo Cucina, sala, ufficio \+1/.test(txt), "target Alexa: nome, id accorciati, +N");
 ok(/in pausa/.test(txt) && /nessun destinatario utilizzabile/.test(txt), "motivi tradotti (SNOOZED, NO_TARGET)");
 ok(/Priorità: Alta/.test(txt) && /afternoon, Persone a casa/.test(txt) && /In casa: Lorenzo/.test(txt), "priorità, scenari, chi è in casa");
-ok(/Controllo doppioni non simulato/.test(txt), "nota sul controllo doppioni");
+ok(!/Controllo doppioni non simulato/.test(txt), "nessuna nota: il controllo doppioni è simulato");
 const rows = [...box.querySelectorAll(".dRow")].map((r) => r.textContent.trim());
 const rowIcons = [...box.querySelectorAll(".dRow")].map((r) => (r.querySelector("ha-icon") || {}).getAttribute?.("icon"));
 ok(rowIcons[0] === "mdi:check-circle" && rowIcons[rowIcons.length - 1] === "mdi:minus-circle-outline", "prima chi parte, poi i saltati");
@@ -87,49 +89,40 @@ ok(/Doppione di una notifica recente/.test(box.textContent), "doppione segnalato
 card._renderDry({}, true);
 ok(/è la 2\.12/.test(box.textContent), "risposta vuota spiegata");
 
-// con dry_run_dupe_check: la prova controlla i doppioni, l'Invia dopo porta force_resend
+// dry_run_dupe_check: false = niente controllo doppioni (force_resend), detto nel riquadro
 const c2 = document.createElement("supernotify-composer-card");
-c2.setConfig({ dry_run_dupe_check: true });
+c2.setConfig({ dry_run_dupe_check: false });
 document.body.appendChild(c2);
-c2.hass = mkHass("v2.12.0");
+c2.hass = mkHass("v2.13.0");
 c2.shadowRoot.getElementById("m").value = "Garage aperto";
 await c2._dryRun();
-ok(!("force_resend" in ws[ws.length - 1].service_data), "dry_run_dupe_check: la prova controlla i doppioni");
+ok(ws[ws.length - 1].service_data.force_resend === true, "dry_run_dupe_check: false -> force_resend");
+ok(/Controllo doppioni non simulato/.test(c2.shadowRoot.getElementById("dryBox").textContent), "nota sul controllo doppioni");
 await c2._send();
-ok(services.length === 1 && services[0][2].force_resend === true, "l'Invia subito dopo porta force_resend");
-await c2._send();
-ok(!("force_resend" in services[1][2]), "il secondo Invia no (vale solo una volta)");
-c2.shadowRoot.getElementById("m").value = "Altro testo";
-await c2._dryRun();
-c2.shadowRoot.getElementById("m").value = "Testo cambiato";
-await c2._send();
-ok(!("force_resend" in services[2][2]), "testo cambiato dopo la prova: niente force_resend");
+ok(services.length === 1 && !("force_resend" in services[0][2]), "l'Invia dopo la prova non porta force_resend");
+ok(!c2._dryKey, "nessuna memoria della prova (_dryKey) per l'Invia");
 
-// forzato da config senza entità update
+// senza update.supernotify_update il pulsante c'è lo stesso; dry_run: false lo nasconde
 const c3 = document.createElement("supernotify-composer-card");
-c3.setConfig({ dry_run: true });
+c3.setConfig({});
 document.body.appendChild(c3);
 c3.hass = { ...mkHass("x"), states: {} };
-ok(c3.shadowRoot.getElementById("dry").style.display === "", "dry_run: true lo mostra anche senza versione");
+ok(c3.shadowRoot.getElementById("dry").style.display === "", "senza entità update il pulsante compare");
+const c3b = document.createElement("supernotify-composer-card");
+c3b.setConfig({ dry_run: false });
+document.body.appendChild(c3b);
+c3b.hass = mkHass("v2.13.0");
+ok(c3b.shadowRoot.getElementById("dry").style.display === "none", "dry_run: false lo nasconde");
 
 // errore
 card._hass.callWS = async () => { throw { code: "service_validation_error", message: "boom" }; };
 await card._dryRun();
 ok(/Simulazione non riuscita: boom/.test(box.textContent), "errore mostrato");
 
-// scaricata ma HA non riavviato: update dice 2.12, l'azione non risponde ancora
-const c4 = document.createElement("supernotify-composer-card");
-c4.setConfig({}); document.body.appendChild(c4);
-c4.hass = { ...mkHass("v2.12.0-beta1"), services: { supernotify: { notify: {} } } };
-ok(c4.shadowRoot.getElementById("dry").style.display === "none", "2.12 scaricata ma non attiva: pulsante nascosto");
-card._hass.callWS = async () => { throw { code: "service_validation_error", message: "Validation error: An action which does not return responses can't be called with return_response=True" }; };
-await card._dryRun();
-ok(/va riavviato/.test(box.textContent), "errore 'does not return responses' spiegato come riavvio");
-
 // v0.48.3: nomi delle camere e anteprima con il testo automatico
 const c5 = document.createElement("supernotify-composer-card");
 c5.setConfig({}); document.body.appendChild(c5);
-c5.hass = mkHass("v2.12.0");
+c5.hass = mkHass("v2.13.0");
 const s5 = c5.shadowRoot;
 const opt = [...s5.getElementById("cam").options].find((o) => o.value === "camera.a1_camera");
 ok(opt && /Ingresso/.test(opt.textContent) && !/a1_camera/.test(opt.textContent), "camera mostrata col nome");

@@ -1,6 +1,7 @@
 // v0.88.0: panoramica "Proposta 2" - overview 0.39.0 (banda di stato, numeri dall'archivio, ultima
 // notifica con Ripeti e Perché, scenari a righe con l'effetto adesso, parts) e stats 0.33.0
 // (kpis/versions false, intestazione col periodo, picco e doppioni sotto le barre, errori in colonna).
+// 1.0.0 (fase 3): la seconda lettura dei totali giornalieri parte da un contatore cambiato (memo di 60 s).
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -70,7 +71,7 @@ const band = R.querySelector(".band");
 console.log("    band:", band.className, [...R.querySelectorAll(".hr")].map(txt).join(" | "));
 ok(band && band.classList.contains("crit"), "banda rossa: email fallita oggi, più pausa, canale spento, non disturbare");
 ok(/4 cose da guardare/.test(txt(band.querySelector(".bl"))) && /2 di 3 canali accesi/.test(txt(band.querySelector(".bl"))), `frase e canali (${txt(band.querySelector(".bl"))})`);
-ok(/SuperNotify 2\.13\.2/.test(txt(R.querySelector(".bver"))) && /Card 0\.(8[89]|9\d)\.\d/.test(txt(R.querySelector(".bver"))), "versioni a destra della banda");
+ok(/SuperNotify 2\.13\.2/.test(txt(R.querySelector(".bver"))) && /Card (0\.(8[89]|9\d)|[1-9]\d*\.\d+)\.\d/.test(txt(R.querySelector(".bver"))), "versioni a destra della banda");
 ok(!R.querySelector(".hr.ok"), "le versioni non sono più righe dell'elenco");
 const pz = R.querySelector("[data-resume]");
 ok(pz && /Riprendi/.test(pz.textContent) && /finché non riprendi|fino alle/.test(txt(pz.closest(".hr"))), "pausa con ▶ Riprendi e fino a quando");
@@ -87,7 +88,12 @@ ok(/^Canali2 \/ 3 accesi1 spento/.test(st[2]), "Canali accesi e spenti");
 ok(/^Silenzio1 pausa attivaNon disturbare: attivo/.test(st[3]), "Silenzio: pause e non disturbare");
 const t0 = new Date(); t0.setHours(0, 0, 0, 0);
 const dl0 = calls.filter((c) => c.verbosity === "daily");
-ok(dl0.length === 2 && new Date(dl0[0].after).getTime() === t0.getTime(), "prima volta: oggi, poi i 30 giorni (0.88.1)");
+// 1.0.0 (phase 5): SuperNotify 2.13 always has daily - the 30 days straight away, no "today first" probe
+const t30 = new Date(t0); t30.setDate(t30.getDate() - 30);
+ok(dl0.length === 1 && new Date(dl0[0].after).getTime() === t30.getTime(), "prima volta: i 30 giorni in una chiamata");
+// 1.0.0 (fase 3): i totali giornalieri sono riletti quando il contatore cambia (prima bastava _ftStamp)
+hass.states = { ...hass.states, "sensor.supernotify_notifications": { state: "43", attributes: {}, last_updated: new Date().toISOString() } };
+top.hass = { ...hass };
 calls.length = 0; top._ftAt = 0; top._ftStamp = "x"; top._failures(); await wait(60);
 const dl1 = calls.filter((c) => c.verbosity === "daily");
 ok(dl1.length === 1 && new Date(dl1[0].after).getTime() === t0.getTime(), "poi solo oggi: i giorni finiti restano nel browser");

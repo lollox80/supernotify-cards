@@ -1,17 +1,9 @@
 // v0.49.0: una sola palette con contrasti AA, nome leggibile davanti, versione nascosta.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { SRC, boot, load, ok, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-new dom.window.Function(SRC)();
+boot({ scroll: true });
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const flush = () => new Promise((r) => setTimeout(r, 30));
 
 // ── 1. contrasti della palette chiara (WCAG AA 4.5:1 sul fondo della card) ──
@@ -34,26 +26,29 @@ ok(ratio("#ffffff", val("brand")) >= 4.5, `chiaro: testo bianco su brand ${ratio
 ok(ratio(val("warnInk"), val("warnSoft")) >= 4.5, `chiaro: snooze attivo ${ratio(val("warnInk"), val("warnSoft")).toFixed(2)}:1`);
 // 0.64.0: one _palette in SnCard, and the cards extend it (0.85.0: 13 - why is an alias of archive; 0.91.0: 14 with appliances)
 ok((SRC.match(/\n  _palette\(\) \{\n    return snPalette\(/g) || []).length === 1
-  && (SRC.match(/^class Supernotify\w+Card extends SnCard \{/gm) || []).length === 14, "le 14 card usano snPalette tramite SnCard (0.64.0)");
+  // 1.0.0 (phase 4): deliveries, transports and recipients extend SnListCard, which extends SnCard
+  && /^class SnListCard extends SnCard \{/m.test(SRC)
+  && (SRC.match(/^class Supernotify\w+Card extends Sn(?:List)?Card \{/gm) || []).length === 14, "le 14 card usano snPalette tramite SnCard (0.64.0)");
 
 // ── 2. stati di prova ───────────────────────────────────────────────────────
 const T0 = Math.floor(Date.now() / 1000) - 600;
-const IDX = { count: 1, chan: ["mobile_push", "email"], scen: [],
-  items: [{ id: "aaaa1111", t: T0, ti: "Porta", o: "partial_delivery", d: 1, s: 1, c: [0, [1, "s", "nessun target"]] }] };
-const DET = JSON.stringify({ ok: true, n: { id: "aaaa1111-x", t: T0, ti: "Porta", p: "high", o: "partial_delivery",
-  dl: [{ n: "mobile_push", r: "ok", calls: 1 }, { n: "email", r: "skip", why: "NO_TARGET", tr: "always" }] } });
+// 1.0.0: the archive comes from enquire_archive (the sensor + shell_command bridge is gone)
+const DOC = { id: "aaaa1111-x", created: new Date(T0 * 1000).toISOString(), message: "Porta", priority: "high",
+  outcome: "partial_delivery", delivered: 1, skipped: 1,
+  deliveries: { mobile_push: { success: [{}] }, email: { skipped: { skip_reason: "NO_TARGET" } } } };
 const del = (name, fn, transport) => ({ state: "on", attributes: { name, enabled: true, transport, inclusion: ["default"], transport_enabled: true,
   friendly_name: `SuperNotify Delivery ${fn} abilitata` } });
 const hass = {
   language: "it", themes: { darkMode: false }, entities: {}, user: { is_admin: true },
-  services: { supernotify: { notify: {} }, shell_command: { sn_archive_detail: {} } },
+  services: { supernotify: { notify: {}, enquire_archive: {} } },
   states: {
     "switch.supernotify_delivery_mobile_push": del("mobile_push", "Notifica sul telefono", "mobile_push"),
     "switch.supernotify_delivery_email": del("email", "Email", "email"),
-    "sensor.supernotify_archivio": { state: "1", attributes: IDX, last_updated: "x" },
+    "sensor.supernotify_notifications": { state: "1", attributes: {}, last_updated: "x" },
   },
   callService: async () => {}, callApi: async () => ({}),
-  callWS: async (m) => (m.domain === "shell_command" ? { response: { stdout: DET, stderr: "", returncode: 0 } } : { response: {} }),
+  callWS: async (m) => (m.service === "enquire_archive"
+    ? { response: (m.service_data || {}).id ? DOC : { notifications: (m.service_data || {}).verbosity ? [] : [DOC] } } : { response: {} }),
 };
 const mount = (tag, cfg = {}) => { const c = document.createElement(tag); c.setConfig(cfg); document.body.appendChild(c); c.hass = hass; return c; };
 
@@ -69,13 +64,14 @@ const cc = mount("supernotify-composer-card");
 const chip = cc.shadowRoot.querySelector('#chips .chip[data-d="mobile_push"]');
 ok(chip && chip.textContent === "Notifica sul telefono" && chip.title === "mobile_push", "composer: chip con alias, tecnico nel tooltip");
 
-const ac = mount("supernotify-archive-card", { source: "sensor", entity: "sensor.supernotify_archivio" });
+const ac = mount("supernotify-archive-card", { priority_filters: false });
+await flush(); ac.hass = { ...hass };
 await flush();
 // 0.85.0: the list says where it went, with the alias
 const l2 = ac.shadowRoot.querySelector(".it .l2");
 ok(l2 && /Notifica sul telefono/.test(l2.textContent) && !/mobile_push/.test(l2.textContent), "archive: riga con alias");
 
-const wc = mount("supernotify-why-card", { source: "sensor", entity: "sensor.supernotify_archivio" });
+const wc = mount("supernotify-why-card", { priority_filters: false });
 await flush(); await flush();
 const nm = [...wc.shadowRoot.querySelectorAll(".ch .nm")].map((n) => n.textContent);
 ok(nm.includes("Notifica sul telefono"), `why: nome leggibile (${nm.join(", ")})`);

@@ -1,18 +1,10 @@
 // CHANGELOG
 // 2026-10-04 v0.63.1: snooze_announce - la pausa detta a voce, prima di metterla e dopo averla tolta.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, wait, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(SRC)();
+boot();
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = [];
 const mk = (admin) => ({
   language: "it", themes: { darkMode: false }, entities: {}, user: { id: "u1", is_admin: admin },

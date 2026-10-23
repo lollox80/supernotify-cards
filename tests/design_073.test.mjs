@@ -12,7 +12,7 @@ dom.window.customCards = [];
 dom.window.fetch = async () => ({ ok: false });
 const errors = [];
 dom.window.addEventListener("error", (e) => errors.push(String(e.message)));
-const G = new dom.window.Function(SRC + "\nreturn { SN_STRINGS, SN_I18N_EXTRA, snT, SN_FORM_LABELS, SN_STATS_STRINGS };")();
+const G = new dom.window.Function(SRC + "\nreturn { SN_STRINGS, SN_I18N_EXTRA, snT, SN_FORM_LABELS };")();
 
 let fail = 0;
 const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
@@ -20,13 +20,15 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const LANGS = ["de", "es", "fr", "nl", "pl", "pt", "ja", "zh", "hi"];
 
 ok(LANGS.every((l) => G.SN_STRINGS[l] && Object.keys(G.SN_STRINGS[l]).length === Object.keys(G.SN_STRINGS.en).length), "SN_STRINGS: tutte le lingue con tutte le chiavi");
-ok(G.snT({}, { language: "de" }).sent_today === G.SN_I18N_EXTRA.de.SN_STRINGS.sent_today, "de da hass.language");
+// 1.0.0 (phase 5): `sent_today` is gone with the numbers of before SuperNotify 2.12.1 - `act_scen` instead
+ok(G.snT({}, { language: "de" }).act_scen === G.SN_I18N_EXTRA.de.SN_STRINGS.act_scen, "de da hass.language");
 ok(G.snT({}, { language: "zh-Hans" }) === G.SN_STRINGS.zh, "zh-Hans -> zh");
 ok(G.snT({}, { language: "pt-BR" }) === G.SN_STRINGS.pt, "pt-BR -> pt");
 ok(G.snT({ language: "fr" }, { language: "it" }) === G.SN_STRINGS.fr, "language: nella card vince");
 ok(G.snT({}, { language: "sv" }) === G.SN_STRINGS.en, "lingua assente: inglese");
-ok(G.SN_STRINGS.it.sent_today === "Inviate oggi", "italiano intatto (non sovrascritto)");
-ok(LANGS.every((l) => G.SN_FORM_LABELS[l] && G.SN_STATS_STRINGS[l]), "editor e statistiche tradotti");
+ok(G.SN_STRINGS.it.act_scen === "Scenari attivi", "italiano intatto (non sovrascritto)");
+// 1.0.0: the stats strings live in SN_STRINGS (the separate SN_STATS_STRINGS copy per language is gone)
+ok(LANGS.every((l) => G.SN_FORM_LABELS[l] && G.SN_STRINGS[l].st_title === G.SN_I18N_EXTRA[l].SN_STRINGS.st_title && G.SN_STRINGS[l].st_title !== G.SN_STRINGS.en.st_title), "editor e statistiche tradotti");
 
 // ogni card si disegna in ogni lingua senza errori
 const S = (state = "on", attributes = {}) => ({ state, attributes, last_changed: "2026-10-04T10:00:00Z" });

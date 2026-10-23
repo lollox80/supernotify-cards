@@ -1,17 +1,11 @@
 // CHANGELOG
 // 2026-10-05 v0.75.2: conteggi giornalieri tenuti nel browser, poi solo i giorni nuovi.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+// 2026-10-23 v1.0.0: le letture qui verificano la cache del browser: la memoria di 60 s (fase 3) va azzerata prima di ognuna.
+import { boot, load, ok, dom, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true, url: "http://ha.local/" });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-const G = new dom.window.Function(SRC + "\nreturn { snStatsDaily };")();
+boot({ url: "http://ha.local/" });
+const G = load("snStatsDaily");
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const key = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const asks = [];
 const hass = { callWS: async (m) => {
@@ -24,13 +18,16 @@ dom.window.localStorage.clear();
 const start = new Date(Date.now() - 14 * 86400000); start.setHours(0, 0, 0, 0);
 const d1 = await G.snStatsDaily.get(hass, start.getTime());
 ok(d1.length === 15 && asks[0] === start.getTime(), `prima volta: tutto il periodo (${d1.length} giorni)`);
+G.snStatsDaily.memo = null;
 const d2 = await G.snStatsDaily.get(hass, start.getTime());
 const today = new Date(); today.setHours(0, 0, 0, 0);
 ok(asks[1] === today.getTime() && d2.length === 15, "seconda volta: solo da oggi, stessi giorni");
 const s7 = new Date(Date.now() - 7 * 86400000); s7.setHours(0, 0, 0, 0);
+G.snStatsDaily.memo = null;
 const d3 = await G.snStatsDaily.get(hass, s7.getTime());
 ok(asks[2] === today.getTime() && d3.length === 8 && d3[0].date === key(s7), "finestra più corta: dalla cache");
 const s30 = new Date(Date.now() - 30 * 86400000); s30.setHours(0, 0, 0, 0);
+G.snStatsDaily.memo = null;
 await G.snStatsDaily.get(hass, s30.getTime());
 ok(asks[3] === s30.getTime(), "finestra più lunga: rilegge tutto il periodo");
 if (fail) { console.log(`FAIL ${fail}`); process.exit(1); }

@@ -1,6 +1,7 @@
 // v0.89.0: allineamento a SuperNotify 2.13-2.15 - esito dell'ultimo invio per canale (card canali,
 // banda di stato, badge), Critiche/Alte con una sola chiamata `priority`, scenari attivi dai
 // binary_sensor quando scenario_control.refresh e' acceso.
+// 1.0.0 (fase 3): righe dei canali con un solo listener su #rows: .click() invece di .onclick().
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -92,7 +93,7 @@ const tg = row("Telegram Lorenzo");
 ok(tg && tg.querySelector(".st.ls.crit") && /fallita 1 h fa/.test(txt(tg)), "Telegram: ✖ fallita, in rosso");
 ok(/⏭ saltata/.test(txt(row("Annuncio vocale Alexa"))), "Alexa: saltata");
 ok(!/inviata|fallita|saltata/.test(txt(row("email"))), "email senza esito: nessuna scritta");
-tg.onclick({ target: tg }); await wait(30);
+tg.click(); await wait(30);
 ok(/Ultimo invio/.test(txt(row("Telegram Lorenzo"))) && dl.shadowRoot.querySelectorAll('.row[aria-expanded="true"]').length === 1, "nel dettaglio: «Ultimo invio»");
 
 // ── 3. banda di stato e badge ───────────────────────────────────────────
@@ -119,12 +120,13 @@ hass = { ...hass, states: st2 };
 G.snActiveEnsure(hass);
 ok(G.snActive.names.has("morning") && !G.snActive.names.has("late_night") && G.snActive.v > v0, "cambio di stato letto subito, le card si ridisegnano (v cresce)");
 
-// SuperNotify 2.12 (sensori forse fermi): chiede a SuperNotify anche se sono on/off
+// 1.0.0 (phase 5): SuperNotify 2.13 minimum - the version is no longer read: sensors on/off are live
+// even without update.supernotify_update (on 2.12 they could be stale, that case is gone)
 G = boot(); calls.length = 0;
-const st12 = baseStates(); st12["update.supernotify_update"].attributes.installed_version = "v2.12.1";
-G.snActiveEnsure(mkHass(st12));
+const stNoUpd = baseStates(); delete stNoUpd["update.supernotify_update"];
+G.snActiveEnsure(mkHass(stNoUpd));
 await wait(30);
-ok(G.snActive.live === false && calls.some((c) => c.service === "enquire_active_scenarios"), "su 2.12 non si fida dei sensori");
+ok(G.snActive.live === true && !calls.some((c) => c.service === "enquire_active_scenarios"), "senza entità update: sensori vivi, nessuna enquire");
 
 // refresh spento: sensori unknown (il manuale resta on/off) -> chiede a SuperNotify
 G = boot(); calls.length = 0;

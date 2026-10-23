@@ -1,16 +1,10 @@
 // v0.54.0: singolare/plurale, nomi leggibili in simulatore e scenari, fasce tradotte e dalla mattina.
 // 2026-10-05 v0.78.0: il tooltip del tag scenario ora inizia col nome tecnico e prosegue con cosa fa lo scenario.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, fail } from "./_harness.mjs";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true, url: "http://ha.local/" });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
+boot({ url: "http://ha.local/" });
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const tick = () => new Promise((r) => setTimeout(r, 40));
 const st = (state, attributes = {}) => ({ state, attributes });
 const del = (name, fn, on = "on") => st(on, { name, enabled: on === "on", transport: "mobile_push", inclusion: ["default"], friendly_name: `SuperNotify Delivery ${fn} abilitata` });
@@ -20,7 +14,7 @@ const states = {
   "switch.supernotify_scenario_ospiti": st("on", { name: "ospiti", friendly_name: "SuperNotify Scenario Voce spenta (ospiti)", delivery: { mobile_push: { enabled: false } } }),
   "binary_sensor.supernotify_scenario_ospiti": st("on"),
   "switch.supernotify_recipient_lorenzo": st("on", { entity_id: "person.lorenzo", mobile_devices: [{}], friendly_name: "SuperNotify Recipient Lorenzo abilitato" }),
-  "sensor.supernotify_failures": st("1"),
+  "sensor.supernotify_failures": st("0"),
 };
 for (const [b, t] of [["early_morning", "06:00"], ["morning", "07:30"], ["evening", "19:00"], ["late_night", "00:30"]]) {
   states["input_datetime.s_" + b] = st(t + ":00");
@@ -34,6 +28,8 @@ const mk = async (tag, cfg, lang = "it") => {
       if (m.service === "enquire_deliveries_by_scenario") return { response: { ospiti: { enabled: [], disabled: ["mobile_push"] } } };
       if (m.service === "enquire_implicit_deliveries") return { response: { default: ["mobile_push"] } };
       if (m.service === "enquire_active_scenarios") return { response: { scenarios: ["ospiti"] } };
+      // 1.0.0 (phase 5): the failures come from the archive's daily totals (SuperNotify 2.13), not the sensor
+      if (m.service === "enquire_archive") return { response: { days: [{ date: new Date().toLocaleDateString("sv"), count: 2, deliveries: { mobile_push: { failed: 1 } } }] } };
       return { response: {} };
     } };
   await tick(); return el.shadowRoot;

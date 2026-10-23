@@ -1,15 +1,9 @@
 // v0.51.0: deliveries-card raggruppata, una riga di stato per canale (pausa da scenario, spento, transport spento).
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, fail } from "./_harness.mjs";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
+boot();
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const del = (name, fn, transport, inc, extra = {}, state = "on") => ({ state, attributes: { name, enabled: state === "on", transport, inclusion: inc,
   transport_enabled: true, friendly_name: `SuperNotify Delivery ${fn} abilitata`, ...extra } });
 const states = {

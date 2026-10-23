@@ -1,16 +1,9 @@
 // v0.56.1: fix visti sul HA vero - 5 numeri senza buco, messaggio senza titolo, markdown, chip scenari.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(SRC)();
+boot();
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const flush = () => new Promise((r) => setTimeout(r, 30));
 
 const LAST = { id: "x1", title: "", priority: "medium", created: new Date(Date.now() - 7 * 60000).toISOString(), delivered: 2,
@@ -25,15 +18,16 @@ const hass = {
 };
 const mount = (cfg = {}) => { const c = document.createElement("supernotify-overview-card"); c.setConfig(cfg); document.body.appendChild(c); c.hass = hass; return c; };
 
+// 1.0.0 (phase 5): `stats: full` and `sent_today_entity` are gone - always the archive's four numbers
 const oc = mount({ stats: "full", sent_today_entity: "sensor.inviate" });
 await flush(); await flush();
 const st = oc.shadowRoot.getElementById("stats");
-ok(st.dataset.n === "5" && st.children.length === 5, `stats full: 5 riquadri, data-n=${st.dataset.n}`);
+ok(st.dataset.n === "4" && st.children.length === 4, `opzioni rimosse ignorate: 4 riquadri, data-n=${st.dataset.n}`);
 const css = oc.shadowRoot.innerHTML;
-ok(/\.stats\[data-n="5"\] \{ grid-template-columns: repeat\(6, 1fr\)/.test(css), "5 numeri: griglia 3+2");
+ok(/\.stats\[data-n="4"\] \{ grid-template-columns: repeat\(2, 1fr\)/.test(css), "4 numeri: griglia 2+2");
 const o3 = mount({});
 await flush(); await flush();
-ok(o3.shadowRoot.getElementById("stats").dataset.n === "3", "default: 3 riquadri");
+ok(o3.shadowRoot.getElementById("stats").dataset.n === "4", "default: 4 riquadri");
 
 const last = oc.shadowRoot.getElementById("last");
 ok(!last.querySelector(".lt"), "senza titolo niente riga in grassetto");

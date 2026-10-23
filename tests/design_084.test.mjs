@@ -20,8 +20,9 @@ const tabs = async (cfg, v) => (await Strat.generate({ type: "custom:supernotify
 let vs = await tabs({}, "2026.10.1");
 ok(vs.every((v) => /^mdi:/.test(v.icon) && v.show_icon_and_title === true), "default: icona mdi + nome");
 ok(vs.find((v) => v.path === "home").title === "Casa", "default: titolo senza emoji");
-vs = await tabs({}, "2026.1.3");
-ok(vs.every((v) => !v.icon && !v.show_icon_and_title), "HA prima della 2026.2: solo nome, mai icona da sola");
+// 1.0.0 (phase 5): Home Assistant 2026.2 minimum - icon + name always, also when the version is not known
+vs = await tabs({}, "");
+ok(vs.every((v) => /^mdi:/.test(v.icon) && v.show_icon_and_title === true), "versione HA sconosciuta: icona + nome (minimo 2026.2)");
 vs = await tabs({ tabs: "emoji" }, "2026.10.1");
 ok(vs.every((v) => !v.icon) && vs.find((v) => v.path === "stats").title === "📊 Statistiche", "emoji: emoji davanti al nome");
 vs = await tabs({ tabs: "text" }, "2026.10.1");

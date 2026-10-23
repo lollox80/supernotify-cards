@@ -21,23 +21,15 @@ type: custom:supernotify-why-card
 
 | Option | Required | Description |
 |---|---|---|
-| `limit` | no | notifications read from the archive (default 40) |
+| `limit` | no | notifications in the list (as for supernotify-archive-card) |
 | `expand` | no | `true` opens the folded parts (routine skips, channels not involved, full trace) |
-| `source`, `trigger_entity` | no | as for supernotify-archive-card |
-| `entity` | no | bridge only: sensor holding the archive index |
-| `service` | no | bridge only: service returning the detail (default `shell_command.sn_archive_detail`) |
+| `trigger_entity` | no | as for supernotify-archive-card |
 | `intro`, `style`, `language` | no | as for the other cards |
 
-On SuperNotify 2.10.0 or later the list and the detail both come from `supernotify.enquire_archive`,
-through the same store as the archive card: opening a notification already listed needs no
-further call. Before 2.10, the detail is read on demand through the bridge, so it never weighs on
-any entity's attributes. It needs the same `tools/sn_archive_index.py` as the archive card and a
-shell command returning its output (restart Home Assistant after adding it):
-
-```yaml
-shell_command:
-  sn_archive_detail: "python3 /config/tools/sn_archive_index.py --detail {{ id }}"
-```
+The list and the detail both come from `supernotify.enquire_archive`, through the same store as the
+archive card: opening a notification already listed needs no further call. Since 1.0.0 the
+`shell_command.sn_archive_detail` bridge of before SuperNotify 2.10 is gone (`source`, `entity` and
+`service` are ignored).
 
 The channels that did not start are not in the archive: their reason is reconstructed from the
 configuration as it is now (delivery and transport switches, inclusion, the scenarios in force,

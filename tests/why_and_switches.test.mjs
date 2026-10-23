@@ -1,5 +1,7 @@
 // v0.40.0: card Delivery/Transport pronte per gli switch della PR #207, ultimo avviso
 // nella card Destinatari, nuova card "Perché?" alimentata da shell_command.
+// 1.0.0: SuperNotify 2.13 - every delivery has its switch (the binary_sensor mirror is ignored), the
+// sensor index + shell_command bridge is gone: the index and the detail are handed to the cards.
 import { JSDOM } from "jsdom";
 import fs from "fs";
 import assert from "assert";
@@ -9,9 +11,9 @@ global.window = dom.window; global.document = dom.window.document; global.Custom
 global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
 dom.window.customCards = [];
 dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
+const G = new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8") + "\nreturn { snArchiveStore };")();
 
-// Dati sintetici con la stessa forma di tools/sn_archive_index.py (indice e --detail)
+// Dati sintetici nella forma dell'indice compatto e del dettaglio (snArchiveItem / snArchiveDetail)
 const T0 = Math.floor(Date.now() / 1000) - 600;
 const IDX = {
   count: 2, chan: ["html5", "mobile_push"], scen: ["afternoon"],
@@ -38,16 +40,16 @@ const del = (name, extra = {}) => ({ name, enabled: true, transport: "mobile_pus
 const now = new Date();
 const hass = {
   language: "it", themes: { darkMode: false },
-  services: { shell_command: { sn_archive_detail: {} }, switch: {}, button: {} },
+  services: { supernotify: { enquire_archive: {} }, switch: {}, button: {} },
   entities: { "button.supernotify_ripristina_override": { platform: "supernotify", translation_key: "reset_overrides" } },
   states: {
     // PR #207: switch + binary_sensor mirror for the same delivery -> one row
     "switch.supernotify_delivery_mobile_push": { state: "on", attributes: { ...del("mobile_push"), transport_enabled: true, friendly_name: "SuperNotify Delivery Notifica sul telefono abilitata" } },
     "binary_sensor.supernotify_delivery_mobile_push": { state: "on", attributes: { ...del("mobile_push"), friendly_name: "SuperNotify Delivery Notifica sul telefono" } },
     "switch.supernotify_delivery_alexa_announce": { state: "on", attributes: { ...del("alexa_announce", { transport: "alexa_media_player" }), transport_enabled: false, friendly_name: "SuperNotify Delivery Annuncio vocale Alexa abilitata" } },
-    // old style only (no switch)
+    "switch.supernotify_delivery_tts": { state: "off", attributes: { ...del("tts", { transport: "tts" }), friendly_name: "SuperNotify Delivery Voce (TTS) abilitata" } },
     "binary_sensor.supernotify_delivery_tts": { state: "off", attributes: { ...del("tts", { transport: "tts" }), friendly_name: "Voce (TTS)" } },
-    "binary_sensor.supernotify_delivery_sirena": { state: "on", attributes: { ...del("sirena", { transport: "generic", inclusion: ["explicit"] }) } },
+    "switch.supernotify_delivery_sirena": { state: "on", attributes: { ...del("sirena", { transport: "generic", inclusion: ["explicit"] }) } },
     "switch.supernotify_transport_mobile_push": { state: "on", attributes: { name: "mobile_push", friendly_name: "SuperNotify Transport mobile_push abilitato" } },
     "binary_sensor.supernotify_transport_mobile_push": { state: "on", attributes: { name: "mobile_push" } },
     "button.supernotify_ripristina_override": { state: "unknown", attributes: {} }, // 2.8.0 in an Italian HA
@@ -58,25 +60,29 @@ const hass = {
     "person.lorenzo": { state: "home", attributes: { friendly_name: "Lorenzo" } },
     "switch.supernotify_scenario_afternoon": { state: "on", attributes: { name: "afternoon", delivery: { tts: { enabled: false } }, friendly_name: "SuperNotify Scenario Afternoon" } },
     "switch.supernotify_scenario_multi_home": { state: "on", attributes: { name: "multi_home", delivery: { mobile_push: { enabled: true } }, friendly_name: "SuperNotify Scenario Persone a casa" } },
-    "sensor.supernotify_archivio": { state: String(IDX.count), attributes: IDX, last_updated: "x" },
   },
   callService: (d, s, data) => { calls.push(["svc", d, s, data.entity_id]); return Promise.resolve(); },
   callApi: (m, path, body) => { calls.push(["api", m, path, body.state]); return Promise.resolve(); },
   callWS: async (msg) => {
     calls.push(["ws", msg.domain, msg.service, msg.service_data && msg.service_data.id]);
-    if (msg.domain === "shell_command") return { response: { stdout: DET, stderr: "", returncode: 0 } };
     return { response: {} };
   },
 };
+G.snArchiveStore.getIndex = () => IDX;
+const archiveCards = ["supernotify-why-card", "supernotify-archive-card"];
 const mount = (tag, cfg = {}) => {
-  const c = document.createElement(tag); c.setConfig(cfg); document.body.appendChild(c); c.hass = hass; return c;
+  const c = document.createElement(tag);
+  c.setConfig(archiveCards.includes(tag) ? { priority_filters: false, ...cfg } : cfg);
+  if (archiveCards.includes(tag)) c._fetch = async (id) => { calls.push(["fetch", id]); return JSON.parse(DET); };
+  document.body.appendChild(c); c.hass = hass; return c;
 };
+const fetches = () => calls.splice(0).filter((c) => c[0] === "fetch");
 const flush = () => new Promise((r) => setTimeout(r, 20));
 
 // ---- deliveries ----
 const dc = mount("supernotify-deliveries-card");
 let rows = [...dc.shadowRoot.querySelectorAll(".row")];
-assert.strictEqual(rows.length, 4, "una riga per delivery (switch + mirror unite)");
+assert.strictEqual(rows.length, 4, "una riga per delivery switch (il mirror binary_sensor ignorato)");
 const mp = rows.find((r) => r.textContent.includes("mobile_push"));
 assert.ok(mp.textContent.includes("Notifica sul telefono"), "alias pulito dallo switch");
 assert.ok(!mp.textContent.includes("SuperNotify Delivery"));
@@ -88,7 +94,7 @@ tts.querySelector(".sw input").checked = true; tts.querySelector(".sw input").di
 assert.ok(!dc.shadowRoot.querySelector(".rstb"), "niente pulsante di ripristino nei canali");
 assert.deepStrictEqual(calls.splice(0), [
   ["svc", "switch", "turn_off", "switch.supernotify_delivery_mobile_push"],
-  ["api", "POST", "states/binary_sensor.supernotify_delivery_tts", "on"],
+  ["svc", "switch", "turn_on", "switch.supernotify_delivery_tts"],
 ]);
 
 // ---- transports ----
@@ -105,7 +111,7 @@ assert.strictEqual(dom.window.__snWhyCards, 1);
 assert.ok(wc.shadowRoot.querySelectorAll(".it").length > 0, "elenco notifiche");
 await flush();
 // si apre da sola sull'ultima notifica
-assert.deepStrictEqual(calls.splice(0).filter((c) => c[1]), [["ws", "shell_command", "sn_archive_detail", IDX.items[0].id]]); // 0.61.0: + logbook lookup for "sent by"
+assert.deepStrictEqual(fetches(), [["fetch", IDX.items[0].id]]);
 const rc = mount("supernotify-recipients-card");
 const lor = [...rc.shadowRoot.querySelectorAll(".row")].find((r) => r.textContent.includes("Lorenzo"));
 const last = lor.querySelector(".last");
@@ -115,7 +121,7 @@ const jes = [...rc.shadowRoot.querySelectorAll(".row")].find((r) => r.textConten
 assert.ok(jes.textContent.includes("nessun avviso"));
 last.click();               // -> evento -> la card Perché? mostra il dettaglio (già in cache)
 await flush();
-assert.deepStrictEqual(calls.splice(0), []);
+assert.deepStrictEqual(fetches(), []);
 const det = wc.shadowRoot.getElementById("det").textContent;
 assert.ok(det.includes("Scenari") && det.includes("Persone a casa"), "scenari con nome pulito (passo 2 del percorso)");
 assert.ok(det.includes("in casa") && det.includes("Lorenzo"), "presenza");
@@ -128,7 +134,7 @@ assert.ok(/sirena[\s\S]*solo se chiesto per nome/.test(det), "sirena solo esplic
 assert.ok(det.includes("diagnostica"), "nota sul trace");
 // cache: secondo click non richiama il servizio
 last.click(); await flush();
-assert.deepStrictEqual(calls.splice(0), []);
+assert.deepStrictEqual(fetches(), []);
 
 // ---- 0.85.0: archive card = list + the same detail ----
 const ac = mount("supernotify-archive-card", { auto_select: false });
@@ -168,12 +174,5 @@ assert.ok(/mobile_push[\s\S]*scelto da: scenario Persone a casa/.test(det3), "fo
 assert.ok(/tts[\s\S]*spento da[\s\S]*chiamata/.test(det3), "call non finisce tra gli scenari");
 assert.ok(!det3.includes("Trace di selezione"), "nessuna sezione trace vuota");
 
-// ---- servizio mancante ----
-delete hass.services.shell_command;
-wc._cache.clear();
-await wc._select(IDX.items[1].id);
-// 0.85.0: without the detail service the card shows what the index row knows, and says what is missing
-const det4 = wc.shadowRoot.getElementById("det").textContent;
-assert.ok(det4.includes("sn_archive_detail") && wc.shadowRoot.querySelector("#det .tags"), "senza servizio: canali dall'indice + cosa manca");
 console.log("why_and_switches: OK");
 process.exit(0);

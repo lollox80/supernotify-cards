@@ -26,17 +26,15 @@ the words of SuperNotify's own translation. Corrections are welcome as issues or
 
 ## Which SuperNotify version each feature needs
 
+Since 1.0.0 the cards need **SuperNotify 2.13 or later** and **Home Assistant 2026.2 or later**; the
+code for older versions is gone (the archive's command_line sensor and shell_command, the stats
+helpers and utility meter, the version checks). On an older SuperNotify stay on release 0.92.0.
+
 | Feature | SuperNotify |
 |---|---|
-| All cards | 2.0 or later |
-| Composer: native target picker, `supernotify.notify` action | 2.3 |
-| Live scenario state (control, scenarios, overview) | 2.4 |
-| Delivery and transport switches | 2.8 |
-| Archive and Why? without the command_line bridge (`enquire_archive`) | 2.10 |
-| Notification without text (composer) | 2.11.1 |
-| "Try without sending" (dry run) | 2.12 |
-| Stats from the archive, no helpers; dry run with its own duplicate check | 2.12.1 |
-| Pauses by any user with the full panel (`supernotify.snooze`); "channels off" = only switched off by hand, and "changed by hand" on the rows (`overridden`); stats in one call (`enquire_archive` daily) | 2.13.0 |
+| All cards | 2.13 or later |
+| Live scenario state without polling (`scenario_control: {refresh: true}`; with refresh off the cards ask `enquire_active_scenarios` every 30 s) | 2.13 |
+| Channels: how the last send went (`last_outcome`), Critical / High filters in one call (`enquire_archive` `priority`) | 2.14 |
 
 The automations card works with any version but needs its manifest generator
 (`tools/genera_vista_automazioni.py`), see [its page](cards/automations.md).
