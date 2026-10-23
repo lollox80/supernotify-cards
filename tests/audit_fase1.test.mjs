@@ -209,8 +209,9 @@ const ctlHass = (extra = {}) => ({
   proto("supernotify-simulator-card")._dry.call({ shadowRoot: { getElementById: () => ({}) }, _config: {}, _hass: never, _sel: new Set(), _prio: "medium" });
   ok(delays.includes(30000), "BUG-9: simulatore _dry con timeout 30 s");
   delays.length = 0;
-  proto("supernotify-composer-card")._dryRun.call({ shadowRoot: { getElementById: () => ({ style: {} }) }, _config: {}, _hass: never,
-    _dryAvailable: () => true, _payload: () => ({ message: "x" }), _renderDry() {} });
+  // 1.0.0 (phase 4): the composer asks snDryAvailable (no _dryAvailable of its own): the service is there
+  proto("supernotify-composer-card")._dryRun.call({ shadowRoot: { getElementById: () => ({ style: {} }) }, _config: {},
+    _hass: { ...never, services: { supernotify: { notify: {} } } }, _payload: () => ({ message: "x" }), _renderDry() {} });
   ok(delays.includes(30000), "BUG-9: composer _dryRun con timeout 30 s");
 }
 

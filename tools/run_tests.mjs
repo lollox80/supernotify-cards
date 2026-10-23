@@ -1,4 +1,5 @@
 // CHANGELOG
+// 2026-10-23 - only *.test.mjs run: tests/_harness.mjs (the shared prologue) is not a test (1.0.0).
 // 2026-10-03 - first version: runs every tests/*.test.mjs in its own node process (each test
 //   defines custom elements on a fresh JSDOM, so they cannot share one), with a timeout, and
 //   exits 1 if any fails. Used by `npm test` and by the "Tests" job in .github/workflows/lint.yml.

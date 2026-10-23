@@ -1,19 +1,11 @@
 // CHANGELOG
 // 2026-10-04 v0.63.0: chi è in casa, riparazioni, dettaglio transport/canali, voce in archivio,
 //   motivo delle pause, compositore completo, pausa a voce per chi non è admin.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, wait, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true, url: "http://ha.local/lovelace/0" });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(SRC)();
+boot({ url: "http://ha.local/lovelace/0" });
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const iso = (minAgo) => new Date(Date.now() - minAgo * 60000).toISOString();
 
 const DOCS = [{

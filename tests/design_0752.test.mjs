@@ -1,18 +1,11 @@
 // CHANGELOG
 // 2026-10-05 v0.75.2: conteggi giornalieri tenuti nel browser, poi solo i giorni nuovi.
 // 2026-10-23 v1.0.0: le letture qui verificano la cache del browser: la memoria di 60 s (fase 3) va azzerata prima di ognuna.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, dom, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true, url: "http://ha.local/" });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-const G = new dom.window.Function(SRC + "\nreturn { snStatsDaily };")();
+boot({ url: "http://ha.local/" });
+const G = load("snStatsDaily");
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const key = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const asks = [];
 const hass = { callWS: async (m) => {

@@ -150,7 +150,9 @@ ok(dr && dr[2].dry_run === "simulate" && !("force_resend" in dr[2]), "composer: 
 ok(G.snDryAvailable(hass, {}) === true && G.snDryAvailable(hass, { dry_run: false }) === false, "snDryAvailable: sempre su 2.13, false con dry_run: false");
 const sim2 = document.createElement("supernotify-simulator-card");
 sim2.setConfig({ dry_run: false }); document.body.appendChild(sim2); sim2.hass = hass;
-ok(sim2._dryMode() === false && cards["supernotify-simulator-card"]._dryMode() === true, "simulatore: dry run di SuperNotify, stima con dry_run: false");
+// 1.0.0 (phase 4): the simulator asks snDryAvailable with its own config (no _dryMode any more)
+const simDry = (c) => G.snDryAvailable(c._hass, c._config);
+ok(simDry(sim2) === false && simDry(cards["supernotify-simulator-card"]) === true, "simulatore: dry run di SuperNotify, stima con dry_run: false");
 
 // ── 2.13 actions: snooze / silence / unsnooze, no `command`, for any user ──
 calls.length = 0;

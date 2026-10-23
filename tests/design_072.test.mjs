@@ -1,16 +1,9 @@
 // v0.72.0: badge di stato e feature per le tile native di HA.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, wait, fail } from "./_harness.mjs";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true, url: "http://ha.local/lovelace/0" });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
+boot({ url: "http://ha.local/lovelace/0" });
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const S = (state = "on", attributes = {}) => ({ state, attributes, last_changed: "2026-10-04T10:00:00Z" });
 let snoozes = [];
 const calls = [];

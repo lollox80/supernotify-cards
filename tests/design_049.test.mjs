@@ -1,17 +1,9 @@
 // v0.49.0: una sola palette con contrasti AA, nome leggibile davanti, versione nascosta.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { SRC, boot, load, ok, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-new dom.window.Function(SRC)();
+boot({ scroll: true });
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const flush = () => new Promise((r) => setTimeout(r, 30));
 
 // ── 1. contrasti della palette chiara (WCAG AA 4.5:1 sul fondo della card) ──
@@ -34,7 +26,9 @@ ok(ratio("#ffffff", val("brand")) >= 4.5, `chiaro: testo bianco su brand ${ratio
 ok(ratio(val("warnInk"), val("warnSoft")) >= 4.5, `chiaro: snooze attivo ${ratio(val("warnInk"), val("warnSoft")).toFixed(2)}:1`);
 // 0.64.0: one _palette in SnCard, and the cards extend it (0.85.0: 13 - why is an alias of archive; 0.91.0: 14 with appliances)
 ok((SRC.match(/\n  _palette\(\) \{\n    return snPalette\(/g) || []).length === 1
-  && (SRC.match(/^class Supernotify\w+Card extends SnCard \{/gm) || []).length === 14, "le 14 card usano snPalette tramite SnCard (0.64.0)");
+  // 1.0.0 (phase 4): deliveries, transports and recipients extend SnListCard, which extends SnCard
+  && /^class SnListCard extends SnCard \{/m.test(SRC)
+  && (SRC.match(/^class Supernotify\w+Card extends Sn(?:List)?Card \{/gm) || []).length === 14, "le 14 card usano snPalette tramite SnCard (0.64.0)");
 
 // ── 2. stati di prova ───────────────────────────────────────────────────────
 const T0 = Math.floor(Date.now() / 1000) - 600;

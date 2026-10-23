@@ -111,10 +111,6 @@ const SN_STRINGS = {
     dry_dupe: "Duplicate of a recent notification: it would be dropped",
     dry_no_dupe: "Duplicate check not simulated, so the real Send right after is not blocked.",
     dry_home: "Home", dry_empty: "SuperNotify gave no answer: is it 2.12 or later?",
-    dry_reasons: { NO_TARGET: "no usable target", DUPE: "duplicate", PRIORITY: "not for this priority",
-      SNOOZED: "snoozed", DELIVERY_CONDITION: "delivery condition false", OCCUPANCY: "presence rule",
-      TRANSPORT_DISABLED: "transport off", DELIVERY_DISABLED: "switched off", NO_SCENARIO: "required scenario not in force",
-      NO_ACTION: "no action", INVALID_ACTION_DATA: "invalid data", UNKNOWN: "unknown reason", ERROR: "error" },
     prio_minimum: "Minimum", prio_low: "Low", prio_medium: "Medium",
     prio_high: "High", prio_critical: "Critical",
     target_lbl: "Target — people, devices, areas, floors, labels",
@@ -241,10 +237,6 @@ const SN_STRINGS = {
     dry_dupe: "Doppione di una notifica recente: verrebbe scartata",
     dry_no_dupe: "Controllo doppioni non simulato, così l'Invia subito dopo non viene bloccato.",
     dry_home: "In casa", dry_empty: "SuperNotify non ha risposto: è la 2.12 o successiva?",
-    dry_reasons: { NO_TARGET: "nessun destinatario utilizzabile", DUPE: "doppione", PRIORITY: "non per questa priorità",
-      SNOOZED: "in pausa", DELIVERY_CONDITION: "condizione del canale falsa", OCCUPANCY: "regola di presenza",
-      TRANSPORT_DISABLED: "transport spento", DELIVERY_DISABLED: "spento", NO_SCENARIO: "manca uno scenario richiesto",
-      NO_ACTION: "nessuna azione", INVALID_ACTION_DATA: "dati non validi", UNKNOWN: "motivo sconosciuto", ERROR: "errore" },
     prio_minimum: "Minima", prio_low: "Bassa", prio_medium: "Media",
     prio_high: "Alta", prio_critical: "Critica",
     target_lbl: "Target — persone, dispositivi, aree, piani, etichette",
@@ -310,12 +302,18 @@ const SN_STRINGS = {
  * a camera name, a tag (SuperNotify 2.11.1, e.g. "porch"), a priority or a transport,
  * plus "for <person>" when it only covers one recipient. Fields from enquire_snoozes.
  */
+/** 1.0.0: an entity's friendly name, else `fallback`. */
+function snFname(hass, id, fallback) {
+  const s = hass && hass.states && hass.states[id];
+  return (s && s.attributes && s.attributes.friendly_name) || fallback;
+}
+
 function snSnoozeLabel(hass, s, T) {
   const st = (hass && hass.states) || {};
   const tt = String((s && s.target_type) || "").toUpperCase();
   const raw = s ? s.target : null;
   const tg = Array.isArray(raw) ? raw.join(", ") : (raw == null ? "" : String(raw));
-  const fname = (id) => (st[id] && st[id].attributes && st[id].attributes.friendly_name) || "";
+  const fname = (id) => snFname(hass, id, "");
   let what;
   if (tt === "EVERYTHING") what = T.snz_all;
   else if (tt === "NONCRITICAL") what = T.snz_nc;
@@ -339,14 +337,18 @@ function snSnoozeLabel(hass, s, T) {
   return what || "?";
 }
 
+/** 1.0.0: two digits ("07"), the local time "HH:MM" and the local day "YYYY-MM-DD" of a Date (or a time in ms). */
+function snPad2(n) { return String(n).padStart(2, "0"); }
+function snHm(d) { d = new Date(d); return `${snPad2(d.getHours())}:${snPad2(d.getMinutes())}`; }
+function snDayKey(d) { d = new Date(d); return `${d.getFullYear()}-${snPad2(d.getMonth() + 1)}-${snPad2(d.getDate())}`; }
+
 /** 0.82.0: end of a pause, "00:50" today, "00:50 (gio)" on another day. */
 function snSnzUntil(end, hass) {
-  const pad = (n) => String(n).padStart(2, "0");
-  const hm = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
+  const hm = snHm(end);
   if (end.toDateString() === new Date().toDateString()) return hm;
   let day;
   try { day = end.toLocaleDateString((hass && hass.language) || undefined, { weekday: "short" }); }
-  catch (e) { day = `${pad(end.getDate())}/${pad(end.getMonth() + 1)}`; }
+  catch (e) { day = `${snPad2(end.getDate())}/${snPad2(end.getMonth() + 1)}`; }
   return `${hm} (${day})`;
 }
 
@@ -381,9 +383,14 @@ function snTitleShow(v) {
 }
 
 /** Labels of active snoozes, at most `max` and "+N" for the rest. */
+/** 1.0.0: the first `max` of a list joined with ", ", then "+N" for the rest. */
+function snJoinMax(list, max) {
+  return list.length > max ? list.slice(0, max).join(", ") + ` +${list.length - max}` : list.join(", ");
+}
+
 function snSnoozeLabels(hass, list, T, max = 2) {
   const labels = [...new Set((list || []).map((s) => snSnoozeLabel(hass, s, T)))];
-  return labels.length > max ? labels.slice(0, max).join(", ") + ` +${labels.length - max}` : labels.join(", ");
+  return snJoinMax(labels, max);
 }
 
 /**
@@ -472,6 +479,36 @@ function snLastDeliveries(hass, n) {
     }
   }
   return { ok, err, skipped };
+}
+
+/** 1.0.0: "Repeat" on the last notification - press the button (input_button, button) or run the script. */
+function snRepeat(hass, entity) {
+  const [dom] = entity.split(".");
+  return hass.callService(dom, dom === "script" ? "turn_on" : "press", { entity_id: entity });
+}
+
+/**
+ * 1.0.0: the chips of the last notification (control and overview): delivered / failed - one chip a channel
+ * with `perChannel`, else counts with the names in the tooltip - missed and skipped. `k`: the classes
+ * (ok, err, skip) and the attributes of the missed chip; `fb`: the counts of the notification when the
+ * channels do not say.
+ */
+function snLastChips(hass, n, T, k, perChannel, fb) {
+  const esc = snEsc;
+  const chips = [];
+  const { ok, err, skipped } = snLastDeliveries(hass, n);
+  if (perChannel) {
+    for (const l of ok) chips.push(`<span class="${k.ok}">✔ ${esc(l)}</span>`);
+    for (const l of err) chips.push(`<span class="${k.err}">✖ ${esc(l)}</span>`);
+  } else {
+    if (ok.length) chips.push(`<span class="${k.ok}" title="${esc(ok.join(", "))}">✔ ${snPl(T, "ln_delivered", ok.length)}</span>`);
+    else if (fb && +n.delivered > 0) chips.push(`<span class="${k.ok}">✔ ${snPl(T, "ln_delivered", +n.delivered)}</span>`);
+    const nErr = err.length || (fb ? +n.failed || 0 : 0);
+    if (nErr > 0) chips.push(`<span class="${k.err}" title="${esc(err.join(", "))}">✖ ${snPl(T, "ln_failed", nErr)}</span>`);
+  }
+  if (n && +n.missed > 0) chips.push(`<span ${k.mis}>⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
+  if (skipped) chips.push(`<span class="${k.skip}">${snPl(T, "skipped_n", skipped)}</span>`);
+  return chips;
 }
 
 function snPrioColor(p, prio) {
@@ -796,9 +833,8 @@ class SupernotifyDashboardStrategy extends HTMLElement {
   static async generate(config, hass) {
     const cfg = config || {};
     const st = (hass && hass.states) || {};
-    const lang = String((hass && (hass.locale && hass.locale.language || hass.language)) || "en").slice(0, 2);
-    const T = SN_STRATEGY_TITLES[lang] || SN_STRATEGY_TITLES.en;
-    const admin = !hass || !hass.user || hass.user.is_admin !== false;
+    const T = SN_STRATEGY_TITLES[snLang(null, hass)] || SN_STRATEGY_TITLES.en;
+    const admin = snIsAdmin(hass);
     const hide = new Set((cfg.hide || []).map(String));
     const extra = cfg.cards || {};
     const has = (re) => Object.keys(st).some((id) => re.test(id));
@@ -816,9 +852,7 @@ class SupernotifyDashboardStrategy extends HTMLElement {
     };
     // 0.91.0: the appliances view only when Appliance Autonotify has an appliance
     if (!hide.has("appliances") && hass && hass.callWS) {
-      try {
-        wanted.appliances = snApplUsable(await hass.callWS({ type: "config_entries/get", domain: "appliance_autonotify" })).length > 0;
-      } catch (e) { wanted.appliances = false; }
+      wanted.appliances = snApplUsable(await snAppliances.read(hass)).length > 0;
     }
     const card = (kind, base) => {
       if (hide.has(kind) || wanted[kind] === false) return null;
@@ -879,16 +913,15 @@ if (!window.customStrategies.some((x) => x && x.type === "supernotify")) {
  * 0.72.0: SuperNotify inside Home Assistant's own cards. Shared by the badge and the tile features.
  */
 const SN_NATIVE_STR = {
-  en: { all_good: "All good", paused: "Paused", until: "until", resume: "Resume", test: "Send a test",
+  en: { all_good: "All good", paused: "Paused", resume: "Resume", test: "Send a test",
     sure: "Tap again to send", sent: "Sent", last: "Last", none: "No notification yet", ago: "ago",
-    min: "min", h: "h", err: "transports with errors", off: "channels off", ch_err: "channels failed" },
-  it: { all_good: "Tutto ok", paused: "In pausa", until: "fino alle", resume: "Riprendi", test: "Manda una prova",
+    h: "h", err: "transports with errors", off: "channels off", ch_err: "channels failed" },
+  it: { all_good: "Tutto ok", paused: "In pausa", resume: "Riprendi", test: "Manda una prova",
     sure: "Tocca di nuovo per inviare", sent: "Inviata", last: "Ultima", none: "Nessuna notifica ancora", ago: "fa",
-    min: "min", h: "h", err: "transport con errori", off: "canali spenti", ch_err: "canali falliti" },
+    h: "h", err: "transport con errori", off: "canali spenti", ch_err: "canali falliti" },
 };
 function snNativeT(hass) {
-  const l = String((hass && (hass.locale && hass.locale.language || hass.language)) || "en").slice(0, 2);
-  return SN_NATIVE_STR[l] || SN_NATIVE_STR.en;
+  return SN_NATIVE_STR[snLang(null, hass)] || SN_NATIVE_STR.en;
 }
 /** The entity a card feature is on (context.entity_id: HA 2026.2 always sets it). */
 function snFeatureEntity(el) {
@@ -940,23 +973,28 @@ function snPauseSubjects(doc) {
 /**
  * 0.81.0: the automations and scripts that sent an archived notification - the logbook entries in
  * its context, as the why card reads them. Cached per notification; [] when unknown.
+ * 1.0.0: one cache for the pause panel and the archive's "sent by": snSenderEvents keeps the logbook
+ * entries (automation / script), snSenders gives their entity ids.
  */
 const SN_SENDERS = new Map();
-function snSenders(hass, doc) {
+function snSenderEvents(hass, doc) {
   const ctx = (doc && snIsObj(doc.original_context)) ? doc.original_context : {};
   if (!hass || !hass.callWS || !ctx.id) return Promise.resolve([]);
   if (SN_SENDERS.has(doc.id)) return SN_SENDERS.get(doc.id);
   const t = Date.parse(doc.created || "") || Date.now();
   const p = hass.callWS({ type: "logbook/get_events", start_time: new Date(t - 120000).toISOString(),
     end_time: new Date(t + 5000).toISOString(), context_id: ctx.id })
-    .then((ev) => [...new Set((ev || []).map((e) => e.entity_id || "").filter((id) => /^(automation|script)\./.test(id)))])
+    .then((ev) => (ev || []).filter((e) => /^(automation|script)\./.test(e.entity_id || "")))
     .catch(() => []);
   SN_SENDERS.set(doc.id, p);
   return p;
 }
+function snSenders(hass, doc) {
+  return snSenderEvents(hass, doc).then((ev) => [...new Set(ev.map((e) => e.entity_id))]);
+}
 /** A name as SuperNotify's spoken_name() has it: case, underscores and extra spaces ignored. */
 function snSpoken(name) {
-  return String(name || "").replace(/_/g, " ").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+  return snSquash(String(name || "").replace(/_/g, " ").toLowerCase());
 }
 /** The active tag pauses on this entity (from enquire_snoozes, see snLiveSnoozes). */
 function snPausesOn(snoozes, entityId) {
@@ -1016,22 +1054,30 @@ function snHandTag(a, T, raw) {
   return raw ? `<span class="tag" style="border-style:dashed;font-weight:600" title="${snEsc(T.hand_tip)}">✏️ ${snEsc(T.hand)}</span>` : `✏️ ${T.hand}`;
 }
 /** SuperNotify's health: [{k: crit|off|pause, n, text, title}] worst first, [] = all good. */
-function snNativeHealth(hass, snoozes, opts) {
-  opts = opts || {};
-  const ignore = new Set((opts.ignore || []).map((x) => String(x).toLowerCase()));
-  const T = snNativeT(hass);
-  const out = [];
+/**
+ * 1.0.0: what is wrong with the channels (overview health strip and the badge / features): transports with
+ * errors, channels whose last send failed (SuperNotify >= 2.14), channels switched off by hand among `offRows`
+ * (rows of snEntityRows, or {id, name, state}: an unavailable switch is then not "off"; null: not looked at).
+ * `ignore`: the channel names left out.
+ */
+function snHealthFacts(hass, ignore, offRows) {
+  const ign = new Set((ignore || []).map((x) => String(x).toLowerCase()));
   const tr = snEntityRows(hass, "transport").filter((t) => {
     const st = hass.states[t.id];
     return st && st.state !== "unavailable" && +((st.attributes || {}).error_count || 0) > 0;
   });
+  return { tr, chErr: snChannelsFailed(hass, ign), off: offRows ? snChannelsOff(hass, offRows, ign) : [] };
+}
+function snNativeHealth(hass, snoozes, opts) {
+  opts = opts || {};
+  const T = snNativeT(hass);
+  const out = [];
+  const { tr, chErr, off } = snHealthFacts(hass, opts.ignore, opts.channels_off !== false && snEntityRows(hass, "delivery"));
   if (tr.length) out.push({ k: "crit", n: tr.length, text: `${tr.length} ${T.err}`,
     title: tr.map((t) => (t.a.last_error_message ? `${t.name}: ${t.a.last_error_message}` : t.name)).join(" · ") });
   // 0.89.0: channels whose last send failed (SuperNotify >= 2.14)
-  const chErr = snChannelsFailed(hass, ignore);
   if (chErr.length) out.push({ k: "crit", n: chErr.length, text: `${chErr.length} ${T.ch_err || T.err}`,
     title: chErr.map((d) => snDeliveryAlias(hass, d.name) || d.name).join(", ") });
-  const off = opts.channels_off === false ? [] : snChannelsOff(hass, snEntityRows(hass, "delivery"), ignore);
   if (off.length) out.push({ k: "off", n: off.length, text: `${off.length} ${T.off}`,
     title: off.map((d) => snDeliveryAlias(hass, d.name) || d.name).join(", ") });
   const live = snLiveSnoozes(snoozes || []);
@@ -1047,12 +1093,36 @@ function snPauseText(hass, live, T) {
   const hm = end ? snSnzUntil(end, hass) : "";
   return hm ? `${T.paused} ${T.until} ${hm}` : T.paused;
 }
+/** 1.0.0: supernotify.clear_snoozes - every pause ends (one copy for the tile, the panel, the overview, the feature). */
+function snClearSnoozes(hass) {
+  return hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
+}
+
+/** 1.0.0: the supernotify.unsnooze data that ends this pause (snSnoozeCall with command resume). */
+function snResumeData(s) {
+  const scope = String(s.target_type || "NONCRITICAL").toLowerCase();
+  const data = { command: "resume", scope };
+  if (!["noncritical", "everything"].includes(scope)) data.name = Array.isArray(s.target) ? s.target.join("_") : (s.target || "");
+  if (String(s.recipient_type || "").toUpperCase() === "USER" && s.recipient) data.person = s.recipient;
+  return data;
+}
+
+/** 1.0.0: a message through one SuperNotify channel only (the announce channel). */
+function snAnnounce(hass, delivery, message) {
+  return hass.callService("notify", "supernotify", { message, data: { delivery_selection: "fixed", delivery: { [delivery]: {} } } });
+}
+
+/** 1.0.0: an administrator - or a user Home Assistant does not say is not one (no user object). */
+function snIsAdmin(hass) {
+  return !hass || !hass.user || hass.user.is_admin !== false;
+}
+
 /** Pause for everyone (non-critical, supernotify.snooze: any user) or resume, as the control card does. */
 async function snNativePause(hass, minutes) {
   if (minutes) {
     await snSnoozeCall(hass, { command: "snooze", scope: "noncritical", minutes });
   } else {
-    await hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
+    await snClearSnoozes(hass);
   }
   snEnquireBust(800);
 }
@@ -1231,7 +1301,7 @@ class SupernotifyTestFeature extends SnFeature {
       const T2 = snT({}, hass);
       const d = new Date();
       hass.callService("notify", "send_message", { entity_id: id, title: T2.rc_test_title,
-        message: `${T2.rc_test_msg} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` })
+        message: `${T2.rc_test_msg} ${snHm(d)}` })
         .then(() => { this._state = "sent"; this._draw(); this._t = setTimeout(() => { this._state = null; this._draw(); }, 4000); })
         .catch(() => { this._state = null; this._draw(); });
       snEnquireBust(1500);
@@ -1310,7 +1380,6 @@ function snDryHtml(hass, T, doc, noDupeCheck) {
   const esc = snEsc;
   const n = snIsObj(doc) && (doc.deliveries || doc.outcome || doc.id) ? snArchiveDetail(doc) : null;
   if (!n) return `<h4>🔍 ${T.dry_title}</h4><div class="dNo">${T.dry_empty}</div>`;
-  const st = hass.states;
   const chan = (name) => {
     const alias = snDeliveryAlias(hass, name);
     return alias && !snSame(alias, name) ? `${esc(alias)} <span class="dNo">${snTech(name, alias)}</span>` : esc(alias || name);
@@ -1323,8 +1392,7 @@ function snDryHtml(hass, T, doc, noDupeCheck) {
   const tgText = (tg) => {
     const vals = Object.values(tg || {}).flat();
     if (!vals.length) return "";
-    const shown = vals.slice(0, 3).map((v) => esc((st[v] && st[v].attributes && st[v].attributes.friendly_name) || short(v)));
-    return shown.join(", ") + (vals.length > 3 ? ` +${vals.length - 3}` : "");
+    return snJoinMax(vals.map((v) => esc(snFname(hass, v, short(v)))), 3);
   };
   const order = { ok: 0, err: 1, supp: 2, skip: 3 };
   const dl = [...(n.dl || [])].sort((a, b) => (order[a.r] ?? 4) - (order[b.r] ?? 4) || a.n.localeCompare(b.n));
@@ -1349,7 +1417,7 @@ function snDryHtml(hass, T, doc, noDupeCheck) {
   const scen = (n.sc && (n.sc.sel || n.sc.on)) || [];
   if (scen.length) meta.push(`${T.dry_scen}: ${esc(scen.map((x) => snScenarioName(hass, x)).join(", "))}`);
   if (n.occ && n.occ.home && n.occ.home.length)
-    meta.push(`${T.dry_home}: ${esc(n.occ.home.map((p) => (st[p] && st[p].attributes.friendly_name) || short(p)).join(", "))}`);
+    meta.push(`${T.dry_home}: ${esc(n.occ.home.map((p) => snFname(hass, p, short(p))).join(", "))}`);
   h += `<div class="dMeta">${meta.join(" · ")}</div>`;
   if (noDupeCheck) h += `<div class="dMeta">ℹ️ ${T.dry_no_dupe}</div>`;
   h += `<details class="dMeta"><summary>${T.dry_raw}</summary><pre>${esc(JSON.stringify(doc, null, 2))}</pre></details>`;
@@ -1363,10 +1431,15 @@ function snDryAvailable(hass, config) {
   return !!(svc && svc.notify);
 }
 
-/** supernotify.notify with dry_run: simulate (nothing is sent, no duplicate check) -> the notification. */
-async function snDryRun(hass, data) {
-  const r = await hass.callWS({ type: "call_service", domain: "supernotify", service: "notify",
-    service_data: { priority: "medium", ...data, dry_run: "simulate", force_resend: true }, return_response: true });
+/**
+ * supernotify.notify with dry_run: simulate (nothing is sent) -> the notification. 1.0.0: the one copy for every
+ * card, with a 30 s limit (snWS). No duplicate check (force_resend) unless `opts.dupeCheck`; priority medium
+ * unless the data says otherwise or `opts.prio === null` (the composer sends its own payload as it is).
+ */
+async function snDryRun(hass, data, opts = {}) {
+  const sd = { ...(opts.prio === null ? {} : { priority: "medium" }), ...data, dry_run: "simulate" };
+  if (!opts.dupeCheck) sd.force_resend = true;
+  const r = await snWS(hass, { type: "call_service", domain: "supernotify", service: "notify", service_data: sd, return_response: true }, 30000);
   return (r && r.response) || {};
 }
 
@@ -1382,7 +1455,7 @@ function snDrySending(doc) {
 /** One condition of a scenario, in words. */
 function snCondText(hass, c, T) {
   if (!c || typeof c !== "object") return String(c);
-  const name = (id) => (hass.states[id] && hass.states[id].attributes && hass.states[id].attributes.friendly_name) || String(id);
+  const name = (id) => snFname(hass, id, String(id));
   const ents = [].concat(c.entity_id || []).map(name).join(", ");
   const t = c.condition;
   if (t === "state") return T.c_state.replace("{e}", ents).replace("{s}", [].concat(c.state).join(T.c_or_join));
@@ -1509,15 +1582,25 @@ function snEffectShort(effects) {
     else if (e.vol === 0) bits.push(`🔇 ${e.alias}`);
     else if (e.vol !== null) bits.push(`🔉 ${e.alias} ${e.vol}%`);
   }
-  return bits.length > 3 ? bits.slice(0, 3).join(", ") + ` +${bits.length - 3}` : bits.join(", ");
+  return snJoinMax(bits, 3);
+}
+
+/** 1.0.0: the last result at a trace path ({result, state...}) of a scenario's trace, or null. */
+function snTraceResult(sc, path) {
+  const v = ((sc.trace && sc.trace.trace) || {})[path];
+  const last = Array.isArray(v) && v.length ? v[v.length - 1] : null;
+  return last && last.result ? last.result : null;
+}
+/** 1.0.0: a scenario's conditions as a list. */
+function snConds(sc) {
+  return Array.isArray(sc.conditions) ? sc.conditions : sc.conditions ? [sc.conditions] : [];
 }
 
 /** The conditions of a scenario with their result now, on one line (null until the trace is read). */
 function snScenarioCondLine(hass, T, sc) {
   if (!sc) return null;
-  const tr = (sc.trace && sc.trace.trace) || {};
-  const res = (p) => { const v = tr[p]; const last = Array.isArray(v) && v.length ? v[v.length - 1] : null; return last && last.result ? last.result.result : undefined; };
-  const conds = Array.isArray(sc.conditions) ? sc.conditions : sc.conditions ? [sc.conditions] : [];
+  const res = (p) => { const r = snTraceResult(sc, p); return r ? r.result : undefined; };
+  const conds = snConds(sc);
   if (!conds.length) return { text: T.sc_no_cond, parts: [] };
   // and/or/not spelled out, nested ones in brackets ("at least one of these: A or (all of these: B, C)")
   const full = (c, depth) => {
@@ -1543,8 +1626,7 @@ function snScenarioCondLine(hass, T, sc) {
 function snScenarioWhyHtml(hass, T, sc, active) {
   const esc = snEsc;
   if (!sc) return "";
-  const tr = (sc.trace && sc.trace.trace) || {};
-  const res = (p) => { const v = tr[p]; const last = Array.isArray(v) && v.length ? v[v.length - 1] : null; return last && last.result ? last.result : null; };
+  const res = (p) => snTraceResult(sc, p);
   const line = (c, path, depth) => {
     const r = res(path);
     const ok = r ? r.result === true : null;
@@ -1554,7 +1636,7 @@ function snScenarioWhyHtml(hass, T, sc, active) {
       : (ok === false && now && now.state != null ? ` <span class="wq">(${esc(T.sc_now)}: ${esc(now.state)})</span>` : "");
     return `<div class="wl ${ok === true ? "y" : ok === false ? "n" : "q"}" style="padding-left:${depth * 16}px">${icon} ${esc(snCondText(hass, c, T))}${extra}</div>`;
   };
-  const conds = Array.isArray(sc.conditions) ? sc.conditions : sc.conditions ? [sc.conditions] : [];
+  const conds = snConds(sc);
   let h = `<div class="wh">${esc(active ? T.sc_yes : T.sc_no)}</div>`;
   if (sc.enabled === false) h += `<div class="wl n">✖ ${esc(T.sc_off_sw)}</div>`;
   if (!conds.length) h += `<div class="wl q">${esc(T.sc_no_cond)}</div>`;
@@ -1638,9 +1720,8 @@ function snScenarioKey(s) {
 function snWhen(v) {
   const d = v ? new Date(v) : null;
   if (!d || isNaN(d)) return "";
-  const p2 = (n) => String(n).padStart(2, "0");
-  const hm = `${p2(d.getHours())}:${p2(d.getMinutes())}`;
-  return d.toDateString() === new Date().toDateString() ? hm : `${p2(d.getDate())}/${p2(d.getMonth() + 1)} ${hm}`;
+  const hm = snHm(d);
+  return d.toDateString() === new Date().toDateString() ? hm : `${snPad2(d.getDate())}/${snPad2(d.getMonth() + 1)} ${hm}`;
 }
 
 const SN_OPT_LABELS = {
@@ -1672,8 +1753,7 @@ function snValText(v, T) {
 /** The expanded detail of a channel or transport row: label / value lines, then the attributes link. */
 function snDetailHtml(rows, T, config, hass) {
   const esc = snEsc;
-  const lang = (config && config.language) || (hass && hass.language) || "en";
-  const L = SN_OPT_LABELS[String(lang).slice(0, 2)] || SN_OPT_LABELS.en;
+  const L = SN_OPT_LABELS[snLang(config, hass)] || SN_OPT_LABELS.en;
   const lines = rows.filter((r) => r && r[1] !== undefined && r[1] !== null && r[1] !== "").map(([k, v, opt, cls]) =>
     `<div class="dr${cls ? " " + cls : ""}"><span class="dk">${esc(opt ? (L[k] || k.replace(/_/g, " ")) : k)}</span><span class="dv">${esc(snValText(v, T))}</span></div>`);
   return `<div class="det">${lines.join("")}<button class="dmore">${esc(T.det_more)} ›</button></div>`;
@@ -1698,9 +1778,16 @@ function snDetailCss(p) {
     .row[aria-expanded="true"] .chev { align-self: flex-start; padding-top: 2px; }`;
 }
 
+/**
+ * 1.0.0: the language of the texts - the card's `language:`, else Home Assistant's, without the region
+ * (zh-Hans -> zh). Numbers and dates keep following hass.locale where a card formats them (_loc).
+ */
+function snLang(config, hass) {
+  return String((config && config.language) || (hass && hass.language) || "en").split("-")[0];
+}
+
 function snT(config, hass) {
-  const lang = ((config && config.language) || (hass && hass.language) || "en").split("-")[0];
-  return SN_STRINGS[lang] || SN_STRINGS.en;
+  return SN_STRINGS[snLang(config, hass)] || SN_STRINGS.en;
 }
 
 /**
@@ -1909,6 +1996,45 @@ function snPl(T, key, n) {
 }
 
 /** Readable name of a time band: config name, else the translated standard one, else the key. */
+/**
+ * 1.0.0: the time bands of a card's `bands:` (control and bands card): key, start / volume entities, name,
+ * icon, start as "HH:MM" and in minutes (null when its input_datetime has no readable time), sorted by start
+ * from 04:00 (a band starting after midnight comes last; no start: at the end).
+ */
+const SN_BAND_ICONS = { early_morning: "🌅", morning: "🌤️", afternoon: "☀️", evening: "🌇", night: "🌙", late_night: "🌃" };
+function snBands(hass, cfgBands, T) {
+  const st = (id) => { const s = hass && hass.states[id]; return s ? s.state : undefined; };
+  return Object.entries(cfgBands || {}).map(([key, b]) => {
+    const [h, m] = (st(b.start) || "").split(":");
+    const ok = h !== undefined && m !== undefined;
+    return { key, start: b.start, volume: b.volume, name: snBandName(T, key, b.name), icon: b.icon || SN_BAND_ICONS[key] || "🕐",
+      hhmm: ok ? `${h.padStart(2, "0")}:${m}` : "", min: ok ? +h * 60 + +m : null };
+  }).sort((x, y) => {
+    // Sort by start time, never by config order: Home Assistant
+    // reserialises the card config with its keys sorted alphabetically,
+    // so the order written in YAML does not survive a save. Bands with
+    // no readable start time go last.
+    // the day starts at 04:00, so a band starting after midnight (late night) comes last
+    if (x.min === null) return y.min === null ? 0 : 1;
+    if (y.min === null) return -1;
+    const d = (m) => (m - 240 + 1440) % 1440;
+    return d(x.min) - d(y.min);
+  });
+}
+
+/** 1.0.0: the band in force now (from its start to the next band's start, across midnight), or null. */
+function snActiveBand(list) {
+  const now = new Date();
+  const t = now.getHours() * 60 + now.getMinutes();
+  const valid = list.filter((b) => b.min !== null).sort((a, b) => a.min - b.min);
+  for (let i = 0; i < valid.length; i++) {
+    const s = valid[i].min, e = valid[(i + 1) % valid.length].min;
+    const hit = s < e ? t >= s && t < e : t >= s || t < e;
+    if (hit) return valid[i];
+  }
+  return null;
+}
+
 function snBandName(T, key, custom) {
   return custom || (T && T["band_" + key]) || String(key).replace(/_/g, " ");
 }
@@ -2094,7 +2220,7 @@ function snScenarioActive(hass, bsId) {
   // refresh on, snActive holds the live sensors' answer instead, see snLiveScenarioNames)
   snActiveEnsure(hass);
   if (snActive.names) {
-    const name = bsId.replace(/^(binary_sensor|switch)\.supernotify_scenario_/, "");
+    const name = snScenarioKey(bsId);
     return snActive.names.has(name) && (!sw || sw.state !== "off");
   }
   if (!hass.states[bsId] || hass.states[bsId].state !== "on") return false;
@@ -2152,7 +2278,7 @@ function snActiveEnsure(hass) {
   snEnquire(hass, "enquire_active_scenarios").then((r) => {
     const list = (r && r.response && r.response.scenarios) || [];
     if (snActive.live) return; // the sensors came alive meanwhile
-    snActiveSet(new Set(list.map((x) => String(x).replace(/^(binary_sensor|switch)\.supernotify_scenario_/, ""))));
+    snActiveSet(new Set(list.map(snScenarioKey)));
   }).catch(() => {}).finally(() => { snActive.busy = false; });
 }
 
@@ -2365,9 +2491,19 @@ function snArchiveTitle(doc, message) {
   return snCut(String(message || "").split("\n")[0], 120);
 }
 
+/** 1.0.0: runs of white space as one space, none at the ends. */
+function snSquash(s) {
+  return String(s).split(/\s+/).filter(Boolean).join(" ");
+}
+
 function snArchiveShort(value, limit = SN_ARCHIVE_DETAIL_VALUE) {
-  const text = String(value).split(/\s+/).filter(Boolean).join(" ");
+  const text = snSquash(value);
   return snLen(text) <= limit ? text : snCut(text, limit - 1) + "…";
+}
+
+/** A skip reason as the list shows it: the short word of SN_ARCHIVE_REASONS, or the code cut short ("" for none). */
+function snArchiveReason(raw) {
+  return raw ? SN_ARCHIVE_REASONS[String(raw).toUpperCase()] || snCut(raw, 18).toLowerCase() : "";
 }
 
 /** A channel that delivered is just its pool index; skipped or failed is [index, "s"|"e", reason?]. */
@@ -2385,12 +2521,7 @@ function snArchiveChannels(doc, chan) {
         if (snIsObj(env) && env.skip_reason) { raw = env.skip_reason; break; }
       }
     }
-    if (raw) {
-      const key = String(raw).toUpperCase();
-      out.push([idx, "s", SN_ARCHIVE_REASONS[key] || snCut(raw, 18).toLowerCase()]);
-    } else {
-      out.push([idx, "s"]);
-    }
+    out.push(raw ? [idx, "s", snArchiveReason(raw)] : [idx, "s"]);
   }
   return out;
 }
@@ -2415,7 +2546,7 @@ function snArchiveSpokenBy(doc) {
         }
       }
       said = said || call.message;
-      if (said) return { text: snCut(String(said).split(/\s+/).filter(Boolean).join(" "), SN_ARCHIVE_SPOKEN_CHARS), name };
+      if (said) return { text: snCut(snSquash(said), SN_ARCHIVE_SPOKEN_CHARS), name };
     }
   }
   return null;
@@ -2446,19 +2577,22 @@ function snArchiveAppliance(doc) {
 const snAppliances = {
   names: null,  // entry_id -> title
   loading: null,
+  /**
+   * 1.0.0: the Autonotify config entries, read now ([] when they cannot be read) - the one read for the
+   * dashboard strategy, the appliances card (snAppl.ensure) and the names here, which it keeps current.
+   */
+  read(hass) {
+    return Promise.resolve()
+      .then(() => snWS(hass, { type: "config_entries/get", domain: "appliance_autonotify" }))
+      .then((list) => (Array.isArray(list) ? list : []), () => [])
+      .then((list) => {
+        this.names = Object.fromEntries(list.filter((e) => e && e.entry_id).map((e) => [e.entry_id, e.title || ""]));
+        return list;
+      });
+  },
   load(hass) {
     if (this.names) return Promise.resolve(this.names);
-    if (!this.loading) {
-      this.loading = Promise.resolve()
-        .then(() => hass.callWS({ type: "config_entries/get", domain: "appliance_autonotify" }))
-        .then((list) => {
-          const out = {};
-          for (const e of Array.isArray(list) ? list : []) if (e && e.entry_id) out[e.entry_id] = e.title || "";
-          this.names = out;
-        })
-        .catch(() => { this.names = {}; })
-        .then(() => this.names);
-    }
+    if (!this.loading) this.loading = this.read(hass).then(() => this.names);
     return this.loading;
   },
   label(entry) {
@@ -2467,21 +2601,31 @@ const snAppliances = {
   },
 };
 
-/** One row of the archive index (the compact format the archive card lists). */
-function snArchiveItem(doc, chan, scen) {
-  const message = String(doc.message || "").trim();
-  const title = snArchiveTitle(doc, message);
+/**
+ * 1.0.0: what an index row of a full document and of a summary have in common - id, time, title, the
+ * message without the title, priority and outcome. Returns the row and the flattened body.
+ */
+function snArchiveItemHead(src, title, message, light) {
   let body = message;
   if (title && body.startsWith(title)) body = body.slice(title.length);
-  body = body.split(/\s+/).filter(Boolean).join(" ");
+  body = snSquash(body);
   // the full id travels in `fid`, for the detail; `id` stays the 8 characters shown
-  const item = { id: String(doc.id || "").slice(0, 8), fid: String(doc.id || ""), t: snArchiveStamp(doc), ti: title };
+  const item = { id: String(src.id || "").slice(0, 8), fid: String(src.id || ""), t: snArchiveStamp(src), ti: title };
+  if (light) item.light = true;
   if (body) {
     item.m = snCut(body, SN_ARCHIVE_MESSAGE_CHARS);
     if (snLen(body) > SN_ARCHIVE_MESSAGE_CHARS) item.mt = true;
   }
-  if (doc.priority && doc.priority !== "medium") item.p = doc.priority;
-  if (doc.outcome && doc.outcome !== "success") item.o = doc.outcome;
+  if (src.priority && src.priority !== "medium") item.p = src.priority;
+  if (src.outcome && src.outcome !== "success") item.o = src.outcome;
+  return { item, body };
+}
+
+/** One row of the archive index (the compact format the archive card lists). */
+function snArchiveItem(doc, chan, scen) {
+  const message = String(doc.message || "").trim();
+  const title = snArchiveTitle(doc, message);
+  const { item, body } = snArchiveItemHead(doc, title, message);
   for (const [key, field] of [["d", "delivered"], ["f", "failed"], ["s", "skipped"], ["mi", "missed"]]) {
     const val = parseInt(doc[field] || 0, 10);
     if (val) item[key] = val;
@@ -2533,20 +2677,8 @@ function snArchiveLightRow(sum) {
 function snArchiveItemSummary(row, chan, scen) {
   const message = String(row.message || "").trim();
   const title = row.title ? snCut(row.title, 120) : snCut(message.split("\n")[0], 120);
-  let body = message;
-  if (title && body.startsWith(title)) body = body.slice(title.length);
-  body = body.split(/\s+/).filter(Boolean).join(" ");
-  const item = { id: String(row.id || "").slice(0, 8), fid: String(row.id || ""), t: snArchiveStamp(row), ti: title, light: true };
-  if (body) {
-    item.m = snCut(body, SN_ARCHIVE_MESSAGE_CHARS);
-    if (snLen(body) > SN_ARCHIVE_MESSAGE_CHARS) item.mt = true;
-  }
-  if (row.priority && row.priority !== "medium") item.p = row.priority;
-  if (row.outcome && row.outcome !== "success") item.o = row.outcome;
-  const reason = (raw) => {
-    const key = String(raw || "").toUpperCase();
-    return raw ? SN_ARCHIVE_REASONS[key] || snCut(raw, 18).toLowerCase() : "";
-  };
+  const { item } = snArchiveItemHead(row, title, message, true);
+  const reason = snArchiveReason;
   const c = [];
   let d = 0, f = 0, sk = 0;
   for (const [name, res] of Object.entries(row.deliveries || {})) {
@@ -2573,21 +2705,33 @@ function snArchiveItemSummary(row, chan, scen) {
  * the days that have some are read, as summaries, and their rows kept here - a finished day is
  * never read again. `counts` is null until known, or when this SuperNotify has no daily.
  */
+/**
+ * 1.0.0: a JSON value kept in this browser (localStorage). load() gives `def()` when nothing is kept, the
+ * storage is not available (private mode) or the value is broken / fails `ok`; save() ignores a full storage.
+ */
+function snStore(key, def, ok = (c) => c != null) {
+  return {
+    load() {
+      try {
+        const c = JSON.parse(window.localStorage.getItem(key) || "null");
+        if (ok(c)) return c;
+      } catch (e) { /* private mode or a broken cache */ }
+      return def();
+    },
+    save(c) {
+      try { window.localStorage.setItem(key, JSON.stringify(c)); } catch (e) { /* full or private */ }
+    },
+  };
+}
+const snDaysOk = (c) => !!(c && c.v === 1 && c.days && typeof c.days === "object");
+
 const SN_PRIO_KEY = "supernotify-archive-prio";
 const snArchivePrio = {
   counts: null, days: 0, ver: 0, busy: null, at: 0,
 
-  _load() {
-    try {
-      const c = JSON.parse(window.localStorage.getItem(SN_PRIO_KEY) || "null");
-      if (c && c.v === 1 && c.days && typeof c.days === "object") return c;
-    } catch (e) { /* private mode or a broken cache */ }
-    return { v: 1, days: {} };
-  },
-
-  _save(c) {
-    try { window.localStorage.setItem(SN_PRIO_KEY, JSON.stringify(c)); } catch (e) { /* full or private */ }
-  },
+  _store: snStore(SN_PRIO_KEY, () => ({ v: 1, days: {} }), snDaysOk),
+  _load() { return this._store.load(); },
+  _save(c) { this._store.save(c); },
 
   /** Read again at most every `minMs` (default 5 min), or now with force. */
   refresh(hass, force, minMs = 300000) {
@@ -2597,7 +2741,7 @@ const snArchivePrio = {
     this.busy = (async () => {
       if (snStatsDaily.busy) await snStatsDaily.busy.catch(() => {});
       const from = new Date(Date.now() - SN_PRIO_DAYS * 86400000);
-      const fromKey = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}-${String(from.getDate()).padStart(2, "0")}`;
+      const fromKey = snDayKey(from);
       const all = await snStatsDaily.get(hass, from.getTime());
       if (!all) { this.counts = null; return; }
       const days = all.filter((d) => d && d.date >= fromKey); // the stats card may have read a longer window
@@ -2663,8 +2807,7 @@ const snArchivePrio = {
   /** The kept rows of one priority, newest first. */
   rows(p) {
     const c = this._load();
-    return Object.values(c.days).flatMap((d) => d.rows || []).filter((x) => x.priority === p)
-      .sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
+    return Object.values(c.days).flatMap((d) => d.rows || []).filter((x) => x.priority === p).sort(snByCreatedDesc);
   },
 };
 
@@ -2912,6 +3055,19 @@ function snArchiveSig(list) {
   return s;
 }
 
+/** Newest first, by the ISO creation time. */
+function snByCreatedDesc(a, b) {
+  return String(b.created || "").localeCompare(String(a.created || ""));
+}
+
+// 1.0.0: the two lists of snArchiveStore (full documents / light summaries) - their fields and what they ask
+const SN_ARCHIVE_SLOTS = {
+  full: { list: "docs", limit: "limit", stamp: "stamp", fetched: "fetched", loading: "loading", at: "loadingAt", run: "run",
+    max: 100, def: 40, data: {}, err: true },
+  light: { list: "light", limit: "lightLimit", stamp: "lightStamp", fetched: "lightFetched", loading: "lightLoading", at: "lightAt",
+    run: "lightRun", max: SN_ARCHIVE_LIGHT_MAX, def: SN_ARCHIVE_LIGHT, data: { verbosity: "summary" }, row: snArchiveLightRow },
+};
+
 const snArchiveStore = {
   docs: [],            // archived notifications, newest first
   limit: 0,
@@ -2952,36 +3108,7 @@ const snArchiveStore = {
    * the newest few. Only what the list draws is kept (no provenance, no presence).
    */
   ensureLight(hass, limit, trigger) {
-    if (trigger) this.trigger = trigger;
-    const st = hass.states[trigger || this.trigger || "sensor.supernotify_notifications"];
-    const stamp = (st ? st.last_updated : "none") + "|" + this.pokes;
-    const want = Math.max(1, Math.min(SN_ARCHIVE_LIGHT_MAX, limit || SN_ARCHIVE_LIGHT));
-    if (this.lightLoading && Date.now() - (this.lightAt || 0) < 20000) return;
-    let data = null;
-    if (!this.lightFetched || want > this.lightLimit) data = { verbosity: "summary", limit: want };
-    else if (stamp !== this.lightStamp) data = { verbosity: "summary", limit: SN_ARCHIVE_REFRESH };
-    if (!data) return;
-    this.lightLimit = Math.max(this.lightLimit, want);
-    this.lightStamp = stamp;
-    const run = (this.lightRun || 0) + 1;
-    this.lightRun = run;
-    this.lightAt = Date.now();
-    let changed = !this.lightFetched;
-    this.lightLoading = this._call(hass, data).then((resp) => {
-      if (run !== this.lightRun) return;
-      const got = (resp.notifications || []).filter(snIsObj).map(snArchiveLightRow);
-      const seen = new Set(got.map((d) => d.id));
-      const merged = got.concat(this.light.filter((d) => !seen.has(d.id)));
-      merged.sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
-      const next = merged.slice(0, this.lightLimit);
-      // 1.0.0 (perf): the same notifications as before (a read after another card's update) change nothing
-      if (changed || snArchiveSig(next) !== snArchiveSig(this.light)) { this.light = next; changed = true; }
-      this.lightFetched = new Date();
-    }).catch(() => { /* the next update asks again */ }).finally(() => {
-      if (run !== this.lightRun) return;
-      this.lightLoading = null;
-      if (changed) { this.index = null; this._changed(); }
-    });
+    this._sync(hass, "light", limit, trigger);
   },
 
   /**
@@ -3006,41 +3133,52 @@ const snArchiveStore = {
   /** Keep the store current for this card: first load, then only the newest few. */
   ensure(hass, limit, trigger) {
     snLiveEnsure(hass);
+    this._sync(hass, "full", limit, trigger);
+  },
+
+  /**
+   * 1.0.0: one reading for both lists (SN_ARCHIVE_SLOTS says which fields): first `limit`, then only the newest
+   * few when the trigger entity or a live event says something changed.
+   */
+  _sync(hass, slot, limit, trigger) {
+    const k = SN_ARCHIVE_SLOTS[slot];
     if (trigger) this.trigger = trigger;
     const st = hass.states[trigger || this.trigger || "sensor.supernotify_notifications"];
     const stamp = (st ? st.last_updated : "none") + "|" + this.pokes;
-    const want = Math.max(1, Math.min(100, limit || 40));
+    const want = Math.max(1, Math.min(k.max, limit || k.def));
     // 0.74.1: a reading that never answered (e.g. made while the page was still connecting)
     // is given up after 20 s, so the next update tries again
-    if (this.loading && Date.now() - (this.loadingAt || 0) < 20000) return;
+    if (this[k.loading] && Date.now() - (this[k.at] || 0) < 20000) return;
     let data = null;
-    if (!this.fetched || want > this.limit) data = { limit: want };
-    else if (stamp !== this.stamp) data = { limit: SN_ARCHIVE_REFRESH };
+    if (!this[k.fetched] || want > this[k.limit]) data = { ...k.data, limit: want };
+    else if (stamp !== this[k.stamp]) data = { ...k.data, limit: SN_ARCHIVE_REFRESH };
     if (!data) return;
-    this.limit = Math.max(this.limit, want);
-    this.stamp = stamp;
-    const run = (this.run || 0) + 1;
-    this.run = run;
-    this.loadingAt = Date.now();
-    let changed = !this.fetched;
+    this[k.limit] = Math.max(this[k.limit], want);
+    this[k.stamp] = stamp;
+    const run = (this[k.run] || 0) + 1;
+    this[k.run] = run;
+    this[k.at] = Date.now();
+    let changed = !this[k.fetched];
     const err0 = this.error;
-    this.loading = this._call(hass, data).then((resp) => {
-      if (run !== this.run) return; // a newer reading replaced this one
-      const got = (resp.notifications || []).filter(snIsObj);
+    this[k.loading] = this._call(hass, data).then((resp) => {
+      if (run !== this[k.run]) return; // a newer reading replaced this one
+      let got = (resp.notifications || []).filter(snIsObj);
+      if (k.row) got = got.map(k.row);
       const seen = new Set(got.map((d) => d.id));
-      const merged = got.concat(this.docs.filter((d) => !seen.has(d.id)));
-      merged.sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
-      const next = merged.slice(0, this.limit);
-      // 1.0.0 (perf): index and event only when the set of notifications changed
-      if (changed || snArchiveSig(next) !== snArchiveSig(this.docs)) { this.docs = next; changed = true; }
-      this.error = null;
-      this.fetched = new Date();
+      const merged = got.concat(this[k.list].filter((d) => !seen.has(d.id)));
+      merged.sort(snByCreatedDesc);
+      const next = merged.slice(0, this[k.limit]);
+      // 1.0.0 (perf): index and event only when the set of notifications changed (not after another card's read)
+      if (changed || snArchiveSig(next) !== snArchiveSig(this[k.list])) { this[k.list] = next; changed = true; }
+      if (k.err) this.error = null;
+      this[k.fetched] = new Date();
     }).catch((e) => {
-      if (run === this.run) this.error = (e && e.message) || String(e);
+      // the light list: the next update asks again
+      if (k.err && run === this[k.run]) this.error = (e && e.message) || String(e);
     }).finally(() => {
-      if (run !== this.run) return;
-      this.loading = null;
-      if (changed || this.error !== err0) { this.index = null; this._changed(); }
+      if (run !== this[k.run]) return;
+      this[k.loading] = null;
+      if (changed || (k.err && this.error !== err0)) { this.index = null; this._changed(); }
     });
   },
 
@@ -3181,8 +3319,7 @@ function snSnap(tr, hass) {
 
 /** A camera's friendly name, or its entity_id without "camera.". */
 function snCameraName(hass, id) {
-  const st = hass && hass.states && hass.states[id];
-  return (st && st.attributes && st.attributes.friendly_name) || String(id || "").replace(/^camera\./, "");
+  return snFname(hass, id, String(id || "").replace(/^camera\./, ""));
 }
 
 /** A scenario's readable name from its switch, as the why-card shows it. */
@@ -3206,9 +3343,9 @@ function snAgo(date, T) {
   const m = Math.floor((Date.now() - date.getTime()) / 60000);
   if (m < 1) return T.ago_now;
   if (m < 60) return `${m} ${T.ago_min}`;
-  const hh = String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
+  const hh = snHm(date);
   if (m < 1440) return `${Math.floor(m / 60)} ${T.ago_h} · ${hh}`;
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")} ${hh}`;
+  return `${snPad2(date.getDate())}/${snPad2(date.getMonth() + 1)} ${hh}`;
 }
 
 /**
@@ -3239,6 +3376,140 @@ const SN_SWITCH_CSS = `
   .sw input:checked + .sl { background: var(--sn-sw-on, #03a9f4); }
   .sw input:checked + .sl::after { left: 21px; }
 `;
+
+/** The on/off pill of a list row (delivery, transport, recipient, scenario): SN_SWITCH_CSS draws it. */
+function snSwitchHtml(p, id, on, label, title) {
+  return `<label class="sw" data-id="${snEsc(id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
+          <input type="checkbox" ${on ? "checked" : ""} aria-label="${snEsc(label)}"${title ? ` title="${title}"` : ""}>
+          <span class="sl"></span>
+        </label>`;
+}
+
+/** 1.0.0: the CSS the deliveries, transports and recipients lists share (each card adds its own after it). */
+function snListCss(p) {
+  return `:host { display: block; }
+        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
+               cursor: pointer; border-radius: 8px; }
+        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
+               border-top: 1px solid ${p.line}; pointer-events: none; }
+        .row:hover { background: ${p.soft}; }
+        .em { font-size: 22px; flex-shrink: 0; }
+        .mid { flex: 1; min-width: 0; }
+        .mid b { font-size: 14px; }
+        .mid .sub { font-size: 11.5px; color: ${p.muted}; }
+        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
+               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
+               white-space: nowrap; }
+        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750;
+                 flex-shrink: 0; }
+        .b-off { background: ${p.soft}; color: ${p.muted}; }
+        ${SN_SWITCH_CSS}
+        ${SN_FLOW_CSS}
+        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }`;
+}
+
+/**
+ * 1.0.0: base of the deliveries, transports and recipients cards - one row per `switch.supernotify_<kind>_*`
+ * (on first, then by name), an on/off switch on each, one listener on #rows, the list rebuilt only when its
+ * HTML changed, a tap that opens the row's detail. A card says what differs: static snKind / snEntity /
+ * snEmpty / snSize, _css(p), _body(list, T, p) (rows with data-i), _onRow(item, node, e), _onOther(e), _after(rows, T).
+ */
+class SnListCard extends SnCard {
+  static getStubConfig() {
+    return {};
+  }
+
+  setConfig(config) {
+    this._config = { style: "supernotify", ...(config || {}) };
+    this._rendered = false;
+  }
+
+  getCardSize() {
+    return this.constructor.snSize;
+  }
+
+  _list() {
+    const out = snEntityRows(this._hass, this.constructor.snEntity);
+    // enabled first, then alphabetical — like the prototype list
+    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
+    return out;
+  }
+
+  /** A link from another card (0.65.0): open these rows. */
+  _focus(d) {
+    if (!d || !d.ids) return;
+    this._open = new Set(d.ids);
+    this._update();
+    snFlash(this, '.row[aria-expanded="true"]');
+  }
+
+  _css() {
+    return "";
+  }
+
+  _render() {
+    if (!this._hass) return;
+    this._rendered = true;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const p = this._palette();
+    this.shadowRoot.innerHTML = snIconify(`
+      <style>
+        ${snListCss(p)}
+        ${this._css(p)}
+      </style>
+      <ha-card>
+        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
+        ${snVer(this._config, this.constructor.snKind, p)}
+      </ha-card>`, this._config);
+    this._update();
+  }
+
+  _update() {
+    if (!this.shadowRoot) return;
+    const T = snT(this._config, this._hass);
+    const p = this._palette();
+    const list = this._list();
+    const rows = this.shadowRoot.getElementById("rows");
+    if (!list.length) {
+      rows.innerHTML = snIconify(`<span class="badge b-off">${T[this.constructor.snEmpty]}</span>`, this._config);
+      this._rowsHtml = null;
+      return;
+    }
+    const html = snIconify(this._body(list, T, p), this._config);
+    // 1.0.0 (perf): rebuilt only when it changed; one listener on #rows for every row and switch
+    this._items = list;
+    const key = this._key(html);
+    if (key != null && key === this._rowsHtml && rows.firstChild) return;
+    this._rowsHtml = key;
+    rows.innerHTML = html;
+    snRowsDelegate(rows, (node, e) => {
+      const it = this._items[+node.dataset.i];
+      if (it) this._onRow(it, node, e);
+    }, (label, input) => { this._rowsHtml = null; snToggleSafe(this._hass, label.dataset.id, input); }, (e) => this._onOther(e));
+    this._after(rows, T);
+  }
+
+  _key(html) {
+    return html;
+  }
+
+  _onOther() {
+    return false;
+  }
+
+  _after() {}
+
+  // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
+  _onRow(it, node, e) {
+    if (e.target.closest(".dmore")) { this._moreInfo(it.id); return; }
+    if (e.target.closest(".det") || e.target.closest(".dres")) return;
+    this._open = this._open || new Set();
+    if (this._open.has(it.id)) this._open.delete(it.id); else this._open.add(it.id);
+    this._update();
+  }
+}
 
 /**
  * 0.39.0 (bundle 0.88.0): strings of the new overview - status band, numbers from the archive,
@@ -3287,6 +3558,18 @@ const SN_OV_STRINGS = {
 Object.assign(SN_STRINGS.en, SN_OV_STRINGS.en);
 Object.assign(SN_STRINGS.it, SN_OV_STRINGS.it);
 
+/**
+ * 1.0.0: what an update entity says (overview health and versions, stats card): installed and latest version,
+ * an update waiting, a restart asked for, the release notes. Null without the entity.
+ */
+function snVersionInfo(hass, id) {
+  const st = id && hass && hass.states[id];
+  if (!st) return null;
+  const a = st.attributes || {};
+  return { a, upd: st.state === "on", inst: a.installed_version || "", latest: a.latest_version || "", url: a.release_url,
+    restart: /restart/i.test(a.release_summary || "") };
+}
+
 /** 0.39.0: compare two dotted versions ("0.88.0" < "0.88.1"): -1, 0 or 1. */
 function snVerCmp(a, b) {
   const x = String(a).split(/[.-]/).map((n) => parseInt(n, 10) || 0), y = String(b).split(/[.-]/).map((n) => parseInt(n, 10) || 0);
@@ -3300,8 +3583,7 @@ function snVerCmp(a, b) {
  * complete days the archive has, at most 30.
  */
 function snOvDays(days, now) {
-  const pad = (x) => String(x).padStart(2, "0");
-  const key = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const key = snDayKey;
   const t0 = new Date(now); t0.setHours(0, 0, 0, 0);
   const y0 = new Date(t0); y0.setDate(y0.getDate() - 1);
   const kToday = key(t0), kY = key(y0);
@@ -3488,7 +3770,7 @@ class SupernotifyControlCard extends SnCard {
     if (!held || !held.length) { el.hidden = true; el.innerHTML = ""; this._cuHtml = ""; return; }
     const T = snT(this._config, this._hass);
     const esc = snEsc;
-    const hm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    const hm = snHm;
     const nAll = held.filter((h) => h.all).length;
     const nSome = held.length - nAll;
     const groups = {};
@@ -3517,17 +3799,12 @@ class SupernotifyControlCard extends SnCard {
     };
   }
 
-  // ── helpers ────────────────────────────────────────────────────────────
-  _st(entityId) {
-    const s = this._hass && this._hass.states[entityId];
-    return s ? s.state : undefined;
-  }
+  // ── helpers (_st: SnCard) ─────────────────────────────────────────────
   _on(entityId) {
     return this._st(entityId) === "on";
   }
   _friendly(entityId, fallback) {
-    const s = this._hass && this._hass.states[entityId];
-    return (s && s.attributes.friendly_name) || fallback || entityId;
+    return snFname(this._hass, entityId, fallback || entityId);
   }
   // 0.60.0: any domain (input_boolean, switch, light, fan...) - the visual editor also offers switch.*
   _toggle(entityId) {
@@ -3539,26 +3816,7 @@ class SupernotifyControlCard extends SnCard {
 
   _activeBand() {
     const bands = this._config.bands;
-    if (!bands) return null;
-    const now = new Date();
-    const t = now.getHours() * 60 + now.getMinutes();
-    const entries = Object.entries(bands)
-      .map(([name, b]) => {
-        const raw = this._st(b.start) || "";
-        const [h, m] = raw.split(":");
-        if (h === undefined || m === undefined) return null;
-        return { name: snBandName(snT(this._config, this._hass), name, b.name), min: +h * 60 + +m, volume: b.volume };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.min - b.min);
-    if (!entries.length) return null;
-    for (let i = 0; i < entries.length; i++) {
-      const s = entries[i].min;
-      const e = entries[(i + 1) % entries.length].min;
-      const hit = s < e ? t >= s && t < e : t >= s || t < e;
-      if (hit) return entries[i];
-    }
-    return null;
+    return bands ? snActiveBand(snBands(this._hass, bands, snT(this._config, this._hass))) : null;
   }
 
   _activeScenarios() {
@@ -3610,12 +3868,7 @@ class SupernotifyControlCard extends SnCard {
       input.focus();
       return;
     }
-    const delivery = {};
-    delivery[this._config.announce_delivery || "alexa_announce"] = {};
-    this._hass.callService("notify", "supernotify", {
-      message,
-      data: { delivery_selection: "fixed", delivery },
-    });
+    snAnnounce(this._hass, this._config.announce_delivery || "alexa_announce", message);
     input.value = "";
     this._toast(snT(this._config, this._hass).announced);
   }
@@ -3767,7 +4020,7 @@ class SupernotifyControlCard extends SnCard {
         <div id="groups"></div>
         ${snVer(this._config, "control", p)}
         <div class="toast" id="toast"></div>
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     const abtn = this.shadowRoot.getElementById("announceBtn");
     if (abtn) {
       abtn.addEventListener("click", () => this._announce());
@@ -3800,24 +4053,13 @@ class SupernotifyControlCard extends SnCard {
     if (c.last_notification_strip) {
       try { msg = msg.replace(new RegExp(c.last_notification_strip, "m"), "").trim(); } catch (e) { /* bad regex: ignore */ }
     }
-    if (!n && !title) { el.innerHTML = snIconify(`<div class="lm" style="opacity:.7">${T.no_notif}</div>`, this && this._config); return; }
+    if (!n && !title) { el.innerHTML = snIconify(`<div class="lm" style="opacity:.7">${T.no_notif}</div>`, this._config); return; }
     const prio = n && n.priority
       ? `<span class="lb" style="color:${snPrioColor(this._palette(), n.priority) || "inherit"}">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "";
     let when = "";
     if (n && n.created) { const d = new Date(n.created); if (!isNaN(d)) when = `<span class="lb mut">🕐 ${esc(snAgo(d, T))}</span>`; }
-    const chips = [];
-    const { ok: okNames, err: errNames, skipped } = snLastDeliveries(this._hass, n);
-    if (c.last_channels) {
-      for (const l of okNames) chips.push(`<span class="lb ok">✔ ${esc(l)}</span>`);
-      for (const l of errNames) chips.push(`<span class="lb err">✖ ${esc(l)}</span>`);
-    }
     // 0.52.0: counts with the channel names in the tooltip (`last_channels: true` = one chip each)
-    if (!c.last_channels) {
-      if (okNames.length) chips.push(`<span class="lb ok" title="${esc(okNames.join(", "))}">✔ ${snPl(T, "ln_delivered", okNames.length)}</span>`);
-      if (errNames.length) chips.push(`<span class="lb err" title="${esc(errNames.join(", "))}">✖ ${snPl(T, "ln_failed", errNames.length)}</span>`);
-    }
-    if (n && +n.missed > 0) chips.push(`<span class="lb mis">⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
-    if (skipped) chips.push(`<span class="lb mut">${snPl(T, "skipped_n", skipped)}</span>`);
+    const chips = snLastChips(this._hass, n, T, { ok: "lb ok", err: "lb err", mis: 'class="lb mis"', skip: "lb mut" }, c.last_channels);
     const rep = c.repeat_entity
       ? `<button class="rep" id="repBtn">🔁 ${T.repeat}</button>` : "";
     const why = n && n.id && window.__snWhyCards
@@ -3825,14 +4067,12 @@ class SupernotifyControlCard extends SnCard {
     el.innerHTML = snIconify(`
       <div class="lh"><span class="lt">${esc(snTitleShow(title)) || "📨 " + T.last_notif}</span>${prio}${when}</div>
       ${msg ? `<div class="lm">${esc(msg)}</div>` : ""}
-      <div class="lf">${chips.join("")}${why}${rep}</div>`, this && this._config);
+      <div class="lf">${chips.join("")}${why}${rep}</div>`, this._config);
     const wb = el.querySelector("#whyBtn");
     if (wb) wb.onclick = () => snWhyOpen(n.id);
     const btn = el.querySelector("#repBtn");
     if (btn) btn.onclick = () => {
-      const [dom] = c.repeat_entity.split(".");
-      const svc = dom === "input_button" ? "press" : dom === "script" ? "turn_on" : "press";
-      this._hass.callService(dom, svc, { entity_id: c.repeat_entity });
+      snRepeat(this._hass, c.repeat_entity);
       this._toast("🔁 " + T.repeat);
     };
   }
@@ -3876,7 +4116,7 @@ class SupernotifyControlCard extends SnCard {
     if (act !== null) segs.push(seg("🎬 " + T.act_scen, String(act.length))
       .replace('<div class="sseg"', snCardReach("scenarios") ? '<div class="sseg go" data-go="scenarios"' : '<div class="sseg"'));
     const bar = this.shadowRoot.getElementById("statusbar");
-    bar.innerHTML = snIconify(segs.join(""), this && this._config);
+    bar.innerHTML = snIconify(segs.join(""), this._config);
     // 0.65.0: who is home -> recipients card, active scenarios -> scenarios card
     bar.querySelectorAll("[data-go]").forEach((g) => {
       g.onclick = () => g.dataset.go === "recipients"
@@ -3944,7 +4184,7 @@ class SupernotifyControlCard extends SnCard {
         `<div class="ctile ${d.cls}" data-i="${i}" role="button" tabindex="0">
            ${this._icon(d.icon)}<span class="tx"><b>${d.name}</b><span class="ts">${d.sub}</span></span>
          </div>`)
-      .join(""), this && this._config);
+      .join(""), this._config);
     el.querySelectorAll(".ctile").forEach((node) => {
       const d = defs[+node.dataset.i];
       node.onclick = () => d.act();
@@ -3971,7 +4211,7 @@ class SupernotifyControlCard extends SnCard {
     const T = snT(this._config, this._hass);
     const esc = snEsc;
     const st = this._snz || (this._snz = { what: "NONCRITICAL", target: "", who: "EVERYONE", min: this._config.snooze_minutes || 30 });
-    const me = this._myPerson();
+    const me = snMyPerson(this._hass);
     const dels = snEntityRows(this._hass, "delivery").filter((d) => !/^default_/i.test(d.name));
     if (st.what === "DELIVERY" && !st.target && dels.length) st.target = dels[0].name;
     if (st.what === "PRIORITY" && !st.target) st.target = "low";
@@ -3994,7 +4234,6 @@ class SupernotifyControlCard extends SnCard {
     const myUser = this._hass && this._hass.user && this._hass.user.id;
     const canResume = (s) => String(s.recipient_type || "").toUpperCase() !== "USER" ||
       (s.recipient && this._hass.states[s.recipient] && (this._hass.states[s.recipient].attributes || {}).user_id === myUser);
-    const pad = (n) => String(n).padStart(2, "0");
     const voice = this._snzVoice();
     const rows = live.map((s, i) => `<div class="sr"><div class="sm"><span class="sl">${esc(snSnoozeLabel(this._hass, s, T))}</span>
         <span class="su">${s._end ? `${esc(T.until)} ${esc(snSnzUntil(s._end, this._hass))}` : esc(T.snz_until_resumed)}${snSnoozeReason(s, T) ? ` · ${esc(snSnoozeReason(s, T))}` : ""}</span></div>
@@ -4080,9 +4319,7 @@ class SupernotifyControlCard extends SnCard {
         }
         await this._hass.callService(m[1], m[2], payload);
       } else {
-        const delivery = {};
-        delivery[name] = {};
-        await this._hass.callService("notify", "supernotify", { message: text, data: { delivery_selection: "fixed", delivery } });
+        await snAnnounce(this._hass, name, text);
       }
     } catch (e) { /* the pause goes on anyway */ }
   }
@@ -4100,7 +4337,7 @@ class SupernotifyControlCard extends SnCard {
     else if (st.what === "PRIORITY") what = T.sa_w_pr.replace("{x}", String(T["prio_" + st.target] || st.target || "").toLowerCase());
     else what = T.sa_w_nc;
     if (!st.mine && st.who === "USER") {
-      const me = this._myPerson && this._myPerson();
+      const me = snMyPerson(this._hass);
       const nm = me && this._hass.states[me] && this._hass.states[me].attributes.friendly_name;
       if (nm) what += " " + T.sa_for.replace("{x}", nm);
     }
@@ -4113,7 +4350,7 @@ class SupernotifyControlCard extends SnCard {
 
   async _snzSay(cmd, min) {
     const T = snT(this._config, this._hass);
-    const it = String((this._config.language || this._hass.language || "en")).startsWith("it");
+    const it = snLang(this._config, this._hass) === "it";
     const text = cmd === "resume" ? (it ? "riattiva le mie notifiche" : "resume my notifications")
       : cmd === "silence" ? (it ? "silenzia le mie notifiche fino a nuovo ordine" : "silence my notifications until I say")
       : (it ? `metti in pausa le mie notifiche per ${min} minuti` : `pause my notifications for ${min} minutes`);
@@ -4137,7 +4374,7 @@ class SupernotifyControlCard extends SnCard {
   async _resumeAll() {
     const T = snT(this._config, this._hass);
     try {
-      await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
+      await snClearSnoozes(this._hass);
       this._toast(T.cleared);
       this._snzSpeak(this._snzText("resume_all"));
     } catch (e) {
@@ -4158,7 +4395,7 @@ class SupernotifyControlCard extends SnCard {
     const scope = String(st.what || "NONCRITICAL").toLowerCase();
     const d = { scope };
     if (!["noncritical", "everything"].includes(scope)) d.name = st.target;
-    if (st.who === "USER") d.person = st.person || this._myPerson();
+    if (st.who === "USER") d.person = st.person || snMyPerson(this._hass);
     if (st.resume) d.command = "resume";
     else if (+st.min > 0) { d.command = "snooze"; d.minutes = +st.min; }
     else d.command = "silence";
@@ -4193,11 +4430,6 @@ class SupernotifyControlCard extends SnCard {
       this._toast(`✖ ${(e && e.message) || e}`);
     }
     snEnquireBust(800);
-  }
-
-  /** person.* linked to the logged-in user, for "only me" pauses. */
-  _myPerson() {
-    return snMyPerson(this._hass);
   }
 
   _collapseKey() {
@@ -4249,7 +4481,7 @@ class SupernotifyControlCard extends SnCard {
         return `<div class="mgroup ${foldable ? "clk" : ""} ${isFold ? "fold" : ""}" data-g="${gi}" role="${foldable ? "button" : ""}"
                      ${foldable ? `aria-expanded="${!isFold}" tabindex="0"` : ""}>${g.name || ""}${counter}${chev}</div><div>${pills}</div>`;
       })
-      .join(""), this && this._config);
+      .join(""), this._config);
     el.querySelectorAll(".mpill").forEach((node) => {
       node.onclick = () => this._toggle(node.dataset.e);
     });
@@ -4306,27 +4538,20 @@ class SupernotifyOverviewCard extends SnCard {
     const T = snT(this._config, this._hass);
     const c = this._config;
     const chips = [];
-    const upd = c.update_entity && this._hass.states[c.update_entity];
-    if (upd) {
-      const a = upd.attributes || {};
-      if (upd.state === "on") chips.push({ k: "warn", t: `⬆ ${T.h_update} ${a.latest_version || ""}`, href: a.release_url });
-      else if (/restart/i.test(a.release_summary || "")) chips.push({ k: "warn", t: `🔄 ${T.h_restart}` });
-      else chips.push({ k: "ok", t: `✔ SuperNotify ${a.installed_version || ""} ${T.h_uptodate}` });
+    const v = snVersionInfo(this._hass, c.update_entity);
+    if (v) {
+      if (v.upd) chips.push({ k: "warn", t: `⬆ ${T.h_update} ${v.latest}`, href: v.url });
+      else if (v.restart) chips.push({ k: "warn", t: `🔄 ${T.h_restart}` });
+      else chips.push({ k: "ok", t: `✔ SuperNotify ${v.inst} ${T.h_uptodate}` });
     }
     const failures = this._failures().n || 0;
     if (failures > 0) chips.push({ k: "crit", t: `✖ ${snPl(T, "h_failures", failures)}` });
-    const trErr = this._scan("transport").filter((t) => {
-      const st = this._hass.states[t.id];
-      return st && st.state !== "unavailable" && +((st.attributes || {}).error_count || 0) > 0;
-    });
+    // 0.74.0: channels switched off by hand; 0.89.0: a channel whose last send failed, with when and to see it
+    const { tr: trErr, chErr, off: delsOff } = snHealthFacts(this._hass, c.ignore, this._scan("delivery"));
     if (trErr.length) chips.push({ k: "crit", go: ["transports", { ids: trErr.map((t) => t.id) }], t: `⚠️ ${snPl(T, "h_transport_err", trErr.length)}`, title: trErr.map((t) => {
       const a = (this._hass.states[t.id] || {}).attributes || {};
       return a.last_error_message ? `${t.name}: ${a.last_error_message}` : t.name;
     }).join(" · ") });
-    const ign = new Set((c.ignore || []).map((x) => String(x).toLowerCase()));
-    const delsOff = snChannelsOff(this._hass, this._scan("delivery"), ign); // 0.74.0: switched off by hand
-    // 0.89.0: a channel whose last send failed (SuperNotify >= 2.14), with when and to see it
-    const chErr = snChannelsFailed(this._hass, ign);
     if (chErr.length) chips.push({ k: "crit", go: ["deliveries", { ids: chErr.map((d) => d.id) }], t: `✖ ${snPl(T, "h_ch_err", chErr.length)}`,
       title: chErr.map((d) => `${snDeliveryAlias(this._hass, d.name) || d.name}: ${snLastSendText(d.a, T)}`).join(" · ") });
     if (delsOff.length) chips.push({ k: "off", go: ["deliveries", { ids: delsOff.map((d) => d.id) }], t: `🔕 ${snPl(T, "h_channels_off", delsOff.length)}`, title: delsOff.map((d) => snDeliveryAlias(this._hass, d.name) || d.name).join(", ") });
@@ -4404,12 +4629,6 @@ class SupernotifyOverviewCard extends SnCard {
 
   /** A link from this card: show it in the card of that kind (0.65.0). */
   _focus() { /* nothing to show in the overview */ }
-
-  /** Scenario name for a chip: entity ids (reactive path) become the translated alias. */
-  _scenLabel(s) {
-    const m = String(s).match(/^binary_sensor\.supernotify_scenario_(.+)$/);
-    return m ? snScenarioName(this._hass, m[1]) : s;
-  }
 
   setConfig(config) {
     if (!config) throw new Error("Invalid configuration");
@@ -4628,7 +4847,7 @@ class SupernotifyOverviewCard extends SnCard {
           ${P.has("scenarios") ? `<div><div class="sec" id="scenH">${T.act_scen}</div><div id="scen">—</div></div>` : ""}
         </div>` : ""}
         ${snVer(this._config, "overview", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this._healthHtml = this._statsHtml = null; // fresh elements: draw them again
     this._lastHtml = this._occHtml = this._scenHtml = this._scenHeadHtml = null;
     this._update();
@@ -4696,7 +4915,7 @@ class SupernotifyOverviewCard extends SnCard {
     if (hb && hb.innerHTML !== helpHtml) hb.innerHTML = helpHtml;
     if (html === this._healthHtml) return;
     this._healthHtml = html;
-    healthEl.innerHTML = snIconify(html, this && this._config);
+    healthEl.innerHTML = snIconify(html, this._config);
     healthEl.querySelectorAll("a[data-nav]").forEach((a) => {
       a.onclick = (e) => { e.preventDefault(); snNavigate(a.getAttribute("href")); };
     });
@@ -4715,13 +4934,11 @@ class SupernotifyOverviewCard extends SnCard {
     const T = snT(this._config, this._hass);
     const c = this._config;
     const one = (id, name, fallback) => {
-      const st = id && this._hass.states[id];
-      if (!st) return fallback ? { html: `<span><span class="vok">✔</span> ${esc(name)} ${esc(fallback)}</span>`, upd: false } : null;
-      const a = st.attributes || {};
-      const upd = st.state === "on";
-      const txt = upd ? `<span class="vup">⬆</span> ${esc(name)} ${esc(a.installed_version || "")} → ${esc(a.latest_version || "")}`
-        : `<span class="vok">✔</span> ${esc(name)} ${esc(a.installed_version || "")}`;
-      return { html: a.release_url ? `<a href="${esc(a.release_url)}" target="_blank" rel="noopener">${txt}</a>` : `<span>${txt}</span>`, upd };
+      const v = snVersionInfo(this._hass, id);
+      if (!v) return fallback ? { html: `<span><span class="vok">✔</span> ${esc(name)} ${esc(fallback)}</span>`, upd: false } : null;
+      const txt = v.upd ? `<span class="vup">⬆</span> ${esc(name)} ${esc(v.inst)} → ${esc(v.latest)}`
+        : `<span class="vok">✔</span> ${esc(name)} ${esc(v.inst)}`;
+      return { html: v.url ? `<a href="${esc(v.url)}" target="_blank" rel="noopener">${txt}</a>` : `<span>${txt}</span>`, upd: v.upd };
     };
     // the cards: the version running in this browser (HACS may not know a manual install)
     const cst = c.cards_update_entity && this._hass.states[c.cards_update_entity];
@@ -4741,16 +4958,8 @@ class SupernotifyOverviewCard extends SnCard {
     const live = snLiveSnoozes(this._snoozes);
     b.disabled = true;
     try {
-      if (live.length === 1) {
-        const s = live[0];
-        const scope = String(s.target_type || "NONCRITICAL").toLowerCase();
-        const data = { command: "resume", scope };
-        if (!["noncritical", "everything"].includes(scope)) data.name = Array.isArray(s.target) ? s.target.join("_") : (s.target || "");
-        if (String(s.recipient_type || "").toUpperCase() === "USER" && s.recipient) data.person = s.recipient;
-        await snSnoozeCall(this._hass, data);
-      } else {
-        await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "clear_snoozes", service_data: {}, return_response: true });
-      }
+      if (live.length === 1) await snSnoozeCall(this._hass, snResumeData(live[0]));
+      else await snClearSnoozes(this._hass);
     } catch (e) {
       b.disabled = false;
       b.textContent = `✖ ${(e && e.message) || e}`;
@@ -4803,7 +5012,7 @@ class SupernotifyOverviewCard extends SnCard {
     }
     if (html === this._statsHtml) return;
     this._statsHtml = html;
-    statsEl.innerHTML = snIconify(html, this && this._config);
+    statsEl.innerHTML = snIconify(html, this._config);
     statsEl.dataset.n = statsEl.children.length;
     const goch = statsEl.querySelector("[data-goch]");
     if (goch) goch.onclick = () => snGo("deliveries", { ids: off.map((x) => x.id) });
@@ -4826,13 +5035,8 @@ class SupernotifyOverviewCard extends SnCard {
     const d = n.created ? new Date(n.created) : null;
     if (head) head.textContent = d && !isNaN(d) ? `${T.last_notif} · ${snAgo(d, T)}` : T.last_notif;
     const meta = n.priority ? `<span style="color:${prioCol || p.muted};font-weight:600">● ${esc(T["prio_" + n.priority] || n.priority)}</span>` : "";
-    const { ok: okN, err: errN, skipped } = snLastDeliveries(this._hass, n);
-    const chips = [];
-    if (okN.length) chips.push(`<span class="badge b-ok" title="${esc(okN.join(", "))}">✔ ${snPl(T, "ln_delivered", okN.length)}</span>`);
-    else if (+n.delivered > 0) chips.push(`<span class="badge b-ok">✔ ${snPl(T, "ln_delivered", +n.delivered)}</span>`);
-    if (errN.length || +n.failed > 0) chips.push(`<span class="badge b-crit" title="${esc(errN.join(", "))}">✖ ${snPl(T, "ln_failed", errN.length || +n.failed)}</span>`);
-    if (+n.missed > 0) chips.push(`<span class="badge" style="background:${p.warnSoft};color:${p.warnInk}">⚠ ${snPl(T, "missed_n", +n.missed)}</span>`);
-    if (skipped) chips.push(`<span class="badge b-off">${snPl(T, "skipped_n", skipped)}</span>`);
+    const chips = snLastChips(this._hass, n, T, { ok: "badge b-ok", err: "badge b-crit",
+      mis: `class="badge" style="background:${p.warnSoft};color:${p.warnInk}"`, skip: "badge b-off" }, false, true);
     const rep = c.repeat_entity ? `<button class="act" id="repBtn">🔁 ${esc(T.repeat)}</button>` : "";
     // Why: the archive card on this page, else the archive card of another view
     const whyHere = n.id && window.__snWhyCards;
@@ -4841,7 +5045,7 @@ class SupernotifyOverviewCard extends SnCard {
       <div class="lmm${title ? "" : " solo"}">${esc(msg || "—")}</div>
       ${meta ? `<div class="t">${meta}</div>` : ""}
       <div class="lf">${chips.join("")}</div>
-      ${rep || why ? `<div class="lf lb">${rep}${why}</div>` : ""}`, this && this._config);
+      ${rep || why ? `<div class="lf lb">${rep}${why}</div>` : ""}`, this._config);
     // 1.0.0 (perf): the same notification drawn the same way - nothing to rebuild
     if (html === this._lastHtml && lastEl.firstElementChild) return;
     this._lastHtml = html;
@@ -4850,9 +5054,7 @@ class SupernotifyOverviewCard extends SnCard {
     if (wb) wb.onclick = () => { if (!snWhyOpen(n.id)) snGo("archive", { id: n.id }); };
     const rb = lastEl.querySelector("#repBtn");
     if (rb) rb.onclick = () => {
-      const [dom] = c.repeat_entity.split(".");
-      const svc = dom === "script" ? "turn_on" : "press";
-      this._hass.callService(dom, svc, { entity_id: c.repeat_entity });
+      snRepeat(this._hass, c.repeat_entity);
       rb.textContent = `✔ ${T.repeat}`;
       setTimeout(() => { if (rb.isConnected) rb.textContent = `🔁 ${T.repeat}`; }, 2500);
     };
@@ -4868,7 +5070,7 @@ class SupernotifyOverviewCard extends SnCard {
     const html = o ? snIconify(`<div style="display:flex;flex-wrap:wrap;align-items:flex-start">`
       + `<span class="badge ${o.home.length ? "b-ok" : "b-off"}" style="padding:7px 12px;margin:0 6px 6px 0">${esc(T["occ_" + o.state] || o.state)}</span>`
       + o.home.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1">🏠 ${esc(n)}</span>`).join("")
-      + o.away.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1" style="color:${p.muted}">🚶 ${esc(n)}</span>`).join("") + `</div>`, this && this._config) : "—";
+      + o.away.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1" style="color:${p.muted}">🚶 ${esc(n)}</span>`).join("") + `</div>`, this._config) : "—";
     // 1.0.0 (perf): rebuilt only when it changed
     if (html === this._occHtml && occEl.firstChild) return;
     this._occHtml = html;
@@ -4913,7 +5115,7 @@ class SupernotifyOverviewCard extends SnCard {
     const bits = [];
     if (muted.size) bits.push(T.ov_eff_mute.replace("{x}", [...muted].join(", ")));
     if (off.size) bits.push(T.ov_eff_off.replace("{x}", [...off].join(", ")));
-    const html = snIconify(`<div>${rows}</div><div class="effnow">${esc(T.ov_eff_now)}: <b>${esc(bits.length ? bits.join(" · ") : T.ov_eff_none)}</b></div>`, this && this._config);
+    const html = snIconify(`<div>${rows}</div><div class="effnow">${esc(T.ov_eff_now)}: <b>${esc(bits.length ? bits.join(" · ") : T.ov_eff_none)}</b></div>`, this._config);
     if (html === this._scenHtml && el.firstChild) return;
     this._scenHtml = html;
     el.innerHTML = html;
@@ -4934,7 +5136,7 @@ class SupernotifyOverviewCard extends SnCard {
     const cl = snScenarioCondLine(this._hass, T, tr && tr[key]);
     const tip = [cl ? `${T.sc_when}: ${cl.text}` : "", eff].filter(Boolean).join("\n");
     return { effects, html: `<div class="scr${snCardReach("scenarios") ? " go" : ""}" data-gos="${esc(key)}"${tip ? ` title="${esc(tip)}"` : ""}>`
-      + `<b>${esc(this._scenLabel(s))}</b><span class="eff">${esc(eff || T.ov_eff_none)}</span></div>` };
+      + `<b>${esc(key !== String(s) ? snScenarioName(this._hass, key) : s)}</b><span class="eff">${esc(eff || T.ov_eff_none)}</span></div>` };
   }
 }
 
@@ -4987,44 +5189,15 @@ class SupernotifyBandsCard extends SnCard {
   }
 
   _bands() {
-    // Preserve config order (chronological, cyclic: last crosses midnight).
-    const DEFAULT_ICONS = { early_morning: "🌅", morning: "🌤️", afternoon: "☀️",
-      evening: "🌇", night: "🌙", late_night: "🌃" };
-    return Object.entries(this._config.bands).map(([key, b]) => {
-      const raw = this._st(b.start) || "";
-      const [h, m] = raw.split(":");
-      return {
-        key, start: b.start, volume: b.volume,
-        name: snBandName(snT(this._config, this._hass), key, b.name),
-        icon: b.icon || DEFAULT_ICONS[key] || "🕐",
-        hhmm: h !== undefined && m !== undefined ? `${h.padStart(2, "0")}:${m}` : "",
-        min: h !== undefined && m !== undefined ? +h * 60 + +m : null,
-        vol: b.volume ? Math.round(+this._st(b.volume) || 0) : null,
-      };
-    }).sort((x, y) => {
-      // Sort by start time, never by config order: Home Assistant
-      // reserialises the card config with its keys sorted alphabetically,
-      // so the order written in YAML does not survive a save. Bands with
-      // no readable start time go last.
-      // the day starts at 04:00, so a band starting after midnight (late night) comes last
-      if (x.min === null) return y.min === null ? 0 : 1;
-      if (y.min === null) return -1;
-      const d = (m) => (m - 240 + 1440) % 1440;
-      return d(x.min) - d(y.min);
-    });
+    // the volume of each band too (the slider)
+    const list = snBands(this._hass, this._config.bands, snT(this._config, this._hass));
+    for (const b of list) b.vol = b.volume ? Math.round(+this._st(b.volume) || 0) : null;
+    return list;
   }
 
   _activeKey(bands) {
-    const now = new Date();
-    const t = now.getHours() * 60 + now.getMinutes();
-    const valid = bands.filter((b) => b.min !== null).slice()
-      .sort((a, b) => a.min - b.min);
-    for (let i = 0; i < valid.length; i++) {
-      const s = valid[i].min, e = valid[(i + 1) % valid.length].min;
-      const hit = s < e ? t >= s && t < e : t >= s || t < e;
-      if (hit) return valid[i].key;
-    }
-    return null;
+    const b = snActiveBand(bands);
+    return b ? b.key : null;
   }
 
   _setStart(entity, hhmm) {
@@ -5097,7 +5270,7 @@ class SupernotifyBandsCard extends SnCard {
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         <div class="hint">🔇 ${snT(this._config, this._hass).mute_hint}</div>
         ${snVer(this._config, "bands", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this._update();
   }
 
@@ -5129,7 +5302,7 @@ class SupernotifyBandsCard extends SnCard {
         <input type="range" class="volwrap" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}" aria-label="${b.name} - ${T.volume}" title="${T.volume}">
         <span class="pct"><span data-l="${b.key}">${b.vol != null ? b.vol : "\u2014"}</span>%</span>
       </div>`;
-      }).join(""), this && this._config);
+      }).join(""), this._config);
       rows.dataset.sig = sig;
       this._bind(rows);
     }
@@ -5239,7 +5412,12 @@ const SN_TRANSPORT_ICONS = {
   generic: "⚙️", notify_entity: "🔔", media: "📺", mqtt: "📡",
 };
 
-class SupernotifyDeliveriesCard extends SnCard {
+class SupernotifyDeliveriesCard extends SnListCard {
+  static snKind = "deliveries";
+  static snEntity = "delivery";
+  static snEmpty = "no_deliveries";
+  static snSize = 8;
+
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("deliveries");
@@ -5255,47 +5433,15 @@ class SupernotifyDeliveriesCard extends SnCard {
     this._rendered = false;
   }
 
-  getCardSize() {
-    return 8;
+  // one row per delivery switch
+  _list() {
+    return super._list().filter((d) => !(this._config.hide_defaults && /^default_/i.test(d.name)));
   }
 
-  _deliveries() {
-    // one row per delivery switch
-    const out = snEntityRows(this._hass, "delivery")
-      .filter((d) => !(this._config.hide_defaults && /^default_/i.test(d.name)));
-    // enabled first, then alphabetical — like the prototype list
-    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
-    return out;
-  }
-
-  _render() {
-    if (!this._hass) return;
-    this._rendered = true;
-    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    const p = this._palette();
-    this.shadowRoot.innerHTML = snIconify(`
-      <style>
-        :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
-               cursor: pointer; border-radius: 8px; }
-        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
-               border-top: 1px solid ${p.line}; pointer-events: none; }
-        .row:hover { background: ${p.soft}; }
-        .em { font-size: 22px; flex-shrink: 0; }
-        .mid { flex: 1; min-width: 0; }
-        .mid b { font-size: 14px; }
-        .mid .tr { font-size: 11.5px; color: ${p.muted}; margin-top: 2px; }
-        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
-        .tag { border: 1px solid ${p.line}; background: transparent; color: ${p.muted};
-               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
-               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
-        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750;
-                 flex-shrink: 0; }
-        .b-off { background: ${p.soft}; color: ${p.muted}; }
-        ${SN_SWITCH_CSS}
-        ${SN_FLOW_CSS}
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
+  _css(p) {
+    return `.mid .tr { font-size: 11.5px; color: ${p.muted}; margin-top: 2px; }
+        .tag { background: transparent; color: ${p.muted};
+               overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
         .chd { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 0 4px 6px; }
         .cht { font-size: 17px; font-weight: 700; } .chn { font-size: 13px; color: ${p.muted}; }
         .grp h3 { margin: 14px 4px 2px; font-size: 11.5px; font-weight: 700; letter-spacing: .05em;
@@ -5307,13 +5453,7 @@ class SupernotifyDeliveriesCard extends SnCard {
                   padding: 7px 14px; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; min-height: 36px; }
         .dres { cursor: default; }
         .st.warn { color: ${p.warn}; font-weight: 600; } .st.crit { color: ${p.crit}; font-weight: 600; }
-        .st.ok { color: ${p.ok}; font-weight: 600; }
-      </style>
-      <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        ${snVer(this._config, "deliveries", p)}
-      </ha-card>`, this && this._config);
-    this._update();
+        .st.ok { color: ${p.ok}; font-weight: 600; }`;
   }
 
   // Which group a delivery belongs to, from its inclusion list (SuperNotify 2.5: `inclusion`,
@@ -5369,26 +5509,8 @@ class SupernotifyDeliveriesCard extends SnCard {
     this._update();
   }
 
-  /** A link from another card (0.65.0): open these rows. */
-  _focus(d) {
-    if (!d || !d.ids) return;
-    this._open = new Set(d.ids);
-    this._update();
-    snFlash(this, '.row[aria-expanded="true"]');
-  }
-
-  _update() {
-    if (!this.shadowRoot) return;
+  _body(dels, T, p) {
     const esc = snEsc;
-    const T = snT(this._config, this._hass);
-    const p = this._palette();
-    const dels = this._deliveries();
-    const rows = this.shadowRoot.getElementById("rows");
-    if (!dels.length) {
-      rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_deliveries}</span>`, this && this._config);
-      this._rowsHtml = null;
-      return;
-    }
     const nOn = dels.filter((d) => d.on).length;
     // 1.0.0 (perf): worked out once for all the rows - position, scenario effects, "fallback for"
     const idxOf = new Map(dels.map((d, i) => [d, i]));
@@ -5453,10 +5575,7 @@ class SupernotifyDeliveriesCard extends SnCard {
           ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
           ${det}
         </div><span class="chev" aria-hidden="true">${open ? "▴" : "▾"}</span>
-        <label class="sw" data-id="${esc(d.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
-          <input type="checkbox" ${d.on ? "checked" : ""} aria-label="${esc(alias || d.name)}">
-          <span class="sl"></span>
-        </label>
+        ${snSwitchHtml(p, d.id, d.on, alias || d.name)}
       </div>`;
     };
     let body;
@@ -5470,25 +5589,13 @@ class SupernotifyDeliveriesCard extends SnCard {
       }).join("");
     }
     // 0.65.0: "undo the changes made by hand" lives in the tools card (all or one kind)
-    // 1.0.0 (perf): rebuilt only when it changed; one listener on #rows for every row and switch
-    this._dels = dels;
-    const html = snIconify(head + body, this && this._config);
-    if (html === this._rowsHtml && rows.firstChild) return;
-    this._rowsHtml = html;
-    rows.innerHTML = html;
-    snRowsDelegate(rows, (node, e) => {
-      // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
-      const d = this._dels[+node.dataset.i];
-      if (!d) return;
-      const id = d.id;
-      if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
-      const pb = e.target.closest(".dprobe");
-      if (pb) { this._runProbe(pb.dataset.n); return; }
-      if (e.target.closest(".det") || e.target.closest(".dres")) return;
-      this._open = this._open || new Set();
-      if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
-      this._update();
-    }, (label, input) => { this._rowsHtml = null; snToggleSafe(this._hass, label.dataset.id, input); });
+    return head + body;
+  }
+
+  _onRow(d, node, e) {
+    const pb = e.target.closest(".dprobe");
+    if (pb) { this._runProbe(pb.dataset.n); return; }
+    super._onRow(d, node, e);
   }
 }
 
@@ -5509,96 +5616,32 @@ window.customCards.push({
  * on/off switch. A tap opens the detail (last error, delivery defaults).
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyTransportsCard extends SnCard {
+class SupernotifyTransportsCard extends SnListCard {
+  static snKind = "transports";
+  static snEntity = "transport";
+  static snEmpty = "no_transports";
+  static snSize = 6;
+
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("transports");
   }
 
-  static getStubConfig() {
-    return {};
-  }
-
-  setConfig(config) {
-    this._config = { style: "supernotify", ...(config || {}) };
-    this._rendered = false;
-  }
-
-  getCardSize() {
-    return 6;
-  }
-
-  /** A link from another card (0.65.0): open these rows. */
-  _focus(d) {
-    if (!d || !d.ids) return;
-    this._open = new Set(d.ids);
-    this._update();
-    snFlash(this, '.row[aria-expanded="true"]');
-  }
-
-  _transports() {
-    const out = snEntityRows(this._hass, "transport");
-    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
-    return out;
-  }
-
-  _render() {
-    if (!this._hass) return;
-    this._rendered = true;
-    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    const p = this._palette();
-    this.shadowRoot.innerHTML = snIconify(`
-      <style>
-        :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
-               cursor: pointer; border-radius: 8px; }
-        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
-               border-top: 1px solid ${p.line}; pointer-events: none; }
-        .row:hover { background: ${p.soft}; }
-        .em { font-size: 22px; flex-shrink: 0; }
-        .mid { flex: 1; min-width: 0; }
-        .mid b { font-size: 14px; }
-        .mid .sub { font-size: 11.5px; color: ${p.muted}; }
-        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
-        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
-               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
-               white-space: nowrap; }
-        .tag.err { color: ${p.crit}; border-color: ${p.crit}; background: rgba(226,60,60,.08); }
-        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750; }
-        .b-off { background: ${p.soft}; color: ${p.muted}; }
-        ${SN_SWITCH_CSS}
-        ${SN_FLOW_CSS}
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
+  _css(p) {
+    return `.tag.err { color: ${p.crit}; border-color: ${p.crit}; background: rgba(226,60,60,.08); }
         ${snDetailCss(p)}
-        .det { background: ${p.panel}; border: 1px solid ${p.line}; }
-      </style>
-      <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        ${snVer(this._config, "transports", p)}
-      </ha-card>`, this && this._config);
-    this._update();
+        .det { background: ${p.panel}; border: 1px solid ${p.line}; }`;
   }
 
-  _update() {
-    if (!this.shadowRoot) return;
+  _body(trs, T, p) {
     const esc = snEsc;
-    const T = snT(this._config, this._hass);
-    const p = this._palette();
-    const trs = this._transports();
-    const rows = this.shadowRoot.getElementById("rows");
-    if (!trs.length) {
-      rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_transports}</span>`, this && this._config);
-      this._rowsHtml = null;
-      return;
-    }
     // 1.0.0 (perf): channels per transport counted once, not once per row
     const usedBy = new Map();
     for (const d of snEntityRows(this._hass, "delivery")) {
       const tr = d.a && d.a.transport;
       if (tr) usedBy.set(tr, (usedBy.get(tr) || 0) + 1);
     }
-    const html = snIconify(trs.map((t, i) => {
+    return trs.map((t, i) => {
       const em = SN_TRANSPORT_ICONS[t.name] || "🔌";
       const tags = [];
       if (snHandTag(t.a, T, true)) tags.push(snHandTag(t.a, T, true)); // 0.75.0
@@ -5632,28 +5675,9 @@ class SupernotifyTransportsCard extends SnCard {
           ${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}
           ${det}
         </div><span class="chev" aria-hidden="true">${open ? "▴" : "▾"}</span>
-        <label class="sw" data-id="${esc(t.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
-          <input type="checkbox" ${t.on ? "checked" : ""} aria-label="${esc(t.name)}">
-          <span class="sl"></span>
-        </label>
+        ${snSwitchHtml(p, t.id, t.on, t.name)}
       </div>`;
-    }).join(""), this && this._config);
-    // 1.0.0 (perf): rebuilt only when it changed; one listener on #rows
-    this._trs = trs;
-    if (html === this._rowsHtml && rows.firstChild) return;
-    this._rowsHtml = html;
-    rows.innerHTML = html;
-    snRowsDelegate(rows, (node, e) => {
-      // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
-      const t = this._trs[+node.dataset.i];
-      if (!t) return;
-      const id = t.id;
-      if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
-      if (e.target.closest(".det")) return;
-      this._open = this._open || new Set();
-      if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
-      this._update();
-    }, (label, input) => { this._rowsHtml = null; snToggleSafe(this._hass, label.dataset.id, input); });
+    }).join("");
   }
 }
 
@@ -5675,30 +5699,15 @@ window.customCards.push({
  * and an on/off switch. A tap on the row opens Home Assistant's dialog.
  * ════════════════════════════════════════════════════════════════════════ */
 
-class SupernotifyRecipientsCard extends SnCard {
+class SupernotifyRecipientsCard extends SnListCard {
+  static snKind = "recipients";
+  static snEntity = "recipient"; // one row per recipient switch
+  static snEmpty = "no_recipients";
+  static snSize = 4;
+
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
     return snForm("recipients");
-  }
-
-  static getStubConfig() {
-    return {};
-  }
-
-  setConfig(config) {
-    this._config = { style: "supernotify", ...(config || {}) };
-    this._rendered = false;
-  }
-
-  getCardSize() {
-    return 4;
-  }
-
-  _recipients() {
-    // one row per recipient switch (the deprecated binary_sensor mirror is left out)
-    const out = snEntityRows(this._hass, "recipient");
-    out.sort((x, y) => (x.on === y.on ? x.name.localeCompare(y.name) : x.on ? -1 : 1));
-    return out;
   }
 
   /** A link from another card (0.65.0): outline these people. */
@@ -5707,38 +5716,14 @@ class SupernotifyRecipientsCard extends SnCard {
     if (ps.length) snFlash(this, ps.map((n) => `.row[data-person="${CSS.escape(n)}"]`).join(","));
   }
 
-  _render() {
-    if (!this._hass) return;
-    this._rendered = true;
-    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    const p = this._palette();
-    this.shadowRoot.innerHTML = snIconify(`
-      <style>
-        :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
-        .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
-               cursor: pointer; border-radius: 8px; }
-        .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
-               border-top: 1px solid ${p.line}; pointer-events: none; }
-        .row:hover { background: ${p.soft}; }
-        .em { font-size: 24px; flex-shrink: 0; }
-        .mid { flex: 1; min-width: 0; }
-        .mid b { font-size: 14px; text-transform: capitalize; }
-        .mid .sub { font-size: 11.5px; color: ${p.muted}; }
-        .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
-        .tag { border: 1px solid ${p.line}; background: ${p.soft}; color: ${p.brandD};
-               border-radius: 7px; padding: 2px 8px; font-size: 11px; font-weight: 650;
-               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+  _css(p) {
+    return `.em { font-size: 24px; }
+        .mid b { text-transform: capitalize; }
+        .tag { overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
         .tag.warn { color: #c77700; }
-        .badge { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 750;
-                 flex-shrink: 0; }
-        .b-off { background: ${p.soft}; color: ${p.muted}; }
-        ${SN_SWITCH_CSS}
-        ${SN_FLOW_CSS}
         .gear { font-size: 17px; opacity: .5; flex-shrink: 0; cursor: pointer;
                 transition: opacity .15s; padding: 2px; }
         .gear:hover { opacity: 1; }
-        .ver { text-align: right; font-size: 10px; color: ${p.muted}; margin-top: 8px; }
         .last { margin-top: 5px; font-size: 11.5px; color: ${p.muted}; cursor: pointer; }
         .last b { color: ${p.ink}; text-transform: none; }
         .last.none { cursor: default; opacity: .7; }
@@ -5747,30 +5732,14 @@ class SupernotifyRecipientsCard extends SnCard {
         .dv { font-size: 12px; } .dv b { font-size: 12.5px; text-transform: none; margin-right: 6px; } .dv span { color: ${p.muted}; }
         .tst { margin-top: 7px; border: 1.5px solid ${p.line}; background: ${p.panel}; color: ${p.brandD}; border-radius: 999px;
                padding: 4px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 30px; }
-        .tst.arm { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }
-      </style>
-      <ha-card>
-        ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
-        ${snVer(this._config, "recipients", p)}
-      </ha-card>`, this && this._config);
-    this._update();
+        .tst.arm { background: ${p.brand}; border-color: ${p.brand}; color: ${p.onBrand}; }`;
   }
 
-  _update() {
-    if (!this.shadowRoot) return;
+  _body(recs, T, p) {
     const esc = snEsc;
-    const T = snT(this._config, this._hass);
-    const p = this._palette();
-    const recs = this._recipients();
-    const rows = this.shadowRoot.getElementById("rows");
-    if (!recs.length) {
-      rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_recipients}</span>`, this && this._config);
-      this._rowsHtml = null;
-      return;
-    }
     // 1.0.0 (perf): the archive index read once for every row (it was asked once per recipient)
     this._lastIdx = null;
-    const html = snIconify(recs.map((r, i) => {
+    return recs.map((r, i) => {
       const personId = r.a.entity_id;
       const pState = personId ? (this._hass.states[personId] || {}).state : undefined;
       const home = pState === "home";
@@ -5804,69 +5773,71 @@ class SupernotifyRecipientsCard extends SnCard {
           ${hasNotify ? `<button class="tst${this._armed === r.name ? " arm" : ""}" data-tst="${esc(r.name)}">${this._armed === r.name ? "✉️ " + esc(T.rc_test_confirm) : "✉️ " + esc(T.rc_test)}</button>` : ""}
         </div>
         <span class="gear" title="${esc(T.details)}" aria-label="${esc(T.details)}">⚙️</span>
-        <label class="sw" data-id="${esc(r.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
-          <input type="checkbox" ${r.on ? "checked" : ""} aria-label="${esc(alias || r.name)}">
-          <span class="sl"></span>
-        </label>
+        ${snSwitchHtml(p, r.id, r.on, alias || r.name)}
       </div>`;
-    }).join(""), this && this._config);
-    // 1.0.0 (perf): rebuilt only when it changed (the "sent" mark and an error line are part of what is shown);
-    // one listener on #rows for the rows, switches, devices, tests and "last notified"
-    this._recs = recs;
-    const key = `${html}|${this._sent || ""}`;
-    if (key === this._rowsHtml && !this._sentErr && rows.firstChild) return;
-    this._rowsHtml = key;
-    rows.innerHTML = html;
-    snRowsDelegate(rows, (node, e) => {
-      if (e.target.closest(".devb") || e.target.closest(".tst") || e.target.closest(".last[data-ent]")) return;
-      const r = this._recs[+node.dataset.i];
-      if (r) this._moreInfo(r.id);
-    }, (label, input) => { this._rowsHtml = null; snToggleSafe(this._hass, label.dataset.id, input); }, (e) => {
-      // 0.62.0: the person's devices (model, system, app version) on request
-      const dv = e.target.closest(".devb");
-      if (dv) {
-        e.stopPropagation();
-        this._openDev = this._openDev || new Set();
-        const n = dv.dataset.dev;
-        if (this._openDev.has(n)) this._openDev.delete(n); else this._openDev.add(n);
+    }).join("");
+  }
+
+  // 1.0.0 (perf): rebuilt only when it changed (the "sent" mark and an error line are part of what is shown)
+  _key(html) {
+    return this._sentErr ? null : `${html}|${this._sent || ""}`;
+  }
+
+  // a tap on the row opens HA's dialog
+  _onRow(r, node, e) {
+    if (e.target.closest(".devb") || e.target.closest(".tst") || e.target.closest(".last[data-ent]")) return;
+    this._moreInfo(r.id);
+  }
+
+  _onOther(e) {
+    // 0.62.0: the person's devices (model, system, app version) on request
+    const dv = e.target.closest(".devb");
+    if (dv) {
+      e.stopPropagation();
+      this._openDev = this._openDev || new Set();
+      const n = dv.dataset.dev;
+      if (this._openDev.has(n)) this._openDev.delete(n); else this._openDev.add(n);
+      this._update();
+      return true;
+    }
+    // 0.62.0: test message through the whole pipeline (scenarios, snoozes, dupe check), two taps
+    const b = e.target.closest(".tst");
+    if (b) {
+      e.stopPropagation();
+      const n = b.dataset.tst;
+      if (this._armed !== n) {
+        this._armed = n;
+        clearTimeout(this._armT);
+        this._armT = setTimeout(() => { this._armed = null; this._update(); }, 4000);
         this._update();
         return true;
       }
-      // 0.62.0: test message through the whole pipeline (scenarios, snoozes, dupe check), two taps
-      const b = e.target.closest(".tst");
-      if (b) {
-        e.stopPropagation();
-        const n = b.dataset.tst;
-        if (this._armed !== n) {
-          this._armed = n;
-          clearTimeout(this._armT);
-          this._armT = setTimeout(() => { this._armed = null; this._update(); }, 4000);
-          this._update();
-          return true;
-        }
-        this._armed = null;
-        clearTimeout(this._armT);
-        const T2 = snT(this._config, this._hass);
-        const when = new Date();
-        this._hass.callService("notify", "send_message", {
-          entity_id: `notify.recipient_${n}`, title: T2.rc_test_title,
-          message: `${T2.rc_test_msg} ${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`,
-        }).then(() => {
-          this._sent = n; this._update();
-          clearTimeout(this._sentT);
-          this._sentT = setTimeout(() => { this._sent = null; this._update(); }, 4000);
-        }).catch((err) => { this._sentErr = `${n}: ${(err && err.message) || err}`; this._update(); });
-        snEnquireBust(1500);
-        return true;
-      }
-      const ln = e.target.closest(".last[data-ent]");
-      if (ln) {
-        e.stopPropagation();
-        if (!snWhyOpen(ln.dataset.why)) this._moreInfo(ln.dataset.ent);
-        return true;
-      }
-      return false;
-    });
+      this._armed = null;
+      clearTimeout(this._armT);
+      const T2 = snT(this._config, this._hass);
+      const when = new Date();
+      this._hass.callService("notify", "send_message", {
+        entity_id: `notify.recipient_${n}`, title: T2.rc_test_title,
+        message: `${T2.rc_test_msg} ${snHm(when)}`,
+      }).then(() => {
+        this._sent = n; this._update();
+        clearTimeout(this._sentT);
+        this._sentT = setTimeout(() => { this._sent = null; this._update(); }, 4000);
+      }).catch((err) => { this._sentErr = `${n}: ${(err && err.message) || err}`; this._update(); });
+      snEnquireBust(1500);
+      return true;
+    }
+    const ln = e.target.closest(".last[data-ent]");
+    if (ln) {
+      e.stopPropagation();
+      if (!snWhyOpen(ln.dataset.why)) this._moreInfo(ln.dataset.ent);
+      return true;
+    }
+    return false;
+  }
+
+  _after(rows, T) {
+    const esc = snEsc;
     if (this._sent || this._sentErr) {
       const tb = this._sent && rows.querySelector(`.tst[data-tst="${this._sent}"]`);
       if (tb) tb.textContent = "✔ " + T.rc_test_sent;
@@ -6154,7 +6125,7 @@ class SupernotifyScenariosCard extends SnCard {
       <ha-card>
         ${snIntro(this._config, this._dark)}<div id="rows" class="flow"></div>
         ${snVer(this._config, "scenarios", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this._update();
   }
 
@@ -6184,9 +6155,7 @@ class SupernotifyScenariosCard extends SnCard {
     const p = this._rP || this._palette();
     // the scenario switch; a read-only badge if the switch is missing.
     const ctl = s.swId
-      ? `<label class="sw" data-id="${esc(s.swId)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
-          <input type="checkbox" ${s.enabled ? "checked" : ""} aria-label="${esc(alias || s.name)}" title="${T.enabled_lbl}">
-          <span class="sl"></span></label>`
+      ? snSwitchHtml(p, s.swId, s.enabled, alias || s.name, T.enabled_lbl)
       : (s.enabled === false ? `<span class="badge b-dis">${T.disabled}</span>` : "");
     // Manual scenario (no conditions): its binary_sensor state IS the control.
     const man = s.manual && s.bsId
@@ -6221,7 +6190,7 @@ class SupernotifyScenariosCard extends SnCard {
     const active = reactive !== null ? reactive : (this._active || []);
     const rows = this.shadowRoot.getElementById("rows");
     if (!all.length) {
-      rows.innerHTML = snIconify(`<span class="tag">${snT(this._config, this._hass).no_scenarios}</span>`, this && this._config);
+      rows.innerHTML = snIconify(`<span class="tag">${snT(this._config, this._hass).no_scenarios}</span>`, this._config);
       return;
     }
     const sortFn = (x, y) => {
@@ -6247,7 +6216,7 @@ class SupernotifyScenariosCard extends SnCard {
     } else {
       html = all.slice().sort(sortFn).map((s) => this._rowHtml(s, all.indexOf(s), active)).join("");
     }
-    rows.innerHTML = snIconify(html, this && this._config);
+    rows.innerHTML = snIconify(html, this._config);
     rows.querySelectorAll(".row").forEach((node) => {
       node.onclick = (e) => {
         if (e.target.closest(".sw") || e.target.closest(".apb")) return;
@@ -6266,15 +6235,8 @@ class SupernotifyScenariosCard extends SnCard {
     rows.querySelectorAll(".apb").forEach((b) => {
       b.onclick = (e) => { e.stopPropagation(); snToggle(this._hass, b.dataset.id, b.dataset.on !== "1"); };
     });
-    rows.querySelectorAll(".sw").forEach((label) => {
-      label.addEventListener("click", (e) => e.stopPropagation());
-      const input = label.querySelector("input");
-      input.addEventListener("change", () => {
-        // switch.* -> switch service; the manual binary_sensor -> state write,
-        // which SuperNotify applies back to the scenario.
-        snToggleSafe(this._hass, label.dataset.id, input);
-      });
-    });
+    // the scenario switches: one listener on #rows (switch.* -> switch service)
+    snRowsDelegate(rows, null, (label, input) => snToggleSafe(this._hass, label.dataset.id, input));
   }
 }
 
@@ -6347,7 +6309,7 @@ class SupernotifySimulatorCard extends SnCard {
     this._refBusy = true;
     try {
       // the dry run needs only the scenario names (by_scenario); the baseline (implicit) feeds the estimate alone
-      const dry = this._dryMode();
+      const dry = snDryAvailable(this._hass, this._config);
       const [act, byScen, impl] = await Promise.all([
         this._sel === null ? this._ws("enquire_active_scenarios") : {},
         this._ws("enquire_deliveries_by_scenario"),
@@ -6413,9 +6375,9 @@ class SupernotifySimulatorCard extends SnCard {
         <div id="chips"></div>
         <div class="sec">${snT(this._config, this._hass).sim_fire}</div>
         <div id="result">—</div>
-        <div class="hint" id="simHint">${snT(this._config, this._hass)[this._dryMode() ? "sim_hint_dry" : "sim_hint"]}</div>
+        <div class="hint" id="simHint">${snT(this._config, this._hass)[snDryAvailable(this._hass, this._config) ? "sim_hint_dry" : "sim_hint"]}</div>
         ${snVer(this._config, "simulator", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this._refresh();
   }
 
@@ -6424,21 +6386,17 @@ class SupernotifySimulatorCard extends SnCard {
    * picked scenarios applied and nothing else considered - the same dry run as the composer's
    * "Try without sending". `dry_run: false` in the card config keeps the estimate below.
    */
-  _dryMode() {
-    return snDryAvailable(this._hass, this._config);
-  }
-
   async _dry() {
     const res = this.shadowRoot.getElementById("result");
     const T = snT(this._config, this._hass);
     const sel = [...(this._sel || [])];
-    const data = { message: T.sim_msg, priority: this._prio || "medium", dry_run: "simulate", force_resend: true,
+    const data = { message: T.sim_msg, priority: this._prio || "medium",
       apply_scenarios: sel, constrain_scenarios: sel.length ? sel : ["__simulator_none__"] };
     const ticket = (this._dryTicket = (this._dryTicket || 0) + 1);
     try {
-      const r = await snWS(this._hass, { type: "call_service", domain: "supernotify", service: "notify", service_data: data, return_response: true }, 30000);
+      const doc = await snDryRun(this._hass, data);
       if (ticket !== this._dryTicket) return;
-      res.innerHTML = snIconify(`<div class="dryBox">${snDryHtml(this._hass, T, (r && r.response) || {}, false)}</div>`, this._config);
+      res.innerHTML = snIconify(`<div class="dryBox">${snDryHtml(this._hass, T, doc, false)}</div>`, this._config);
     } catch (e) {
       if (ticket === this._dryTicket) res.textContent = `✖ ${T.dry_err}: ${(e && (e.message || e.code)) || e}`;
     }
@@ -6451,7 +6409,7 @@ class SupernotifySimulatorCard extends SnCard {
     const names = Object.keys(this._byScen || {}).sort();
     chips.innerHTML = snIconify(names.map((n) =>
       `<span class="chip ${this._sel.has(n) ? "sel" : ""}" data-n="${esc(n)}" title="${esc(n)}">${snScenarioIcon(this._config, n)} ${esc(snScenarioName(this._hass, n))}</span>`
-    ).join("") || "—", this && this._config);
+    ).join("") || "—", this._config);
     chips.querySelectorAll(".chip").forEach((node) => {
       node.onclick = () => {
         const n = node.dataset.n;
@@ -6459,7 +6417,7 @@ class SupernotifySimulatorCard extends SnCard {
         this._simulate();
       };
     });
-    if (this._dryMode()) {
+    if (snDryAvailable(this._hass, this._config)) {
       const T0 = snT(this._config, this._hass);
       chips.insertAdjacentHTML("beforeend", `<select class="sprio" id="sprio" aria-label="${esc(T0.sim_prio)}">${["minimum", "low", "medium", "high", "critical"].map((pr) =>
         `<option value="${pr}"${(this._prio || "medium") === pr ? " selected" : ""}>${esc(T0["prio_" + pr] || pr)}</option>`).join("")}</select>`);
@@ -6507,7 +6465,7 @@ class SupernotifySimulatorCard extends SnCard {
     }
     res.innerHTML = snIconify(
       (goRows.length ? `<div class="sh go">${esc(T.sim_go)} · ${goRows.length}</div>${goRows.join("")}` : `<span class='hint'>${T.sim_none}</span>`) +
-      (stopRows.length ? `<div class="sh">${esc(T.sim_stop)} · ${stopRows.length}</div>${stopRows.join("")}` : ""), this && this._config);
+      (stopRows.length ? `<div class="sh">${esc(T.sim_stop)} · ${stopRows.length}</div>${stopRows.join("")}` : ""), this._config);
   }
 }
 
@@ -6566,14 +6524,10 @@ class SupernotifyComposerCard extends SnCard {
 
   // Dry run (issue #218): supernotify.notify with `dry_run: simulate` does everything a real
   // notification does except calling the integrations. `dry_run: false` hides the button.
-  _dryAvailable() {
-    return snDryAvailable(this._hass, this._config);
-  }
-
   _syncDry() {
     const b = this.shadowRoot && this.shadowRoot.getElementById("dry");
     if (!b) return;
-    const has = this._dryAvailable();
+    const has = snDryAvailable(this._hass, this._config);
     b.style.display = has ? "" : "none";
     if (!has) this.shadowRoot.getElementById("dryBox").style.display = "none";
   }
@@ -6714,7 +6668,7 @@ class SupernotifyComposerCard extends SnCard {
         <div class="dryBox" id="dryBox" style="display:none"></div>
         <div class="toast" id="toast"></div>
         ${snVer(this._config, "composer", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     const sr = this.shadowRoot;
     const upd = () => {
       sr.getElementById("pvT").textContent = sr.getElementById("t").value || T.no_title;
@@ -6939,19 +6893,12 @@ class SupernotifyComposerCard extends SnCard {
   async _dryRun() {
     const T = snT(this._config, this._hass);
     const box = this.shadowRoot.getElementById("dryBox");
-    if (!this._dryAvailable()) return;
-    const payload = this._payload();
+    if (!snDryAvailable(this._hass, this._config)) return;
     const dupeCheck = this._config.dry_run_dupe_check !== false;
-    const data = { ...payload, dry_run: "simulate" };
-    if (!dupeCheck) data.force_resend = true;
     box.style.display = "";
     box.textContent = "…";
     try {
-      const res = await snWS(this._hass, {
-        type: "call_service", domain: "supernotify", service: "notify",
-        service_data: data, return_response: true,
-      }, 30000);
-      this._renderDry((res && res.response) || {}, !dupeCheck);
+      this._renderDry(await snDryRun(this._hass, this._payload(), { dupeCheck, prio: null }), !dupeCheck);
     } catch (e) {
       box.textContent = `✖ ${T.dry_err}: ${(e && (e.message || e.code)) || e}`;
     }
@@ -6961,7 +6908,7 @@ class SupernotifyComposerCard extends SnCard {
   // archive keeps), read through snArchiveDetail like the why-card does.
   _renderDry(doc, noDupeCheck) {
     const box = this.shadowRoot.getElementById("dryBox");
-    box.innerHTML = snIconify(snDryHtml(this._hass, snT(this._config, this._hass), doc, noDupeCheck), this && this._config);
+    box.innerHTML = snIconify(snDryHtml(this._hass, snT(this._config, this._hass), doc, noDupeCheck), this._config);
   }
 
   _toast(msg) {
@@ -7047,10 +6994,6 @@ class SupernotifyAutomationsCard extends SnCard {
     if (this._hass) this._render();
   }
 
-  _esc(s) {
-    return snEsc(s);
-  }
-
   _rel(iso) {
     const T = snT(this._config, this._hass);
     if (!iso) return T.never;
@@ -7118,14 +7061,8 @@ class SupernotifyAutomationsCard extends SnCard {
         .nm { font-size: 13.5px; font-weight: 650; overflow: hidden;
           text-overflow: ellipsis; white-space: nowrap; }
         .sub { font-size: 11px; color: ${p.muted}; }
-        .sw { position: relative; width: 40px; height: 22px; flex: none; }
-        .sw input { opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-        .sw .sl { position: absolute; inset: 0; border-radius: 999px; background: ${p.line};
-          pointer-events: none; transition: background .15s; }
-        .sw .sl::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px;
-          height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
-        .sw input:checked + .sl { background: ${p.brand}; }
-        .sw input:checked + .sl::after { left: 21px; }
+        :host { --sn-sw-line: ${p.line}; --sn-sw-on: ${p.brand}; }
+        ${SN_SWITCH_CSS}
         .empty { padding: 18px 8px; color: ${p.muted}; font-size: 13px; }
         .err { padding: 14px; border: 1.5px dashed ${p.line}; border-radius: 12px;
           color: ${p.muted}; font-size: 13px; }
@@ -7136,7 +7073,7 @@ class SupernotifyAutomationsCard extends SnCard {
         ${snIntro(this._config, this._dark)}
         <div id="body"></div>
         <div class="ver" id="foot">${this._config && this._config.show_version ? `supernotify-automations-card v${SN_CARD_VERSIONS.automations}` : ""}</div>
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this._renderBody();
   }
 
@@ -7144,23 +7081,23 @@ class SupernotifyAutomationsCard extends SnCard {
     const el = this.shadowRoot.getElementById("body");
     const T = snT(this._config, this._hass);
     if (this._err) {
-      el.innerHTML = snIconify(`<div class="err">⚠️ ${this._esc(T.aut_err)}<br>
-        <span style="opacity:.7">${this._esc(this._config.manifest_url)} — ${this._esc(this._err)}</span></div>`, this && this._config);
+      el.innerHTML = snIconify(`<div class="err">⚠️ ${snEsc(T.aut_err)}<br>
+        <span style="opacity:.7">${snEsc(this._config.manifest_url)} — ${snEsc(this._err)}</span></div>`, this._config);
       return;
     }
     if (!this._manifest) {
-      el.innerHTML = snIconify(`<div class="empty">…</div>`, this && this._config);
+      el.innerHTML = snIconify(`<div class="empty">…</div>`, this._config);
       return;
     }
     const items = this._items();
     el.innerHTML = snIconify(`
       <div class="top">
-        <input type="search" id="q" placeholder="${this._esc(T.aut_search)}"
-          value="${this._esc(this._q)}" aria-label="${this._esc(T.aut_search)}">
+        <input type="search" id="q" placeholder="${snEsc(T.aut_search)}"
+          value="${snEsc(this._q)}" aria-label="${snEsc(T.aut_search)}">
         <span class="tot">${snPl(T, "aut_count", items.length)}${this._config.show_version ? ` · v${SN_CARD_VERSIONS.automations}` : ""}</span>
       </div>
       <div class="chips" id="chips"></div>
-      <div id="list" class="flow"></div>`, this && this._config);
+      <div id="list" class="flow"></div>`, this._config);
     const q = el.querySelector("#q");
     q.addEventListener("input", () => { this._q = q.value; this._renderList(); });
     this._renderChips();
@@ -7180,10 +7117,10 @@ class SupernotifyAutomationsCard extends SnCard {
     const cats = this._cats(items);
     const offCount = items.filter((a) => !(a.st && a.st.state === "on")).length;
     const chip = (label, val, n) =>
-      `<span class="chip ${this._cat === val ? "sel" : ""}" data-c="${this._esc(val || "")}">${this._esc(label)} · ${n}</span>`;
+      `<span class="chip ${this._cat === val ? "sel" : ""}" data-c="${snEsc(val || "")}">${snEsc(label)} · ${n}</span>`;
     el.innerHTML = snIconify(chip(T.aut_all, null, items.length) +
       cats.map((c) => chip(c, c, items.filter((a) => a.c === c).length)).join("") +
-      `<span class="chip warn ${this._onlyDisabled ? "sel" : ""}" id="offOnly">🔕 ${this._esc(T.aut_disabled_only)} · ${offCount}</span>`, this && this._config);
+      `<span class="chip warn ${this._onlyDisabled ? "sel" : ""}" id="offOnly">🔕 ${snEsc(T.aut_disabled_only)} · ${offCount}</span>`, this._config);
     el.querySelectorAll(".chip[data-c]").forEach((ch) => {
       ch.addEventListener("click", () => {
         const v = ch.dataset.c || null;
@@ -7210,26 +7147,26 @@ class SupernotifyAutomationsCard extends SnCard {
     const order = this._cats(all);
     const rows = this._filtered(all).sort((x, y) => order.indexOf(x.c) - order.indexOf(y.c));
     if (!rows.length) {
-      el.innerHTML = snIconify(`<div class="empty">${this._esc(T.aut_none)}</div>`, this && this._config);
+      el.innerHTML = snIconify(`<div class="empty">${snEsc(T.aut_none)}</div>`, this._config);
       return;
     }
     let html = "", lastCat = null;
     for (const a of rows) {
       if (a.c !== lastCat && !this._cat) {
-        html += `<div class="grp">${this._esc(a.c)}</div>`;
+        html += `<div class="grp">${snEsc(a.c)}</div>`;
         lastCat = a.c;
       }
       const on = a.st && a.st.state === "on";
       const lt = a.st && a.st.attributes.last_triggered;
       html += `
-        <div class="row ${on ? "" : "off"}" data-e="${this._esc(a.e)}">
-          <div class="who"><div class="nm">${this._esc(a.n)}</div>
-            <div class="sub"><span class="lt">${this._esc(this._rel(lt))}</span> · ${this._esc(a.s)}</div></div>
+        <div class="row ${on ? "" : "off"}" data-e="${snEsc(a.e)}">
+          <div class="who"><div class="nm">${snEsc(a.n)}</div>
+            <div class="sub"><span class="lt">${snEsc(this._rel(lt))}</span> · ${snEsc(a.s)}</div></div>
           <label class="sw"><input type="checkbox" ${on ? "checked" : ""}
-            aria-label="${this._esc(a.n)}"><span class="sl"></span></label>
+            aria-label="${snEsc(a.n)}"><span class="sl"></span></label>
         </div>`;
     }
-    el.innerHTML = snIconify(html, this && this._config);
+    el.innerHTML = snIconify(html, this._config);
     el.querySelectorAll(".row").forEach((row) => {
       const inp = row.querySelector("input");
       inp.addEventListener("change", () => this._toggle(row.dataset.e, inp.checked));
@@ -7277,17 +7214,9 @@ const snStatsDaily = {
   busy: null,
 
   // 0.75.2: kept in this browser - {v, from: first day covered (ms), at: last reading (ms), days: {date: totals}}
-  _load() {
-    try {
-      const c = JSON.parse(window.localStorage.getItem(SN_DAILY_KEY) || "null");
-      if (c && c.v === 1 && c.days && typeof c.days === "object") return c;
-    } catch (e) { /* private mode or a broken cache */ }
-    return { v: 1, from: 0, at: 0, days: {} };
-  },
-
-  _save(c) {
-    try { window.localStorage.setItem(SN_DAILY_KEY, JSON.stringify(c)); } catch (e) { /* full or private */ }
-  },
+  _store: snStore(SN_DAILY_KEY, () => ({ v: 1, from: 0, at: 0, days: {} }), snDaysOk),
+  _load() { return this._store.load(); },
+  _save(c) { this._store.save(c); },
 
   async _ask(hass, afterMs) {
     const r = await snWS(hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
@@ -7303,7 +7232,7 @@ const snStatsDaily = {
 
   _days(c, startMs) {
     const s0 = new Date(startMs);
-    const startKey = `${s0.getFullYear()}-${String(s0.getMonth() + 1).padStart(2, "0")}-${String(s0.getDate()).padStart(2, "0")}`;
+    const startKey = snDayKey(s0);
     return Object.keys(c.days).filter((k) => k >= startKey).sort().map((k) => c.days[k]);
   },
 
@@ -7327,7 +7256,7 @@ const snStatsDaily = {
       if (after === startMs && (!c.from || startMs < c.from)) c.from = startMs;
       c.at = Date.now();
       const keep = new Date(Date.now() - SN_STATS_KEEP * 86400000);
-      const keepKey = `${keep.getFullYear()}-${String(keep.getMonth() + 1).padStart(2, "0")}-${String(keep.getDate()).padStart(2, "0")}`;
+      const keepKey = snDayKey(keep);
       for (const k of Object.keys(c.days)) if (k < keepKey) delete c.days[k];
       if (c.from < keep.getTime()) c.from = keep.getTime();
       this._save(c);
@@ -7528,7 +7457,7 @@ class SupernotifyStatsCard extends SnCard {
       if (day.getTime() + 86400000 <= startMs) continue;
       const count = +d.count || 0;
       const sent = Math.max(0, count - (+((d.outcome || {}).dupe) || 0));
-      out.push({ dk: this._dayKey(day), dn: sent, dd: +((d.outcome || {}).dupe) || 0 });
+      out.push({ dk: snDayKey(day), dn: sent, dd: +((d.outcome || {}).dupe) || 0 });
       (Array.isArray(d.hour) ? d.hour : []).forEach((n, h) => {
         if (+n > 0) out.push({ t: new Date(y, m - 1, dd, h, 30).getTime(), w: +n, nd: true });
       });
@@ -7566,7 +7495,7 @@ class SupernotifyStatsCard extends SnCard {
         perHour[d.getHours()] += w;
         perWd[(d.getDay() + 6) % 7] += w;
         if (!ev.nd) {
-          const key = this._dayKey(d);
+          const key = snDayKey(d);
           perDayHist[key] = (perDayHist[key] || 0) + w;
         }
         if (d.getHours() >= 23 || d.getHours() < 7) night += w;
@@ -7586,9 +7515,9 @@ class SupernotifyStatsCard extends SnCard {
 
     const perDay = [];
     const dayCursor = new Date(start);
-    const todayKey = this._dayKey(now);
+    const todayKey = snDayKey(now);
     while (dayCursor <= now) {
-      const k = this._dayKey(dayCursor);
+      const k = snDayKey(dayCursor);
       const v = perDayHist[k] || 0;
       perDay.push({ key: k, d: new Date(dayCursor), n: v, today: k === todayKey, dupes: perDayDupe[k] || 0 });
       dayCursor.setDate(dayCursor.getDate() + 1);
@@ -7620,10 +7549,6 @@ class SupernotifyStatsCard extends SnCard {
       total, avg, today, peakHour, night, m7, mp7,
       wdPerDay: wdDays ? wdCount / wdDays : null, wePerDay: weDays ? weCount / weDays : null,
     };
-  }
-
-  _dayKey(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
   // ── render ────────────────────────────────────────────────────────────
@@ -7701,7 +7626,7 @@ class SupernotifyStatsCard extends SnCard {
         <div id="body"><div class="empty">${T.st_loading}</div></div>
         <div class="ver" id="ver"></div>
         ${this._config && this._config.show_version ? `<div class="foot">supernotify-stats-card v${SN_CARD_VERSIONS.stats}</div>` : ""}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     this.shadowRoot.querySelectorAll(".pb").forEach((b) => { b.onclick = () => this._setDays(+b.dataset.d); });
     this._updateVersions();
     if (this._data) this._draw();
@@ -7709,10 +7634,6 @@ class SupernotifyStatsCard extends SnCard {
 
   _fmt(n, dec) {
     return Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: dec == null ? 0 : dec });
-  }
-
-  _esc(s) {
-    return snEsc(s);
   }
 
   _t(key, vars) {
@@ -7729,7 +7650,7 @@ class SupernotifyStatsCard extends SnCard {
     const d = this._data;
     const T = snT(this._config, this._hass);
     const p = this._palette();
-    const esc = (s) => this._esc(s);
+    const esc = snEsc;
     sr.getElementById("win").textContent = this._error ? `${T.st_archive_err}: ${this._error}` : T.st_from_archive;
     const body = sr.getElementById("body");
     // 0.33.0: without the number boxes the header says the period, the total and the daily average
@@ -7739,7 +7660,7 @@ class SupernotifyStatsCard extends SnCard {
         this._t("st_per_day", { n: this._fmt(d.avg, 0) })].join(" · ");
     }
     if (!d.total && !d.spineCount) {
-      body.innerHTML = snIconify(`<div class="empty">${T.st_no_data}${this._error ? ` <small>(${esc(this._error)})</small>` : ""}</div>`, this && this._config);
+      body.innerHTML = snIconify(`<div class="empty">${T.st_no_data}${this._error ? ` <small>(${esc(this._error)})</small>` : ""}</div>`, this._config);
       return;
     }
     const top = d.channels[0];
@@ -7806,7 +7727,7 @@ class SupernotifyStatsCard extends SnCard {
         <div><div class="sec"><span>${T.st_period}</span></div><div class="tl">${perChips}</div></div>
       </div>
       <details class="insd"><summary>💡 ${ins.length} ${T.st_insights.toLowerCase()}</summary>
-      <ul class="ins">${ins.map((s) => `<li>${s}</li>`).join("")}</ul></details>`, this && this._config);
+      <ul class="ins">${ins.map((s) => `<li>${s}</li>`).join("")}</ul></details>`, this._config);
   }
 
   // Channel names are DELIVERY names; look the transport up on the delivery
@@ -7845,7 +7766,7 @@ class SupernotifyStatsCard extends SnCard {
       const fill = it.hi ? p.brandD : p.brand;
       s += `<rect x="${x}" y="${H - padB - h}" width="${bw}" height="${h}" rx="3" fill="${fill}" opacity="${it.hi ? 1 : 0.8}"/>`;
       if (it.v && (n <= 16 || it.hi)) s += `<text class="val" x="${x + bw / 2}" y="${H - padB - h - 3}" text-anchor="middle">${it.v}</text>`;
-      if (it.l) s += `<text x="${x + bw / 2}" y="${H - 4}" text-anchor="middle">${this._esc(it.l)}</text>`;
+      if (it.l) s += `<text x="${x + bw / 2}" y="${H - 4}" text-anchor="middle">${snEsc(it.l)}</text>`;
     });
     return s + "</svg>";
   }
@@ -7854,7 +7775,7 @@ class SupernotifyStatsCard extends SnCard {
     const T = snT(this._config, this._hass);
     const out = [];
     const top = d.channels[0];
-    if (top && d.sends) out.push(this._t("st_i_share", { p: Math.round(((top.ok + top.ko) / d.sends) * 100), c: this._esc(this._aliasFor(top.name) || top.name) }));
+    if (top && d.sends) out.push(this._t("st_i_share", { p: Math.round(((top.ok + top.ko) / d.sends) * 100), c: snEsc(this._aliasFor(top.name) || top.name) }));
     if (d.spineCount) {
       out.push(this._t("st_i_peak", { h: String(d.peakHour).padStart(2, "0"), n: d.perHour[d.peakHour], d: d.days }));
       const np = Math.round((d.night / d.spineCount) * 100);
@@ -7874,7 +7795,7 @@ class SupernotifyStatsCard extends SnCard {
     if (d.sends) {
       if (d.errors) {
         const worst = d.channels.slice().sort((a, b) => b.ko - a.ko)[0];
-        out.push(this._t("st_i_errors", { n: d.errors, d: d.days, c: this._esc(worst ? (this._aliasFor(worst.name) || worst.name) : "—") }));
+        out.push(this._t("st_i_errors", { n: d.errors, d: d.days, c: snEsc(worst ? (this._aliasFor(worst.name) || worst.name) : "—") }));
       } else out.push(this._t("st_i_noerr", { d: d.days }));
     }
     return out;
@@ -7889,32 +7810,30 @@ class SupernotifyStatsCard extends SnCard {
     if (this._config.versions === false) { el.innerHTML = ""; return; }
     const T = snT(this._config, this._hass);
     const box = (id, fallbackName, fallbackVer, emoji) => {
-      const st = this._hass.states[id];
-      if (!st) {
+      const v = snVersionInfo(this._hass, id);
+      if (!v) {
         if (!fallbackVer) return "";
-        return `<div class="vbox"><span class="ic">${emoji}</span><div><b>${this._esc(fallbackName)}</b><div class="sm">v${this._esc(fallbackVer)}</div></div></div>`;
+        return `<div class="vbox"><span class="ic">${emoji}</span><div><b>${snEsc(fallbackName)}</b><div class="sm">v${snEsc(fallbackVer)}</div></div></div>`;
       }
-      const a = st.attributes || {};
-      const inst = a.installed_version || "—";
-      const latest = a.latest_version || "—";
-      const upd = st.state === "on";
-      const restart = /restart/i.test(a.release_summary || "");
+      const { a, upd, restart } = v;
+      const inst = v.inst || "—";
+      const latest = v.latest || "—";
       const name = (a.title || a.friendly_name || fallbackName || "").replace(/\s*update$/i, "");
       const icon = a.entity_picture
-        ? `<img src="${this._esc(a.entity_picture)}" alt="">`
+        ? `<img src="${snEsc(a.entity_picture)}" alt="">`
         : `<span class="ic">${emoji}</span>`;
       const badge = upd
         ? `<span class="badge b-upd">⬆ ${T.st_update}</span>`
         : `<span class="badge b-ok">✔ ${restart ? T.st_restart : T.st_uptodate}</span>`;
       const sub = upd
-        ? `${T.st_installed} ${this._esc(inst)} → ${T.st_latest} <b>${this._esc(latest)}</b>`
-        : `${this._esc(inst)} · ${T.st_latest} ${this._esc(latest)}`;
-      const href = a.release_url ? ` href="${this._esc(a.release_url)}" target="_blank" rel="noopener"` : "";
-      return `<a class="vbox"${href}>${icon}<div><b>${this._esc(name)}</b><div class="sm">${sub}</div></div>${badge}</a>`;
+        ? `${T.st_installed} ${snEsc(inst)} → ${T.st_latest} <b>${snEsc(latest)}</b>`
+        : `${snEsc(inst)} · ${T.st_latest} ${snEsc(latest)}`;
+      const href = a.release_url ? ` href="${snEsc(a.release_url)}" target="_blank" rel="noopener"` : "";
+      return `<a class="vbox"${href}>${icon}<div><b>${snEsc(name)}</b><div class="sm">${sub}</div></div>${badge}</a>`;
     };
     el.innerHTML =
       snIconify(box(this._config.update_entity, "SuperNotify", null, "🔔") +
-      box(this._config.cards_update_entity, "SuperNotify Cards", VERSION, "🃏"), this && this._config);
+      box(this._config.cards_update_entity, "SuperNotify Cards", VERSION, "🃏"), this._config);
   }
 }
 
@@ -8081,11 +8000,10 @@ class SupernotifyArchiveCard extends SnCard {
     if (!subs.length) return `<div class="pzn">⏸ ${esc(t(this._config.pause_sender ? "pz_none_any" : "pz_none"))}</div>`;
     const st = this._pz[r.id] || (this._pz[r.id] = { who: "all", subj: subs[0] });
     if (!subs.includes(st.subj)) st.subj = subs[0];
-    const fname0 = (id) => ((this._hass.states[id] || {}).attributes || {}).friendly_name || id;
+    const fname0 = (id) => snFname(this._hass, id, id);
     // 0.81.0: a sender reads "automation: name" / "script: name"
     const fname = (id) => /^automation\./.test(id) ? `${t("pz_auto")}: ${fname0(id)}`
       : /^script\./.test(id) ? `${t("pz_script")}: ${fname0(id)}` : fname0(id);
-    const pad = (n) => String(n).padStart(2, "0");
     const live = this._snz ? snPausesOn(this._snz, st.subj) : [];
     const subjRow = subs.length > 1 ? `<div class="pzr"><span class="pzk">${esc(t("pz_what"))}</span>${subs.map((s) =>
       `<button class="pzc${s === st.subj ? " on" : ""}" data-subj="${esc(s)}">${esc(fname(s))}</button>`).join("")}</div>` : "";
@@ -8155,9 +8073,7 @@ class SupernotifyArchiveCard extends SnCard {
         e.stopPropagation();
         const s = live[+b.dataset.resume];
         if (!s) return;
-        const data = { command: "resume", scope: "tag", name: s.target };
-        if (String(s.recipient_type || "").toUpperCase() === "USER" && s.recipient) data.person = s.recipient;
-        run(data, t("pz_resumed"));
+        run(snResumeData(s), t("pz_resumed")); // a tag pause: scope tag, name = the entity
       };
     });
   }
@@ -8172,7 +8088,7 @@ class SupernotifyArchiveCard extends SnCard {
 
   _loc() { return (this._config.language || (this._hass && this._hass.language) || undefined); }
 
-  _lang() { return ((this._config.language || (this._hass && this._hass.language) || "en").split("-")[0]); }
+  _lang() { return snLang(this._config, this._hass); }
 
   /** The detail (SnWhyDetail) reads the why strings. */
   _T() { return SN_WHY_STRINGS[this._lang()] || SN_WHY_STRINGS.en; }
@@ -8273,7 +8189,7 @@ class SupernotifyArchiveCard extends SnCard {
     const name = (n) => snDeliveryAlias(this._hass, n) || n;
     const chans = this._channels(r, idx);
     const okN = chans.filter((c) => c.state === "ok").map((c) => name(c.name));
-    const list = (a) => a.length > 3 ? `${a.slice(0, 3).join(", ")} +${a.length - 3}` : a.join(", ");
+    const list = (a) => snJoinMax(a, 3);
     const st = this._status(r);
     if (st === "err") {
       const bad = chans.filter((c) => c.state === "err").map((c) => name(c.name));
@@ -8468,7 +8384,7 @@ class SupernotifyArchiveCard extends SnCard {
           </div>
         </div>
         ${snVer(this._config, "archive", p)}
-      </ha-card>`, this && this._config);
+      </ha-card>`, this._config);
     const q = this.shadowRoot.getElementById("q");
     q.addEventListener("input", () => { this._q = q.value.toLowerCase(); this._renderList(); });
     const help = this.shadowRoot.getElementById("help");
@@ -8772,7 +8688,6 @@ const SN_ARCH_STRINGS = {
     loading: "reading the archive…", recent: "latest notifications", read_at: "read at",
     today: "Today", yesterday: "Yesterday",
     failed: "failed", missed: "missed",
-    prio: { critical: "Critical", high: "High", low: "Low", minimum: "Minimum", medium: "Medium" },
     reasons: { doppione: "duplicate", "nessun target": "no target", errore: "error", condizione: "condition",
       scenario: "scenario", presenza: "presence", priorita: "priority", spento: "off", pausa: "snoozed",
       "transport spento": "transport off", "nessuna azione": "no action", "dati non validi": "invalid data",
@@ -8806,7 +8721,6 @@ const SN_ARCH_STRINGS = {
     today: "Oggi", yesterday: "Ieri",
     failed: "falliti", failed_1: "fallito",
     missed: "mancati", missed_1: "mancato",
-    prio: { critical: "Critica", high: "Alta", low: "Bassa", minimum: "Minima", medium: "Media" },
     pz_title: "Metti in pausa le notifiche su {x}", pz_all: "per tutti", pz_me: "solo per me", pz_only: "solo per",
     pz_all_tip: "Nessuno riceve notifiche su questa entità finché la pausa non finisce",
     pz_me_tip: "Smetti di riceverle tu; i canali con destinazione fissa (altoparlanti, dashboard) suonano comunque",
@@ -8885,13 +8799,8 @@ const SnWhyDetail = {
     return (st && st.attributes && st.attributes.delivery && typeof st.attributes.delivery === "object") ? st.attributes.delivery : {};
   },
 
-  _scenarioLabel(name) {
-    return snScenarioName(this._hass, name);
-  },
-
   _personLabel(pid) {
-    const st = this._hass.states[pid];
-    return (st && st.attributes && st.attributes.friendly_name) || String(pid).replace(/^person\./, "");
+    return snFname(this._hass, pid, String(pid).replace(/^person\./, ""));
   },
 
   /**
@@ -8902,7 +8811,7 @@ const SnWhyDetail = {
     const [kind, name] = String(src).split(/:(.*)/s);
     if (kind === "default") return T.src_default;
     if (kind === "call") return T.src_call;
-    if (kind === "scenario") return `${T.src_scen} ${this._scenarioLabel(name)}`;
+    if (kind === "scenario") return `${T.src_scen} ${snScenarioName(this._hass, name)}`;
     if (kind === "recipient") return `${T.src_recipient} ${name}`;
     // 0.76.2: SuperNotify 2.13.0 per-delivery fallback
     if (kind === "fallback" && T.src_fallback) return T.src_fallback.replace("{x}", snDeliveryAlias(this._hass, name) || name);
@@ -8942,7 +8851,7 @@ const SnWhyDetail = {
     if (row && !row.on) return T.r_disabled;
     if (row && row.a.transport_enabled === false) return T.r_transport_off;
     const src = this._scenarioSources(dname, scen);
-    if (src.off.length) return `${T.r_scen_off}: ${src.off.map((s) => this._scenarioLabel(s)).join(", ")}`;
+    if (src.off.length) return `${T.r_scen_off}: ${src.off.map((s) => snScenarioName(this._hass, s)).join(", ")}`;
     const inc = this._inclusion(row);
     if (!inc.includes("default") && !src.on.length && !ov) {
       if (inc.includes("scenario")) return T.r_only_scen;
@@ -8964,12 +8873,12 @@ const SnWhyDetail = {
     if (!el) return;
     const T = this._T();
     const esc = snEsc;
-    if (!this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.pick}</div>`, this && this._config); return; }
-    if (this._loading === this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this && this._config); return; }
+    if (!this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.pick}</div>`, this._config); return; }
+    if (this._loading === this._sel) { el.innerHTML = snIconify(`<div class="empty">${T.loading}</div>`, this._config); return; }
     const res = this._cache.get(this._sel) || {};
     if (!res.ok) {
       const msg = esc(res.error || T.none);
-      el.innerHTML = snIconify(`<div class="empty err">${msg}</div>`, this && this._config);
+      el.innerHTML = snIconify(`<div class="empty err">${msg}</div>`, this._config);
       return;
     }
     const n = res.n || {};
@@ -9013,9 +8922,9 @@ const SnWhyDetail = {
     // the path in four steps
     const ovNames = Object.entries(n.ov || {}).filter(([, ov]) => ov && ov.en !== false).map(([k]) => nameOf(k));
     const callTxt = ovNames.length ? `${T.call_named} ${ovNames.join(", ")}` : T.call_auto;
-    const scenTxt = scen.length ? scen.map((x) => this._scenarioLabel(x)).join(", ") : T.no_scenarios;
+    const scenTxt = scen.length ? scen.map((x) => snScenarioName(this._hass, x)).join(", ") : T.no_scenarios;
     const scenMore = [["ap", T.applied], ["rq", T.required], ["cs", T.constrain]]
-      .filter(([k]) => (sc[k] || []).length).map(([k, l]) => `${l}: ${sc[k].map((x) => this._scenarioLabel(x)).join(", ")}`);
+      .filter(([k]) => (sc[k] || []).length).map(([k, l]) => `${l}: ${sc[k].map((x) => snScenarioName(this._hass, x)).join(", ")}`);
     const home = n.occ ? (n.occ.home || []).map((pid) => this._personLabel(pid)) : null;
     const away = n.occ ? (n.occ.away || []).map((pid) => this._personLabel(pid)) : [];
     const peopleTxt = home === null ? "—" : home.length ? `${T.home}: ${home.join(", ")}` : T.nobody;
@@ -9044,7 +8953,7 @@ const SnWhyDetail = {
         offBy = dis.filter((x) => !/^scenario:/.test(x)).map((x) => this._provLabel(x, T));
       } else {
         if (this._inclusion(row).includes("default")) by.push(T.src_default);
-        if (src.on.length) by.push(`${T.src_scen} ${src.on.map((x) => this._scenarioLabel(x)).join(", ")}`);
+        if (src.on.length) by.push(`${T.src_scen} ${src.on.map((x) => snScenarioName(this._hass, x)).join(", ")}`);
         if (ov && ov.en) by.push(T.src_call);
       }
       const icon = { ok: "✔", skip: "⊘", supp: "⊘", err: "✖" }[ch.r] || "?";
@@ -9054,7 +8963,7 @@ const SnWhyDetail = {
       else why = `${esc(this._reasonText(ch.why, T))}${ch.tr && String(ch.why || "").toUpperCase() === "NO_TARGET" ? ` (${T.target_required} ${esc(ch.tr)})` : ""}`;
       const tg = ch.tg ? tgText(ch.tg) : "";
       const meta = [by.length ? `${T.started_by}: ${esc(by.join(" · "))}` : "",
-        src.off.length ? `${T.scen_would_off}: ${esc(src.off.map((x) => this._scenarioLabel(x)).join(", "))}` : "",
+        src.off.length ? `${T.scen_would_off}: ${esc(src.off.map((x) => snScenarioName(this._hass, x)).join(", "))}` : "",
         offBy.length ? `${T.r_off_by}: ${esc(offBy.join(", "))}` : ""].filter(Boolean);
       return `<div class="ch ${cls || ""}"><div class="r1"><span class="st ${ch.r}">${icon}</span>
         <span class="nm">${esc(alias || ch.n)}</span>${alias && !snSame(alias, ch.n) ? `<span class="al tech">${esc(ch.n)}</span>` : ""}</div>
@@ -9110,7 +9019,7 @@ const SnWhyDetail = {
     } else {
       out.push(`<div class="note">ℹ️ ${T.no_trace}</div>`);
     }
-    el.innerHTML = snIconify(out.join(""), this && this._config);
+    el.innerHTML = snIconify(out.join(""), this._config);
     if (n.apl || (n.ctx && n.ctx.id)) this._sentBy(n);
     if (n.dupe || n.o === "dupe") this._dupeOf(n);
   },
@@ -9144,8 +9053,7 @@ const SnWhyDetail = {
     const o = (this._cache.get(orig.id) || {}).n || {};
     if (!(o.ctx && o.ctx.id === n.ctx.id)) return;
     let who = "";
-    await this._sentBy(n).catch(() => {});
-    const res = this._sentCache && this._sentCache.get(n.id);
+    const res = await this._sentBy(n).catch(() => null);
     if (res && res.kind !== "person") who = `${res.kind === "automation" ? T.sent_auto : T.sent_script} «${res.name}»`;
     put(head + `<div class="pbw">${esc(who ? T.dupe_same_run.replace("{a}", who) : T.dupe_same_run_anon)}</div>` + link);
     wire();
@@ -9165,29 +9073,22 @@ const SnWhyDetail = {
       if (!snAppliances.names) await snAppliances.load(this._hass).then(show);
       return;
     }
-    this._sentCache = this._sentCache || new Map();
-    let res = this._sentCache.get(n.id);
-    if (res === undefined) {
-      res = null;
-      try {
-        const t = new Date((n.t || 0) * 1000);
-        const ev = await this._hass.callWS({ type: "logbook/get_events", start_time: new Date(t.getTime() - 120000).toISOString(),
-          end_time: new Date(t.getTime() + 5000).toISOString(), context_id: n.ctx.id });
-        const hit = (ev || []).find((e) => /^(automation|script)\./.test(e.entity_id || "") && e.context_id === n.ctx.id)
-          || (ev || []).find((e) => /^(automation|script)\./.test(e.entity_id || ""));
-        if (hit) res = { kind: hit.entity_id.split(".")[0], id: hit.entity_id, name: hit.name || hit.entity_id };
-      } catch (e) { /* logbook not available to this user: fall back below */ }
-      if (!res && n.ctx.user_id) {
-        const pid = snPersonOfUser(this._hass, n.ctx.user_id);
-        if (pid) res = { kind: "person", id: pid, name: (this._hass.states[pid].attributes || {}).friendly_name || pid };
-      }
-      this._sentCache.set(n.id, res);
+    let res = null;
+    // the logbook entries, read once per notification (SN_SENDERS, shared with the pause panel); [] when the
+    // logbook is not available to this user: then the person below
+    const ev = await snSenderEvents(this._hass, { id: n.id, created: new Date((n.t || 0) * 1000).toISOString(), original_context: n.ctx });
+    const hit = ev.find((e) => e.context_id === n.ctx.id) || ev[0];
+    if (hit) res = { kind: hit.entity_id.split(".")[0], id: hit.entity_id, name: hit.name || hit.entity_id };
+    if (!res && n.ctx.user_id) {
+      const pid = snPersonOfUser(this._hass, n.ctx.user_id);
+      if (pid) res = { kind: "person", id: pid, name: snFname(this._hass, pid, pid) };
     }
-    if (!res) { put(`📨 ${esc(T.sent_unknown)}`); return; }
+    if (!res) { put(`📨 ${esc(T.sent_unknown)}`); return null; }
     const what = res.kind === "automation" ? T.sent_auto : res.kind === "script" ? T.sent_script : T.sent_person;
     put(`📨 ${esc(T.sent_by)} ${esc(what)} <a href="#" id="sentLink">${esc(res.name)}</a>`);
     const a = this.shadowRoot.getElementById("sentLink");
     if (a) a.onclick = (e) => { e.preventDefault(); this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: res.id }, bubbles: true, composed: true })); };
+    return res;
   },
 };
 
@@ -9381,8 +9282,7 @@ class SupernotifyToolsCard extends SnCard {
   }
 
   _T() {
-    const lang = String(this._config.language || (this._hass && this._hass.language) || "en").split("-")[0];
-    return SN_TOOLS_STRINGS[lang] || SN_TOOLS_STRINGS.en;
+    return SN_TOOLS_STRINGS[snLang(this._config, this._hass)] || SN_TOOLS_STRINGS.en;
   }
 
   async _call(service, data, withResponse = true) {
@@ -9625,16 +9525,17 @@ class SupernotifyAppliancesCard extends SnCard {
     this._msgT = null;
   }
 
-  /** 1.0.0: a result line goes after 6 s - a timer the card cancels when it leaves the page. */
-  _msgLater(id) {
+  /** A result line under an appliance; 1.0.0: it goes after 6 s - a timer the card cancels when it leaves the page. */
+  _flash(id, ok, text) {
+    this._msg[id] = { ok, text };
     const set = this._msgT || (this._msgT = new Set());
     const t = setTimeout(() => { set.delete(t); delete this._msg[id]; this._update(); }, 6000);
     set.add(t);
+    this._update();
   }
 
   _T() {
-    const lang = String((this._config && this._config.language) || (this._hass && this._hass.language) || "en").split("-")[0];
-    return SN_APPL_STRINGS[lang] || SN_APPL_STRINGS.en;
+    return SN_APPL_STRINGS[snLang(this._config, this._hass)] || SN_APPL_STRINGS.en;
   }
 
   _loc() {
@@ -9848,13 +9749,9 @@ class SupernotifyAppliancesCard extends SnCard {
       if (cur && cur.kwh > 0.005) bits.push(`${this._fmtKwh(cur.kwh)} ${T.so_far}`);
       return bits.join(" · ");
     }
-    const last = s.last || (cy && cy.done.length ? cy.done[cy.done.length - 1] : null);
+    const last = this._lastRun(ap, s);
     if (!last) return s.since ? `${T.start} ${this._fmtTime(s.since)}` : (!cy || cy.loading) && (ap.power || ap.cycle || ap.vacuum) ? T.loading : T.no_cycle;
-    let kwh = last.kwh;
-    if (kwh == null && cy) {
-      const m = cy.done.find((c) => Math.abs(c.start - last.start) < 15 * 60000 || (c.start <= last.end && c.end >= last.start));
-      if (m) kwh = m.kwh;
-    }
+    const kwh = last.kwh;
     bits.push(`${this._fmtTime(last.start)} → ${this._fmtHm(last.end)}`);
     bits.push(this._fmtDur(last.end - last.start));
     if (kwh != null && kwh > 0.005) {
@@ -9879,21 +9776,33 @@ class SupernotifyAppliancesCard extends SnCard {
   /** What the primary button does for this state, or null. */
   _primary(ap, s) {
     const T = this._T();
-    const admin = !this._hass.user || this._hass.user.is_admin !== false;
+    const admin = snIsAdmin(this._hass);
     if (s.status === "done" && admin && !ap.manual) return { act: "finished", label: snApplEmptiable(ap) ? T.btn_empty : T.btn_seen };
     if (s.status === "error" && ap.vacuum) return { act: "resume", label: T.btn_resume };
     return null;
   }
 
+  /**
+   * 1.0.0: the actions of the ⋮ menu and of the panel's chips, worked out once: remind, switch the plug off
+   * (`armed`: the first of the two taps was made) or on; `admin` for the rest.
+   */
+  _actions(ap, s) {
+    const admin = snIsAdmin(this._hass);
+    const plug = ap.switch && this._st(ap.switch);
+    return { admin, remind: s.status === "done" && admin && !ap.manual,
+      off: plug === "on" && s.status !== "running" && ap.switch_off !== false, armed: this._armed === `${ap.id}|switch_off`,
+      on: plug === "off" && ap.switch_on !== false };
+  }
+
   _menuItems(ap, s) {
     const T = this._T();
-    const admin = !this._hass.user || this._hass.user.is_admin !== false;
+    const a = this._actions(ap, s);
     const out = [];
-    if (ap.switch && s.status !== "running" && ap.switch_off !== false && this._st(ap.switch) === "on") out.push(["switch_off", this._armed === `${ap.id}|switch_off` ? T.tap_again : T.m_switch_off]);
-    if (ap.switch && ap.switch_on !== false && this._st(ap.switch) === "off") out.push(["switch_on", T.m_switch_on]);
-    if (s.status === "done" && admin && !ap.manual) out.push(["remind", T.m_remind]);
+    if (a.off) out.push(["switch_off", a.armed ? T.tap_again : T.m_switch_off]);
+    if (a.on) out.push(["switch_on", T.m_switch_on]);
+    if (a.remind) out.push(["remind", T.m_remind]);
     out.push(["details", T.details]);
-    if (admin && !ap.manual) out.push(["settings", T.settings]);
+    if (a.admin && !ap.manual) out.push(["settings", T.settings]);
     return out;
   }
 
@@ -10009,8 +9918,7 @@ class SupernotifyAppliancesCard extends SnCard {
     const T = this._T();
     const esc = snEsc;
     const [cls, word] = this._status(ap, s);
-    const cy = snAppl.cyclesOf(ap);
-    const last = s.last || (cy && cy.done.length ? cy.done[cy.done.length - 1] : null);
+    const last = this._lastRun(ap, s);
     const sub = last ? T.last_cycle.replace("{d}", `${this._fmtTime(last.start)} · ${this._fmtDur(last.end - last.start)}`) : T.no_cycle;
     const msg = this._msg[ap.id];
     const w = this._powerNow(ap);
@@ -10119,7 +10027,7 @@ class SupernotifyAppliancesCard extends SnCard {
         // Autonotify has no button for it: the plug's own switch
         await this._hass.callService("switch", "turn_on", { entity_id: ap.switch });
         text = T.done_switch_on;
-      } else if (act === "switch_off" && (ap.manual || (this._hass.user && this._hass.user.is_admin === false))) {
+      } else if (act === "switch_off" && (ap.manual || !snIsAdmin(this._hass))) {
         // fire_event is for admins: anyone else switches the plug off with the switch itself
         await this._hass.callService("switch", "turn_off", { entity_id: ap.switch });
         text = T.done_switch;
@@ -10140,9 +10048,7 @@ class SupernotifyAppliancesCard extends SnCard {
     } finally {
       this._busy[ap.id] = false;
     }
-    this._msg[ap.id] = { ok, text };
-    this._msgLater(ap.id);
-    this._update();
+    this._flash(ap.id, ok, text);
   }
 
   _userActName(a) {
@@ -10186,9 +10092,7 @@ class SupernotifyAppliancesCard extends SnCard {
       ok = false;
       text = `${T.err}: ${(e && (e.message || e.code)) || e}`;
     }
-    this._msg[ap.id] = { ok, text };
-    this._msgLater(ap.id);
-    this._update();
+    this._flash(ap.id, ok, text);
   }
 
   /** Two taps: true on the second within 4 s, else arms it (the button says "tap again") and false. */
@@ -10206,15 +10110,7 @@ class SupernotifyAppliancesCard extends SnCard {
     const a = (ap.actions || [])[i];
     if (!a) return;
     if (a.confirmation !== "double") return this._userAct(ap, a);
-    const key = `${ap.id}|${i}`;
-    clearTimeout(this._armT);
-    if (this._armed !== key) {
-      this._armed = key;
-      this._armT = setTimeout(() => { this._armed = null; this._update(); }, 4000);
-      this._update();
-      return;
-    }
-    this._armed = null;
+    if (!this._arm(`${ap.id}|${i}`)) return;
     return this._userAct(ap, { ...a, confirmation: false });
   }
 
@@ -10390,14 +10286,14 @@ class SupernotifyAppliancesCard extends SnCard {
     const art = kind ? `<div class="pv-art ill" data-art="${esc(ap.id)}">${snApplSvg(kind, "pv")}</div>`
       : `<div class="pv-art"><ha-icon icon="${esc(ap.icon)}"></ha-icon></div>`;
     const plugOn = ap.switch && this._st(ap.switch) === "on";
+    const A = this._actions(ap, s);
     const quick = [Number.isFinite(w) ? `⚡ ${this._fmtW(w)}` : "", ap.switch ? `${T.plug} ${plugOn ? T.plug_on : T.plug_off}` : "",
       s.battery != null ? `🔋 ${s.battery}%${s.charging ? ` · ${T.st_charging}` : ""}` : "", s.lost ? `⚠ ${T.conn_lost}` : ""].filter(Boolean).join(" · ");
-    const admin = !this._hass.user || this._hass.user.is_admin !== false;
+    const admin = A.admin;
     const tab = ["stats", "cons", "sets"].includes(this._panelTab) ? this._panelTab : "info";
     const pri = this._primary(ap, s);
     const chip = (attr, label, main, icon) => `<button class="chip${main ? " main" : ""}${/class="ic"/.test(attr) ? " ic" : ""}" ${attr.replace(' class="ic"', "")}${main && this._busy[ap.id] ? " disabled" : ""}>${
       icon ? `<ha-icon icon="${esc(icon)}"></ha-icon>` : ""}${esc(label)}</button>`;
-    const plugOff = ap.switch && this._st(ap.switch) === "off";
     // the buttons of your own shown in this state (`when:`), in the row or - many of them - in the menu
     const now0 = s.status === "running" && s.paused ? "paused" : s.status;
     const mine = (ap.actions || []).map((a, i) => ({ a, i })).filter(({ a }) => !a.when || [].concat(a.when).some((w) => w === s.status || w === now0));
@@ -10422,10 +10318,9 @@ class SupernotifyAppliancesCard extends SnCard {
     }
     const acts = [
       pri ? chip(`data-pact="${pri.act}"`, pri.label, true) : "",
-      s.status === "done" && admin && !ap.manual ? chip('data-pact="remind"', T.m_remind) : "",
-      plugOn && s.status !== "running" && ap.switch_off !== false ? (this._armed === `${ap.id}|switch_off`
-        ? chip('data-pact="switch_off" data-armed', T.tap_again, false, "mdi:gesture-double-tap") : chip('data-pact="switch_off"', T.m_switch_off)) : "",
-      plugOff && ap.switch_on !== false ? chip('data-pact="switch_on"', T.m_switch_on) : "",
+      A.remind ? chip('data-pact="remind"', T.m_remind) : "",
+      A.off ? (A.armed ? chip('data-pact="switch_off" data-armed', T.tap_again, false, "mdi:gesture-double-tap") : chip('data-pact="switch_off"', T.m_switch_off)) : "",
+      A.on ? chip('data-pact="switch_on"', T.m_switch_on) : "",
       ...(inMenu ? [] : mine.map(uchip)),
     ].filter(Boolean);
     // the head, the same in every tab: the drawing, the name, the state and what matters now, the round buttons
@@ -10521,8 +10416,7 @@ class SupernotifyAppliancesCard extends SnCard {
     }).join("");
     if (!full) return `<div class="tiles">${tiles}</div>${this._seeChart()}`;
     const types = cy.types;
-    const mStart = new Date(); mStart.setDate(1); mStart.setHours(0, 0, 0, 0);
-    const month = cy.done.filter((c) => c.start >= mStart.getTime());
+    const month = this._month(cy);
     // an hourly (coarse) cycle looks longer than it was: by its energy instead
     const kwhSplit = types.split ? (types.short.kwh + types.long.kwh) / 2 : 0;
     const kind = (c) => (c.anomalous ? "anom" : !types.split ? "short"
@@ -10542,13 +10436,28 @@ class SupernotifyAppliancesCard extends SnCard {
     if (month.some((c) => c.anomalous)) leg.push(`<span><i class="sw anom"></i>${esc(T.anomalous)}</span>`);
     const rows = cy.done.slice(-8).reverse().map((c) => `<tr class="${c.anomalous ? "anom" : ""}"><td>${esc(this._fmtTime(c.start))}</td>
         <td>${esc(this._fmtDur(c.end - c.start))}${c.anomalous ? " ⚠" : ""}</td><td>${esc(this._fmtKwh(c.kwh))}</td>${this._price() != null ? `<td>${esc(this._fmtCost(c.kwh))}</td>` : ""}</tr>`).join("");
-    return `<div class="sub">${esc(T.per_cycle)}</div>
-      ${month.length ? `${bars}<div class="leg">${leg.join("")}</div>` : `<div class="empty">${esc(T.no_cycle_month)}</div>`}
-      ${this._daysHtml(cy, T.col_cycles, "kwh")}
-      <div class="sub">${esc(T.last_cycles)}</div>
-      ${rows ? `<table class="tb"><thead><tr><th>${esc(T.col_start)}</th><th>${esc(T.col_dur)}</th><th>kWh</th>${this._price() != null ? `<th>${esc(T.col_cost)}</th>` : ""}</tr></thead><tbody>${rows}</tbody></table>`
-        : `<div class="empty">${esc(T.no_cycle)}</div>`}
-      ${cy.coarse ? `<div class="fine">${esc(T.coarse)}</div>` : ""}`;
+    return this._fullHtml({ per: T.per_cycle, month, bars, leg, noneM: T.no_cycle_month, days: this._daysHtml(cy, T.col_cycles, "kwh"),
+      last: T.last_cycles, rows, cols: `<th>kWh</th>${this._price() != null ? `<th>${esc(T.col_cost)}</th>` : ""}`, none: T.no_cycle,
+      foot: cy.coarse ? `<div class="fine">${esc(T.coarse)}</div>` : "" });
+  }
+
+  /** 1.0.0: the cycles started this month (the chart of the full screen). */
+  _month(cy) {
+    const mStart = new Date(); mStart.setDate(1); mStart.setHours(0, 0, 0, 0);
+    return cy.done.filter((c) => c.start >= mStart.getTime());
+  }
+
+  /** 1.0.0: the full screen of _panelStats and _panelRuns - the chart, the 7 days, the last ones in a table. */
+  _fullHtml(o) {
+    const T = this._T();
+    const esc = snEsc;
+    return `<div class="sub">${esc(o.per)}</div>
+      ${o.month.length ? `${o.bars}<div class="leg">${o.leg.join("")}</div>` : `<div class="empty">${esc(o.noneM)}</div>`}
+      ${o.days}
+      <div class="sub">${esc(o.last)}</div>
+      ${o.rows ? `<table class="tb"><thead><tr><th>${esc(T.col_start)}</th><th>${esc(T.col_dur)}</th>${o.cols}</tr></thead><tbody>${o.rows}</tbody></table>`
+        : `<div class="empty">${esc(o.none)}</div>`}
+      ${o.foot}`;
   }
 
   /** The last 7 days, one row a day (today first): runs, time, and energy and cost, or area, or filament. */
@@ -10684,8 +10593,7 @@ class SupernotifyAppliancesCard extends SnCard {
         <span class="ts">${esc(sub || "—")}</span></div>`;
     }).join("");
     if (!full) return `<div class="tiles">${tiles}</div>${this._seeChart()}`;
-    const mStart = new Date(); mStart.setDate(1); mStart.setHours(0, 0, 0, 0);
-    const month = cy.done.filter((c) => c.start >= mStart.getTime());
+    const month = this._month(cy);
     const tipOf = (c) => [this._fmtTime(c.start), this._fmtDur(c.end - c.start), m2(c.area), g(c.weight), c.name || "", c.failed ? T.failed : ""].filter(Boolean).join(" · ");
     const okM = month.filter((c) => !c.failed);
     const avgD = okM.length ? okM.reduce((x, c) => x + (c.end - c.start), 0) / okM.length : 0;
@@ -10700,13 +10608,10 @@ class SupernotifyAppliancesCard extends SnCard {
     const rows = cy.done.slice(-8).reverse().map((c) => `<tr class="${c.failed ? "anom" : ""}"${c.name ? ` title="${esc(c.name)}"` : ""}><td>${esc(this._fmtTime(c.start))}</td>
         <td>${esc(this._fmtDur(c.end - c.start))}${c.failed ? ` · ${esc(T.failed)}` : ""}</td>${area ? `<td>${esc(m2(c.area))}</td>` : ""}${fil ? `<td>${esc(g(c.weight))}</td>` : ""}</tr>`).join("");
     const days = Math.max(1, Math.round((Date.now() - cy.histFrom) / 86400000));
-    return `<div class="sub">${esc(w.per)}</div>
-      ${month.length ? `${bars}<div class="leg">${leg.join("")}</div>` : `<div class="empty">${esc(w.none_m)}</div>`}
-      ${this._daysHtml(cy, ap.vacuum ? T.tab_cleans : ap.type === "3d_printer" ? T.tab_prints : T.col_cycles, ap.vacuum ? "area" : "weight")}
-      <div class="sub">${esc(w.last)}</div>
-      ${rows ? `<table class="tb"><thead><tr><th>${esc(T.col_start)}</th><th>${esc(T.col_dur)}</th>${area ? `<th>${esc(T.col_area)}</th>` : ""}${fil ? `<th>${esc(T.col_fil)}</th>` : ""}</tr></thead><tbody>${rows}</tbody></table>`
-        : `<div class="empty">${esc(w.none)}</div>`}
-      <div class="fine">${esc(w.note.replace("{n}", days))}</div>`;
+    return this._fullHtml({ per: w.per, month, bars, leg, noneM: w.none_m,
+      days: this._daysHtml(cy, ap.vacuum ? T.tab_cleans : ap.type === "3d_printer" ? T.tab_prints : T.col_cycles, ap.vacuum ? "area" : "weight"),
+      last: w.last, rows, cols: `${area ? `<th>${esc(T.col_area)}</th>` : ""}${fil ? `<th>${esc(T.col_fil)}</th>` : ""}`, none: w.none,
+      foot: `<div class="fine">${esc(w.note.replace("{n}", days))}</div>` });
   }
 }
 
@@ -10804,6 +10709,7 @@ const SN_APPL_DONE_MAX = 24 * 3600000;
 const SN_APPL_STALE = 2 * 3600000; // waiting to be emptied for longer: the drawing insists
 const SN_APPL_FINE_DAYS = 10;
 const SN_APPL_KEY = "supernotify-appliances-stats-v1";
+const SN_APPL_STORE = snStore(SN_APPL_KEY, () => ({}), (c) => !!c && typeof c === "object");
 // cycle detection on the statistics when Autonotify's own settings are out of reach (override per appliance)
 const SN_APPL_DEFAULTS = { threshold: 5, grace_period: 300, min_duration: 300 };
 
@@ -11204,12 +11110,18 @@ function snApplTypes(cycles) {
   return out;
 }
 
-/** Today, this week, month and year: kWh (the power integrated) and cycles started. */
-function snApplPeriods(cy, now) {
+/** 1.0.0: midnight today, Monday of this week, the 1st of this month and of this year (local time). */
+function snApplPeriodStarts(now) {
   const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
   const w0 = new Date(d0); w0.setDate(w0.getDate() - ((w0.getDay() + 6) % 7));
   const m0 = new Date(d0); m0.setDate(1);
   const y0 = new Date(d0); y0.setMonth(0, 1);
+  return { d0, w0, m0, y0 };
+}
+
+/** Today, this week, month and year: kWh (the power integrated) and cycles started. */
+function snApplPeriods(cy, now) {
+  const { d0, w0, m0, y0 } = snApplPeriodStarts(now);
   return [["today", d0], ["week", w0], ["month", m0], ["year", y0]].map(([key, from]) => {
     const f = from.getTime();
     const kwh = cy.bins.filter((b) => b.t >= f).reduce((x, b) => x + (b.mean || 0) * b.dt / 3600000, 0) / 1000;
@@ -11624,6 +11536,24 @@ function snApplBins(rows, dt) {
     mean: r.mean != null ? +r.mean : null, max: r.max != null ? +r.max : null })).filter((b) => Number.isFinite(b.t));
 }
 
+/**
+ * 1.0.0: no new statistics / history read for this entry: one on its way (two cards, a refresh: `inflight`),
+ * a recent one (10 min, after an error SN_APPL_RETRY), or - forced - one less than a minute old.
+ */
+function snApplGuard(have, force) {
+  if (have && (have.loading || have.inflight || (!force && Date.now() - have.at < (have.error ? SN_APPL_RETRY : 600000)))) return true;
+  return !!(have && force && !have.error && Date.now() - have.at < 60000);
+}
+
+/** 1.0.0: a read that failed (a timeout while the phone wakes up): what was shown stays, `retry` runs again soon. */
+function snApplFail(entry, e, retry) {
+  const fails = (entry.fails || 0) + 1;
+  if (entry.at && !entry.error) Object.assign(entry, { loading: false, fails, at: Date.now() - 600000 + SN_APPL_RETRY });
+  else Object.assign(entry, { loading: false, fails, error: (e && e.message) || String(e), at: Date.now() });
+  clearTimeout(entry.retryT);
+  entry.retryT = setTimeout(retry, Math.min(600000, SN_APPL_RETRY * 2 ** (fails - 1)));
+}
+
 const snAppl = {
   entries: null,   // usable Autonotify entries
   flows: 0,        // appliances found and waiting to be set up (admins)
@@ -11644,13 +11574,12 @@ const snAppl = {
     if (!hass || !hass.callWS) return;
     if (!this.busy && Date.now() - this.at > 300000) {
       this.busy = true;
-      const admin = !hass.user || hass.user.is_admin !== false;
+      const admin = snIsAdmin(hass);
       Promise.all([
-        snWS(hass, { type: "config_entries/get", domain: "appliance_autonotify" }).catch(() => []),
+        snAppliances.read(hass), // the names of snAppliances too
         admin ? snWS(hass, { type: "config_entries/flow/progress" }).catch(() => []) : Promise.resolve([]),
       ]).then(([entries, flows]) => {
         this.entries = snApplUsable(entries);
-        snAppliances.names = Object.fromEntries((entries || []).filter((e) => e && e.entry_id).map((e) => [e.entry_id, e.title || ""]));
         this.flows = (flows || []).filter((f) => f && f.handler === "appliance_autonotify").length;
         this._list = null;
         this._lists.clear();
@@ -11723,7 +11652,7 @@ const snAppl = {
         const seen = new Set(got.map((n) => n.id));
         const cut = Date.now() - 48 * 3600000;
         this.rows = got.concat(this.rows.filter((n) => !seen.has(n.id))).filter((n) => Date.parse(n.created) >= cut)
-          .sort((a, b) => String(b.created).localeCompare(String(a.created)));
+          .sort(snByCreatedDesc);
         this.rowsAt = Date.now();
         return this._classify(hass);
       })
@@ -11789,22 +11718,17 @@ const snAppl = {
     const id = ap.power;
     if (!id || !hass.callWS) return;
     const have = this.stats.get(id);
-    // 1.0.0 (perf): `inflight` - a second call while a read is on its way (two cards, a refresh) asks nothing
-    if (have && (have.loading || have.inflight || (!force && Date.now() - have.at < (have.error ? SN_APPL_RETRY : 600000)))) return;
-    if (have && force && !have.error && Date.now() - have.at < 60000) return;
+    if (snApplGuard(have, force)) return;
     const entry = have || { bins: [], done: [], types: {}, loading: true, at: 0 };
     entry.loading = !have || !have.bins.length;
     entry.inflight = true;
     this.stats.set(id, entry);
     const now = Date.now();
     const fineFrom = new Date(now - SN_APPL_FINE_DAYS * 86400000); fineFrom.setMinutes(0, 0, 0);
-    const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
-    const w0 = new Date(d0); w0.setDate(w0.getDate() - ((w0.getDay() + 6) % 7));
-    const y0 = new Date(d0); y0.setMonth(0, 1);
+    const { w0, y0 } = snApplPeriodStarts(now);
     const from = new Date(Math.min(y0.getTime(), w0.getTime()));
     // the hourly part before the fine window is kept in this browser and never read again
-    let cache = null;
-    try { cache = JSON.parse(window.localStorage.getItem(SN_APPL_KEY) || "null"); } catch (e) { cache = null; }
+    const cache = SN_APPL_STORE.load();
     const mine = cache && cache[id] && cache[id].from === from.getTime() ? cache[id] : null;
     const hourFrom = mine ? new Date(mine.upto) : from;
     // 1.0.0 (perf): the 5-minute rows already read are kept - only the last hour is read again (a late
@@ -11821,16 +11745,14 @@ const snAppl = {
     Promise.all(reads).then(([fine, hour]) => {
       const hb = (mine ? mine.rows : []).concat(snApplBins(hour && hour[id], 3600000).map((b) => [b.t, b.mean, b.max]))
         .filter((r) => r[0] < fineFrom.getTime());
-      try {
+      {
         // 1.0.0: read the blob again right before writing - the other appliances load in the
         // same tick and each one wrote back the copy it read at the start (the last one won)
-        let c = null;
-        try { c = JSON.parse(window.localStorage.getItem(SN_APPL_KEY) || "null"); } catch (e) { c = null; }
-        if (!c || typeof c !== "object") c = {};
+        const c = SN_APPL_STORE.load();
         const r1 = (v) => (typeof v === "number" ? Math.round(v * 10) / 10 : v);
         c[id] = { from: from.getTime(), upto: fineFrom.getTime(), rows: hb.map(([t, mean, max]) => [t, r1(mean), r1(max)]) };
-        window.localStorage.setItem(SN_APPL_KEY, JSON.stringify(c));
-      } catch (e) { /* full or private */ }
+        SN_APPL_STORE.save(c);
+      }
       const got = snApplBins(fine && fine[id], 300000);
       const fineAll = (fine0 || []).filter((b) => b.t < fineRead.getTime()).concat(got);
       fineAll.sort((a, b) => a.t - b.t);
@@ -11847,14 +11769,7 @@ const snAppl = {
       all.forEach((c) => { if (durs.length >= 3 && c.end - c.start > 3 * med) c.anomalous = true; });
       Object.assign(entry, { bins, done: all, current: open, types: snApplTypes(all), coarse: all.some((c) => c.coarse),
         loading: false, error: null, fails: 0, at: Date.now() });
-    }).catch((e) => {
-      // a read that failed (a timeout while the phone wakes up): what was shown stays, read again soon
-      const fails = (entry.fails || 0) + 1;
-      if (entry.at && !entry.error) Object.assign(entry, { loading: false, fails, at: Date.now() - 600000 + SN_APPL_RETRY });
-      else Object.assign(entry, { loading: false, fails, error: (e && e.message) || String(e), at: Date.now() });
-      clearTimeout(entry.retryT);
-      entry.retryT = setTimeout(() => this.loadStats(hass, ap), Math.min(600000, SN_APPL_RETRY * 2 ** (fails - 1)));
-    }).finally(() => { entry.inflight = false; snApplFire(); });
+    }).catch((e) => snApplFail(entry, e, () => this.loadStats(hass, ap))).finally(() => { entry.inflight = false; snApplFire(); });
   },
 
   /**
@@ -11865,16 +11780,13 @@ const snAppl = {
     const id = ap.vacuum || ap.cycle;
     if (!id || !hass.callWS) return;
     const have = this.stats.get(id);
-    if (have && (have.loading || have.inflight || (!force && Date.now() - have.at < (have.error ? SN_APPL_RETRY : 600000)))) return;
-    if (have && force && !have.error && Date.now() - have.at < 60000) return;
+    if (snApplGuard(have, force)) return;
     const entry = have || { done: [], types: {}, loading: true, at: 0 };
     entry.loading = !have;
     entry.inflight = true;
     this.stats.set(id, entry);
     const now = Date.now();
-    const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
-    const w0 = new Date(d0); w0.setDate(w0.getDate() - ((w0.getDay() + 6) % 7));
-    const y0 = new Date(d0); y0.setMonth(0, 1);
+    const { w0, y0 } = snApplPeriodStarts(now);
     const from = new Date(Math.min(y0.getTime(), w0.getTime()));
     const vs = ap.vstats || {};
     const totals = [vs.count, vs.time, vs.area].filter(Boolean);
@@ -11913,14 +11825,7 @@ const snAppl = {
       const tot = stats ? { count: rows(vs.count), time: rows(vs.time), area: rows(vs.area) } : null;
       Object.assign(entry, { done, current, types: snApplTypes(done.filter((c) => !c.failed)), totals: tot, histFrom: first ? first.t : now,
         loading: false, error: null, fails: 0, at: Date.now() });
-    }).catch((e) => {
-      // a read that failed (a timeout while the phone wakes up): what was shown stays, read again soon
-      const fails = (entry.fails || 0) + 1;
-      if (entry.at && !entry.error) Object.assign(entry, { loading: false, fails, at: Date.now() - 600000 + SN_APPL_RETRY });
-      else Object.assign(entry, { loading: false, fails, error: (e && e.message) || String(e), at: Date.now() });
-      clearTimeout(entry.retryT);
-      entry.retryT = setTimeout(() => this.loadStats(hass, ap), Math.min(600000, SN_APPL_RETRY * 2 ** (fails - 1)));
-    }).finally(() => { entry.inflight = false; snApplFire(); });
+    }).catch((e) => snApplFail(entry, e, () => this.loadStats(hass, ap))).finally(() => { entry.inflight = false; snApplFire(); });
   },
 };
 
@@ -11964,10 +11869,7 @@ function snApplRunCycles(pts, extra, runStates) {
 
 /** Today, week, month and year: runs, time, m² and filament - from the totals, else from the runs read. */
 function snApplRunPeriods(cy, now) {
-  const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
-  const w0 = new Date(d0); w0.setDate(w0.getDate() - ((w0.getDay() + 6) % 7));
-  const m0 = new Date(d0); m0.setDate(1);
-  const y0 = new Date(d0); y0.setMonth(0, 1);
+  const { d0, w0, m0, y0 } = snApplPeriodStarts(now);
   const t = cy.totals;
   const sum = (rows, f) => rows && rows.length ? rows.filter((r) => r.t >= f).reduce((x, r) => x + r.v, 0) : null;
   return [["today", d0], ["week", w0], ["month", m0], ["year", y0]].map(([key, from]) => {
@@ -12019,18 +11921,17 @@ function snApplRowEntry(n, entries, names) {
 /** What a full document says: live (start/progress), clear (end of cycle), end, emptied, stuck. */
 function snApplClassify(doc, entryId) {
   const x = doc.extra_data || {};
-  const tag = String(x.mobile_push_notification_tag || "");
   const t = Date.parse(doc.created);
-  const m = /^appliance_([0-9a-z]+?)(_end)?$/i.exec(tag);
-  if (!m) {
+  const entry = snArchiveAppliance(doc);
+  if (!entry) {
     if (SN_APPL_STUCK.some((re) => re.test(String(doc.message || "")))) return { entry: entryId, t, kind: "stuck" };
     return { entry: entryId, t, kind: "other" };
   }
   const clear = !!x.mobile_push_clear_notification;
   let kind;
-  if (m[2]) kind = clear ? "emptied" : "end";
+  if (/_end$/i.test(x.mobile_push_notification_tag)) kind = clear ? "emptied" : "end";
   else kind = clear ? "clear" : x.live_update ? "live" : "other";
-  return { entry: m[1], t, kind };
+  return { entry, t, kind };
 }
 
 /**
@@ -12381,7 +12282,7 @@ window.customCards.push({
  * so a string a language does not have yet shows in English. Keys: the language part of
  * hass.language (zh-Hans -> zh, pt-BR -> pt).
  */
-const SN_I18N_EXTRA = {"de":{"SN_STRINGS":{"presence":"Anwesenheit","time_band":"Zeitfenster","quiet":"Ruhe","act_scen":"Aktive Szenarien","on":"an","off":"aus","active":"aktiv","dnd":"Nicht stören","tap_silence":"tippen zum Stummschalten","snooze":"Pause","min":"Min.","pause_nc":"Nicht-Kritisches pausieren","snoozed":"Pausiert","until":"bis","tap_clear":"tippen zum Aufheben","announce":"Durchsage","intercom":"Gegensprechen","announce_ph":"Auf allen Lautsprechern durchsagen…","send":"Senden","announced":"Durchgesagt","cleared":"Pausen aufgehoben","snoozed_for":"Nicht-kritische Benachrichtigungen pausiert für","sent":"Gesendet","yesterday":"gestern","deliveries":"Kanäle","last_notif":"Letzte Benachrichtigung","transports":"Transporte","delivered":"zugestellt","failed":"fehlgeschlagen","channels":"Kanäle","none":"keine","no_transports":"keine Transport-Entitäten gefunden","tr_used":"genutzt von","tr_unused":"kein Kanal nutzt ihn","start":"Start","volume":"Lautstärke","now":"jetzt","crosses":"über Mitternacht","no_voice":"keine Sprache","mute_hint":"Ein Zeitfenster mit <b>0%</b> sendet <b>keine Sprachdurchsage</b> (Alexa und TTS aus, Push und Dashboard werden trotzdem zugestellt). Kritische und hohe Priorität werden immer gesprochen.","enabled":"aktiv","grp_auto":"Starten von selbst","grp_named":"Nur wenn im Aufruf genannt","grp_scen":"Nur mit einem Szenario","grp_fallback":"Reserve, wenn die anderen scheitern","ch_title":"Kanäle","ch_count":"{on} von {tot} an","off_manual":"ausgeschaltet","paused_by":"gerade pausiert durch","on_by":"gerade an durch","fixed_targets":"feste Ziele","no_deliveries":"keine Zustellungs-Entitäten gefunden","home":"zu Hause","away":"unterwegs","devices":"Geräte","devices_1":"Gerät","rc_test":"Test senden","rc_test_confirm":"Zum Senden erneut tippen","rc_test_sent":"Test gesendet","rc_test_title":"SuperNotify-Test","rc_test_msg":"Testnachricht vom Dashboard,","overrides":"Zustellungs-Übersteuerungen","overrides_1":"Zustellungs-Übersteuerung","no_contact":"keine Kontaktpunkte","no_recipients":"keine Empfänger-Entitäten gefunden","details":"Details","h_update":"Update verfügbar:","h_restart":"Home Assistant neu starten, um das Update abzuschließen","h_uptodate":"aktuell","h_transport_err":"Transporte mit Fehlern","h_channels_off":"Kanäle aus","h_all_good":"Alles in Ordnung","h_failures":"Fehler","h_failures_1":"Fehler","h_transport_err_1":"Transport mit Fehlern","h_channels_off_1":"Kanal aus","channels_1":"Kanal","band_early_morning":"Früher Morgen","band_morning":"Morgen","band_afternoon":"Nachmittag","band_evening":"Abend","band_night":"Nacht","band_late_night":"Späte Nacht","h_look_1":"1 Sache zum Ansehen","h_look_n":"{n} Sachen zum Ansehen","h_rest_ok":"alles andere funktioniert","h_ch_on":"{on} von {tot} Kanälen an","h_open":"Öffnen","ln_delivered":"zugestellt","ln_failed":"fehlgeschlagen","ln_why":"Warum","tgt_loading":"Auswahl wird geladen…","bands_empty_t":"Noch keine Zeitfenster","bands_empty":"Füge ein Zeitfenster pro Tagesabschnitt hinzu: ein input_datetime für den Beginn und ein input_number für die Sprachlautstärke.","active_now":"gerade aktiv","disabled":"deaktiviert","other":"Sonstige","manual":"manuell","apply_now":"jetzt anwenden","applied":"Angewendet","apply_off":"tippen, um es nicht mehr anzuwenden","enabled_lbl":"aktiviert","reset_overrides":"Übersteuerungen zurücksetzen","reset_done":"Übersteuerungen zurückgesetzt","transport_off":"Transport aus","last_notified":"zuletzt benachrichtigt","never_notified":"nie benachrichtigt","media":"Medien","no_scenarios":"keine Szenario-Entitäten gefunden","sim_pick":"🎬 Szenarien — zum Simulieren tippen","sim_fire":"📤 Kanäle","sim_hint":"Echte Daten der Engine (enquire-Dienste). Die Filterung nach Priorität passiert in der Engine und wird hier nicht simuliert. Deaktiviert gewinnt gegen aktiviert, wie beim Zusammenführen zur Laufzeit.","sim_none":"keine Zustellung würde ausgelöst","sim_go":"Würde gesendet","sim_stop":"Würde nicht gesendet","sim_r_default":"startet von selbst","sim_r_on":"eingeschaltet durch","sim_r_off":"ausgeschaltet durch","sim_r_named":"nur wenn im Aufruf genannt","sim_r_scen":"nur mit einem Szenario, das ihn einschaltet","sim_r_fallback":"Reserve, wenn die anderen scheitern","sim_r_switched":"ausgeschaltet","title":"Titel","message":"Nachricht","priority":"Priorität","channels_lbl":"Kanäle — keiner gewählt = normales Routing","camera_lbl":"Kamera-Schnappschuss","preview":"Vorschau","no_title":"(kein Titel)","no_message":"(keine Nachricht)","default_prio":"Standard (mittel)","comp_hint":"Gewählte Kanäle werden mit delivery_selection: fixed gesendet (nur diese lösen aus). Kritisch ist wirklich kritisch — Sirenen inklusive.","critical_confirm":"Eine KRITISCHE Benachrichtigung senden? Sirenen und maximale Lautstärke inklusive.","sent_toast":"Gesendet","write_or_pick":"Schreib eine Nachricht oder wähle eine Kamera oder einen Kanal","send_err":"Nicht gesendet","dry_btn":"Testen ohne Senden","dry_title":"Wenn du es jetzt sendest","dry_err":"Testlauf fehlgeschlagen","dry_nobody":"kein Empfänger, nur direkte Ziele","dry_none":"Kein Kanal ausgewählt","dry_scen":"Aktive Szenarien","dry_raw":"Rohe Antwort","dry_prio":"Priorität","dry_would_n":"Kanäle würden senden","dry_nothing":"Es würde nichts gesendet","dry_dupe":"Duplikat einer kürzlichen Benachrichtigung: sie würde verworfen","dry_no_dupe":"Duplikatprüfung nicht simuliert, damit das echte Senden direkt danach nicht blockiert wird.","dry_home":"Zu Hause","dry_empty":"SuperNotify hat nicht geantwortet: ist es 2.12 oder neuer?","dry_reasons":{"NO_TARGET":"kein nutzbares Ziel","DUPE":"Duplikat","PRIORITY":"nicht für diese Priorität","SNOOZED":"pausiert","DELIVERY_CONDITION":"Zustellungsbedingung falsch","OCCUPANCY":"Anwesenheitsregel","TRANSPORT_DISABLED":"Transport aus","DELIVERY_DISABLED":"ausgeschaltet","NO_SCENARIO":"erforderliches Szenario nicht aktiv","NO_ACTION":"keine Aktion","INVALID_ACTION_DATA":"ungültige Daten","UNKNOWN":"unbekannter Grund","ERROR":"Fehler"},"prio_minimum":"Minimal","prio_low":"Niedrig","prio_medium":"Mittel","prio_high":"Hoch","prio_critical":"Kritisch","target_lbl":"Ziel — Personen, Geräte, Bereiche, Etagen, Labels","custom_target_lbl":"Eigene Ziele (E-Mail, Telegram-IDs, …) — durch Komma getrennt","adv_title":"Erweiterte Optionen","adv_spoken":"Gesprochene Nachricht (Alexa, TTS)","adv_spoken_ph":"was die Lautsprecher sagen, falls anders als der Text","adv_apply":"Diese Szenarien anwenden","adv_require":"Nur senden, wenn diese Szenarien aktiv sind","adv_constrain":"Nur diese Szenarien berücksichtigen","adv_snapshot":"Bild von einer URL","adv_debug":"Debug: vollständige Auswahl-Ablaufverfolgung aufzeichnen (in der Warum-Karte angezeigt)","custom_target_ph":"z. B. user@example.com, 123456789","native_target_tag":"🎯 nativer Bereich/Etage/Label","target_warn":"⚠️ Bereiche, Etagen und Labels werden nur von notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts und chime aufgelöst. Mit jedem anderen Kanal — oder dem Standard-Routing, wenn oben kein Kanal gewählt ist — kann die Benachrichtigung unbemerkt ohne Ziel bleiben. Wähle einen kompatiblen Kanal oder füge direkt eine Person bzw. ein Gerät hinzu.","aut_search":"Automationen suchen…","aut_all":"Alle","aut_none":"Keine Treffer","aut_err":"Manifest nicht gefunden — erzeuge es mit tools/genera_vista_automazioni.py","aut_updated":"Liste aktualisiert","aut_count":"Automationen","aut_count_1":"Automation","never":"nie","ago_now":"jetzt","ago_min":"Min. her","ago_h":"Std. her","ago_d":"T. her","aut_disabled_only":"Nur deaktivierte","grp_active":"aktiv","repeat":"Wiederholen","skipped_n":"übersprungen","left":"übrig","missed_n":"verpasst","snz_all":"alles","snz_nc":"nicht kritisch","snz_prio":"Priorität","snz_transport":"Transport","snz_for":"für","snz_choose":"wähle was und wie lange","snz_title":"Benachrichtigungen pausieren","snz_what":"Was","snz_nc_l":"Nicht kritisch","snz_all_l":"Alles","snz_ch":"Ein Kanal","snz_pr":"Eine Priorität","snz_who":"Für wen","snz_everyone":"Alle","snz_me":"Nur ich","snz_len":"Wie lange","snz_forever":"Bis ich fortsetze","snz_go":"Pausieren","snz_close":"Schließen","rs_hand":"von Hand","rs_voice":"per Sprache","rs_assist":"vom Assistenten","snz_voice_info":"Deine Pausen laufen über die Sprachbefehle von SuperNotify: sie gelten nur für dich.","snz_voice_off":"Die Sprachbefehle von SuperNotify sind aus: schalte sie in den Integrationsoptionen ein.","snz_resume_mine":"Meine fortsetzen","go_open":"Anzeigen","dl_probe":"Diesen Kanal testen","probe_msg":"Kanaltest vom Dashboard","sc_why":"Warum","sc_yes":"Gilt jetzt","sc_no":"Gilt jetzt nicht","sc_manual_why":"Manuelles Szenario: von Hand angewendet","sc_no_cond":"Keine Bedingungen","sc_off_sw":"Ausgeschaltet","sc_not_eval":"nicht geprüft","sc_now":"jetzt","sc_diff_btn_on":"Was sich ändert, wenn es gilt","sc_diff_btn_off":"Was sich ohne es ändert","sc_diff_on":"Wenn es gälte, für eine mittlere Benachrichtigung jetzt:","sc_diff_off":"Ohne es, für eine mittlere Benachrichtigung jetzt:","sc_diff_add":"würde zusätzlich senden","sc_diff_rem":"würde nicht mehr senden","sc_diff_none":"kein Unterschied","c_state":"{e} ist {s}","c_template":"Template-Bedingung","c_time":"Zeit","c_after":"nach","c_before":"vor","c_numeric":"{e}","c_above":"über","c_below":"unter","c_and":"alle davon","c_or":"mindestens eine davon","c_not":"keine davon","c_or_join":" oder ","sim_hint_dry":"Die Antwort von SuperNotify selbst (Testlauf, nichts wird gesendet): eine Benachrichtigung jetzt, mit der Priorität und nur den oben gewählten Szenarien.","sim_msg":"Simulator-Test","sim_prio":"Priorität","sa_snooze":"{what} pausiert für {len}.","sa_silence":"{what} bis auf Weiteres stummgeschaltet.","sa_resume":"{what} wieder an.","sa_resume_one":"Pause beendet: {x}.","sa_resume_all":"Benachrichtigungen wieder an.","sa_w_nc":"Nicht-kritische Benachrichtigungen","sa_w_all":"Alle Benachrichtigungen","sa_w_ch":"Kanal {x}","sa_w_pr":"Benachrichtigungen mit Priorität {x}","sa_w_mine":"Deine Benachrichtigungen","sa_for":"für {x}","sa_min":"{n} Minuten","sa_hour":"eine Stunde","sa_hours":"{n} Stunden","occ_title":"Wer ist zu Hause","occ_home_l":"Zu Hause","occ_ALL_HOME":"Alle zu Hause","occ_ALL_AWAY":"Alle unterwegs","occ_LONE_HOME":"Nur eine Person zu Hause","occ_MULTI_HOME":"Einige zu Hause","occ_UNDEFINED_OCCUPANTS":"Niemand erfasst","h_repairs":"SuperNotify-Reparaturen","h_repairs_1":"SuperNotify-Reparatur","det_more":"Alle Attribute","det_yes":"ja","det_no":"nein","det_action":"Aktion","det_target":"Feste Ziele","det_target_req":"Braucht ein Ziel","det_target_use":"Ziele nutzen","det_inclusion":"Verwendet, wenn","det_prio":"Prioritäten","det_occ":"Wer zu Hause sein muss","det_transport":"Transport","det_data":"Daten","det_debug":"Debug","det_err_last":"Letzter Fehler","det_err_in":"In","det_err_n":"Fehler seit Start","det_select":"Auswahl","adv_html":"Text für E-Mail (HTML)","adv_clip":"Videoclip von einer URL","adv_actions":"Schaltflächen in der Benachrichtigung","adv_act_id":"Aktions-ID","adv_act_title":"Schaltflächentext","adv_act_add":"+ Schaltfläche","adv_groups":"Schaltflächengruppen (Komma)","adv_dc":"Kanaleinstellungen für diese Benachrichtigung","adv_dc_ph":"schlüssel: wert, einer pro Zeile","adv_dc_add":"+ Kanal","snz_active":"Gerade pausiert","snz_resume":"Fortsetzen","snz_resume_all":"Alles fortsetzen","snz_until_resumed":"bis zur Fortsetzung","snz_done":"Pausiert","snz_resumed":"Fortgesetzt","no_notif":"noch keine Benachrichtigung","st_title":"Nutzung","st_days_short":"T","st_total":"Benachrichtigungen","st_avg":"pro Tag","st_today":"Heute","st_vs_avg":"ggü. Durchschnitt","st_peak_hour":"Spitzenstunde","st_top_channel":"Top-Kanal","st_errors":"Kanalfehler","st_of_sends":"der Kanal-Sendungen","st_daily":"Pro Tag","st_hourly":"Nach Tageszeit","st_weekday":"Nach Wochentag","st_channels":"Kanäle — meistgenutzt","st_priority":"Priorität","st_period":"Tagesabschnitt","st_insights":"Erkenntnisse","st_no_data":"Noch kein Verlauf — Daten erscheinen nach den ersten Benachrichtigungen.","st_loading":"wird geladen…","st_installed":"installiert","st_latest":"neueste","st_uptodate":"aktuell","st_update":"Update verfügbar","st_restart":"Neustart erforderlich","st_logged":"erfasst","st_from_archive":"aus dem SuperNotify-Archiv","st_archive_err":"Archiv teilweise gelesen","st_wd":["Mo","Di","Mi","Do","Fr","Sa","So"],"st_i_share":"{p}% aller Kanal-Sendungen laufen über {c}.","st_i_peak":"Die meisten Benachrichtigungen kommen um {h}:00 ({n} in {d} Tagen).","st_i_night":"{p}% der Benachrichtigungen kommen zwischen 23:00 und 07:00 — erwäge ein Nicht-stören-Szenario, falls das unerwünscht ist.","st_i_night_ok":"Nur {p}% der Benachrichtigungen kommen nachts (23–07): die Ruhezeiten funktionieren.","st_i_weekend":"Am Wochenende gibt es {p}% {dir} Benachrichtigungen als an Werktagen.","st_i_errors":"{n} Kanalfehler in {d} Tagen, vor allem bei {c}.","st_i_noerr":"Keine Kanalfehler in den letzten {d} Tagen.","st_i_prio":"{p}% der Benachrichtigungen haben Priorität {prio}.","st_i_trend":"Letzte 7 Tage: {n}/Tag, {dir} {p}% ggü. den 7 davor.","st_more":"mehr","st_less":"weniger","st_up":"plus","st_down":"minus"},"SN_ARCH_STRINGS":{"search":"Titel oder Nachricht suchen…","f_all":"Alle","f_today":"Heute","f_whisper":"Geflüstert","wh":"geflüstert","said":"Alexa sagte","said_by":"{ch} sagte","none":"keine passende Benachrichtigung","loading":"Archiv wird gelesen…","recent":"neueste Benachrichtigungen","read_at":"gelesen um","today":"Heute","yesterday":"Gestern","failed":"fehlgeschlagen","missed":"verpasst","prio":{"critical":"Kritisch","high":"Hoch","low":"Niedrig","minimum":"Minimal","medium":"Mittel"},"reasons":{"doppione":"Duplikat","nessun target":"kein Ziel","errore":"Fehler","condizione":"Bedingung","scenario":"Szenario","presenza":"Anwesenheit","priorita":"Priorität","spento":"aus","pausa":"pausiert","transport spento":"Transport aus","nessuna azione":"keine Aktion","dati non validi":"ungültige Daten","sconosciuto":"unbekannt"},"f_appliance":"Haushaltsgeräte","ap_scope":"unter den letzten {n} vollständig gelesenen – ältere werden nicht erkannt"},"SN_WHY_STRINGS":{"pick":"Wähle eine Benachrichtigung, um zu sehen, warum sie dorthin ging, wo sie hinging.","loading":"wird geladen…","none":"keine Benachrichtigung","gone":"diese Benachrichtigung ist nicht mehr im Archiv","priority":"Priorität","dupe":"Duplikat","outcomes":{"success":"zugestellt","partial_delivery":"teilweise zugestellt","dupe":"Duplikat","failed":"fehlgeschlagen","error":"fehlgeschlagen","fallback_delivery":"über den Fallback-Kanal zugestellt","no_delivery":"nicht zugestellt"},"step_call":"Aufruf","step_scen":"Szenarien","step_people":"Personen","step_ch":"Kanäle","call_auto":"kein Kanal genannt: normales Routing","call_named":"im Aufruf genannt:","call_debug":"mit Debug","nobody":"niemand zu Hause","ch_sent":"gesendet","ch_problems":"zum Ansehen","ch_skipped":"übersprungen","pb_failed":"fehlgeschlagen","pb_missed":"angefordert, aber nicht gesendet","grp_skipped":"per Regel übersprungen: normal","grp_not":"nicht beteiligt","trace_title":"Vollständige Auswahl-Ablaufverfolgung","fix":{"NO_TARGET":"Kein Empfänger hat eine Adresse für diesen Kanal: füge einem Empfänger eine hinzu, gib dem Kanal feste Ziele oder lass ihn bei diesem Aufruf weg.","ERROR":"Die Integration hinter diesem Kanal hat mit einem Fehler geantwortet: sieh in ihrem eigenen Logeintrag nach.","NO_ACTION":"Der Kanal hat keine Aktion zum Aufrufen: setze `action:` in der Zustellung.","INVALID_ACTION_DATA":"Die an die Aktion übergebenen Daten wurden abgelehnt: prüfe `data:` im Aufruf oder in der Zustellung."},"no_scenarios":"kein Szenario aktiv","applied":"vom Aufruf erzwungen","required":"vom Aufruf verlangt","constrain":"vom Aufruf beschränkt auf","home":"zu Hause","away":"unterwegs","no_channels":"kein Kanal wurde ausgewählt","st_ok":"zugestellt","st_err":"fehlgeschlagen","st_skip":"übersprungen","calls":"Aufrufe","calls_1":"Aufruf","target_required":"Ziel erforderlich:","started_by":"ausgewählt durch","scen_would_off":"ausgeschaltet durch (überstimmt)","src_default":"immer an (Standard)","src_scen":"Szenario","src_call":"den Aufruf selbst","src_recipient":"Empfänger","r_off_by":"ausgeschaltet durch","call_targets":"Ziele im Aufruf","cats":{"entity_id":"Entitäten","mobile_app_id":"Geräte","person_id":"Personen","email":"E-Mail","phone":"Telefon","device_id":"Geräte"},"r_call_off":"vom Aufruf ausgeschlossen","r_scen_off":"von einem aktiven Szenario ausgeschaltet","r_disabled":"ausgeschaltet","r_transport_off":"sein Transport ist aus","r_only_scen":"startet nur, wenn ein Szenario ihn einschaltet","r_only_fallback":"nur ein Fallback","r_only_explicit":"startet nur, wenn namentlich angefordert","r_priority":"nicht für diese Priorität","r_unknown":"ohne Ablaufverfolgung nicht rekonstruierbar","from_config":"Gründe für nicht gestartete Kanäle werden aus der Konfiguration rekonstruiert, wie sie JETZT ist, nicht wie sie damals war.","from_trace":"Die Gründe stammen aus der Auswahl-Ablaufverfolgung, die mit der Benachrichtigung archiviert wurde.","st_time":"Dauer","st_slow":"langsamster","st_rate":"der Kanäle erfolgreich","ua_title":"Ziele, die kein Kanal übernommen hat","ua_hint":"Sie waren im Aufruf, aber kein ausgewählter Kanal akzeptiert diese Art von Ziel.","un_title":"Namen, die nicht existieren","sent_by":"Gesendet von","sent_auto":"Automation","sent_script":"Skript","sent_person":"","sent_unknown":"Absender unbekannt (keine Automation oder Person im Kontext)","no_trace":"Die vollständige Auswahl-Ablaufverfolgung wird nur aufgezeichnet, wenn der notify-Aufruf debug: true hat, und archiviert, wenn die Archiv-Diagnose sie einschließt.","reasons":{"NO_TARGET":"kein nutzbares Ziel","DUPE":"Duplikat einer kürzlichen Benachrichtigung","PRIORITY":"nicht für diese Priorität","SNOOZE":"pausiert","SNOOZED":"pausiert","DELIVERY_CONDITION":"Zustellungsbedingung falsch","OCCUPANCY":"Anwesenheitsregel","ERROR":"Fehler","DELIVERY_DISABLED":"ausgeschaltet","SCENARIO":"Szenario","TRANSPORT_DISABLED":"sein Transport ist aus","NO_SCENARIO":"ein erforderliches Szenario ist nicht aktiv","NO_ACTION":"keine Aktion zum Aufrufen","INVALID_ACTION_DATA":"ungültige Aktionsdaten","UNKNOWN":"unbekannter Grund"}},"SN_TOOLS_STRINGS":{"maint":"Wartung","enq":"SuperNotify fragen","refresh":"Alle Entitäten neu veröffentlichen","refresh_btn":"Aktualisieren","resume_btn":"Fortsetzen","refreshed":"Entitäten neu veröffentlicht.","resume_all":"Alle Pausen fortsetzen","cleared_n":"Pausen fortgesetzt","purge_arch":"Archiv bereinigen","purge_media":"Bilder bereinigen","older":"älter als","days":"Tage","purge_btn":"Bereinigen","confirm":"Zum Bestätigen erneut tippen","purged":"gelöscht","remaining":"übrig","reset":"Manuelle Änderungen rückgängig machen","reset_btn":"Zurücksetzen","reset_none":"Nichts zurückzusetzen: alles ist wie konfiguriert.","reset_done":"Zurück zur Konfiguration:","k_all":"alles","k_scenario":"Szenarien","k_delivery":"Kanäle","k_recipient":"Personen","k_transport":"Transporte","q_config":"Konfiguration","q_scen":"Szenarien","q_active":"Aktive Szenarien","q_by_scen":"Kanäle nach Szenario","q_implicit":"Standardkanäle","q_recipients":"Empfänger","q_occupancy":"Wer ist zu Hause","q_snoozes":"Pausen","q_last":"Letzte Benachrichtigung","copy":"JSON kopieren","copied":"Kopiert","close":"Schließen","empty":"(leer)","err":"SuperNotify hat mit einem Fehler geantwortet:","settings":"Integrationseinstellungen","running":"läuft…","more":"mehr"},"SN_FORM_LABELS":{"_common":"Aussehen und Text","style":"Farben","icons":"Symbole","show_version":"Kartenversion anzeigen","intro":"Einleitungstext oben","title":"Titel","dnd_entity":"Nicht-stören-Schalter","quiet_entity":"Berechneter Ruhezustand (optional)","presence_entity":"Person für die Statusleiste","archive_days":"Archivbereinigung: älter als (Tage)","media_days":"Bilderbereinigung: älter als (Tage)","occupancy":"Wer ist zu Hause (von SuperNotify)","repairs":"SuperNotify-Reparaturen in der Zustandsliste","snooze_announce":"Pausen laut ansagen (Durchsage-Kanal)","snooze_via":"Pausen laufen über","o_event":"das Push-Schaltflächen-Ereignis (Admin)","o_voice":"die Sprachbefehle","snooze_minutes":"Pausendauer (Minuten)","snooze_panel":"Pause-Kachel öffnet das Pausen-Panel","announce_delivery":"Kanal für Durchsagen","last_notification":"Letzte Benachrichtigung anzeigen","last_channels":"Ein Chip pro Kanal der letzten Benachrichtigung","repeat_entity":"Schaltfläche „Letzte wiederholen“ (optional)","tile_layout":"Kacheln","tile_columns":"Kachelspalten (leer = automatisch)","update_entity":"SuperNotify-Update-Entität","cards_update_entity":"Karten-Update-Entität","health":"Zustand oben","poll_seconds":"Aktualisieren alle (Sekunden)","group":"Nach Startart der Kanäle gruppieren","hide_defaults":"Automatische DEFAULT_-Kanäle ausblenden","limit":"Benachrichtigungen in der Liste","expand":"Eingeklappte Teile öffnen","max_height":"Maximale Höhe (CSS, z. B. 70vh)","trigger_entity":"Aktualisieren, wenn sich dies ändert","dry_run":"„Testen ohne Senden“ anzeigen","dry_run_dupe_check":"Auch die Duplikatprüfung simulieren","days":"Standardmäßig angezeigte Tage","manifest_url":"URL des Automationen-Manifests","o_supernotify":"SuperNotify","o_theme":"Home Assistant-Design","o_mdi":"Home Assistant-Symbole","o_emoji":"Emoji","o_row":"Symbol links","o_stacked":"Hoch, Symbol oben","o_auto":"Automatisch"},"SN_NATIVE_STR":{"all_good":"Alles in Ordnung","paused":"Pausiert","until":"bis","resume":"Fortsetzen","test":"Test senden","sure":"Zum Senden erneut tippen","sent":"Gesendet","last":"Zuletzt","none":"Noch keine Benachrichtigung","ago":"her","min":"Min.","h":"Std.","err":"Transporte mit Fehlern","off":"Kanäle aus"},"SN_STRATEGY_TITLES":{"home":"Start","archive":"Archiv","send":"Senden","setup":"Einrichtung","stats":"Statistik","tools":"Werkzeuge","title":"SuperNotify","appliances":"Haushaltsgeräte"},"SN_APPL_STRINGS":{"title":"Haushaltsgeräte","loading":"wird gelesen…","none":"Keine Geräte: richte eines in Appliance Autonotify ein (Einstellungen → Geräte & Dienste).","st_run":"Läuft","st_cleaning":"Reinigt","st_done":"Fertig · ausräumen","st_done_other":"Fertig","st_err":"Braucht Hilfe","m_switch_on":"Steckdose einschalten","done_switch_on":"Steckdose eingeschaltet.","done_action":"Erledigt: {n}.","confirm_action":"«{n}» ausführen?","open_entity":"Zum Ändern öffnen","chip_notifs":"Benachrichtigungen","chip_device":"Gerät","not_found":"Kein Gerät mit dem Namen «{n}».","last7":"Letzte 7 Tage","col_day":"Tag","col_cycles":"Zyklen","col_time":"Zeit","col_energy":"Verbrauch","source_h":"Quelle","manual_src":"von Hand hinzugefügt: läuft über {w}","tab_info":"Übersicht","tab_stats":"Verbrauch und Zyklen","tab_cleans":"Reinigungen","tab_prints":"Drucke","last_run":"Letzter Zyklus","avg_run":"Durchschnitt","reminders_h":"Benachrichtigungen","plug":"Steckdose","plug_on":"an","plug_off":"aus","error_h":"Fehler","open_device":"Das Gerät in Home Assistant","prints":"Drucke","print1":"Druck","per_print":"Jeder Druck in diesem Monat","last_prints":"Letzte Drucke","no_print_month":"Noch kein Druck in diesem Monat","no_print":"Noch kein Druck","col_fil":"Filament","failed":"fehlgeschlagen","per_run":"Jeder Zyklus in diesem Monat","dev_hist":"Jeder Eintrag stammt aus dem Verlauf von Home Assistant (letzte {n} Tage); die Stunden aus dem Zähler des Geräts, wenn es einen hat.","cleans":"Reinigungen","clean1":"Reinigung","per_clean":"Jede Reinigung in diesem Monat","avg_clean":"Durchschnitt {d}","col_area":"Fläche","last_cleans":"Letzte Reinigungen","no_clean_month":"Noch keine Reinigung in diesem Monat","no_clean":"Noch keine Reinigung","vac_hist":"Die Summen stammen aus den Zählern des Roboters, die einzelnen Reinigungen aus dem Verlauf von Home Assistant (letzte {n} Tage).","st_paused":"Pausiert","st_returning":"Fährt zur Station","st_charging":"Lädt","st_docked_w":"In der Station","st_idle":"Aus","st_off":"Ausgeschaltet","stopped":"Inaktiv","yesterday":"gestern","u_min":"Min.","u_h":"Std.","start":"Start","so_far":"bisher","no_cycle":"Noch kein Durchlauf","last_cycle":"Letzter Durchlauf {d}","ended_at":"Fertig um {t}","reminders":"+{n} Erinnerungen bis {t}","reminder1":"+1 Erinnerung um {t}","end_est":"Voraussichtliches Ende","left":"noch {d}","almost":"gleich fertig","est_from_avg":"geschätzt aus ähnlichen Durchläufen","running_for":"Läuft seit {d}","btn_empty":"Ausgeräumt","btn_seen":"Erledigt","btn_resume":"Reinigung fortsetzen","m_switch_off":"Steckdose ausschalten","m_remind":"Später erinnern","details":"Details","settings":"Einstellungen","more":"Mehr","details_link":"Details, Verbrauch und Durchläufe","done_empty":"Erledigt: keine Erinnerungen mehr.","done_remind":"Es erinnert dich später.","done_switch":"Steckdose ausgeschaltet.","done_resume":"Reinigung fortgesetzt.","err":"Fehler","new_dev":"{n} neue Geräte","new_dev1":"1 neues Gerät","battery":"Akku","consumable":"{n} bei {p}%","maint_in":"in {c} Zyklen","maint_next":"beim nächsten Zyklus","maint_due":"fällig","maint_of":"{d} von {e}","maint_done":"Erledigt","confirm_maint":"«{n}» als erledigt markieren? Die Zählung beginnt neu.","conn_lost":"Verbindung verloren: letzter bekannter Zustand","cons_h":"Verbrauchsmaterial","commands":"Befehle","tap_again":"Zum Bestätigen erneut tippen","empty_since":"Auszuräumen seit","done_since":"Fertig seit","avg_cycle":"Durchschnittlicher Zyklus","maint_tab":"Wartung","tab_stats_short":"Verbrauch","read_failed":"Der Verlauf konnte nicht gelesen werden ({e}); neuer Versuch in Kürze.","retry":"Erneut versuchen","see_chart":"Diagramm anzeigen","back":"Zurück","avg_line":"Schnitt {v}","tap_bar":"Tippe auf einen Balken für den Zyklus","k_station":"Station","off_since":"Aus seit","close":"Schließen","power_now":"jetzt","p_today":"Heute","p_week":"Woche","p_month":"Monat","p_year":"Jahr","cycles":"Durchläufe","cycle1":"Durchlauf","per_cycle":"Verbrauch pro Durchlauf in diesem Monat","short":"Kurz","long":"Lang","anomalous":"Ungewöhnlich","avg":"Ø {d}, {k}","last_cycles":"Letzte Durchläufe","col_start":"Start","col_dur":"Dauer","col_cost":"Kosten","no_cycle_month":"Diesen Monat noch kein Durchlauf","coarse":"Durchläufe vor mehr als 10 Tagen werden stundenweise gezählt.","open_notifs":"Benachrichtigungen des Geräts","no_power":"Kein Leistungssensor gefunden: gib ihn mit `power_entity` in `appliances:` an.","no_power_vac":"Ein Saugroboter hat keinen Leistungssensor: Verbrauch und Durchläufe werden nicht gezählt."}},"es":{"SN_STRINGS":{"presence":"Presencia","time_band":"Franja horaria","quiet":"Silencio","act_scen":"Escenarios activos","on":"sí","off":"no","active":"activo","dnd":"No molestar","tap_silence":"toca para silenciar","snooze":"Pausa","min":"min","pause_nc":"pausar las no críticas","snoozed":"En pausa","until":"hasta","tap_clear":"toca para quitar","announce":"Anunciar","intercom":"intercomunicador","announce_ph":"Anunciar en todos los altavoces…","send":"Enviar","announced":"Anunciado","cleared":"Pausas quitadas","snoozed_for":"Notificaciones no críticas en pausa durante","sent":"Enviadas","yesterday":"ayer","deliveries":"Entregas","last_notif":"Última notificación","transports":"Transportes","delivered":"entregada","failed":"fallida","channels":"canales","none":"ninguno","no_transports":"no se encontraron entidades de transporte","tr_used":"usado por","tr_unused":"ningún canal lo usa","start":"inicio","volume":"volumen","now":"ahora","crosses":"pasa la medianoche","no_voice":"sin voz","mute_hint":"Una franja al <b>0%</b> no envía <b>ningún anuncio de voz</b> (Alexa y TTS apagados; push y panel siguen recibiendo). Las alertas críticas y de prioridad alta siempre hablan.","enabled":"activo","grp_auto":"Arrancan solos","grp_named":"Solo si se nombran en la llamada","grp_scen":"Solo con un escenario","grp_fallback":"Respaldo, cuando los demás fallan","ch_title":"Canales","ch_count":"{on} de {tot} activos","off_manual":"apagado","paused_by":"en pausa ahora por","on_by":"activo ahora por","fixed_targets":"destinos fijos","no_deliveries":"no se encontraron entidades de entrega","home":"en casa","away":"fuera","devices":"dispositivos","devices_1":"dispositivo","rc_test":"Enviar una prueba","rc_test_confirm":"Toca otra vez para enviar","rc_test_sent":"Prueba enviada","rc_test_title":"Prueba de SuperNotify","rc_test_msg":"Mensaje de prueba desde el panel,","overrides":"ajustes de entrega","overrides_1":"ajuste de entrega","no_contact":"sin puntos de contacto","no_recipients":"no se encontraron entidades de destinatario","details":"Detalles","h_update":"actualización disponible:","h_restart":"reinicia Home Assistant para terminar la actualización","h_uptodate":"actualizado","h_transport_err":"transportes con errores","h_channels_off":"canales apagados","h_all_good":"Todo bien","h_failures":"fallos","h_failures_1":"fallo","h_transport_err_1":"transporte con errores","h_channels_off_1":"canal apagado","channels_1":"canal","band_early_morning":"Madrugada","band_morning":"Mañana","band_afternoon":"Tarde","band_evening":"Noche temprana","band_night":"Noche","band_late_night":"Noche cerrada","h_look_1":"1 cosa que revisar","h_look_n":"{n} cosas que revisar","h_rest_ok":"todo lo demás funciona","h_ch_on":"{on} de {tot} canales activos","h_open":"Abrir","ln_delivered":"entregada","ln_failed":"fallida","ln_why":"Por qué","tgt_loading":"cargando el selector…","bands_empty_t":"Aún no hay franjas horarias","bands_empty":"Añade una franja por cada parte del día: un input_datetime para su inicio y un input_number para el volumen de voz.","active_now":"activo ahora","disabled":"desactivado","other":"Otros","manual":"manual","apply_now":"aplicar ahora","applied":"Aplicado","apply_off":"toca para dejar de aplicarlo","enabled_lbl":"activado","reset_overrides":"Restablecer ajustes","reset_done":"ajustes restablecidos","transport_off":"transporte apagado","last_notified":"última notificación","never_notified":"nunca notificado","media":"multimedia","no_scenarios":"no se encontraron entidades de escenario","sim_pick":"🎬 Escenarios — toca para simular","sim_fire":"📤 Canales","sim_hint":"Datos reales del motor (servicios de consulta). El filtrado de entregas por prioridad lo hace el motor y no se simula aquí. Desactivado gana sobre activado, como en la fusión en tiempo real.","sim_none":"no saldría ninguna entrega","sim_go":"Saldrían","sim_stop":"No saldrían","sim_r_default":"arranca solo","sim_r_on":"activado por","sim_r_off":"desactivado por","sim_r_named":"solo si se nombra en la llamada","sim_r_scen":"solo con un escenario que lo active","sim_r_fallback":"respaldo, cuando los demás fallan","sim_r_switched":"apagado","title":"Título","message":"Mensaje","priority":"Prioridad","channels_lbl":"Canales — ninguno elegido = envío normal","camera_lbl":"Instantánea de cámara","preview":"Vista previa","no_title":"(sin título)","no_message":"(sin mensaje)","default_prio":"predeterminada (media)","comp_hint":"Los canales elegidos se envían con delivery_selection: fixed (solo salen esos). Crítica es crítica de verdad — sirenas incluidas.","critical_confirm":"¿Enviar una notificación CRÍTICA? Incluye sirenas y volumen máximo.","sent_toast":"Enviada","write_or_pick":"Escribe un mensaje, o elige una cámara o un canal","send_err":"No enviada","dry_btn":"Probar sin enviar","dry_title":"Si la enviaras ahora","dry_err":"La simulación falló","dry_nobody":"sin destinatario, solo destinos directos","dry_none":"Ningún canal elegido","dry_scen":"Escenarios activos","dry_raw":"Respuesta en bruto","dry_prio":"Prioridad","dry_would_n":"canales enviarían","dry_nothing":"No se enviaría nada","dry_dupe":"Duplicado de una notificación reciente: se descartaría","dry_no_dupe":"La comprobación de duplicados no se simula, así que el Enviar real justo después no se bloquea.","dry_home":"En casa","dry_empty":"SuperNotify no dio respuesta: ¿es la 2.12 o posterior?","dry_reasons":{"NO_TARGET":"sin destino utilizable","DUPE":"duplicado","PRIORITY":"no para esta prioridad","SNOOZED":"en pausa","DELIVERY_CONDITION":"condición de entrega falsa","OCCUPANCY":"regla de presencia","TRANSPORT_DISABLED":"transporte apagado","DELIVERY_DISABLED":"apagado","NO_SCENARIO":"falta el escenario requerido","NO_ACTION":"sin acción","INVALID_ACTION_DATA":"datos no válidos","UNKNOWN":"motivo desconocido","ERROR":"error"},"prio_minimum":"Mínima","prio_low":"Baja","prio_medium":"Media","prio_high":"Alta","prio_critical":"Crítica","target_lbl":"Destino — personas, dispositivos, áreas, plantas, etiquetas","custom_target_lbl":"Destinos personalizados (correo, IDs de Telegram, …) — separados por comas","adv_title":"Opciones avanzadas","adv_spoken":"Mensaje hablado (Alexa, TTS)","adv_spoken_ph":"lo que dicen los altavoces, si es distinto del texto","adv_apply":"Aplicar estos escenarios","adv_require":"Enviar solo si estos escenarios están activos","adv_constrain":"Tener en cuenta solo estos escenarios","adv_snapshot":"Imagen desde una URL","adv_debug":"Depuración: registrar la traza de selección completa (la muestra la tarjeta del porqué)","custom_target_ph":"p. ej. user@example.com, 123456789","native_target_tag":"🎯 área/planta/etiqueta nativa","target_warn":"⚠️ Las áreas, plantas y etiquetas solo las resuelven notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts y chime. Con cualquier otro canal — o con el envío normal si no eliges canal arriba — la notificación puede quedarse sin destino sin avisar. Elige un canal compatible, o añade directamente una persona o un dispositivo.","aut_search":"Buscar automatizaciones…","aut_all":"Todas","aut_none":"Sin resultados","aut_err":"Manifiesto no encontrado — genéralo con tools/genera_vista_automazioni.py","aut_updated":"lista actualizada","aut_count":"automatizaciones","aut_count_1":"automatización","never":"nunca","ago_now":"ahora","ago_min":"min atrás","ago_h":"h atrás","ago_d":"d atrás","aut_disabled_only":"Solo desactivadas","grp_active":"activos","repeat":"Repetir","skipped_n":"omitidos","left":"restantes","missed_n":"perdidos","snz_all":"todo","snz_nc":"no críticas","snz_prio":"prioridad","snz_transport":"transporte","snz_for":"para","snz_choose":"elige qué y cuánto tiempo","snz_title":"Pausar notificaciones","snz_what":"Qué","snz_nc_l":"No críticas","snz_all_l":"Todo","snz_ch":"Un canal","snz_pr":"Una prioridad","snz_who":"Para quién","snz_everyone":"Todos","snz_me":"Solo yo","snz_len":"Cuánto tiempo","snz_forever":"Hasta que reanude","snz_go":"Pausar","snz_close":"Cerrar","rs_hand":"a mano","rs_voice":"por voz","rs_assist":"por el asistente","snz_voice_info":"Tus pausas pasan por los comandos de voz de SuperNotify: son solo tuyas.","snz_voice_off":"Los comandos de voz de SuperNotify están apagados: actívalos en las opciones de la integración.","snz_resume_mine":"Reanudar las mías","go_open":"Mostrar","dl_probe":"Probar este canal","probe_msg":"Prueba de canal desde el panel","sc_why":"Por qué","sc_yes":"Se aplica ahora","sc_no":"No se aplica ahora","sc_manual_why":"Escenario manual: se aplica a mano","sc_no_cond":"Sin condiciones","sc_off_sw":"Apagado","sc_not_eval":"no comprobado","sc_now":"ahora","sc_diff_btn_on":"Qué cambia si se aplica","sc_diff_btn_off":"Qué cambia sin él","sc_diff_on":"Si se aplicara, para una notificación media ahora:","sc_diff_off":"Sin él, para una notificación media ahora:","sc_diff_add":"también enviaría","sc_diff_rem":"ya no enviaría","sc_diff_none":"ninguna diferencia","c_state":"{e} está en {s}","c_template":"condición de plantilla","c_time":"hora","c_after":"después de","c_before":"antes de","c_numeric":"{e}","c_above":"por encima de","c_below":"por debajo de","c_and":"todas estas","c_or":"al menos una de estas","c_not":"ninguna de estas","c_or_join":" o ","sim_hint_dry":"La respuesta del propio SuperNotify (simulación, no se envía nada): una notificación ahora, con la prioridad y solo los escenarios elegidos arriba.","sim_msg":"Prueba del simulador","sim_prio":"Prioridad","sa_snooze":"{what} en pausa durante {len}.","sa_silence":"{what} silenciadas hasta nuevo aviso.","sa_resume":"{what} reactivadas.","sa_resume_one":"Pausa terminada: {x}.","sa_resume_all":"Notificaciones reactivadas.","sa_w_nc":"Las notificaciones no críticas","sa_w_all":"Todas las notificaciones","sa_w_ch":"Canal {x}","sa_w_pr":"Las notificaciones de prioridad {x}","sa_w_mine":"Tus notificaciones","sa_for":"para {x}","sa_min":"{n} minutos","sa_hour":"una hora","sa_hours":"{n} horas","occ_title":"Quién está en casa","occ_home_l":"En casa","occ_ALL_HOME":"Todos en casa","occ_ALL_AWAY":"Todos fuera","occ_LONE_HOME":"Solo uno en casa","occ_MULTI_HOME":"Algunos en casa","occ_UNDEFINED_OCCUPANTS":"Nadie con seguimiento","h_repairs":"reparaciones de SuperNotify","h_repairs_1":"reparación de SuperNotify","det_more":"Todos los atributos","det_yes":"sí","det_no":"no","det_action":"Acción","det_target":"Destinos fijos","det_target_req":"Necesita un destino","det_target_use":"Destinos usados","det_inclusion":"Se usa cuando","det_prio":"Prioridades","det_occ":"Quién debe estar en casa","det_transport":"Transporte","det_data":"Datos","det_debug":"Depuración","det_err_last":"Último error","det_err_in":"En","det_err_n":"Errores desde el arranque","det_select":"Selección","adv_html":"Texto para correo (HTML)","adv_clip":"Videoclip desde una URL","adv_actions":"Botones en la notificación","adv_act_id":"id de acción","adv_act_title":"texto del botón","adv_act_add":"+ botón","adv_groups":"Grupos de botones (comas)","adv_dc":"Ajustes de canal para esta notificación","adv_dc_ph":"clave: valor, uno por línea","adv_dc_add":"+ canal","snz_active":"En pausa ahora","snz_resume":"Reanudar","snz_resume_all":"Reanudar todo","snz_until_resumed":"hasta reanudar","snz_done":"En pausa","snz_resumed":"Reanudado","no_notif":"aún no hay notificaciones","st_title":"Uso","st_days_short":"d","st_total":"Notificaciones","st_avg":"al día","st_today":"Hoy","st_vs_avg":"vs. media","st_peak_hour":"Hora punta","st_top_channel":"Canal principal","st_errors":"Errores de canal","st_of_sends":"de los envíos a canales","st_daily":"Por día","st_hourly":"Por hora del día","st_weekday":"Por día de la semana","st_channels":"Canales — más usados","st_priority":"Prioridad","st_period":"Parte del día","st_insights":"Observaciones","st_no_data":"Aún no hay historial — los datos aparecen tras las primeras notificaciones.","st_loading":"cargando…","st_installed":"instalada","st_latest":"última","st_uptodate":"actualizado","st_update":"actualización disponible","st_restart":"hay que reiniciar","st_logged":"registradas","st_from_archive":"del archivo de SuperNotify","st_archive_err":"archivo leído en parte","st_wd":["lun","mar","mié","jue","vie","sáb","dom"],"st_i_share":"El {p}% de los envíos a canales pasa por {c}.","st_i_peak":"La hora con más actividad es las {h}:00 ({n} notificaciones en {d} días).","st_i_night":"El {p}% de las notificaciones llega entre las 23:00 y las 07:00 — plantéate un escenario de No molestar si no lo quieres.","st_i_night_ok":"Solo el {p}% de las notificaciones llega de noche (23–07): las horas de silencio funcionan.","st_i_weekend":"Los fines de semana tienen un {p}% {dir} notificaciones que los días laborables.","st_i_errors":"{n} errores de canal en {d} días, sobre todo en {c}.","st_i_noerr":"Ningún error de canal en los últimos {d} días.","st_i_prio":"El {p}% de las notificaciones son de prioridad {prio}.","st_i_trend":"Últimos 7 días: {n}/día, {dir} un {p}% respecto a los 7 anteriores.","st_more":"más","st_less":"menos","st_up":"sube","st_down":"baja"},"SN_ARCH_STRINGS":{"search":"Buscar en título o mensaje…","f_all":"Todas","f_today":"Hoy","f_whisper":"Susurradas","wh":"susurrada","said":"Alexa dijo","said_by":"{ch} dijo","none":"ninguna notificación coincide","loading":"leyendo el archivo…","recent":"últimas notificaciones","read_at":"leído a las","today":"Hoy","yesterday":"Ayer","failed":"fallida","missed":"perdida","prio":{"critical":"Crítica","high":"Alta","low":"Baja","minimum":"Mínima","medium":"Media"},"reasons":{"doppione":"duplicado","nessun target":"sin destino","errore":"error","condizione":"condición","scenario":"escenario","presenza":"presencia","priorita":"prioridad","spento":"apagado","pausa":"en pausa","transport spento":"transporte apagado","nessuna azione":"sin acción","dati non validi":"datos no válidos","sconosciuto":"desconocido"},"f_appliance":"Electrodomésticos","ap_scope":"entre las últimas {n} leídas completas: las más antiguas no se reconocen"},"SN_WHY_STRINGS":{"pick":"Elige una notificación para ver por qué fue a donde fue.","loading":"cargando…","none":"ninguna notificación","gone":"esta notificación ya no está en el archivo","priority":"prioridad","dupe":"duplicado","outcomes":{"success":"entregada","partial_delivery":"entregada en parte","dupe":"duplicado","failed":"fallida","error":"fallida","fallback_delivery":"entregada por el canal de respaldo","no_delivery":"no entregada"},"step_call":"Llamada","step_scen":"Escenarios","step_people":"Personas","step_ch":"Canales","call_auto":"ningún canal nombrado: envío normal","call_named":"nombrados en la llamada:","call_debug":"con depuración","nobody":"nadie en casa","ch_sent":"enviados","ch_problems":"por revisar","ch_skipped":"omitidos","pb_failed":"fallido","pb_missed":"pedido pero no enviado","grp_skipped":"omitidos por una regla: normal","grp_not":"no implicados","trace_title":"Traza de selección completa","fix":{"NO_TARGET":"Ningún destinatario tiene una dirección para este canal: añade una a un destinatario, da al canal destinos fijos o déjalo fuera de esta llamada.","ERROR":"La integración detrás de este canal respondió con un error: revisa su propia entrada en el registro.","NO_ACTION":"El canal no tiene ninguna acción que llamar: define `action:` en la entrega.","INVALID_ACTION_DATA":"Los datos pasados a la acción fueron rechazados: revisa el `data:` de la llamada o de la entrega."},"no_scenarios":"ningún escenario vigente","applied":"forzado por la llamada","required":"requerido por la llamada","constrain":"limitado por la llamada a","home":"en casa","away":"fuera","no_channels":"no se eligió ningún canal","st_ok":"entregado","st_err":"fallido","st_skip":"omitido","calls":"llamadas","calls_1":"llamada","target_required":"destino requerido:","started_by":"elegido por","scen_would_off":"apagado por (anulado)","src_default":"siempre activo (predeterminado)","src_scen":"escenario","src_call":"la propia llamada","src_recipient":"destinatario","r_off_by":"apagado por","call_targets":"destinos en la llamada","cats":{"entity_id":"entidades","mobile_app_id":"dispositivos","person_id":"personas","email":"correo","phone":"teléfono","device_id":"dispositivos"},"r_call_off":"excluido por la llamada","r_scen_off":"apagado por un escenario vigente","r_disabled":"apagado","r_transport_off":"su transporte está apagado","r_only_scen":"solo arranca cuando un escenario lo activa","r_only_fallback":"solo de respaldo","r_only_explicit":"solo arranca si se pide por nombre","r_priority":"no para esta prioridad","r_unknown":"no se puede reconstruir sin la traza","from_config":"Los motivos de los canales que no arrancaron se reconstruyen a partir de la configuración ACTUAL, no de la de entonces.","from_trace":"Los motivos vienen de la traza de selección archivada con la notificación.","st_time":"tardó","st_slow":"el más lento","st_rate":"de los canales funcionaron","ua_title":"Destinos que ningún canal aceptó","ua_hint":"Estaban en la llamada, pero ningún canal elegido acepta este tipo de destino.","un_title":"Nombres que no existen","sent_by":"Enviada por","sent_auto":"automatización","sent_script":"script","sent_person":"","sent_unknown":"remitente desconocido (ninguna automatización ni persona en su contexto)","no_trace":"La traza de selección completa solo se registra cuando la llamada notify tiene debug: true, y se archiva cuando los diagnósticos del archivo la incluyen.","reasons":{"NO_TARGET":"sin destino utilizable","DUPE":"duplicado de una notificación reciente","PRIORITY":"no para esta prioridad","SNOOZE":"en pausa","SNOOZED":"en pausa","DELIVERY_CONDITION":"condición de entrega falsa","OCCUPANCY":"regla de presencia","ERROR":"error","DELIVERY_DISABLED":"apagado","SCENARIO":"escenario","TRANSPORT_DISABLED":"su transporte está apagado","NO_SCENARIO":"falta un escenario requerido","NO_ACTION":"ninguna acción que llamar","INVALID_ACTION_DATA":"datos de acción no válidos","UNKNOWN":"motivo desconocido"}},"SN_TOOLS_STRINGS":{"maint":"Mantenimiento","enq":"Preguntar a SuperNotify","refresh":"Volver a publicar todas las entidades","refresh_btn":"Actualizar","resume_btn":"Reanudar","refreshed":"Entidades publicadas de nuevo.","resume_all":"Reanudar todas las pausas","cleared_n":"pausas reanudadas","purge_arch":"Limpiar el archivo","purge_media":"Limpiar las imágenes","older":"más antiguos de","days":"días","purge_btn":"Limpiar","confirm":"Toca otra vez para confirmar","purged":"eliminados","remaining":"restantes","reset":"Deshacer los cambios hechos a mano","reset_btn":"Restablecer","reset_none":"Nada que restablecer: todo está como en la configuración.","reset_done":"De vuelta a la configuración:","k_all":"todo","k_scenario":"escenarios","k_delivery":"canales","k_recipient":"personas","k_transport":"transportes","q_config":"Configuración","q_scen":"Escenarios","q_active":"Escenarios activos","q_by_scen":"Canales por escenario","q_implicit":"Canales predeterminados","q_recipients":"Destinatarios","q_occupancy":"Quién está en casa","q_snoozes":"Pausas","q_last":"Última notificación","copy":"Copiar JSON","copied":"Copiado","close":"Cerrar","empty":"(vacío)","err":"SuperNotify respondió con un error:","settings":"Ajustes de la integración","running":"trabajando…","more":"más"},"SN_FORM_LABELS":{"_common":"Aspecto y texto","style":"Colores","icons":"Iconos","show_version":"Mostrar la versión de la tarjeta","intro":"Texto de introducción arriba","title":"Título","dnd_entity":"Interruptor de No molestar","quiet_entity":"Estado de silencio calculado (opcional)","presence_entity":"Persona para la barra de estado","archive_days":"Limpieza del archivo: más antiguos de (días)","media_days":"Limpieza de imágenes: más antiguas de (días)","occupancy":"Quién está en casa (de SuperNotify)","repairs":"Reparaciones de SuperNotify en la lista de estado","snooze_announce":"Decir las pausas en voz alta (canal de anuncios)","snooze_via":"Las pausas pasan por","o_event":"el evento de los botones push (admin)","o_voice":"los comandos de voz","snooze_minutes":"Duración de la pausa (minutos)","snooze_panel":"La ficha de pausa abre el panel de pausas","announce_delivery":"Canal para anuncios","last_notification":"Mostrar la última notificación","last_channels":"Una etiqueta por canal en la última notificación","repeat_entity":"Botón de repetir la última (opcional)","tile_layout":"Fichas","tile_columns":"Columnas de fichas (vacío = automático)","update_entity":"Entidad de actualización de SuperNotify","cards_update_entity":"Entidad de actualización de las tarjetas","health":"Estado arriba","poll_seconds":"Actualizar cada (segundos)","group":"Agrupar según cómo arranca un canal","hide_defaults":"Ocultar los canales automáticos DEFAULT_","limit":"Notificaciones en la lista","expand":"Abrir las partes plegadas","max_height":"Altura máxima (CSS, p. ej. 70vh)","trigger_entity":"Actualizar cuando esto cambie","dry_run":"Mostrar \"Probar sin enviar\"","dry_run_dupe_check":"Simular también la comprobación de duplicados","days":"Días mostrados por defecto","manifest_url":"URL del manifiesto de automatizaciones","o_supernotify":"SuperNotify","o_theme":"Tema de Home Assistant","o_mdi":"Iconos de Home Assistant","o_emoji":"Emoji","o_row":"Icono a la izquierda","o_stacked":"Alta, icono arriba","o_auto":"Automático"},"SN_NATIVE_STR":{"all_good":"Todo bien","paused":"En pausa","until":"hasta","resume":"Reanudar","test":"Enviar una prueba","sure":"Toca otra vez para enviar","sent":"Enviadas","last":"Última","none":"Aún no hay notificaciones","ago":"atrás","min":"min","h":"h","err":"transportes con errores","off":"canales apagados"},"SN_STRATEGY_TITLES":{"home":"Inicio","archive":"Archivo","send":"Enviar","setup":"Configuración","stats":"Estadísticas","tools":"Herramientas","title":"SuperNotify","appliances":"Electrodomésticos"},"SN_APPL_STRINGS":{"title":"Electrodomésticos","loading":"leyendo…","none":"No hay electrodomésticos: añade uno en Appliance Autonotify (Ajustes → Dispositivos y servicios).","st_run":"En marcha","st_cleaning":"Limpiando","st_done":"Terminado · por vaciar","st_done_other":"Terminado","st_err":"Necesita ayuda","m_switch_on":"Encender enchufe","done_switch_on":"Enchufe encendido.","done_action":"Hecho: {n}.","confirm_action":"¿Ejecutar «{n}»?","open_entity":"Abrir para cambiarlo","chip_notifs":"Notificaciones","chip_device":"Dispositivo","not_found":"Ningún aparato o dispositivo llamado «{n}».","last7":"Últimos 7 días","col_day":"Día","col_cycles":"Ciclos","col_time":"Tiempo","col_energy":"Consumo","source_h":"Origen","manual_src":"añadido a mano: en marcha por encima de {w}","tab_info":"Resumen","tab_stats":"Consumo y ciclos","tab_cleans":"Limpiezas","tab_prints":"Impresiones","last_run":"Último ciclo","avg_run":"Media","reminders_h":"Notificaciones","plug":"Enchufe","plug_on":"encendido","plug_off":"apagado","error_h":"Error","open_device":"El dispositivo en Home Assistant","prints":"impresiones","print1":"impresión","per_print":"Cada impresión del mes","last_prints":"Últimas impresiones","no_print_month":"Aún ninguna impresión este mes","no_print":"Aún ninguna impresión","col_fil":"Filamento","failed":"fallida","per_run":"Cada ciclo del mes","dev_hist":"Cada una viene del historial de Home Assistant (últimos {n} días); las horas, del contador del aparato cuando lo tiene.","cleans":"limpiezas","clean1":"limpieza","per_clean":"Cada limpieza del mes","avg_clean":"media {d}","col_area":"Área","last_cleans":"Últimas limpiezas","no_clean_month":"Aún ninguna limpieza este mes","no_clean":"Aún ninguna limpieza","vac_hist":"Los totales vienen de los contadores del robot; cada limpieza, del historial de Home Assistant (últimos {n} días).","st_paused":"En pausa","st_returning":"Vuelve a la base","st_charging":"Cargando","st_docked_w":"En la base","st_idle":"Parado","st_off":"Apagado","stopped":"Parados","yesterday":"ayer","u_min":"min","u_h":"h","start":"Inicio","so_far":"hasta ahora","no_cycle":"Aún ningún ciclo","last_cycle":"Último ciclo {d}","ended_at":"Terminó a las {t}","reminders":"+{n} recordatorios hasta las {t}","reminder1":"+1 recordatorio a las {t}","end_est":"Fin previsto","left":"faltan {d}","almost":"está por terminar","est_from_avg":"estimado por ciclos parecidos","running_for":"En marcha desde hace {d}","btn_empty":"Vaciado","btn_seen":"Hecho","btn_resume":"Reanudar limpieza","m_switch_off":"Apagar el enchufe","m_remind":"Recordármelo luego","details":"Detalles","settings":"Ajustes","more":"Más","details_link":"Detalles, consumo y ciclos","done_empty":"Hecho: los recordatorios se detienen.","done_remind":"Te lo recordará más tarde.","done_switch":"Enchufe apagado.","done_resume":"Limpieza reanudada.","err":"Error","new_dev":"{n} dispositivos nuevos","new_dev1":"1 dispositivo nuevo","battery":"Batería","consumable":"{n} al {p}%","maint_in":"en {c} ciclos","maint_next":"en el próximo ciclo","maint_due":"toca ahora","maint_of":"{d} de {e}","maint_done":"Hecho","confirm_maint":"¿Marcar «{n}» como hecho? La cuenta vuelve a empezar.","conn_lost":"conexión perdida: último estado conocido","cons_h":"Consumibles","commands":"Comandos","tap_again":"Toca otra vez para confirmar","empty_since":"Por vaciar desde hace","done_since":"Terminado hace","avg_cycle":"Ciclo medio","maint_tab":"Mantenimiento","tab_stats_short":"Consumo","read_failed":"No se pudo leer el historial ({e}); vuelvo a intentarlo en breve.","retry":"Reintentar","see_chart":"Ver gráfico","back":"Atrás","avg_line":"media {v}","tap_bar":"Toca una barra para ver ese ciclo","k_station":"Base","off_since":"Apagado desde hace","close":"Cerrar","power_now":"ahora","p_today":"Hoy","p_week":"Semana","p_month":"Mes","p_year":"Año","cycles":"ciclos","cycle1":"ciclo","per_cycle":"Consumo por ciclo este mes","short":"Cortos","long":"Largos","anomalous":"Anómalos","avg":"media {d}, {k}","last_cycles":"Últimos ciclos","col_start":"Inicio","col_dur":"Duración","col_cost":"Coste","no_cycle_month":"Aún ningún ciclo este mes","coarse":"Los ciclos de hace más de 10 días se cuentan por horas.","open_notifs":"Notificaciones del electrodoméstico","no_power":"No se encontró un sensor de potencia: indícalo con `power_entity` en `appliances:`.","no_power_vac":"Un robot aspirador no tiene sensor de potencia: no se cuentan consumo ni ciclos."}},"fr":{"SN_STRINGS":{"presence":"Présence","time_band":"Plage horaire","quiet":"Calme","act_scen":"Scénarios actifs","on":"activé","off":"désactivé","active":"actif","dnd":"Ne pas déranger","tap_silence":"touchez pour couper le son","snooze":"Pause","min":"min","pause_nc":"mettre en pause le non critique","snoozed":"En pause","until":"jusqu'à","tap_clear":"touchez pour annuler","announce":"Annonce","intercom":"interphone","announce_ph":"Annoncer sur toutes les enceintes…","send":"Envoyer","announced":"Annoncé","cleared":"Pauses annulées","snoozed_for":"Notifications non critiques en pause pendant","sent":"Envoyées","yesterday":"hier","deliveries":"Livraisons","last_notif":"Dernière notification","transports":"Transports","delivered":"livré","failed":"échoué","channels":"canaux","none":"aucun","no_transports":"aucune entité de transport trouvée","tr_used":"utilisé par","tr_unused":"aucun canal ne l'utilise","start":"début","volume":"volume","now":"maintenant","crosses":"passe minuit","no_voice":"pas de voix","mute_hint":"Une plage à <b>0 %</b> n'envoie <b>aucune annonce vocale</b> (Alexa et TTS coupés, push et tableau de bord toujours livrés). Les alertes critiques et de priorité haute parlent toujours.","enabled":"activé","grp_auto":"Partent d'eux-mêmes","grp_named":"Seulement si nommés dans l'appel","grp_scen":"Seulement avec un scénario","grp_fallback":"Secours, quand les autres échouent","ch_title":"Canaux","ch_count":"{on} sur {tot} actifs","off_manual":"désactivé","paused_by":"en pause à cause de","on_by":"actif grâce à","fixed_targets":"cibles fixes","no_deliveries":"aucune entité de livraison trouvée","home":"à la maison","away":"absent","devices":"appareils","devices_1":"appareil","rc_test":"Envoyer un test","rc_test_confirm":"Touchez encore pour envoyer","rc_test_sent":"Test envoyé","rc_test_title":"Test SuperNotify","rc_test_msg":"Message de test depuis le tableau de bord,","overrides":"modifications de livraison","overrides_1":"modification de livraison","no_contact":"aucun moyen de contact","no_recipients":"aucune entité de destinataire trouvée","details":"Détails","h_update":"mise à jour disponible :","h_restart":"redémarrez Home Assistant pour terminer la mise à jour","h_uptodate":"à jour","h_transport_err":"transports en erreur","h_channels_off":"canaux désactivés","h_all_good":"Tout va bien","h_failures":"échecs","h_failures_1":"échec","h_transport_err_1":"transport en erreur","h_channels_off_1":"canal désactivé","channels_1":"canal","band_early_morning":"Petit matin","band_morning":"Matin","band_afternoon":"Après-midi","band_evening":"Soir","band_night":"Nuit","band_late_night":"Tard dans la nuit","h_look_1":"1 point à vérifier","h_look_n":"{n} points à vérifier","h_rest_ok":"tout le reste fonctionne","h_ch_on":"{on} canaux actifs sur {tot}","h_open":"Ouvrir","ln_delivered":"livré","ln_failed":"échoué","ln_why":"Pourquoi","tgt_loading":"chargement du sélecteur…","bands_empty_t":"Aucune plage horaire","bands_empty":"Ajoutez une plage par moment de la journée : un input_datetime pour son début et un input_number pour le volume de la voix.","active_now":"actif maintenant","disabled":"désactivé","other":"Autre","manual":"manuel","apply_now":"appliquer maintenant","applied":"Appliqué","apply_off":"touchez pour ne plus l'appliquer","enabled_lbl":"activé","reset_overrides":"Réinitialiser les modifications","reset_done":"modifications réinitialisées","transport_off":"transport désactivé","last_notified":"dernière notification","never_notified":"jamais notifié","media":"médias","no_scenarios":"aucune entité de scénario trouvée","sim_pick":"🎬 Scénarios — touchez pour simuler","sim_fire":"📤 Canaux","sim_hint":"Données réelles du moteur (services enquire). Le filtrage des livraisons par priorité se fait dans le moteur et n'est pas simulé ici. Désactivé l'emporte sur activé, comme la fusion à l'exécution.","sim_none":"aucune livraison ne partirait","sim_go":"Partiraient","sim_stop":"Ne partiraient pas","sim_r_default":"part de lui-même","sim_r_on":"activé par","sim_r_off":"désactivé par","sim_r_named":"seulement si nommé dans l'appel","sim_r_scen":"seulement avec un scénario qui l'active","sim_r_fallback":"secours, quand les autres échouent","sim_r_switched":"désactivé","title":"Titre","message":"Message","priority":"Priorité","channels_lbl":"Canaux — aucun choisi = routage normal","camera_lbl":"Instantané de caméra","preview":"Aperçu","no_title":"(sans titre)","no_message":"(sans message)","default_prio":"par défaut (moyenne)","comp_hint":"Les canaux choisis sont envoyés avec delivery_selection: fixed (seuls ceux-ci partent). Critique veut vraiment dire critique — sirènes comprises.","critical_confirm":"Envoyer une notification CRITIQUE ? Sirènes et volume maximal compris.","sent_toast":"Envoyé","write_or_pick":"Écrivez un message, ou choisissez une caméra ou un canal","send_err":"Non envoyé","dry_btn":"Essayer sans envoyer","dry_title":"Si vous l'envoyiez maintenant","dry_err":"La simulation a échoué","dry_nobody":"aucun destinataire, cibles directes seulement","dry_none":"Aucun canal sélectionné","dry_scen":"Scénarios actifs","dry_raw":"Réponse brute","dry_prio":"Priorité","dry_would_n":"canaux enverraient","dry_nothing":"Rien ne serait envoyé","dry_dupe":"Doublon d'une notification récente : elle serait écartée","dry_no_dupe":"Contrôle des doublons non simulé, donc le vrai Envoyer juste après n'est pas bloqué.","dry_home":"À la maison","dry_empty":"SuperNotify n'a pas répondu : est-ce la 2.12 ou plus récente ?","dry_reasons":{"NO_TARGET":"aucune cible utilisable","DUPE":"doublon","PRIORITY":"pas pour cette priorité","SNOOZED":"en pause","DELIVERY_CONDITION":"condition de livraison fausse","OCCUPANCY":"règle de présence","TRANSPORT_DISABLED":"transport désactivé","DELIVERY_DISABLED":"désactivé","NO_SCENARIO":"scénario requis non actif","NO_ACTION":"aucune action","INVALID_ACTION_DATA":"données non valides","UNKNOWN":"raison inconnue","ERROR":"erreur"},"prio_minimum":"Minimum","prio_low":"Faible","prio_medium":"Moyenne","prio_high":"Haute","prio_critical":"Critique","target_lbl":"Cible — personnes, appareils, pièces, étages, étiquettes","custom_target_lbl":"Cibles personnalisées (e-mail, ID Telegram, …) — séparées par des virgules","adv_title":"Options avancées","adv_spoken":"Message parlé (Alexa, TTS)","adv_spoken_ph":"ce que disent les enceintes, si différent du texte","adv_apply":"Appliquer ces scénarios","adv_require":"Envoyer seulement si ces scénarios sont actifs","adv_constrain":"Ne considérer que ces scénarios","adv_snapshot":"Image depuis une URL","adv_debug":"Débogage : enregistrer la trace complète de sélection (affichée par la carte Pourquoi)","custom_target_ph":"ex. user@example.com, 123456789","native_target_tag":"🎯 pièce/étage/étiquette natif","target_warn":"⚠️ Les pièces, étages et étiquettes ne sont résolus que par notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts et chime. Avec tout autre canal — ou le routage par défaut quand aucun canal n'est choisi ci-dessus — la notification peut se retrouver sans cible sans le signaler. Choisissez un canal compatible, ou ajoutez directement une personne/un appareil.","aut_search":"Rechercher des automatisations…","aut_all":"Toutes","aut_none":"Aucun résultat","aut_err":"Manifeste introuvable — générez-le avec tools/genera_vista_automazioni.py","aut_updated":"liste mise à jour","aut_count":"automatisations","aut_count_1":"automatisation","never":"jamais","ago_now":"maintenant","ago_min":"min","ago_h":"h","ago_d":"j","aut_disabled_only":"Désactivées seulement","grp_active":"actifs","repeat":"Répéter","skipped_n":"ignorés","left":"restant","missed_n":"manqués","snz_all":"tout","snz_nc":"non critique","snz_prio":"priorité","snz_transport":"transport","snz_for":"pour","snz_choose":"choisir quoi et combien de temps","snz_title":"Mettre les notifications en pause","snz_what":"Quoi","snz_nc_l":"Non critiques","snz_all_l":"Tout","snz_ch":"Un canal","snz_pr":"Une priorité","snz_who":"Pour qui","snz_everyone":"Tout le monde","snz_me":"Moi seulement","snz_len":"Combien de temps","snz_forever":"Jusqu'à ce que je reprenne","snz_go":"Pause","snz_close":"Fermer","rs_hand":"à la main","rs_voice":"à la voix","rs_assist":"par l'assistant","snz_voice_info":"Vos pauses passent par les commandes vocales de SuperNotify : elles ne concernent que vous.","snz_voice_off":"Les commandes vocales de SuperNotify sont désactivées : activez-les dans les options de l'intégration.","snz_resume_mine":"Reprendre les miennes","go_open":"Afficher","dl_probe":"Essayer ce canal","probe_msg":"Test du canal depuis le tableau de bord","sc_why":"Pourquoi","sc_yes":"S'applique maintenant","sc_no":"Ne s'applique pas maintenant","sc_manual_why":"Scénario manuel : appliqué à la main","sc_no_cond":"Aucune condition","sc_off_sw":"Désactivé","sc_not_eval":"non vérifié","sc_now":"maintenant","sc_diff_btn_on":"Ce qui change s'il s'applique","sc_diff_btn_off":"Ce qui change sans lui","sc_diff_on":"S'il s'appliquait, pour une notification moyenne maintenant :","sc_diff_off":"Sans lui, pour une notification moyenne maintenant :","sc_diff_add":"enverrait aussi","sc_diff_rem":"n'enverrait plus","sc_diff_none":"aucune différence","c_state":"{e} est {s}","c_template":"condition de modèle","c_time":"heure","c_after":"après","c_before":"avant","c_numeric":"{e}","c_above":"au-dessus de","c_below":"en dessous de","c_and":"toutes celles-ci","c_or":"au moins une de celles-ci","c_not":"aucune de celles-ci","c_or_join":" ou ","sim_hint_dry":"La réponse de SuperNotify lui-même (simulation, rien n'est envoyé) : une notification maintenant, avec la priorité et seulement les scénarios choisis ci-dessus.","sim_msg":"Test du simulateur","sim_prio":"Priorité","sa_snooze":"Pause de {len} : {what}.","sa_silence":"Silence jusqu'à nouvel ordre : {what}.","sa_resume":"Reprise : {what}.","sa_resume_one":"Fin de la pause : {x}.","sa_resume_all":"Notifications réactivées.","sa_w_nc":"Les notifications non critiques","sa_w_all":"Toutes les notifications","sa_w_ch":"Le canal {x}","sa_w_pr":"Les notifications de priorité {x}","sa_w_mine":"Vos notifications","sa_for":"pour {x}","sa_min":"{n} minutes","sa_hour":"une heure","sa_hours":"{n} heures","occ_title":"Qui est à la maison","occ_home_l":"À la maison","occ_ALL_HOME":"Tout le monde à la maison","occ_ALL_AWAY":"Tout le monde absent","occ_LONE_HOME":"Une seule personne à la maison","occ_MULTI_HOME":"Quelques-uns à la maison","occ_UNDEFINED_OCCUPANTS":"Personne n'est suivi","h_repairs":"réparations SuperNotify","h_repairs_1":"réparation SuperNotify","det_more":"Tous les attributs","det_yes":"oui","det_no":"non","det_action":"Action","det_target":"Cibles fixes","det_target_req":"Nécessite une cible","det_target_use":"Cibles utilisées","det_inclusion":"Utilisé quand","det_prio":"Priorités","det_occ":"Qui doit être à la maison","det_transport":"Transport","det_data":"Données","det_debug":"Débogage","det_err_last":"Dernière erreur","det_err_in":"Dans","det_err_n":"Erreurs depuis le démarrage","det_select":"Sélection","adv_html":"Texte pour l'e-mail (HTML)","adv_clip":"Clip vidéo depuis une URL","adv_actions":"Boutons sur la notification","adv_act_id":"id de l'action","adv_act_title":"texte du bouton","adv_act_add":"+ bouton","adv_groups":"Groupes de boutons (virgule)","adv_dc":"Réglages des canaux pour cette notification","adv_dc_ph":"clé: valeur, une par ligne","adv_dc_add":"+ canal","snz_active":"En pause maintenant","snz_resume":"Reprendre","snz_resume_all":"Tout reprendre","snz_until_resumed":"jusqu'à la reprise","snz_done":"En pause","snz_resumed":"Repris","no_notif":"aucune notification pour l'instant","st_title":"Utilisation","st_days_short":"j","st_total":"Notifications","st_avg":"par jour","st_today":"Aujourd'hui","st_vs_avg":"vs moyenne","st_peak_hour":"Heure de pointe","st_top_channel":"Canal principal","st_errors":"Erreurs de canal","st_of_sends":"des envois par canal","st_daily":"Par jour","st_hourly":"Par heure de la journée","st_weekday":"Par jour de la semaine","st_channels":"Canaux — les plus utilisés","st_priority":"Priorité","st_period":"Moment de la journée","st_insights":"Observations","st_no_data":"Pas encore d'historique — les données apparaissent après les premières notifications.","st_loading":"chargement…","st_installed":"installée","st_latest":"dernière","st_uptodate":"à jour","st_update":"mise à jour disponible","st_restart":"redémarrage requis","st_logged":"enregistrées","st_from_archive":"depuis l'archive de SuperNotify","st_archive_err":"archive lue en partie","st_wd":["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"],"st_i_share":"{p} % de tous les envois passent par {c}.","st_i_peak":"L'heure la plus chargée est {h}:00 ({n} notifications en {d} jours).","st_i_night":"{p} % des notifications arrivent entre 23:00 et 07:00 — envisagez un scénario Ne pas déranger si ce n'est pas voulu.","st_i_night_ok":"Seulement {p} % des notifications arrivent la nuit (23–07) : les heures calmes fonctionnent.","st_i_weekend":"Le week-end compte {p} % de notifications {dir} qu'en semaine.","st_i_errors":"{n} erreurs de canal en {d} jours, surtout sur {c}.","st_i_noerr":"Aucune erreur de canal ces {d} derniers jours.","st_i_prio":"{p} % des notifications sont de priorité {prio}.","st_i_trend":"7 derniers jours : {n}/jour, {dir} de {p} % par rapport aux 7 précédents.","st_more":"en plus","st_less":"en moins","st_up":"en hausse","st_down":"en baisse"},"SN_ARCH_STRINGS":{"search":"Rechercher dans le titre ou le message…","f_all":"Toutes","f_today":"Aujourd'hui","f_whisper":"Chuchotées","wh":"chuchoté","said":"Alexa a dit","said_by":"{ch} a dit","none":"aucune notification ne correspond","loading":"lecture de l'archive…","recent":"dernières notifications","read_at":"lu à","today":"Aujourd'hui","yesterday":"Hier","failed":"échoué","missed":"manqué","prio":{"critical":"Critique","high":"Haute","low":"Faible","minimum":"Minimum","medium":"Moyenne"},"reasons":{"doppione":"doublon","nessun target":"aucune cible","errore":"erreur","condizione":"condition","scenario":"scénario","presenza":"présence","priorita":"priorité","spento":"désactivé","pausa":"en pause","transport spento":"transport désactivé","nessuna azione":"aucune action","dati non validi":"données non valides","sconosciuto":"inconnu"},"f_appliance":"Électroménager","ap_scope":"parmi les {n} dernières lues en entier : les plus anciennes ne sont pas reconnues"},"SN_WHY_STRINGS":{"pick":"Choisissez une notification pour voir pourquoi elle est allée là où elle est allée.","loading":"chargement…","none":"aucune notification","gone":"cette notification n'est plus dans l'archive","priority":"priorité","dupe":"doublon","outcomes":{"success":"livrée","partial_delivery":"livrée en partie","dupe":"doublon","failed":"échouée","error":"échouée","fallback_delivery":"livrée par le canal de secours","no_delivery":"non livrée"},"step_call":"Appel","step_scen":"Scénarios","step_people":"Personnes","step_ch":"Canaux","call_auto":"aucun canal nommé : routage normal","call_named":"nommés dans l'appel :","call_debug":"avec débogage","nobody":"personne à la maison","ch_sent":"envoyé","ch_problems":"à vérifier","ch_skipped":"ignoré","pb_failed":"échoué","pb_missed":"demandé mais non envoyé","grp_skipped":"ignoré par une règle : normal","grp_not":"non concerné","trace_title":"Trace complète de sélection","fix":{"NO_TARGET":"Aucun destinataire n'a d'adresse pour ce canal : ajoutez-en une à un destinataire, donnez des cibles fixes au canal, ou laissez-le hors de cet appel.","ERROR":"L'intégration derrière ce canal a répondu par une erreur : consultez sa propre entrée dans le journal.","NO_ACTION":"Le canal n'a aucune action à appeler : définissez `action:` sur la livraison.","INVALID_ACTION_DATA":"Les données passées à l'action ont été refusées : vérifiez le `data:` de l'appel ou de la livraison."},"no_scenarios":"aucun scénario actif","applied":"forcé par l'appel","required":"requis par l'appel","constrain":"limité par l'appel à","home":"à la maison","away":"absent","no_channels":"aucun canal n'a été sélectionné","st_ok":"livré","st_err":"échoué","st_skip":"ignoré","calls":"appels","calls_1":"appel","target_required":"cible requise :","started_by":"sélectionné par","scen_would_off":"désactivé par (outrepassé)","src_default":"toujours actif (par défaut)","src_scen":"scénario","src_call":"l'appel lui-même","src_recipient":"destinataire","r_off_by":"désactivé par","call_targets":"cibles dans l'appel","cats":{"entity_id":"entités","mobile_app_id":"appareils","person_id":"personnes","email":"e-mail","phone":"téléphone","device_id":"appareils"},"r_call_off":"exclu par l'appel","r_scen_off":"désactivé par un scénario actif","r_disabled":"désactivé","r_transport_off":"son transport est désactivé","r_only_scen":"ne part que si un scénario l'active","r_only_fallback":"secours uniquement","r_only_explicit":"ne part que si demandé par son nom","r_priority":"pas pour cette priorité","r_unknown":"impossible à reconstituer sans la trace","from_config":"Les raisons des canaux qui ne sont pas partis sont reconstituées à partir de la configuration ACTUELLE, pas de celle de l'époque.","from_trace":"Les raisons proviennent de la trace de sélection archivée avec la notification.","st_time":"durée","st_slow":"le plus lent","st_rate":"des canaux ont réussi","ua_title":"Cibles qu'aucun canal n'a prises","ua_hint":"Elles étaient dans l'appel, mais aucun canal sélectionné n'accepte ce type de cible.","un_title":"Noms qui n'existent pas","sent_by":"Envoyé par","sent_auto":"automatisation","sent_script":"script","sent_person":"","sent_unknown":"expéditeur inconnu (aucune automatisation ni personne dans son contexte)","no_trace":"La trace complète de sélection n'est enregistrée que lorsque l'appel notify contient debug: true, et archivée lorsque les diagnostics de l'archive l'incluent.","reasons":{"NO_TARGET":"aucune cible utilisable","DUPE":"doublon d'une notification récente","PRIORITY":"pas pour cette priorité","SNOOZE":"en pause","SNOOZED":"en pause","DELIVERY_CONDITION":"condition de livraison fausse","OCCUPANCY":"règle de présence","ERROR":"erreur","DELIVERY_DISABLED":"désactivé","SCENARIO":"scénario","TRANSPORT_DISABLED":"son transport est désactivé","NO_SCENARIO":"un scénario requis n'est pas actif","NO_ACTION":"aucune action à appeler","INVALID_ACTION_DATA":"données d'action non valides","UNKNOWN":"raison inconnue"}},"SN_TOOLS_STRINGS":{"maint":"Maintenance","enq":"Interroger SuperNotify","refresh":"Republier toutes les entités","refresh_btn":"Actualiser","resume_btn":"Reprendre","refreshed":"Entités republiées.","resume_all":"Reprendre toutes les pauses","cleared_n":"pauses reprises","purge_arch":"Nettoyer l'archive","purge_media":"Nettoyer les images","older":"plus anciennes que","days":"jours","purge_btn":"Nettoyer","confirm":"Touchez encore pour confirmer","purged":"supprimés","remaining":"restants","reset":"Annuler les modifications faites à la main","reset_btn":"Réinitialiser","reset_none":"Rien à réinitialiser : tout est comme configuré.","reset_done":"Retour à la configuration :","k_all":"tout","k_scenario":"scénarios","k_delivery":"canaux","k_recipient":"personnes","k_transport":"transports","q_config":"Configuration","q_scen":"Scénarios","q_active":"Scénarios actifs","q_by_scen":"Canaux par scénario","q_implicit":"Canaux par défaut","q_recipients":"Destinataires","q_occupancy":"Qui est à la maison","q_snoozes":"Pauses","q_last":"Dernière notification","copy":"Copier le JSON","copied":"Copié","close":"Fermer","empty":"(vide)","err":"SuperNotify a répondu par une erreur :","settings":"Paramètres de l'intégration","running":"en cours…","more":"plus"},"SN_FORM_LABELS":{"_common":"Apparence et textes","style":"Couleurs","icons":"Icônes","show_version":"Afficher la version de la carte","intro":"Texte d'introduction en haut","title":"Titre","dnd_entity":"Interrupteur Ne pas déranger","quiet_entity":"État calme calculé (facultatif)","presence_entity":"Personne pour la barre d'état","archive_days":"Nettoyage de l'archive : plus ancien que (jours)","media_days":"Nettoyage des images : plus ancien que (jours)","occupancy":"Qui est à la maison (depuis SuperNotify)","repairs":"Réparations SuperNotify dans la liste d'état","snooze_announce":"Annoncer les pauses à voix haute (canal d'annonce)","snooze_via":"Les pauses passent par","o_event":"l'événement des boutons push (admin)","o_voice":"les commandes vocales","snooze_minutes":"Durée de la pause (minutes)","snooze_panel":"La tuile Pause ouvre le panneau des pauses","announce_delivery":"Canal pour les annonces","last_notification":"Afficher la dernière notification","last_channels":"Une puce par canal dans la dernière notification","repeat_entity":"Bouton Répéter la dernière (facultatif)","tile_layout":"Tuiles","tile_columns":"Colonnes de tuiles (vide = automatique)","update_entity":"Entité de mise à jour SuperNotify","cards_update_entity":"Entité de mise à jour des cartes","health":"État en haut","poll_seconds":"Actualiser toutes les (secondes)","group":"Grouper selon la façon dont un canal part","hide_defaults":"Masquer les canaux automatiques DEFAULT_","limit":"Notifications dans la liste","expand":"Ouvrir les parties repliées","max_height":"Hauteur maximale (CSS, ex. 70vh)","trigger_entity":"Actualiser quand ceci change","dry_run":"Afficher « Essayer sans envoyer »","dry_run_dupe_check":"Simuler aussi le contrôle des doublons","days":"Jours affichés par défaut","manifest_url":"URL du manifeste des automatisations","o_supernotify":"SuperNotify","o_theme":"Thème Home Assistant","o_mdi":"Icônes Home Assistant","o_emoji":"Emoji","o_row":"Icône à gauche","o_stacked":"Haute, icône en haut","o_auto":"Automatique"},"SN_NATIVE_STR":{"all_good":"Tout va bien","paused":"En pause","until":"jusqu'à","resume":"Reprendre","test":"Envoyer un test","sure":"Touchez encore pour envoyer","sent":"Envoyé","last":"Dernière","none":"Aucune notification pour l'instant","ago":"il y a","min":"min","h":"h","err":"transports en erreur","off":"canaux désactivés"},"SN_STRATEGY_TITLES":{"home":"Accueil","archive":"Archives","send":"Envoyer","setup":"Configuration","stats":"Statistiques","tools":"Outils","title":"SuperNotify","appliances":"Électroménager"},"SN_APPL_STRINGS":{"title":"Électroménager","loading":"lecture…","none":"Aucun appareil : ajoutez-en un dans Appliance Autonotify (Paramètres → Appareils et services).","st_run":"En marche","st_cleaning":"Nettoie","st_done":"Terminé · à vider","st_done_other":"Terminé","st_err":"A besoin d'aide","m_switch_on":"Allumer la prise","done_switch_on":"Prise allumée.","done_action":"Fait : {n}.","confirm_action":"Lancer « {n} » ?","open_entity":"Ouvrir pour le modifier","chip_notifs":"Notifications","chip_device":"Appareil","not_found":"Aucun appareil nommé « {n} ».","last7":"7 derniers jours","col_day":"Jour","col_cycles":"Cycles","col_time":"Durée","col_energy":"Consommation","source_h":"Origine","manual_src":"ajouté à la main : en marche au-dessus de {w}","tab_info":"Aperçu","tab_stats":"Consommation et cycles","tab_cleans":"Nettoyages","tab_prints":"Impressions","last_run":"Dernier cycle","avg_run":"Moyenne","reminders_h":"Notifications","plug":"Prise","plug_on":"allumée","plug_off":"éteinte","error_h":"Erreur","open_device":"L'appareil dans Home Assistant","prints":"impressions","print1":"impression","per_print":"Chaque impression du mois","last_prints":"Dernières impressions","no_print_month":"Pas encore d'impression ce mois-ci","no_print":"Pas encore d'impression","col_fil":"Filament","failed":"échouée","per_run":"Chaque cycle du mois","dev_hist":"Chacune vient de l'historique de Home Assistant ({n} derniers jours) ; les heures, du compteur de l'appareil quand il en a un.","cleans":"nettoyages","clean1":"nettoyage","per_clean":"Chaque nettoyage du mois","avg_clean":"moyenne {d}","col_area":"Surface","last_cleans":"Derniers nettoyages","no_clean_month":"Pas encore de nettoyage ce mois-ci","no_clean":"Pas encore de nettoyage","vac_hist":"Les totaux viennent des compteurs du robot ; chaque nettoyage, de l'historique de Home Assistant ({n} derniers jours).","st_paused":"En pause","st_returning":"Retourne à la base","st_charging":"En charge","st_docked_w":"Sur sa base","st_idle":"À l'arrêt","st_off":"Éteint","stopped":"À l'arrêt","yesterday":"hier","u_min":"min","u_h":"h","start":"Début","so_far":"jusqu'ici","no_cycle":"Aucun cycle pour l'instant","last_cycle":"Dernier cycle {d}","ended_at":"Terminé à {t}","reminders":"+{n} rappels jusqu'à {t}","reminder1":"+1 rappel à {t}","end_est":"Fin prévue","left":"encore {d}","almost":"presque fini","est_from_avg":"estimé d'après des cycles similaires","running_for":"En marche depuis {d}","btn_empty":"Vidé","btn_seen":"Fait","btn_resume":"Reprendre le nettoyage","m_switch_off":"Éteindre la prise","m_remind":"Me le rappeler plus tard","details":"Détails","settings":"Paramètres","more":"Plus","details_link":"Détails, consommation et cycles","done_empty":"Fait : les rappels s'arrêtent.","done_remind":"Il vous le rappellera plus tard.","done_switch":"Prise éteinte.","done_resume":"Nettoyage repris.","err":"Erreur","new_dev":"{n} nouveaux appareils","new_dev1":"1 nouvel appareil","battery":"Batterie","consumable":"{n} à {p} %","maint_in":"dans {c} cycles","maint_next":"au prochain cycle","maint_due":"à faire","maint_of":"{d} sur {e}","maint_done":"Fait","confirm_maint":"Marquer « {n} » comme fait ? Le compte repart de zéro.","conn_lost":"connexion perdue : dernier état connu","cons_h":"Consommables","commands":"Commandes","tap_again":"Touchez encore pour confirmer","empty_since":"À vider depuis","done_since":"Terminé depuis","avg_cycle":"Cycle moyen","maint_tab":"Entretien","tab_stats_short":"Consommation","read_failed":"Impossible de lire l'historique ({e}) ; nouvel essai sous peu.","retry":"Réessayer","see_chart":"Voir le graphique","back":"Retour","avg_line":"moyenne {v}","tap_bar":"Touchez une barre pour voir ce cycle","k_station":"Station","off_since":"Éteint depuis","close":"Fermer","power_now":"maintenant","p_today":"Aujourd'hui","p_week":"Semaine","p_month":"Mois","p_year":"Année","cycles":"cycles","cycle1":"cycle","per_cycle":"Consommation par cycle ce mois-ci","short":"Courts","long":"Longs","anomalous":"Inhabituels","avg":"moy. {d}, {k}","last_cycles":"Derniers cycles","col_start":"Début","col_dur":"Durée","col_cost":"Coût","no_cycle_month":"Aucun cycle ce mois-ci pour l'instant","coarse":"Les cycles de plus de 10 jours sont comptés à l'heure.","open_notifs":"Notifications de l'appareil","no_power":"Aucun capteur de puissance trouvé : indiquez-le avec `power_entity` dans `appliances:`.","no_power_vac":"Un robot aspirateur n'a pas de capteur de puissance : consommation et cycles ne sont pas comptés."}},"nl":{"SN_STRINGS":{"presence":"Aanwezigheid","time_band":"Tijdvak","quiet":"Stil","act_scen":"Actieve scenario's","on":"aan","off":"uit","active":"actief","dnd":"Niet storen","tap_silence":"tik om te dempen","snooze":"Pauzeren","min":"min","pause_nc":"niet-kritieke pauzeren","snoozed":"Gepauzeerd","until":"tot","tap_clear":"tik om te wissen","announce":"Omroepen","intercom":"intercom","announce_ph":"Omroepen op alle speakers…","send":"Versturen","announced":"Omgeroepen","cleared":"Pauzes gewist","snoozed_for":"Niet-kritieke meldingen gepauzeerd voor","sent":"Verstuurd","yesterday":"gisteren","deliveries":"Bezorgingen","last_notif":"Laatste melding","transports":"Transporten","delivered":"bezorgd","failed":"mislukt","channels":"kanalen","none":"geen","no_transports":"geen transport-entiteiten gevonden","tr_used":"gebruikt door","tr_unused":"geen kanaal gebruikt het","start":"start","volume":"volume","now":"nu","crosses":"gaat over middernacht","no_voice":"geen stem","mute_hint":"Een tijdvak op <b>0%</b> stuurt <b>helemaal geen gesproken melding</b> (Alexa en TTS uit, push en dashboard worden nog wel bezorgd). Kritieke meldingen en meldingen met hoge prioriteit spreken altijd.","enabled":"ingeschakeld","grp_auto":"Starten vanzelf","grp_named":"Alleen als genoemd in de aanroep","grp_scen":"Alleen met een scenario","grp_fallback":"Reserve, als de andere mislukken","ch_title":"Kanalen","ch_count":"{on} van {tot} aan","off_manual":"uitgeschakeld","paused_by":"nu gepauzeerd door","on_by":"nu aan via","fixed_targets":"vaste doelen","no_deliveries":"geen bezorging-entiteiten gevonden","home":"thuis","away":"afwezig","devices":"apparaten","devices_1":"apparaat","rc_test":"Test versturen","rc_test_confirm":"Tik nogmaals om te versturen","rc_test_sent":"Test verstuurd","rc_test_title":"SuperNotify-test","rc_test_msg":"Testbericht vanaf het dashboard,","overrides":"bezorgingsaanpassingen","overrides_1":"bezorgingsaanpassing","no_contact":"geen contactpunten","no_recipients":"geen ontvanger-entiteiten gevonden","details":"Details","h_update":"update beschikbaar:","h_restart":"herstart Home Assistant om de update af te ronden","h_uptodate":"up-to-date","h_transport_err":"transporten met fouten","h_channels_off":"kanalen uit","h_all_good":"Alles in orde","h_failures":"mislukkingen","h_failures_1":"mislukking","h_transport_err_1":"transport met fouten","h_channels_off_1":"kanaal uit","channels_1":"kanaal","band_early_morning":"Vroege ochtend","band_morning":"Ochtend","band_afternoon":"Middag","band_evening":"Avond","band_night":"Nacht","band_late_night":"Late nacht","h_look_1":"1 ding om naar te kijken","h_look_n":"{n} dingen om naar te kijken","h_rest_ok":"de rest werkt","h_ch_on":"{on} van {tot} kanalen aan","h_open":"Openen","ln_delivered":"bezorgd","ln_failed":"mislukt","ln_why":"Waarom","tgt_loading":"kiezer laden…","bands_empty_t":"Nog geen tijdvakken","bands_empty":"Voeg één tijdvak per dagdeel toe: een input_datetime voor de start en een input_number voor het stemvolume.","active_now":"nu actief","disabled":"uitgeschakeld","other":"Overig","manual":"handmatig","apply_now":"nu toepassen","applied":"Toegepast","apply_off":"tik om niet meer toe te passen","enabled_lbl":"ingeschakeld","reset_overrides":"Aanpassingen resetten","reset_done":"aanpassingen gereset","transport_off":"transport uit","last_notified":"laatst gemeld","never_notified":"nooit gemeld","media":"media","no_scenarios":"geen scenario-entiteiten gevonden","sim_pick":"🎬 Scenario's — tik om te simuleren","sim_fire":"📤 Kanalen","sim_hint":"Echte gegevens van de engine (opvraagacties). Filteren van bezorgingen op prioriteit gebeurt in de engine en wordt hier niet gesimuleerd. Uitgeschakeld wint van ingeschakeld, net als bij het samenvoegen tijdens gebruik.","sim_none":"er zouden geen bezorgingen starten","sim_go":"Zou verstuurd worden","sim_stop":"Zou niet verstuurd worden","sim_r_default":"start vanzelf","sim_r_on":"aangezet door","sim_r_off":"uitgezet door","sim_r_named":"alleen als genoemd in de aanroep","sim_r_scen":"alleen met een scenario dat het aanzet","sim_r_fallback":"reserve, als de andere mislukken","sim_r_switched":"uitgeschakeld","title":"Titel","message":"Bericht","priority":"Prioriteit","channels_lbl":"Kanalen — niets gekozen = normale routering","camera_lbl":"Camera-snapshot","preview":"Voorbeeld","no_title":"(geen titel)","no_message":"(geen bericht)","default_prio":"standaard (gemiddeld)","comp_hint":"Gekozen kanalen worden verstuurd met delivery_selection: fixed (alleen die starten). Kritiek is echt kritiek — sirenes inbegrepen.","critical_confirm":"Een KRITIEKE melding versturen? Sirenes en maximaal volume inbegrepen.","sent_toast":"Verstuurd","write_or_pick":"Schrijf een bericht, of kies een camera of een kanaal","send_err":"Niet verstuurd","dry_btn":"Proberen zonder versturen","dry_title":"Als je het nu verstuurde","dry_err":"Testrun mislukt","dry_nobody":"geen ontvanger, alleen directe doelen","dry_none":"Geen kanaal geselecteerd","dry_scen":"Actieve scenario's","dry_raw":"Ruw antwoord","dry_prio":"Prioriteit","dry_would_n":"kanalen zouden versturen","dry_nothing":"Er zou niets worden verstuurd","dry_dupe":"Duplicaat van een recente melding: zou worden weggegooid","dry_no_dupe":"Duplicaatcontrole niet gesimuleerd, dus het echte Versturen direct daarna wordt niet geblokkeerd.","dry_home":"Thuis","dry_empty":"SuperNotify gaf geen antwoord: is het 2.12 of nieuwer?","dry_reasons":{"NO_TARGET":"geen bruikbaar doel","DUPE":"duplicaat","PRIORITY":"niet voor deze prioriteit","SNOOZED":"gepauzeerd","DELIVERY_CONDITION":"bezorgingsvoorwaarde onwaar","OCCUPANCY":"aanwezigheidsregel","TRANSPORT_DISABLED":"transport uit","DELIVERY_DISABLED":"uitgeschakeld","NO_SCENARIO":"vereist scenario niet actief","NO_ACTION":"geen actie","INVALID_ACTION_DATA":"ongeldige gegevens","UNKNOWN":"onbekende reden","ERROR":"fout"},"prio_minimum":"Minimaal","prio_low":"Laag","prio_medium":"Gemiddeld","prio_high":"Hoog","prio_critical":"Kritiek","target_lbl":"Doel — personen, apparaten, ruimtes, verdiepingen, labels","custom_target_lbl":"Eigen doelen (e-mail, Telegram-ID's, …) — gescheiden door komma's","adv_title":"Geavanceerde opties","adv_spoken":"Gesproken bericht (Alexa, TTS)","adv_spoken_ph":"wat de speakers zeggen, als het anders is dan de tekst","adv_apply":"Deze scenario's toepassen","adv_require":"Alleen versturen als deze scenario's actief zijn","adv_constrain":"Alleen deze scenario's meenemen","adv_snapshot":"Afbeelding van een URL","adv_debug":"Debug: volledige selectietrace vastleggen (getoond door de waarom-kaart)","custom_target_ph":"bijv. user@example.com, 123456789","native_target_tag":"🎯 native ruimte/verdieping/label","target_warn":"⚠️ Ruimtes, verdiepingen en labels worden alleen opgelost door notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts en chime. Met elk ander kanaal — of de standaardroutering als hierboven geen kanaal is gekozen — kan de melding ongemerkt zonder doel eindigen. Kies een compatibel kanaal, of voeg direct een persoon/apparaat toe.","aut_search":"Automatiseringen zoeken…","aut_all":"Alle","aut_none":"Geen resultaten","aut_err":"Manifest niet gevonden — genereer het met tools/genera_vista_automazioni.py","aut_updated":"lijst bijgewerkt","aut_count":"automatiseringen","aut_count_1":"automatisering","never":"nooit","ago_now":"nu","ago_min":"min geleden","ago_h":"u geleden","ago_d":"d geleden","aut_disabled_only":"Alleen uitgeschakeld","grp_active":"actief","repeat":"Herhalen","skipped_n":"overgeslagen","left":"over","missed_n":"gemist","snz_all":"alles","snz_nc":"niet-kritiek","snz_prio":"prioriteit","snz_transport":"transport","snz_for":"voor","snz_choose":"kies wat en hoe lang","snz_title":"Meldingen pauzeren","snz_what":"Wat","snz_nc_l":"Niet-kritiek","snz_all_l":"Alles","snz_ch":"Een kanaal","snz_pr":"Een prioriteit","snz_who":"Voor wie","snz_everyone":"Iedereen","snz_me":"Alleen ik","snz_len":"Hoe lang","snz_forever":"Tot ik hervat","snz_go":"Pauzeren","snz_close":"Sluiten","rs_hand":"handmatig","rs_voice":"met spraak","rs_assist":"door de assistent","snz_voice_info":"Je pauzes lopen via de spraakopdrachten van SuperNotify: ze gelden alleen voor jou.","snz_voice_off":"De spraakopdrachten van SuperNotify staan uit: zet ze aan in de integratie-opties.","snz_resume_mine":"Mijn pauzes hervatten","go_open":"Tonen","dl_probe":"Dit kanaal proberen","probe_msg":"Kanaaltest vanaf het dashboard","sc_why":"Waarom","sc_yes":"Geldt nu","sc_no":"Geldt nu niet","sc_manual_why":"Handmatig scenario: met de hand toegepast","sc_no_cond":"Geen voorwaarden","sc_off_sw":"Uitgeschakeld","sc_not_eval":"niet gecontroleerd","sc_now":"nu","sc_diff_btn_on":"Wat verandert als het geldt","sc_diff_btn_off":"Wat verandert zonder","sc_diff_on":"Als het gold, voor een gemiddelde melding nu:","sc_diff_off":"Zonder, voor een gemiddelde melding nu:","sc_diff_add":"zou ook versturen","sc_diff_rem":"zou niet meer versturen","sc_diff_none":"geen verschil","c_state":"{e} is {s}","c_template":"sjabloonvoorwaarde","c_time":"tijd","c_after":"na","c_before":"voor","c_numeric":"{e}","c_above":"boven","c_below":"onder","c_and":"al deze","c_or":"minstens één hiervan","c_not":"geen van deze","c_or_join":" of ","sim_hint_dry":"Het eigen antwoord van SuperNotify (testrun, er wordt niets verstuurd): een melding nu, met de prioriteit en alleen de scenario's die hierboven zijn gekozen.","sim_msg":"Simulatortest","sim_prio":"Prioriteit","sa_snooze":"{what} gepauzeerd voor {len}.","sa_silence":"{what} gedempt tot nader order.","sa_resume":"{what} weer aan.","sa_resume_one":"Pauze voorbij: {x}.","sa_resume_all":"Meldingen weer aan.","sa_w_nc":"Niet-kritieke meldingen","sa_w_all":"Alle meldingen","sa_w_ch":"Kanaal {x}","sa_w_pr":"Meldingen met prioriteit {x}","sa_w_mine":"Je meldingen","sa_for":"voor {x}","sa_min":"{n} minuten","sa_hour":"een uur","sa_hours":"{n} uur","occ_title":"Wie is er thuis","occ_home_l":"Thuis","occ_ALL_HOME":"Iedereen thuis","occ_ALL_AWAY":"Iedereen weg","occ_LONE_HOME":"Eén persoon thuis","occ_MULTI_HOME":"Enkelen thuis","occ_UNDEFINED_OCCUPANTS":"Niemand gevolgd","h_repairs":"SuperNotify-reparaties","h_repairs_1":"SuperNotify-reparatie","det_more":"Alle attributen","det_yes":"ja","det_no":"nee","det_action":"Actie","det_target":"Vaste doelen","det_target_req":"Vereist een doel","det_target_use":"Doelen gebruiken","det_inclusion":"Gebruikt wanneer","det_prio":"Prioriteiten","det_occ":"Wie thuis moet zijn","det_transport":"Transport","det_data":"Gegevens","det_debug":"Debug","det_err_last":"Laatste fout","det_err_in":"In","det_err_n":"Fouten sinds start","det_select":"Selectie","adv_html":"Tekst voor e-mail (HTML)","adv_clip":"Videoclip van een URL","adv_actions":"Knoppen op de melding","adv_act_id":"actie-id","adv_act_title":"knoptekst","adv_act_add":"+ knop","adv_groups":"Knopgroepen (komma)","adv_dc":"Kanaalinstellingen voor deze melding","adv_dc_ph":"sleutel: waarde, één per regel","adv_dc_add":"+ kanaal","snz_active":"Nu gepauzeerd","snz_resume":"Hervatten","snz_resume_all":"Alles hervatten","snz_until_resumed":"tot hervat","snz_done":"Gepauzeerd","snz_resumed":"Hervat","no_notif":"nog geen melding","st_title":"Gebruik","st_days_short":"d","st_total":"Meldingen","st_avg":"per dag","st_today":"Vandaag","st_vs_avg":"t.o.v. gemiddelde","st_peak_hour":"Piekuur","st_top_channel":"Topkanaal","st_errors":"Kanaalfouten","st_of_sends":"van de kanaalverzendingen","st_daily":"Per dag","st_hourly":"Per uur van de dag","st_weekday":"Per weekdag","st_channels":"Kanalen — meest gebruikt","st_priority":"Prioriteit","st_period":"Dagdeel","st_insights":"Inzichten","st_no_data":"Nog geen geschiedenis — gegevens verschijnen na de eerste meldingen.","st_loading":"laden…","st_installed":"geïnstalleerd","st_latest":"nieuwste","st_uptodate":"up-to-date","st_update":"update beschikbaar","st_restart":"herstart vereist","st_logged":"vastgelegd","st_from_archive":"uit het archief van SuperNotify","st_archive_err":"archief deels gelezen","st_wd":["ma","di","wo","do","vr","za","zo"],"st_i_share":"{p}% van alle kanaalverzendingen gaat via {c}.","st_i_peak":"Drukste uur is {h}:00 ({n} meldingen in {d} dagen).","st_i_night":"{p}% van de meldingen komt binnen tussen 23:00 en 07:00 — overweeg een niet-storen-scenario als je dat niet wilt.","st_i_night_ok":"Slechts {p}% van de meldingen komt 's nachts binnen (23–07): de stille uren werken.","st_i_weekend":"Weekenddagen hebben {p}% {dir} meldingen dan doordeweekse dagen.","st_i_errors":"{n} kanaalfouten in {d} dagen, vooral bij {c}.","st_i_noerr":"Geen kanaalfouten in de laatste {d} dagen.","st_i_prio":"{p}% van de meldingen heeft prioriteit {prio}.","st_i_trend":"Laatste 7 dagen: {n}/dag, {dir} {p}% t.o.v. de 7 daarvoor.","st_more":"meer","st_less":"minder","st_up":"omhoog","st_down":"omlaag"},"SN_ARCH_STRINGS":{"search":"Zoek in titel of bericht…","f_all":"Alle","f_today":"Vandaag","f_whisper":"Gefluisterd","wh":"gefluisterd","said":"Alexa zei","said_by":"{ch} zei","none":"geen melding komt overeen","loading":"archief lezen…","recent":"laatste meldingen","read_at":"gelezen om","today":"Vandaag","yesterday":"Gisteren","failed":"mislukt","missed":"gemist","prio":{"critical":"Kritiek","high":"Hoog","low":"Laag","minimum":"Minimaal","medium":"Gemiddeld"},"reasons":{"doppione":"duplicaat","nessun target":"geen doel","errore":"fout","condizione":"voorwaarde","scenario":"scenario","presenza":"aanwezigheid","priorita":"prioriteit","spento":"uit","pausa":"gepauzeerd","transport spento":"transport uit","nessuna azione":"geen actie","dati non validi":"ongeldige gegevens","sconosciuto":"onbekend"},"f_appliance":"Huishoudapparaten","ap_scope":"bij de laatste {n} die volledig zijn gelezen – oudere worden niet herkend"},"SN_WHY_STRINGS":{"pick":"Kies een melding om te zien waarom die ging waar die heen ging.","loading":"laden…","none":"geen melding","gone":"deze melding staat niet meer in het archief","priority":"prioriteit","dupe":"duplicaat","outcomes":{"success":"bezorgd","partial_delivery":"deels bezorgd","dupe":"duplicaat","failed":"mislukt","error":"mislukt","fallback_delivery":"bezorgd via het reservekanaal","no_delivery":"niet bezorgd"},"step_call":"Aanroep","step_scen":"Scenario's","step_people":"Personen","step_ch":"Kanalen","call_auto":"geen kanaal genoemd: normale routering","call_named":"genoemd in de aanroep:","call_debug":"met debug","nobody":"niemand thuis","ch_sent":"verstuurd","ch_problems":"om naar te kijken","ch_skipped":"overgeslagen","pb_failed":"mislukt","pb_missed":"gevraagd maar niet verstuurd","grp_skipped":"overgeslagen door een regel: normaal","grp_not":"niet betrokken","trace_title":"Volledige selectietrace","fix":{"NO_TARGET":"Geen enkele ontvanger heeft een adres voor dit kanaal: voeg er een toe aan een ontvanger, geef het kanaal vaste doelen, of laat het weg uit deze aanroep.","ERROR":"De integratie achter dit kanaal gaf een fout: bekijk de eigen logregel ervan.","NO_ACTION":"Het kanaal heeft geen actie om aan te roepen: stel `action:` in op de bezorging.","INVALID_ACTION_DATA":"De gegevens die aan de actie zijn doorgegeven werden geweigerd: controleer de `data:` van de aanroep of van de bezorging."},"no_scenarios":"geen scenario actief","applied":"geforceerd door de aanroep","required":"vereist door de aanroep","constrain":"door de aanroep beperkt tot","home":"thuis","away":"afwezig","no_channels":"er is geen kanaal geselecteerd","st_ok":"bezorgd","st_err":"mislukt","st_skip":"overgeslagen","calls":"aanroepen","calls_1":"aanroep","target_required":"doel vereist:","started_by":"geselecteerd door","scen_would_off":"uitgezet door (overruled)","src_default":"altijd aan (standaard)","src_scen":"scenario","src_call":"de aanroep zelf","src_recipient":"ontvanger","r_off_by":"uitgezet door","call_targets":"doelen in de aanroep","cats":{"entity_id":"entiteiten","mobile_app_id":"apparaten","person_id":"personen","email":"e-mail","phone":"telefoon","device_id":"apparaten"},"r_call_off":"uitgesloten door de aanroep","r_scen_off":"uitgezet door een actief scenario","r_disabled":"uitgeschakeld","r_transport_off":"het transport staat uit","r_only_scen":"start alleen als een scenario het aanzet","r_only_fallback":"alleen reserve","r_only_explicit":"start alleen als het bij naam wordt gevraagd","r_priority":"niet voor deze prioriteit","r_unknown":"niet te reconstrueren zonder de trace","from_config":"Redenen voor kanalen die niet zijn gestart, zijn gereconstrueerd uit de configuratie zoals die NU is, niet zoals die toen was.","from_trace":"Redenen komen uit de selectietrace die met de melding is gearchiveerd.","st_time":"duurde","st_slow":"traagste","st_rate":"van de kanalen gelukt","ua_title":"Doelen die geen kanaal oppakte","ua_hint":"Ze stonden in de aanroep, maar geen geselecteerd kanaal accepteert dit soort doel.","un_title":"Namen die niet bestaan","sent_by":"Verstuurd door","sent_auto":"automatisering","sent_script":"script","sent_person":"","sent_unknown":"afzender onbekend (geen automatisering of persoon in de context)","no_trace":"De volledige selectietrace wordt alleen vastgelegd als de notify-aanroep debug: true heeft, en gearchiveerd als de archiefdiagnostiek die bevat.","reasons":{"NO_TARGET":"geen bruikbaar doel","DUPE":"duplicaat van een recente melding","PRIORITY":"niet voor deze prioriteit","SNOOZE":"gepauzeerd","SNOOZED":"gepauzeerd","DELIVERY_CONDITION":"bezorgingsvoorwaarde onwaar","OCCUPANCY":"aanwezigheidsregel","ERROR":"fout","DELIVERY_DISABLED":"uitgeschakeld","SCENARIO":"scenario","TRANSPORT_DISABLED":"het transport staat uit","NO_SCENARIO":"een vereist scenario is niet actief","NO_ACTION":"geen actie om aan te roepen","INVALID_ACTION_DATA":"ongeldige actiegegevens","UNKNOWN":"onbekende reden"}},"SN_TOOLS_STRINGS":{"maint":"Onderhoud","enq":"SuperNotify bevragen","refresh":"Alle entiteiten opnieuw publiceren","refresh_btn":"Vernieuwen","resume_btn":"Hervatten","refreshed":"Entiteiten opnieuw gepubliceerd.","resume_all":"Alle pauzes hervatten","cleared_n":"pauzes hervat","purge_arch":"Archief opschonen","purge_media":"Afbeeldingen opschonen","older":"ouder dan","days":"dagen","purge_btn":"Opschonen","confirm":"Tik nogmaals om te bevestigen","purged":"verwijderd","remaining":"over","reset":"Handmatige wijzigingen ongedaan maken","reset_btn":"Resetten","reset_none":"Niets te resetten: alles is zoals geconfigureerd.","reset_done":"Terug naar de configuratie:","k_all":"alles","k_scenario":"scenario's","k_delivery":"kanalen","k_recipient":"personen","k_transport":"transporten","q_config":"Configuratie","q_scen":"Scenario's","q_active":"Actieve scenario's","q_by_scen":"Kanalen per scenario","q_implicit":"Standaardkanalen","q_recipients":"Ontvangers","q_occupancy":"Wie is er thuis","q_snoozes":"Pauzes","q_last":"Laatste melding","copy":"JSON kopiëren","copied":"Gekopieerd","close":"Sluiten","empty":"(leeg)","err":"SuperNotify antwoordde met een fout:","settings":"Integratie-instellingen","running":"bezig…","more":"meer"},"SN_FORM_LABELS":{"_common":"Uiterlijk en tekst","style":"Kleuren","icons":"Pictogrammen","show_version":"Kaartversie tonen","intro":"Introtekst bovenaan","title":"Titel","dnd_entity":"Niet-storen-schakelaar","quiet_entity":"Berekende stille status (optioneel)","presence_entity":"Persoon voor de statusbalk","archive_days":"Archief opschonen: ouder dan (dagen)","media_days":"Afbeeldingen opschonen: ouder dan (dagen)","occupancy":"Wie is er thuis (van SuperNotify)","repairs":"SuperNotify-reparaties in de statuslijst","snooze_announce":"Pauzes hardop zeggen (omroepkanaal)","snooze_via":"Pauzes lopen via","o_event":"de gebeurtenis van de pushknoppen (beheerder)","o_voice":"de spraakopdrachten","snooze_minutes":"Pauzeduur (minuten)","snooze_panel":"Pauzetegel opent het pauzepaneel","announce_delivery":"Kanaal voor omroepen","last_notification":"Laatste melding tonen","last_channels":"Eén chip per kanaal in de laatste melding","repeat_entity":"Knop laatste herhalen (optioneel)","tile_layout":"Tegels","tile_columns":"Tegelkolommen (leeg = automatisch)","update_entity":"SuperNotify-update-entiteit","cards_update_entity":"Update-entiteit van de kaarten","health":"Status bovenaan","poll_seconds":"Vernieuwen elke (seconden)","group":"Groeperen op hoe een kanaal start","hide_defaults":"Automatische DEFAULT_-kanalen verbergen","limit":"Meldingen in de lijst","expand":"Ingeklapte delen openen","max_height":"Maximale hoogte (CSS, bijv. 70vh)","trigger_entity":"Vernieuwen als dit verandert","dry_run":"\"Proberen zonder versturen\" tonen","dry_run_dupe_check":"Ook de duplicaatcontrole simuleren","days":"Standaard getoonde dagen","manifest_url":"URL van het automatiseringsmanifest","o_supernotify":"SuperNotify","o_theme":"Home Assistant-thema","o_mdi":"Home Assistant-pictogrammen","o_emoji":"Emoji","o_row":"Pictogram links","o_stacked":"Hoog, pictogram bovenaan","o_auto":"Automatisch"},"SN_NATIVE_STR":{"all_good":"Alles in orde","paused":"Gepauzeerd","until":"tot","resume":"Hervatten","test":"Test versturen","sure":"Tik nogmaals om te versturen","sent":"Verstuurd","last":"Laatste","none":"Nog geen melding","ago":"geleden","min":"min","h":"u","err":"transporten met fouten","off":"kanalen uit"},"SN_STRATEGY_TITLES":{"home":"Home","archive":"Archief","send":"Versturen","setup":"Instellingen","stats":"Statistieken","tools":"Hulpmiddelen","title":"SuperNotify","appliances":"Huishoudapparaten"},"SN_APPL_STRINGS":{"title":"Huishoudapparaten","loading":"lezen…","none":"Geen apparaten: stel er een in via Appliance Autonotify (Instellingen → Apparaten en diensten).","st_run":"Bezig","st_cleaning":"Maakt schoon","st_done":"Klaar · leeghalen","st_done_other":"Klaar","st_err":"Heeft hulp nodig","m_switch_on":"Stekker aanzetten","done_switch_on":"Stekker aangezet.","done_action":"Gedaan: {n}.","confirm_action":"«{n}» uitvoeren?","open_entity":"Openen om te wijzigen","chip_notifs":"Meldingen","chip_device":"Apparaat","not_found":"Geen apparaat met de naam «{n}».","last7":"Laatste 7 dagen","col_day":"Dag","col_cycles":"Cycli","col_time":"Tijd","col_energy":"Verbruik","source_h":"Bron","manual_src":"handmatig toegevoegd: draait boven {w}","tab_info":"Overzicht","tab_stats":"Verbruik en cycli","tab_cleans":"Schoonmaakbeurten","tab_prints":"Afdrukken","last_run":"Laatste cyclus","avg_run":"Gemiddeld","reminders_h":"Meldingen","plug":"Stekker","plug_on":"aan","plug_off":"uit","error_h":"Fout","open_device":"Het apparaat in Home Assistant","prints":"afdrukken","print1":"afdruk","per_print":"Elke afdruk deze maand","last_prints":"Laatste afdrukken","no_print_month":"Nog geen afdruk deze maand","no_print":"Nog geen afdruk","col_fil":"Filament","failed":"mislukt","per_run":"Elke cyclus deze maand","dev_hist":"Elk komt uit de geschiedenis van Home Assistant (laatste {n} dagen); de uren uit de teller van het apparaat als het die heeft.","cleans":"schoonmaakbeurten","clean1":"schoonmaakbeurt","per_clean":"Elke schoonmaakbeurt deze maand","avg_clean":"gemiddeld {d}","col_area":"Oppervlak","last_cleans":"Laatste schoonmaakbeurten","no_clean_month":"Nog geen schoonmaakbeurt deze maand","no_clean":"Nog geen schoonmaakbeurt","vac_hist":"De totalen komen uit de tellers van de robot; elke schoonmaakbeurt uit de geschiedenis van Home Assistant (laatste {n} dagen).","st_paused":"Gepauzeerd","st_returning":"Keert terug naar het dock","st_charging":"Laadt op","st_docked_w":"In het dock","st_idle":"Stil","st_off":"Uit","stopped":"Stil","yesterday":"gisteren","u_min":"min","u_h":"u","start":"Start","so_far":"tot nu toe","no_cycle":"Nog geen cyclus","last_cycle":"Laatste cyclus {d}","ended_at":"Klaar om {t}","reminders":"+{n} herinneringen tot {t}","reminder1":"+1 herinnering om {t}","end_est":"Verwacht einde","left":"nog {d}","almost":"bijna klaar","est_from_avg":"geschat uit vergelijkbare cycli","running_for":"Bezig sinds {d}","btn_empty":"Leeggehaald","btn_seen":"Gedaan","btn_resume":"Schoonmaken hervatten","m_switch_off":"Stekker uitschakelen","m_remind":"Herinner me later","details":"Details","settings":"Instellingen","more":"Meer","details_link":"Details, verbruik en cycli","done_empty":"Gedaan: de herinneringen stoppen.","done_remind":"Je wordt later herinnerd.","done_switch":"Stekker uitgeschakeld.","done_resume":"Schoonmaken hervat.","err":"Fout","new_dev":"{n} nieuwe apparaten","new_dev1":"1 nieuw apparaat","battery":"Batterij","consumable":"{n} op {p}%","maint_in":"over {c} cycli","maint_next":"bij de volgende cyclus","maint_due":"nu nodig","maint_of":"{d} van {e}","maint_done":"Gedaan","confirm_maint":"«{n}» als gedaan markeren? De telling begint opnieuw.","conn_lost":"verbinding verbroken: laatst bekende toestand","cons_h":"Verbruiksartikelen","commands":"Opdrachten","tap_again":"Tik nogmaals om te bevestigen","empty_since":"Uit te ruimen sinds","done_since":"Klaar sinds","avg_cycle":"Gemiddelde cyclus","maint_tab":"Onderhoud","tab_stats_short":"Verbruik","read_failed":"De geschiedenis kon niet worden gelezen ({e}); straks opnieuw.","retry":"Opnieuw","see_chart":"Grafiek bekijken","back":"Terug","avg_line":"gemiddeld {v}","tap_bar":"Tik op een balk voor die cyclus","k_station":"Station","off_since":"Uit sinds","close":"Sluiten","power_now":"nu","p_today":"Vandaag","p_week":"Week","p_month":"Maand","p_year":"Jaar","cycles":"cycli","cycle1":"cyclus","per_cycle":"Verbruik per cyclus deze maand","short":"Kort","long":"Lang","anomalous":"Afwijkend","avg":"gem. {d}, {k}","last_cycles":"Laatste cycli","col_start":"Start","col_dur":"Duur","col_cost":"Kosten","no_cycle_month":"Deze maand nog geen cyclus","coarse":"Cycli van meer dan 10 dagen geleden worden per uur geteld.","open_notifs":"Meldingen van het apparaat","no_power":"Geen vermogenssensor gevonden: geef hem op met `power_entity` in `appliances:`.","no_power_vac":"Een robotstofzuiger heeft geen vermogenssensor: verbruik en cycli worden niet geteld."}},"pl":{"SN_STRINGS":{"presence":"Obecność","time_band":"Pora dnia","quiet":"Cisza","act_scen":"Aktywne scenariusze","on":"wł.","off":"wył.","active":"aktywny","dnd":"Nie przeszkadzać","tap_silence":"dotknij, aby wyciszyć","snooze":"Drzemka","min":"min","pause_nc":"wstrzymaj niekrytyczne","snoozed":"Wstrzymane","until":"do","tap_clear":"dotknij, aby wyczyścić","announce":"Ogłoś","intercom":"interkom","announce_ph":"Ogłoś na wszystkich głośnikach…","send":"Wyślij","announced":"Ogłoszono","cleared":"Drzemki wyczyszczone","snoozed_for":"Wstrzymano niekrytyczne powiadomienia na","sent":"Wysłane","yesterday":"wczoraj","deliveries":"Dostarczenia","last_notif":"Ostatnie powiadomienie","transports":"Transporty","delivered":"dostarczone","failed":"nieudane","channels":"kanałów","none":"brak","no_transports":"nie znaleziono encji transportów","tr_used":"używany przez","tr_unused":"żaden kanał go nie używa","start":"początek","volume":"głośność","now":"teraz","crosses":"przechodzi przez północ","no_voice":"bez głosu","mute_hint":"Pora z <b>0%</b> nie wysyła <b>żadnego ogłoszenia głosowego</b> (Alexa i TTS wyłączone, push i pulpit nadal dostarczane). Alerty krytyczne i o wysokim priorytecie zawsze są wypowiadane.","enabled":"włączone","grp_auto":"Startują same","grp_named":"Tylko gdy wskazane w wywołaniu","grp_scen":"Tylko ze scenariuszem","grp_fallback":"Zapasowe, gdy inne zawiodą","ch_title":"Kanały","ch_count":"{on} z {tot} wł.","off_manual":"wyłączony","paused_by":"teraz wstrzymany przez","on_by":"teraz włączony przez","fixed_targets":"stałe cele","no_deliveries":"nie znaleziono encji dostarczeń","home":"w domu","away":"poza domem","devices":"urządzeń","devices_1":"urządzenie","rc_test":"Wyślij test","rc_test_confirm":"Dotknij ponownie, aby wysłać","rc_test_sent":"Test wysłany","rc_test_title":"Test SuperNotify","rc_test_msg":"Wiadomość testowa z pulpitu,","overrides":"nadpisań dostarczeń","overrides_1":"nadpisanie dostarczenia","no_contact":"brak danych kontaktowych","no_recipients":"nie znaleziono encji odbiorców","details":"Szczegóły","h_update":"dostępna aktualizacja:","h_restart":"uruchom ponownie Home Assistant, aby dokończyć aktualizację","h_uptodate":"aktualne","h_transport_err":"transportów z błędami","h_channels_off":"kanałów wył.","h_all_good":"Wszystko w porządku","h_failures":"błędów","h_failures_1":"błąd","h_transport_err_1":"transport z błędami","h_channels_off_1":"kanał wył.","channels_1":"kanał","band_early_morning":"Wczesny ranek","band_morning":"Rano","band_afternoon":"Popołudnie","band_evening":"Wieczór","band_night":"Noc","band_late_night":"Późna noc","h_look_1":"1 rzecz do sprawdzenia","h_look_n":"Rzeczy do sprawdzenia: {n}","h_rest_ok":"reszta działa","h_ch_on":"{on} z {tot} kanałów wł.","h_open":"Otwórz","ln_delivered":"dostarczone","ln_failed":"nieudane","ln_why":"Dlaczego","tgt_loading":"ładowanie selektora…","bands_empty_t":"Brak pór dnia","bands_empty":"Dodaj jedną porę na każdą część dnia: input_datetime dla jej początku i input_number dla głośności głosu.","active_now":"aktywny teraz","disabled":"wyłączony","other":"Inne","manual":"ręczny","apply_now":"zastosuj teraz","applied":"Zastosowany","apply_off":"dotknij, aby przestać stosować","enabled_lbl":"włączony","reset_overrides":"Resetuj nadpisania","reset_done":"nadpisania zresetowane","transport_off":"transport wył.","last_notified":"ostatnio powiadomiony","never_notified":"nigdy nie powiadomiony","media":"media","no_scenarios":"nie znaleziono encji scenariuszy","sim_pick":"🎬 Scenariusze — dotknij, aby zasymulować","sim_fire":"📤 Kanały","sim_hint":"Prawdziwe dane silnika (usługi enquire). Filtrowanie dostarczeń według priorytetu odbywa się w silniku i nie jest tu symulowane. Wyłączenie wygrywa z włączeniem, jak przy scalaniu w trakcie działania.","sim_none":"żadne dostarczenie by nie ruszyło","sim_go":"Zostałoby wysłane","sim_stop":"Nie zostałoby wysłane","sim_r_default":"startuje samo","sim_r_on":"włączony przez","sim_r_off":"wyłączony przez","sim_r_named":"tylko gdy wskazany w wywołaniu","sim_r_scen":"tylko ze scenariuszem, który go włącza","sim_r_fallback":"zapasowy, gdy inne zawiodą","sim_r_switched":"wyłączony","title":"Tytuł","message":"Wiadomość","priority":"Priorytet","channels_lbl":"Kanały — brak wyboru = zwykłe kierowanie","camera_lbl":"Zrzut z kamery","preview":"Podgląd","no_title":"(bez tytułu)","no_message":"(bez wiadomości)","default_prio":"domyślny (średni)","comp_hint":"Wybrane kanały są wysyłane z delivery_selection: fixed (tylko one ruszają). Krytyczny naprawdę jest krytyczny — łącznie z syrenami.","critical_confirm":"Wysłać KRYTYCZNE powiadomienie? Łącznie z syrenami i maksymalną głośnością.","sent_toast":"Wysłano","write_or_pick":"Napisz wiadomość albo wybierz kamerę lub kanał","send_err":"Nie wysłano","dry_btn":"Wypróbuj bez wysyłania","dry_title":"Gdybyś wysłał je teraz","dry_err":"Próba nie powiodła się","dry_nobody":"brak odbiorcy, tylko cele bezpośrednie","dry_none":"Nie wybrano kanału","dry_scen":"Aktywne scenariusze","dry_raw":"Surowa odpowiedź","dry_prio":"Priorytet","dry_would_n":"kanałów by wysłało","dry_nothing":"Nic nie zostałoby wysłane","dry_dupe":"Duplikat niedawnego powiadomienia: zostałoby odrzucone","dry_no_dupe":"Wykrywanie duplikatów nie jest symulowane, więc prawdziwe Wyślij zaraz potem nie zostanie zablokowane.","dry_home":"W domu","dry_empty":"SuperNotify nie odpowiedział: czy to wersja 2.12 lub nowsza?","dry_reasons":{"NO_TARGET":"brak użytecznego celu","DUPE":"duplikat","PRIORITY":"nie dla tego priorytetu","SNOOZED":"drzemka","DELIVERY_CONDITION":"warunek dostarczenia niespełniony","OCCUPANCY":"reguła obecności","TRANSPORT_DISABLED":"transport wył.","DELIVERY_DISABLED":"wyłączony","NO_SCENARIO":"wymagany scenariusz nieaktywny","NO_ACTION":"brak akcji","INVALID_ACTION_DATA":"nieprawidłowe dane","UNKNOWN":"nieznany powód","ERROR":"błąd"},"prio_minimum":"Minimalny","prio_low":"Niski","prio_medium":"Średni","prio_high":"Wysoki","prio_critical":"Krytyczny","target_lbl":"Cel — osoby, urządzenia, obszary, piętra, etykiety","custom_target_lbl":"Własne cele (e-mail, ID Telegram, …) — oddzielone przecinkami","adv_title":"Opcje zaawansowane","adv_spoken":"Wiadomość mówiona (Alexa, TTS)","adv_spoken_ph":"co mówią głośniki, jeśli inaczej niż tekst","adv_apply":"Zastosuj te scenariusze","adv_require":"Wyślij tylko, gdy te scenariusze są aktywne","adv_constrain":"Uwzględnij tylko te scenariusze","adv_snapshot":"Obraz z adresu URL","adv_debug":"Debug: zapisz pełny ślad wyboru (pokazywany przez kartę Dlaczego)","custom_target_ph":"np. user@example.com, 123456789","native_target_tag":"🎯 natywny obszar/piętro/etykieta","target_warn":"⚠️ Obszary, piętra i etykiety są rozwiązywane tylko przez notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts i chime. Z każdym innym kanałem — albo przy domyślnym kierowaniu, gdy powyżej nie wybrano kanału — powiadomienie może po cichu zostać bez celu. Wybierz zgodny kanał albo dodaj osobę/urządzenie bezpośrednio.","aut_search":"Szukaj automatyzacji…","aut_all":"Wszystkie","aut_none":"Brak wyników","aut_err":"Nie znaleziono manifestu — wygeneruj go przez tools/genera_vista_automazioni.py","aut_updated":"lista zaktualizowana","aut_count":"automatyzacji","aut_count_1":"automatyzacja","never":"nigdy","ago_now":"teraz","ago_min":"min temu","ago_h":"godz. temu","ago_d":"dni temu","aut_disabled_only":"Tylko wyłączone","grp_active":"aktywne","repeat":"Powtórz","skipped_n":"pominięte","left":"zostało","missed_n":"nieodebrane","snz_all":"wszystko","snz_nc":"niekrytyczne","snz_prio":"priorytet","snz_transport":"transport","snz_for":"na","snz_choose":"wybierz co i na jak długo","snz_title":"Wstrzymaj powiadomienia","snz_what":"Co","snz_nc_l":"Niekrytyczne","snz_all_l":"Wszystko","snz_ch":"Kanał","snz_pr":"Priorytet","snz_who":"Dla kogo","snz_everyone":"Wszyscy","snz_me":"Tylko ja","snz_len":"Jak długo","snz_forever":"Aż wznowię","snz_go":"Wstrzymaj","snz_close":"Zamknij","rs_hand":"ręcznie","rs_voice":"głosem","rs_assist":"przez asystenta","snz_voice_info":"Twoje pauzy idą przez komendy głosowe SuperNotify: dotyczą tylko ciebie.","snz_voice_off":"Komendy głosowe SuperNotify są wyłączone: włącz je w opcjach integracji.","snz_resume_mine":"Wznów moje","go_open":"Pokaż","dl_probe":"Wypróbuj ten kanał","probe_msg":"Test kanału z pulpitu","sc_why":"Dlaczego","sc_yes":"Obowiązuje teraz","sc_no":"Teraz nie obowiązuje","sc_manual_why":"Scenariusz ręczny: stosowany ręcznie","sc_no_cond":"Brak warunków","sc_off_sw":"Wyłączony","sc_not_eval":"nie sprawdzono","sc_now":"teraz","sc_diff_btn_on":"Co się zmieni, jeśli obowiązuje","sc_diff_btn_off":"Co się zmieni bez niego","sc_diff_on":"Gdyby obowiązywał, dla średniego powiadomienia teraz:","sc_diff_off":"Bez niego, dla średniego powiadomienia teraz:","sc_diff_add":"wysłałby też","sc_diff_rem":"już by nie wysłał","sc_diff_none":"bez różnicy","c_state":"{e} to {s}","c_template":"warunek szablonu","c_time":"czas","c_after":"po","c_before":"przed","c_numeric":"{e}","c_above":"powyżej","c_below":"poniżej","c_and":"wszystkie z tych","c_or":"co najmniej jeden z tych","c_not":"żaden z tych","c_or_join":" lub ","sim_hint_dry":"Własna odpowiedź SuperNotify (próba, nic nie jest wysyłane): powiadomienie teraz, z priorytetem i tylko scenariuszami wybranymi powyżej.","sim_msg":"Test symulatora","sim_prio":"Priorytet","sa_snooze":"{what} wstrzymane na {len}.","sa_silence":"{what} wyciszone do odwołania.","sa_resume":"{what} znów włączone.","sa_resume_one":"Koniec pauzy: {x}.","sa_resume_all":"Powiadomienia znów włączone.","sa_w_nc":"Niekrytyczne powiadomienia","sa_w_all":"Wszystkie powiadomienia","sa_w_ch":"Kanał {x}","sa_w_pr":"Powiadomienia o priorytecie {x}","sa_w_mine":"Twoje powiadomienia","sa_for":"dla {x}","sa_min":"{n} minut","sa_hour":"jedną godzinę","sa_hours":"{n} godz.","occ_title":"Kto jest w domu","occ_home_l":"W domu","occ_ALL_HOME":"Wszyscy w domu","occ_ALL_AWAY":"Wszyscy poza domem","occ_LONE_HOME":"Tylko jedna osoba w domu","occ_MULTI_HOME":"Kilka osób w domu","occ_UNDEFINED_OCCUPANTS":"Nikt nie jest śledzony","h_repairs":"naprawy SuperNotify","h_repairs_1":"naprawa SuperNotify","det_more":"Wszystkie atrybuty","det_yes":"tak","det_no":"nie","det_action":"Akcja","det_target":"Stałe cele","det_target_req":"Wymaga celu","det_target_use":"Cele używają","det_inclusion":"Używany, gdy","det_prio":"Priorytety","det_occ":"Kto musi być w domu","det_transport":"Transport","det_data":"Dane","det_debug":"Debug","det_err_last":"Ostatni błąd","det_err_in":"W","det_err_n":"Błędy od uruchomienia","det_select":"Wybór","adv_html":"Tekst do e-maila (HTML)","adv_clip":"Klip wideo z adresu URL","adv_actions":"Przyciski w powiadomieniu","adv_act_id":"id akcji","adv_act_title":"tekst przycisku","adv_act_add":"+ przycisk","adv_groups":"Grupy przycisków (przecinek)","adv_dc":"Ustawienia kanałów dla tego powiadomienia","adv_dc_ph":"klucz: wartość, jedno na linię","adv_dc_add":"+ kanał","snz_active":"Teraz wstrzymane","snz_resume":"Wznów","snz_resume_all":"Wznów wszystko","snz_until_resumed":"do wznowienia","snz_done":"Wstrzymano","snz_resumed":"Wznowiono","no_notif":"brak powiadomień","st_title":"Użycie","st_days_short":"d","st_total":"Powiadomienia","st_avg":"dziennie","st_today":"Dzisiaj","st_vs_avg":"vs. średnia","st_peak_hour":"Godzina szczytu","st_top_channel":"Główny kanał","st_errors":"Błędy kanałów","st_of_sends":"wysyłek kanałów","st_daily":"Dziennie","st_hourly":"Według godziny","st_weekday":"Według dnia tygodnia","st_channels":"Kanały — najczęściej używane","st_priority":"Priorytet","st_period":"Pora dnia","st_insights":"Wnioski","st_no_data":"Brak historii — dane pojawią się po pierwszych powiadomieniach.","st_loading":"ładowanie…","st_installed":"zainstalowana","st_latest":"najnowsza","st_uptodate":"aktualna","st_update":"dostępna aktualizacja","st_restart":"wymagany restart","st_logged":"zapisane","st_from_archive":"z archiwum SuperNotify","st_archive_err":"archiwum odczytane częściowo","st_wd":["Pn","Wt","Śr","Cz","Pt","So","Nd"],"st_i_share":"{p}% wszystkich wysyłek kanałów idzie przez {c}.","st_i_peak":"Najbardziej ruchliwa godzina to {h}:00 ({n} powiadomień w {d} dni).","st_i_night":"{p}% powiadomień przychodzi między 23:00 a 07:00 — rozważ scenariusz „Nie przeszkadzać”, jeśli to niepożądane.","st_i_night_ok":"Tylko {p}% powiadomień przychodzi w nocy (23–07): godziny ciszy działają.","st_i_weekend":"W weekendy jest {p}% {dir} powiadomień niż w dni robocze.","st_i_errors":"{n} błędów kanałów w {d} dni, głównie na {c}.","st_i_noerr":"Brak błędów kanałów w ostatnich {d} dniach.","st_i_prio":"{p}% powiadomień ma priorytet {prio}.","st_i_trend":"Ostatnie 7 dni: {n}/dzień, {dir} o {p}% względem 7 poprzednich.","st_more":"więcej","st_less":"mniej","st_up":"wzrost","st_down":"spadek"},"SN_ARCH_STRINGS":{"search":"Szukaj w tytule lub wiadomości…","f_all":"Wszystkie","f_today":"Dzisiaj","f_whisper":"Szeptane","wh":"szeptem","said":"Alexa powiedziała","said_by":"{ch} powiedział","none":"żadne powiadomienie nie pasuje","loading":"czytanie archiwum…","recent":"ostatnie powiadomienia","read_at":"odczytano o","today":"Dzisiaj","yesterday":"Wczoraj","failed":"nieudane","missed":"nieodebrane","prio":{"critical":"Krytyczny","high":"Wysoki","low":"Niski","minimum":"Minimalny","medium":"Średni"},"reasons":{"doppione":"duplikat","nessun target":"brak celu","errore":"błąd","condizione":"warunek","scenario":"scenariusz","presenza":"obecność","priorita":"priorytet","spento":"wył.","pausa":"drzemka","transport spento":"transport wył.","nessuna azione":"brak akcji","dati non validi":"nieprawidłowe dane","sconosciuto":"nieznany"},"f_appliance":"AGD","ap_scope":"wśród ostatnich {n} odczytanych w całości – starsze nie są rozpoznawane"},"SN_WHY_STRINGS":{"pick":"Wybierz powiadomienie, aby zobaczyć, dlaczego trafiło tam, gdzie trafiło.","loading":"ładowanie…","none":"brak powiadomienia","gone":"tego powiadomienia nie ma już w archiwum","priority":"priorytet","dupe":"duplikat","outcomes":{"success":"dostarczone","partial_delivery":"częściowo dostarczone","dupe":"duplikat","failed":"nieudane","error":"nieudane","fallback_delivery":"dostarczone przez kanał zapasowy","no_delivery":"niedostarczone"},"step_call":"Wywołanie","step_scen":"Scenariusze","step_people":"Osoby","step_ch":"Kanały","call_auto":"nie wskazano kanału: zwykłe kierowanie","call_named":"wskazane w wywołaniu:","call_debug":"z debugiem","nobody":"nikogo nie ma w domu","ch_sent":"wysłane","ch_problems":"do sprawdzenia","ch_skipped":"pominięte","pb_failed":"nieudane","pb_missed":"żądane, ale nie wysłane","grp_skipped":"pominięte przez regułę: normalne","grp_not":"niezaangażowane","trace_title":"Pełny ślad wyboru","fix":{"NO_TARGET":"Żaden odbiorca nie ma adresu dla tego kanału: dodaj go odbiorcy, nadaj kanałowi stałe cele albo pomiń go w tym wywołaniu.","ERROR":"Integracja stojąca za tym kanałem odpowiedziała błędem: sprawdź jej wpis w logu.","NO_ACTION":"Kanał nie ma akcji do wywołania: ustaw `action:` w dostarczeniu.","INVALID_ACTION_DATA":"Dane przekazane do akcji zostały odrzucone: sprawdź `data:` wywołania lub dostarczenia."},"no_scenarios":"żaden scenariusz nie obowiązuje","applied":"wymuszony przez wywołanie","required":"wymagany przez wywołanie","constrain":"ograniczony przez wywołanie do","home":"w domu","away":"poza domem","no_channels":"nie wybrano żadnego kanału","st_ok":"dostarczone","st_err":"nieudane","st_skip":"pominięte","calls":"wywołań","calls_1":"wywołanie","target_required":"wymagany cel:","started_by":"wybrany przez","scen_would_off":"wyłączony przez (uchylone)","src_default":"zawsze wł. (domyślnie)","src_scen":"scenariusz","src_call":"samo wywołanie","src_recipient":"odbiorca","r_off_by":"wyłączony przez","call_targets":"cele w wywołaniu","cats":{"entity_id":"encje","mobile_app_id":"urządzenia","person_id":"osoby","email":"e-mail","phone":"telefon","device_id":"urządzenia"},"r_call_off":"wykluczony przez wywołanie","r_scen_off":"wyłączony przez obowiązujący scenariusz","r_disabled":"wyłączony","r_transport_off":"jego transport jest wyłączony","r_only_scen":"startuje tylko, gdy włączy go scenariusz","r_only_fallback":"tylko zapasowy","r_only_explicit":"startuje tylko, gdy wskazany z nazwy","r_priority":"nie dla tego priorytetu","r_unknown":"nie do odtworzenia bez śladu","from_config":"Powody dla kanałów, które nie ruszyły, są odtwarzane z konfiguracji w jej OBECNYM stanie, nie takim, jaki był wtedy.","from_trace":"Powody pochodzą ze śladu wyboru zarchiwizowanego z powiadomieniem.","st_time":"trwało","st_slow":"najwolniejszy","st_rate":"kanałów się powiodło","ua_title":"Cele, których nie przyjął żaden kanał","ua_hint":"Były w wywołaniu, ale żaden wybrany kanał nie przyjmuje tego rodzaju celu.","un_title":"Nazwy, które nie istnieją","sent_by":"Wysłane przez","sent_auto":"automatyzacja","sent_script":"skrypt","sent_person":"","sent_unknown":"nadawca nieznany (brak automatyzacji lub osoby w kontekście)","no_trace":"Pełny ślad wyboru jest zapisywany tylko, gdy wywołanie notify ma debug: true, i archiwizowany, gdy diagnostyka archiwum go uwzględnia.","reasons":{"NO_TARGET":"brak użytecznego celu","DUPE":"duplikat niedawnego powiadomienia","PRIORITY":"nie dla tego priorytetu","SNOOZE":"drzemka","SNOOZED":"drzemka","DELIVERY_CONDITION":"warunek dostarczenia niespełniony","OCCUPANCY":"reguła obecności","ERROR":"błąd","DELIVERY_DISABLED":"wyłączony","SCENARIO":"scenariusz","TRANSPORT_DISABLED":"jego transport jest wyłączony","NO_SCENARIO":"wymagany scenariusz nie obowiązuje","NO_ACTION":"brak akcji do wywołania","INVALID_ACTION_DATA":"nieprawidłowe dane akcji","UNKNOWN":"nieznany powód"}},"SN_TOOLS_STRINGS":{"maint":"Konserwacja","enq":"Zapytaj SuperNotify","refresh":"Opublikuj ponownie każdą encję","refresh_btn":"Odśwież","resume_btn":"Wznów","refreshed":"Encje opublikowane ponownie.","resume_all":"Wznów każdą pauzę","cleared_n":"pauz wznowionych","purge_arch":"Wyczyść archiwum","purge_media":"Wyczyść obrazy","older":"starsze niż","days":"dni","purge_btn":"Wyczyść","confirm":"Dotknij ponownie, aby potwierdzić","purged":"usunięte","remaining":"zostało","reset":"Cofnij zmiany wprowadzone ręcznie","reset_btn":"Resetuj","reset_none":"Nic do zresetowania: wszystko jest zgodne z konfiguracją.","reset_done":"Przywrócono konfigurację:","k_all":"wszystko","k_scenario":"scenariusze","k_delivery":"kanały","k_recipient":"osoby","k_transport":"transporty","q_config":"Konfiguracja","q_scen":"Scenariusze","q_active":"Aktywne scenariusze","q_by_scen":"Kanały według scenariusza","q_implicit":"Kanały domyślne","q_recipients":"Odbiorcy","q_occupancy":"Kto jest w domu","q_snoozes":"Pauzy","q_last":"Ostatnie powiadomienie","copy":"Kopiuj JSON","copied":"Skopiowano","close":"Zamknij","empty":"(puste)","err":"SuperNotify odpowiedział błędem:","settings":"Ustawienia integracji","running":"w toku…","more":"więcej"},"SN_FORM_LABELS":{"_common":"Wygląd i tekst","style":"Kolory","icons":"Ikony","show_version":"Pokaż wersję karty","intro":"Tekst wprowadzający na górze","title":"Tytuł","dnd_entity":"Przełącznik Nie przeszkadzać","quiet_entity":"Obliczony stan ciszy (opcjonalnie)","presence_entity":"Osoba na pasku stanu","archive_days":"Czyszczenie archiwum: starsze niż (dni)","media_days":"Czyszczenie obrazów: starsze niż (dni)","occupancy":"Kto jest w domu (z SuperNotify)","repairs":"Naprawy SuperNotify na liście stanu","snooze_announce":"Ogłaszaj pauzy na głos (kanał ogłoszeń)","snooze_via":"Pauzy idą przez","o_event":"zdarzenie przycisków push (admin)","o_voice":"komendy głosowe","snooze_minutes":"Długość drzemki (minuty)","snooze_panel":"Kafelek drzemki otwiera panel pauzy","announce_delivery":"Kanał do ogłoszeń","last_notification":"Pokaż ostatnie powiadomienie","last_channels":"Jeden chip na kanał w ostatnim powiadomieniu","repeat_entity":"Przycisk powtórzenia ostatniego (opcjonalnie)","tile_layout":"Kafelki","tile_columns":"Kolumny kafelków (puste = automatycznie)","update_entity":"Encja aktualizacji SuperNotify","cards_update_entity":"Encja aktualizacji kart","health":"Stan na górze","poll_seconds":"Odświeżaj co (sekundy)","group":"Grupuj według sposobu startu kanału","hide_defaults":"Ukryj automatyczne kanały DEFAULT_","limit":"Powiadomienia na liście","expand":"Rozwiń zwinięte części","max_height":"Maksymalna wysokość (CSS, np. 70vh)","trigger_entity":"Odśwież, gdy to się zmieni","dry_run":"Pokaż „Wypróbuj bez wysyłania”","dry_run_dupe_check":"Symuluj też wykrywanie duplikatów","days":"Domyślnie pokazywane dni","manifest_url":"URL manifestu automatyzacji","o_supernotify":"SuperNotify","o_theme":"Motyw Home Assistant","o_mdi":"Ikony Home Assistant","o_emoji":"Emoji","o_row":"Ikona po lewej","o_stacked":"Wysokie, ikona na górze","o_auto":"Automatycznie"},"SN_NATIVE_STR":{"all_good":"Wszystko w porządku","paused":"Wstrzymane","until":"do","resume":"Wznów","test":"Wyślij test","sure":"Dotknij ponownie, aby wysłać","sent":"Wysłane","last":"Ostatnie","none":"Brak powiadomień","ago":"temu","min":"min","h":"godz.","err":"transportów z błędami","off":"kanałów wył."},"SN_STRATEGY_TITLES":{"home":"Główna","archive":"Archiwum","send":"Wyślij","setup":"Ustawienia","stats":"Statystyki","tools":"Narzędzia","title":"SuperNotify","appliances":"AGD"},"SN_APPL_STRINGS":{"title":"AGD","loading":"odczyt…","none":"Brak urządzeń: dodaj je w Appliance Autonotify (Ustawienia → Urządzenia i usługi).","st_run":"Pracuje","st_cleaning":"Sprząta","st_done":"Gotowe · do opróżnienia","st_done_other":"Gotowe","st_err":"Potrzebuje pomocy","m_switch_on":"Włącz gniazdko","done_switch_on":"Gniazdko włączone.","done_action":"Gotowe: {n}.","confirm_action":"Wykonać «{n}»?","open_entity":"Otwórz, aby zmienić","chip_notifs":"Powiadomienia","chip_device":"Urządzenie","not_found":"Brak urządzenia o nazwie «{n}».","last7":"Ostatnie 7 dni","col_day":"Dzień","col_cycles":"Cykle","col_time":"Czas","col_energy":"Zużycie","source_h":"Źródło","manual_src":"dodane ręcznie: pracuje powyżej {w}","tab_info":"Przegląd","tab_stats":"Zużycie i cykle","tab_cleans":"Sprzątania","tab_prints":"Wydruki","last_run":"Ostatni cykl","avg_run":"Średnio","reminders_h":"Powiadomienia","plug":"Gniazdko","plug_on":"włączone","plug_off":"wyłączone","error_h":"Błąd","open_device":"Urządzenie w Home Assistant","prints":"wydruki","print1":"wydruk","per_print":"Każdy wydruk w tym miesiącu","last_prints":"Ostatnie wydruki","no_print_month":"W tym miesiącu jeszcze bez wydruku","no_print":"Jeszcze bez wydruku","col_fil":"Filament","failed":"nieudany","per_run":"Każdy cykl w tym miesiącu","dev_hist":"Każdy pochodzi z historii Home Assistant (ostatnie {n} dni); godziny z licznika urządzenia, jeśli go ma.","cleans":"sprzątania","clean1":"sprzątanie","per_clean":"Każde sprzątanie w tym miesiącu","avg_clean":"średnio {d}","col_area":"Powierzchnia","last_cleans":"Ostatnie sprzątania","no_clean_month":"W tym miesiącu jeszcze bez sprzątania","no_clean":"Jeszcze bez sprzątania","vac_hist":"Sumy pochodzą z liczników robota, pojedyncze sprzątania z historii Home Assistant (ostatnie {n} dni).","st_paused":"Wstrzymane","st_returning":"Wraca do stacji","st_charging":"Ładuje się","st_docked_w":"W stacji","st_idle":"Bezczynne","st_off":"Wyłączone","stopped":"Bezczynne","yesterday":"wczoraj","u_min":"min","u_h":"godz.","start":"Start","so_far":"dotąd","no_cycle":"Jeszcze bez cyklu","last_cycle":"Ostatni cykl {d}","ended_at":"Skończone o {t}","reminders":"+{n} przypomnień do {t}","reminder1":"+1 przypomnienie o {t}","end_est":"Przewidywany koniec","left":"zostało {d}","almost":"zaraz skończy","est_from_avg":"szacunek z podobnych cykli","running_for":"Pracuje od {d}","btn_empty":"Opróżnione","btn_seen":"Zrobione","btn_resume":"Wznów sprzątanie","m_switch_off":"Wyłącz gniazdko","m_remind":"Przypomnij później","details":"Szczegóły","settings":"Ustawienia","more":"Więcej","details_link":"Szczegóły, zużycie i cykle","done_empty":"Zrobione: przypomnienia ustają.","done_remind":"Przypomni później.","done_switch":"Gniazdko wyłączone.","done_resume":"Sprzątanie wznowione.","err":"Błąd","new_dev":"Nowe urządzenia: {n}","new_dev1":"1 nowe urządzenie","battery":"Bateria","consumable":"{n}: {p}%","maint_in":"pozostało cykli: {c}","maint_next":"przy następnym cyklu","maint_due":"do zrobienia","maint_of":"{d} z {e}","maint_done":"Zrobione","confirm_maint":"Oznaczyć «{n}» jako zrobione? Liczenie zacznie się od nowa.","conn_lost":"utracono połączenie: ostatni znany stan","cons_h":"Materiały eksploatacyjne","commands":"Polecenia","tap_again":"Dotknij ponownie, aby potwierdzić","empty_since":"Do opróżnienia od","done_since":"Zakończono","avg_cycle":"Średni cykl","maint_tab":"Konserwacja","tab_stats_short":"Zużycie","read_failed":"Nie udało się odczytać historii ({e}); ponowię za chwilę.","retry":"Ponów","see_chart":"Pokaż wykres","back":"Wstecz","avg_line":"średnio {v}","tap_bar":"Dotknij słupka, aby zobaczyć cykl","k_station":"Stacja","off_since":"Wyłączone od","close":"Zamknij","power_now":"teraz","p_today":"Dziś","p_week":"Tydzień","p_month":"Miesiąc","p_year":"Rok","cycles":"cykli","cycle1":"cykl","per_cycle":"Zużycie na cykl w tym miesiącu","short":"Krótkie","long":"Długie","anomalous":"Nietypowe","avg":"śr. {d}, {k}","last_cycles":"Ostatnie cykle","col_start":"Start","col_dur":"Czas","col_cost":"Koszt","no_cycle_month":"W tym miesiącu jeszcze bez cyklu","coarse":"Cykle sprzed ponad 10 dni liczone są co godzinę.","open_notifs":"Powiadomienia urządzenia","no_power":"Nie znaleziono czujnika mocy: podaj go jako `power_entity` w `appliances:`.","no_power_vac":"Robot sprzątający nie ma czujnika mocy: zużycie i cykle nie są liczone."}},"pt":{"SN_STRINGS":{"presence":"Presença","time_band":"Faixa horária","quiet":"Silêncio","act_scen":"Cenários ativos","on":"ligado","off":"desligado","active":"ativo","dnd":"Não incomodar","tap_silence":"toque para silenciar","snooze":"Pausa","min":"min","pause_nc":"pausar não críticas","snoozed":"Em pausa","until":"até","tap_clear":"toque para limpar","announce":"Anunciar","intercom":"intercomunicador","announce_ph":"Anunciar em todos os altifalantes…","send":"Enviar","announced":"Anunciado","cleared":"Pausas removidas","snoozed_for":"Notificações não críticas em pausa durante","sent":"Enviadas","yesterday":"ontem","deliveries":"Entregas","last_notif":"Última notificação","transports":"Transportes","delivered":"entregue","failed":"falhou","channels":"canais","none":"nenhum","no_transports":"nenhuma entidade de transporte encontrada","tr_used":"usado por","tr_unused":"nenhum canal o usa","start":"início","volume":"volume","now":"agora","crosses":"passa a meia-noite","no_voice":"sem voz","mute_hint":"Uma faixa a <b>0%</b> não envia <b>nenhum anúncio por voz</b> (Alexa e TTS desligados, push e painel continuam a ser entregues). Os alertas críticos e de prioridade alta falam sempre.","enabled":"ativado","grp_auto":"Arrancam sozinhos","grp_named":"Só quando indicados na chamada","grp_scen":"Só com um cenário","grp_fallback":"Reserva, quando os outros falham","ch_title":"Canais","ch_count":"{on} de {tot} ligados","off_manual":"desligado","paused_by":"em pausa agora por","on_by":"ligado agora através de","fixed_targets":"destinos fixos","no_deliveries":"nenhuma entidade de entrega encontrada","home":"em casa","away":"fora","devices":"dispositivos","devices_1":"dispositivo","rc_test":"Enviar um teste","rc_test_confirm":"Toque de novo para enviar","rc_test_sent":"Teste enviado","rc_test_title":"Teste SuperNotify","rc_test_msg":"Mensagem de teste do painel,","overrides":"substituições de entrega","overrides_1":"substituição de entrega","no_contact":"sem contactos","no_recipients":"nenhuma entidade de destinatário encontrada","details":"Detalhes","h_update":"atualização disponível:","h_restart":"reinicie o Home Assistant para concluir a atualização","h_uptodate":"atualizado","h_transport_err":"transportes com erros","h_channels_off":"canais desligados","h_all_good":"Tudo bem","h_failures":"falhas","h_failures_1":"falha","h_transport_err_1":"transporte com erros","h_channels_off_1":"canal desligado","channels_1":"canal","band_early_morning":"Madrugada","band_morning":"Manhã","band_afternoon":"Tarde","band_evening":"Fim de tarde","band_night":"Noite","band_late_night":"Noite avançada","h_look_1":"1 coisa a verificar","h_look_n":"{n} coisas a verificar","h_rest_ok":"todo o resto funciona","h_ch_on":"{on} de {tot} canais ligados","h_open":"Abrir","ln_delivered":"entregue","ln_failed":"falhou","ln_why":"Porquê","tgt_loading":"a carregar o seletor…","bands_empty_t":"Ainda sem faixas horárias","bands_empty":"Adicione uma faixa por cada parte do dia: um input_datetime para o início e um input_number para o volume da voz.","active_now":"ativo agora","disabled":"desativado","other":"Outros","manual":"manual","apply_now":"aplicar agora","applied":"Aplicado","apply_off":"toque para deixar de aplicar","enabled_lbl":"ativado","reset_overrides":"Repor substituições","reset_done":"substituições repostas","transport_off":"transporte desligado","last_notified":"última notificação","never_notified":"nunca notificado","media":"multimédia","no_scenarios":"nenhuma entidade de cenário encontrada","sim_pick":"🎬 Cenários — toque para simular","sim_fire":"📤 Canais","sim_hint":"Dados reais do motor (serviços enquire). A filtragem de entregas por prioridade acontece no motor e não é simulada aqui. Desativado prevalece sobre ativado, como na combinação em execução.","sim_none":"nenhuma entrega seria acionada","sim_go":"Seria enviado","sim_stop":"Não seria enviado","sim_r_default":"arranca sozinho","sim_r_on":"ligado por","sim_r_off":"desligado por","sim_r_named":"só quando indicado na chamada","sim_r_scen":"só com um cenário que o ligue","sim_r_fallback":"reserva, quando os outros falham","sim_r_switched":"desligado","title":"Título","message":"Mensagem","priority":"Prioridade","channels_lbl":"Canais — nenhum escolhido = encaminhamento normal","camera_lbl":"Captura da câmara","preview":"Pré-visualização","no_title":"(sem título)","no_message":"(sem mensagem)","default_prio":"predefinida (média)","comp_hint":"Os canais escolhidos são enviados com delivery_selection: fixed (só esses são acionados). Crítica é mesmo crítica — sirenes incluídas.","critical_confirm":"Enviar uma notificação CRÍTICA? Sirenes e volume máximo incluídos.","sent_toast":"Enviado","write_or_pick":"Escreva uma mensagem, ou escolha uma câmara ou um canal","send_err":"Não enviado","dry_btn":"Experimentar sem enviar","dry_title":"Se o enviasse agora","dry_err":"A simulação falhou","dry_nobody":"nenhum destinatário, só destinos diretos","dry_none":"Nenhum canal selecionado","dry_scen":"Cenários ativos","dry_raw":"Resposta em bruto","dry_prio":"Prioridade","dry_would_n":"canais enviariam","dry_nothing":"Nada seria enviado","dry_dupe":"Duplicado de uma notificação recente: seria descartada","dry_no_dupe":"Verificação de duplicados não simulada, por isso o Enviar real logo a seguir não é bloqueado.","dry_home":"Casa","dry_empty":"O SuperNotify não deu resposta: é a 2.12 ou posterior?","dry_reasons":{"NO_TARGET":"sem destino utilizável","DUPE":"duplicado","PRIORITY":"não para esta prioridade","SNOOZED":"em pausa","DELIVERY_CONDITION":"condição da entrega falsa","OCCUPANCY":"regra de presença","TRANSPORT_DISABLED":"transporte desligado","DELIVERY_DISABLED":"desligado","NO_SCENARIO":"cenário exigido não está em vigor","NO_ACTION":"sem ação","INVALID_ACTION_DATA":"dados inválidos","UNKNOWN":"motivo desconhecido","ERROR":"erro"},"prio_minimum":"Mínima","prio_low":"Baixa","prio_medium":"Média","prio_high":"Alta","prio_critical":"Crítica","target_lbl":"Destino — pessoas, dispositivos, áreas, pisos, etiquetas","custom_target_lbl":"Destinos personalizados (e-mail, IDs do Telegram, …) — separados por vírgulas","adv_title":"Opções avançadas","adv_spoken":"Mensagem falada (Alexa, TTS)","adv_spoken_ph":"o que os altifalantes dizem, se for diferente do texto","adv_apply":"Aplicar estes cenários","adv_require":"Enviar só se estes cenários estiverem ativos","adv_constrain":"Considerar só estes cenários","adv_snapshot":"Imagem a partir de um URL","adv_debug":"Depuração: registar o rastreio completo da seleção (mostrado pelo cartão Porquê)","custom_target_ph":"ex. user@example.com, 123456789","native_target_tag":"🎯 área/piso/etiqueta nativos","target_warn":"⚠️ Áreas, pisos e etiquetas só são resolvidos por notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts e chime. Com qualquer outro canal — ou com o encaminhamento predefinido quando nenhum canal é escolhido acima — a notificação pode ficar silenciosamente sem destino. Escolha um canal compatível, ou adicione diretamente uma pessoa/dispositivo.","aut_search":"Pesquisar automações…","aut_all":"Todas","aut_none":"Sem resultados","aut_err":"Manifesto não encontrado — gere-o com tools/genera_vista_automazioni.py","aut_updated":"lista atualizada","aut_count":"automações","aut_count_1":"automação","never":"nunca","ago_now":"agora","ago_min":"min atrás","ago_h":"h atrás","ago_d":"d atrás","aut_disabled_only":"Só desativadas","grp_active":"ativos","repeat":"Repetir","skipped_n":"ignorados","left":"restantes","missed_n":"perdidos","snz_all":"tudo","snz_nc":"não críticas","snz_prio":"prioridade","snz_transport":"transporte","snz_for":"durante","snz_choose":"escolha o quê e por quanto tempo","snz_title":"Pausar notificações","snz_what":"O quê","snz_nc_l":"Não críticas","snz_all_l":"Tudo","snz_ch":"Um canal","snz_pr":"Uma prioridade","snz_who":"Para quem","snz_everyone":"Todos","snz_me":"Só eu","snz_len":"Quanto tempo","snz_forever":"Até eu retomar","snz_go":"Pausar","snz_close":"Fechar","rs_hand":"à mão","rs_voice":"por voz","rs_assist":"pelo assistente","snz_voice_info":"As suas pausas passam pelos comandos de voz do SuperNotify: são só suas.","snz_voice_off":"Os comandos de voz do SuperNotify estão desligados: ative-os nas opções da integração.","snz_resume_mine":"Retomar as minhas","go_open":"Mostrar","dl_probe":"Experimentar este canal","probe_msg":"Teste de canal a partir do painel","sc_why":"Porquê","sc_yes":"Aplica-se agora","sc_no":"Não se aplica agora","sc_manual_why":"Cenário manual: aplicado à mão","sc_no_cond":"Sem condições","sc_off_sw":"Desligado","sc_not_eval":"não verificado","sc_now":"agora","sc_diff_btn_on":"O que muda se se aplicar","sc_diff_btn_off":"O que muda sem ele","sc_diff_on":"Se se aplicasse, para uma notificação média agora:","sc_diff_off":"Sem ele, para uma notificação média agora:","sc_diff_add":"também enviaria","sc_diff_rem":"deixaria de enviar","sc_diff_none":"sem diferença","c_state":"{e} está {s}","c_template":"condição de modelo","c_time":"hora","c_after":"depois de","c_before":"antes de","c_numeric":"{e}","c_above":"acima de","c_below":"abaixo de","c_and":"todas estas","c_or":"pelo menos uma destas","c_not":"nenhuma destas","c_or_join":" ou ","sim_hint_dry":"A resposta do próprio SuperNotify (simulação, nada é enviado): uma notificação agora, com a prioridade e só os cenários escolhidos acima.","sim_msg":"Teste do simulador","sim_prio":"Prioridade","sa_snooze":"{what} em pausa durante {len}.","sa_silence":"{what} silenciadas até nova ordem.","sa_resume":"{what} reativadas.","sa_resume_one":"Pausa terminada: {x}.","sa_resume_all":"Notificações reativadas.","sa_w_nc":"Notificações não críticas","sa_w_all":"Todas as notificações","sa_w_ch":"Canal {x}","sa_w_pr":"Notificações de prioridade {x}","sa_w_mine":"As suas notificações","sa_for":"para {x}","sa_min":"{n} minutos","sa_hour":"uma hora","sa_hours":"{n} horas","occ_title":"Quem está em casa","occ_home_l":"Em casa","occ_ALL_HOME":"Todos em casa","occ_ALL_AWAY":"Todos fora","occ_LONE_HOME":"Só um em casa","occ_MULTI_HOME":"Alguns em casa","occ_UNDEFINED_OCCUPANTS":"Ninguém monitorizado","h_repairs":"reparações do SuperNotify","h_repairs_1":"reparação do SuperNotify","det_more":"Todos os atributos","det_yes":"sim","det_no":"não","det_action":"Ação","det_target":"Destinos fixos","det_target_req":"Requer um destino","det_target_use":"Os destinos usam","det_inclusion":"Usado quando","det_prio":"Prioridades","det_occ":"Quem tem de estar em casa","det_transport":"Transporte","det_data":"Dados","det_debug":"Depuração","det_err_last":"Último erro","det_err_in":"Em","det_err_n":"Erros desde o arranque","det_select":"Seleção","adv_html":"Texto para e-mail (HTML)","adv_clip":"Clipe de vídeo a partir de um URL","adv_actions":"Botões na notificação","adv_act_id":"id da ação","adv_act_title":"texto do botão","adv_act_add":"+ botão","adv_groups":"Grupos de botões (vírgula)","adv_dc":"Definições do canal para esta notificação","adv_dc_ph":"chave: valor, um por linha","adv_dc_add":"+ canal","snz_active":"Em pausa agora","snz_resume":"Retomar","snz_resume_all":"Retomar tudo","snz_until_resumed":"até retomar","snz_done":"Em pausa","snz_resumed":"Retomado","no_notif":"ainda sem notificações","st_title":"Utilização","st_days_short":"d","st_total":"Notificações","st_avg":"por dia","st_today":"Hoje","st_vs_avg":"vs. média","st_peak_hour":"Hora de pico","st_top_channel":"Canal mais usado","st_errors":"Erros de canal","st_of_sends":"dos envios por canal","st_daily":"Por dia","st_hourly":"Por hora do dia","st_weekday":"Por dia da semana","st_channels":"Canais — mais usados","st_priority":"Prioridade","st_period":"Período do dia","st_insights":"Observações","st_no_data":"Ainda sem histórico — os dados aparecem após as primeiras notificações.","st_loading":"a carregar…","st_installed":"instalada","st_latest":"mais recente","st_uptodate":"atualizado","st_update":"atualização disponível","st_restart":"reinício necessário","st_logged":"registadas","st_from_archive":"do arquivo do SuperNotify","st_archive_err":"arquivo lido em parte","st_wd":["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"],"st_i_share":"{p}% de todos os envios por canal passam por {c}.","st_i_peak":"A hora mais movimentada é às {h}:00 ({n} notificações em {d} dias).","st_i_night":"{p}% das notificações chegam entre as 23:00 e as 07:00 — considere um cenário Não incomodar se não as quiser.","st_i_night_ok":"Apenas {p}% das notificações chegam à noite (23–07): as horas de silêncio estão a funcionar.","st_i_weekend":"Os dias de fim de semana têm {p}% {dir} notificações do que os dias úteis.","st_i_errors":"{n} erros de canal em {d} dias, sobretudo em {c}.","st_i_noerr":"Nenhum erro de canal nos últimos {d} dias.","st_i_prio":"{p}% das notificações têm prioridade {prio}.","st_i_trend":"Últimos 7 dias: {n}/dia, {dir} {p}% face aos 7 anteriores.","st_more":"mais","st_less":"menos","st_up":"subida de","st_down":"descida de"},"SN_ARCH_STRINGS":{"search":"Pesquisar título ou mensagem…","f_all":"Todas","f_today":"Hoje","f_whisper":"Sussurradas","wh":"sussurrada","said":"A Alexa disse","said_by":"{ch} disse","none":"nenhuma notificação corresponde","loading":"a ler o arquivo…","recent":"últimas notificações","read_at":"lido às","today":"Hoje","yesterday":"Ontem","failed":"falhou","missed":"perdido","prio":{"critical":"Crítica","high":"Alta","low":"Baixa","minimum":"Mínima","medium":"Média"},"reasons":{"doppione":"duplicado","nessun target":"sem destino","errore":"erro","condizione":"condição","scenario":"cenário","presenza":"presença","priorita":"prioridade","spento":"desligado","pausa":"em pausa","transport spento":"transporte desligado","nessuna azione":"sem ação","dati non validi":"dados inválidos","sconosciuto":"desconhecido"},"f_appliance":"Eletrodomésticos","ap_scope":"entre as últimas {n} lidas por completo: as mais antigas não são reconhecidas"},"SN_WHY_STRINGS":{"pick":"Escolha uma notificação para ver porque foi para onde foi.","loading":"a carregar…","none":"nenhuma notificação","gone":"esta notificação já não está no arquivo","priority":"prioridade","dupe":"duplicado","outcomes":{"success":"entregue","partial_delivery":"entregue em parte","dupe":"duplicado","failed":"falhou","error":"falhou","fallback_delivery":"entregue pelo canal de reserva","no_delivery":"não entregue"},"step_call":"Chamada","step_scen":"Cenários","step_people":"Pessoas","step_ch":"Canais","call_auto":"nenhum canal indicado: encaminhamento normal","call_named":"indicados na chamada:","call_debug":"com depuração","nobody":"ninguém em casa","ch_sent":"enviados","ch_problems":"a verificar","ch_skipped":"ignorados","pb_failed":"falhou","pb_missed":"pedido mas não enviado","grp_skipped":"ignorados por uma regra: normal","grp_not":"não envolvidos","trace_title":"Rastreio completo da seleção","fix":{"NO_TARGET":"Nenhum destinatário tem um endereço para este canal: adicione um a um destinatário, dê ao canal destinos fixos ou deixe-o fora desta chamada.","ERROR":"A integração por trás deste canal respondeu com um erro: verifique a respetiva entrada no registo.","NO_ACTION":"O canal não tem nenhuma ação a chamar: defina `action:` na entrega.","INVALID_ACTION_DATA":"Os dados passados à ação foram rejeitados: verifique o `data:` da chamada ou da entrega."},"no_scenarios":"nenhum cenário em vigor","applied":"forçado pela chamada","required":"exigido pela chamada","constrain":"limitado pela chamada a","home":"em casa","away":"fora","no_channels":"nenhum canal foi selecionado","st_ok":"entregue","st_err":"falhou","st_skip":"ignorado","calls":"chamadas","calls_1":"chamada","target_required":"destino exigido:","started_by":"selecionado por","scen_would_off":"desligado por (anulado)","src_default":"sempre ligado (predefinição)","src_scen":"cenário","src_call":"a própria chamada","src_recipient":"destinatário","r_off_by":"desligado por","call_targets":"destinos na chamada","cats":{"entity_id":"entidades","mobile_app_id":"dispositivos","person_id":"pessoas","email":"e-mail","phone":"telefone","device_id":"dispositivos"},"r_call_off":"excluído pela chamada","r_scen_off":"desligado por um cenário em vigor","r_disabled":"desligado","r_transport_off":"o seu transporte está desligado","r_only_scen":"só arranca quando um cenário o liga","r_only_fallback":"apenas reserva","r_only_explicit":"só arranca quando pedido pelo nome","r_priority":"não para esta prioridade","r_unknown":"não reconstituível sem o rastreio","from_config":"Os motivos dos canais que não arrancaram são reconstituídos a partir da configuração ATUAL, não da que existia na altura.","from_trace":"Os motivos vêm do rastreio da seleção arquivado com a notificação.","st_time":"demorou","st_slow":"mais lento","st_rate":"dos canais tiveram êxito","ua_title":"Destinos que nenhum canal aceitou","ua_hint":"Estavam na chamada, mas nenhum canal selecionado aceita este tipo de destino.","un_title":"Nomes que não existem","sent_by":"Enviado por","sent_auto":"automação","sent_script":"script","sent_person":"","sent_unknown":"remetente desconhecido (nenhuma automação ou pessoa no seu contexto)","no_trace":"O rastreio completo da seleção só é registado quando a chamada notify tem debug: true, e arquivado quando os diagnósticos do arquivo o incluem.","reasons":{"NO_TARGET":"sem destino utilizável","DUPE":"duplicado de uma notificação recente","PRIORITY":"não para esta prioridade","SNOOZE":"em pausa","SNOOZED":"em pausa","DELIVERY_CONDITION":"condição da entrega falsa","OCCUPANCY":"regra de presença","ERROR":"erro","DELIVERY_DISABLED":"desligado","SCENARIO":"cenário","TRANSPORT_DISABLED":"o seu transporte está desligado","NO_SCENARIO":"um cenário exigido não está em vigor","NO_ACTION":"nenhuma ação a chamar","INVALID_ACTION_DATA":"dados da ação inválidos","UNKNOWN":"motivo desconhecido"}},"SN_TOOLS_STRINGS":{"maint":"Manutenção","enq":"Perguntar ao SuperNotify","refresh":"Publicar de novo todas as entidades","refresh_btn":"Atualizar","resume_btn":"Retomar","refreshed":"Entidades publicadas de novo.","resume_all":"Retomar todas as pausas","cleared_n":"pausas retomadas","purge_arch":"Limpar o arquivo","purge_media":"Limpar as imagens","older":"com mais de","days":"dias","purge_btn":"Limpar","confirm":"Toque de novo para confirmar","purged":"eliminados","remaining":"restantes","reset":"Desfazer as alterações feitas à mão","reset_btn":"Repor","reset_none":"Nada a repor: está tudo como configurado.","reset_done":"De volta à configuração:","k_all":"tudo","k_scenario":"cenários","k_delivery":"canais","k_recipient":"pessoas","k_transport":"transportes","q_config":"Configuração","q_scen":"Cenários","q_active":"Cenários ativos","q_by_scen":"Canais por cenário","q_implicit":"Canais predefinidos","q_recipients":"Destinatários","q_occupancy":"Quem está em casa","q_snoozes":"Pausas","q_last":"Última notificação","copy":"Copiar JSON","copied":"Copiado","close":"Fechar","empty":"(vazio)","err":"O SuperNotify respondeu com um erro:","settings":"Definições da integração","running":"a processar…","more":"mais"},"SN_FORM_LABELS":{"_common":"Aspeto e texto","style":"Cores","icons":"Ícones","show_version":"Mostrar a versão do cartão","intro":"Texto de introdução no topo","title":"Título","dnd_entity":"Interruptor Não incomodar","quiet_entity":"Estado de silêncio calculado (opcional)","presence_entity":"Pessoa para a barra de estado","archive_days":"Limpeza do arquivo: com mais de (dias)","media_days":"Limpeza das imagens: com mais de (dias)","occupancy":"Quem está em casa (do SuperNotify)","repairs":"Reparações do SuperNotify na lista de estado","snooze_announce":"Dizer as pausas em voz alta (canal de anúncios)","snooze_via":"As pausas passam por","o_event":"o evento dos botões push (admin)","o_voice":"os comandos de voz","snooze_minutes":"Duração da pausa (minutos)","snooze_panel":"O mosaico Pausa abre o painel de pausa","announce_delivery":"Canal para anúncios","last_notification":"Mostrar a última notificação","last_channels":"Um chip por canal na última notificação","repeat_entity":"Botão repetir a última (opcional)","tile_layout":"Mosaicos","tile_columns":"Colunas de mosaicos (vazio = automático)","update_entity":"Entidade de atualização do SuperNotify","cards_update_entity":"Entidade de atualização dos cartões","health":"Estado no topo","poll_seconds":"Atualizar a cada (segundos)","group":"Agrupar pela forma como um canal arranca","hide_defaults":"Ocultar canais automáticos DEFAULT_","limit":"Notificações na lista","expand":"Abrir as partes recolhidas","max_height":"Altura máxima (CSS, ex. 70vh)","trigger_entity":"Atualizar quando isto mudar","dry_run":"Mostrar \"Experimentar sem enviar\"","dry_run_dupe_check":"Simular também a verificação de duplicados","days":"Dias mostrados por predefinição","manifest_url":"URL do manifesto das automações","o_supernotify":"SuperNotify","o_theme":"Tema do Home Assistant","o_mdi":"Ícones do Home Assistant","o_emoji":"Emoji","o_row":"Ícone à esquerda","o_stacked":"Alto, ícone em cima","o_auto":"Automático"},"SN_NATIVE_STR":{"all_good":"Tudo bem","paused":"Em pausa","until":"até","resume":"Retomar","test":"Enviar um teste","sure":"Toque de novo para enviar","sent":"Enviado","last":"Última","none":"Ainda sem notificações","ago":"atrás","min":"min","h":"h","err":"transportes com erros","off":"canais desligados"},"SN_STRATEGY_TITLES":{"home":"Início","archive":"Arquivo","send":"Enviar","setup":"Configuração","stats":"Estatísticas","tools":"Ferramentas","title":"SuperNotify","appliances":"Eletrodomésticos"},"SN_APPL_STRINGS":{"title":"Eletrodomésticos","loading":"a ler…","none":"Sem eletrodomésticos: adicione um no Appliance Autonotify (Definições → Dispositivos e serviços).","st_run":"A funcionar","st_cleaning":"A limpar","st_done":"Terminado · por esvaziar","st_done_other":"Terminado","st_err":"Precisa de ajuda","m_switch_on":"Ligar tomada","done_switch_on":"Tomada ligada.","done_action":"Feito: {n}.","confirm_action":"Executar «{n}»?","open_entity":"Abrir para alterar","chip_notifs":"Notificações","chip_device":"Dispositivo","not_found":"Nenhum aparelho ou dispositivo chamado «{n}».","last7":"Últimos 7 dias","col_day":"Dia","col_cycles":"Ciclos","col_time":"Tempo","col_energy":"Consumo","source_h":"Origem","manual_src":"adicionado à mão: a funcionar acima de {w}","tab_info":"Resumo","tab_stats":"Consumo e ciclos","tab_cleans":"Limpezas","tab_prints":"Impressões","last_run":"Último ciclo","avg_run":"Média","reminders_h":"Notificações","plug":"Tomada","plug_on":"ligada","plug_off":"desligada","error_h":"Erro","open_device":"O dispositivo no Home Assistant","prints":"impressões","print1":"impressão","per_print":"Cada impressão do mês","last_prints":"Últimas impressões","no_print_month":"Ainda nenhuma impressão este mês","no_print":"Ainda nenhuma impressão","col_fil":"Filamento","failed":"falhada","per_run":"Cada ciclo do mês","dev_hist":"Cada uma vem do histórico do Home Assistant (últimos {n} dias); as horas, do contador do aparelho quando o tem.","cleans":"limpezas","clean1":"limpeza","per_clean":"Cada limpeza do mês","avg_clean":"média {d}","col_area":"Área","last_cleans":"Últimas limpezas","no_clean_month":"Ainda nenhuma limpeza este mês","no_clean":"Ainda nenhuma limpeza","vac_hist":"Os totais vêm dos contadores do robô; cada limpeza, do histórico do Home Assistant (últimos {n} dias).","st_paused":"Em pausa","st_returning":"A voltar à base","st_charging":"A carregar","st_docked_w":"Na base","st_idle":"Parado","st_off":"Desligado","stopped":"Parados","yesterday":"ontem","u_min":"min","u_h":"h","start":"Início","so_far":"até agora","no_cycle":"Ainda nenhum ciclo","last_cycle":"Último ciclo {d}","ended_at":"Terminou às {t}","reminders":"+{n} lembretes até às {t}","reminder1":"+1 lembrete às {t}","end_est":"Fim previsto","left":"faltam {d}","almost":"quase a terminar","est_from_avg":"estimativa de ciclos parecidos","running_for":"A funcionar há {d}","btn_empty":"Esvaziado","btn_seen":"Feito","btn_resume":"Retomar limpeza","m_switch_off":"Desligar a tomada","m_remind":"Lembrar mais tarde","details":"Detalhes","settings":"Definições","more":"Mais","details_link":"Detalhes, consumo e ciclos","done_empty":"Feito: os lembretes param.","done_remind":"Vai lembrar mais tarde.","done_switch":"Tomada desligada.","done_resume":"Limpeza retomada.","err":"Erro","new_dev":"{n} dispositivos novos","new_dev1":"1 dispositivo novo","battery":"Bateria","consumable":"{n} a {p}%","maint_in":"daqui a {c} ciclos","maint_next":"no próximo ciclo","maint_due":"a fazer","maint_of":"{d} de {e}","maint_done":"Feito","confirm_maint":"Marcar «{n}» como feito? A contagem recomeça.","conn_lost":"ligação perdida: último estado conhecido","cons_h":"Consumíveis","commands":"Comandos","tap_again":"Toque de novo para confirmar","empty_since":"Por esvaziar há","done_since":"Terminado há","avg_cycle":"Ciclo médio","maint_tab":"Manutenção","tab_stats_short":"Consumo","read_failed":"Não foi possível ler o histórico ({e}); tento de novo em breve.","retry":"Tentar de novo","see_chart":"Ver gráfico","back":"Voltar","avg_line":"média {v}","tap_bar":"Toque numa barra para ver esse ciclo","k_station":"Base","off_since":"Desligado há","close":"Fechar","power_now":"agora","p_today":"Hoje","p_week":"Semana","p_month":"Mês","p_year":"Ano","cycles":"ciclos","cycle1":"ciclo","per_cycle":"Consumo por ciclo este mês","short":"Curtos","long":"Longos","anomalous":"Anómalos","avg":"média {d}, {k}","last_cycles":"Últimos ciclos","col_start":"Início","col_dur":"Duração","col_cost":"Custo","no_cycle_month":"Ainda nenhum ciclo este mês","coarse":"Os ciclos com mais de 10 dias são contados à hora.","open_notifs":"Notificações do eletrodoméstico","no_power":"Nenhum sensor de potência encontrado: indique-o com `power_entity` em `appliances:`.","no_power_vac":"Um robot aspirador não tem sensor de potência: consumo e ciclos não são contados."}},"ja":{"SN_STRINGS":{"presence":"在宅状況","time_band":"時間帯","quiet":"静音","act_scen":"有効なシナリオ","on":"オン","off":"オフ","active":"有効","dnd":"おやすみモード","tap_silence":"タップで消音","snooze":"一時停止","min":"分","pause_nc":"重要でない通知を停止","snoozed":"一時停止中","until":"まで","tap_clear":"タップで解除","announce":"アナウンス","intercom":"インターホン","announce_ph":"すべてのスピーカーでアナウンス…","send":"送信","announced":"アナウンスしました","cleared":"一時停止を解除しました","snoozed_for":"重要でない通知を一時停止しました:","sent":"送信済み","yesterday":"昨日","deliveries":"配信","last_notif":"最後の通知","transports":"トランスポート","delivered":"配信済み","failed":"失敗","channels":"チャンネル","none":"なし","no_transports":"トランスポートのエンティティが見つかりません","tr_used":"使用中:","tr_unused":"使用しているチャンネルなし","start":"開始","volume":"音量","now":"現在","crosses":"日付をまたぐ","no_voice":"音声なし","mute_hint":"<b>0%</b> の時間帯は<b>音声アナウンスを一切行いません</b>（Alexa と TTS はオフ、プッシュとダッシュボードには届きます）。緊急・高優先度の通知は常に読み上げます。","enabled":"有効","grp_auto":"自動で開始","grp_named":"呼び出しで指定されたときのみ","grp_scen":"シナリオがあるときのみ","grp_fallback":"予備（他が失敗したとき）","ch_title":"チャンネル","ch_count":"{tot} 件中 {on} 件オン","off_manual":"オフにされています","paused_by":"現在停止中:","on_by":"現在オン:","fixed_targets":"固定ターゲット","no_deliveries":"配信のエンティティが見つかりません","home":"在宅","away":"外出","devices":"台のデバイス","devices_1":"台のデバイス","rc_test":"テスト送信","rc_test_confirm":"もう一度タップで送信","rc_test_sent":"テストを送信しました","rc_test_title":"SuperNotify テスト","rc_test_msg":"ダッシュボードからのテストメッセージ、","overrides":"件の配信オーバーライド","overrides_1":"件の配信オーバーライド","no_contact":"連絡先なし","no_recipients":"受信者のエンティティが見つかりません","details":"詳細","h_update":"アップデートあり:","h_restart":"アップデートを完了するには Home Assistant を再起動してください","h_uptodate":"最新です","h_transport_err":"件のトランスポートでエラー","h_channels_off":"件のチャンネルがオフ","h_all_good":"問題なし","h_failures":"件の失敗","h_failures_1":"件の失敗","h_transport_err_1":"件のトランスポートでエラー","h_channels_off_1":"件のチャンネルがオフ","channels_1":"チャンネル","band_early_morning":"早朝","band_morning":"朝","band_afternoon":"午後","band_evening":"夕方","band_night":"夜","band_late_night":"深夜","h_look_1":"確認が必要な項目が1件","h_look_n":"確認が必要な項目が {n} 件","h_rest_ok":"その他は正常です","h_ch_on":"{tot} チャンネル中 {on} 件オン","h_open":"開く","ln_delivered":"配信済み","ln_failed":"失敗","ln_why":"理由","tgt_loading":"選択画面を読み込み中…","bands_empty_t":"時間帯がまだありません","bands_empty":"1日の区切りごとに時間帯を1つ追加します。開始時刻用の input_datetime と音声音量用の input_number を用意してください。","active_now":"現在有効","disabled":"無効","other":"その他","manual":"手動","apply_now":"今すぐ適用","applied":"適用中","apply_off":"タップで適用を解除","enabled_lbl":"有効","reset_overrides":"オーバーライドをリセット","reset_done":"オーバーライドをリセットしました","transport_off":"トランスポートがオフ","last_notified":"最終通知","never_notified":"通知履歴なし","media":"メディア","no_scenarios":"シナリオのエンティティが見つかりません","sim_pick":"🎬 シナリオ — タップでシミュレート","sim_fire":"📤 チャンネル","sim_hint":"エンジンの実データ（照会サービス）です。優先度による配信の絞り込みはエンジン側で行われ、ここではシミュレートされません。実行時の統合と同様に、無効が有効より優先されます。","sim_none":"送信される配信はありません","sim_go":"送信される","sim_stop":"送信されない","sim_r_default":"自動で開始","sim_r_on":"オンにしたもの:","sim_r_off":"オフにしたもの:","sim_r_named":"呼び出しで指定されたときのみ","sim_r_scen":"オンにするシナリオがあるときのみ","sim_r_fallback":"予備（他が失敗したとき）","sim_r_switched":"オフにされています","title":"タイトル","message":"メッセージ","priority":"優先度","channels_lbl":"チャンネル — 未選択なら通常のルーティング","camera_lbl":"カメラのスナップショット","preview":"プレビュー","no_title":"（タイトルなし）","no_message":"（メッセージなし）","default_prio":"デフォルト（中）","comp_hint":"選択したチャンネルは delivery_selection: fixed で送信されます（それらのみ送信）。「緊急」は本当に緊急扱いです — サイレンも鳴ります。","critical_confirm":"緊急通知を送信しますか？サイレンと最大音量を含みます。","sent_toast":"送信しました","write_or_pick":"メッセージを入力するか、カメラかチャンネルを選んでください","send_err":"送信されませんでした","dry_btn":"送信せずに試す","dry_title":"今送信した場合","dry_err":"ドライランに失敗しました","dry_nobody":"受信者なし、直接ターゲットのみ","dry_none":"チャンネルが選択されていません","dry_scen":"有効なシナリオ","dry_raw":"生の応答","dry_prio":"優先度","dry_would_n":"チャンネルで送信予定","dry_nothing":"何も送信されません","dry_dupe":"最近の通知と重複しています: 破棄されます","dry_no_dupe":"重複チェックはシミュレートしていないため、直後の実際の送信はブロックされません。","dry_home":"在宅","dry_empty":"SuperNotify から応答がありません: バージョンは 2.12 以降ですか？","dry_reasons":{"NO_TARGET":"使えるターゲットなし","DUPE":"重複","PRIORITY":"この優先度は対象外","SNOOZED":"一時停止中","DELIVERY_CONDITION":"配信条件が偽","OCCUPANCY":"在宅ルール","TRANSPORT_DISABLED":"トランスポートがオフ","DELIVERY_DISABLED":"オフにされています","NO_SCENARIO":"必須シナリオが有効でない","NO_ACTION":"アクションなし","INVALID_ACTION_DATA":"無効なデータ","UNKNOWN":"不明な理由","ERROR":"エラー"},"prio_minimum":"最低","prio_low":"低","prio_medium":"中","prio_high":"高","prio_critical":"緊急","target_lbl":"ターゲット — 人、デバイス、エリア、フロア、ラベル","custom_target_lbl":"カスタムターゲット（メール、Telegram ID など）— カンマ区切り","adv_title":"詳細オプション","adv_spoken":"読み上げメッセージ（Alexa、TTS）","adv_spoken_ph":"本文と異なる場合にスピーカーで読み上げる内容","adv_apply":"これらのシナリオを適用","adv_require":"これらのシナリオが有効な場合のみ送信","adv_constrain":"これらのシナリオのみを考慮","adv_snapshot":"URL からの画像","adv_debug":"デバッグ: 選択トレースをすべて記録（理由カードに表示）","custom_target_ph":"例: user@example.com, 123456789","native_target_tag":"🎯 ネイティブのエリア/フロア/ラベル","target_warn":"⚠️ エリア、フロア、ラベルを解決できるのは notify_entity、alexa_devices、html5、ntfy、kodi、media_player、tts、chime だけです。他のチャンネル — または上でチャンネルを選ばない場合のデフォルトのルーティング — では、通知がターゲットなしで黙って失われることがあります。対応するチャンネルを選ぶか、人やデバイスを直接追加してください。","aut_search":"オートメーションを検索…","aut_all":"すべて","aut_none":"一致なし","aut_err":"マニフェストが見つかりません — tools/genera_vista_automazioni.py で生成してください","aut_updated":"リスト更新","aut_count":"件のオートメーション","aut_count_1":"件のオートメーション","never":"なし","ago_now":"たった今","ago_min":"分前","ago_h":"時間前","ago_d":"日前","aut_disabled_only":"無効のみ","grp_active":"有効","repeat":"繰り返し","skipped_n":"スキップ","left":"残り","missed_n":"未送信","snz_all":"すべて","snz_nc":"重要でない通知","snz_prio":"優先度","snz_transport":"トランスポート","snz_for":"対象","snz_choose":"対象と時間を選択","snz_title":"通知を一時停止","snz_what":"対象","snz_nc_l":"重要でない通知","snz_all_l":"すべて","snz_ch":"チャンネル","snz_pr":"優先度","snz_who":"誰の分","snz_everyone":"全員","snz_me":"自分のみ","snz_len":"期間","snz_forever":"再開するまで","snz_go":"一時停止","snz_close":"閉じる","rs_hand":"手動","rs_voice":"音声","rs_assist":"アシスタント","snz_voice_info":"一時停止は SuperNotify の音声コマンド経由で行われ、あなたの分だけに適用されます。","snz_voice_off":"SuperNotify の音声コマンドがオフです: 統合のオプションでオンにしてください。","snz_resume_mine":"自分の分を再開","go_open":"表示","dl_probe":"このチャンネルを試す","probe_msg":"ダッシュボードからのチャンネルテスト","sc_why":"理由","sc_yes":"現在適用中","sc_no":"現在は適用されていません","sc_manual_why":"手動シナリオ: 手動で適用","sc_no_cond":"条件なし","sc_off_sw":"オフにされています","sc_not_eval":"未評価","sc_now":"現在","sc_diff_btn_on":"適用されたら何が変わるか","sc_diff_btn_off":"なければ何が変わるか","sc_diff_on":"適用された場合、今の「中」優先度の通知では:","sc_diff_off":"なかった場合、今の「中」優先度の通知では:","sc_diff_add":"追加で送信","sc_diff_rem":"送信されなくなる","sc_diff_none":"違いなし","c_state":"{e} が {s}","c_template":"テンプレート条件","c_time":"時刻","c_after":"以降","c_before":"以前","c_numeric":"{e}","c_above":"より上","c_below":"より下","c_and":"以下のすべて","c_or":"以下のいずれか","c_not":"以下のいずれでもない","c_or_join":" または ","sim_hint_dry":"SuperNotify 自身の回答です（ドライラン、何も送信されません）: 上で選んだ優先度とシナリオのみで今通知した場合。","sim_msg":"シミュレーターのテスト","sim_prio":"優先度","sa_snooze":"{what}を {len} 一時停止しました。","sa_silence":"{what}を追って通知があるまで消音しました。","sa_resume":"{what}を再開しました。","sa_resume_one":"一時停止終了: {x}。","sa_resume_all":"通知を再開しました。","sa_w_nc":"重要でない通知","sa_w_all":"すべての通知","sa_w_ch":"チャンネル {x}","sa_w_pr":"優先度「{x}」の通知","sa_w_mine":"あなたの通知","sa_for":"{x} の分","sa_min":"{n} 分間","sa_hour":"1時間","sa_hours":"{n} 時間","occ_title":"在宅中の人","occ_home_l":"在宅","occ_ALL_HOME":"全員在宅","occ_ALL_AWAY":"全員外出","occ_LONE_HOME":"1人だけ在宅","occ_MULTI_HOME":"数人が在宅","occ_UNDEFINED_OCCUPANTS":"追跡対象なし","h_repairs":"件の SuperNotify 修復","h_repairs_1":"件の SuperNotify 修復","det_more":"すべての属性","det_yes":"はい","det_no":"いいえ","det_action":"アクション","det_target":"固定ターゲット","det_target_req":"ターゲットが必要","det_target_use":"ターゲットの用途","det_inclusion":"使用条件","det_prio":"優先度","det_occ":"在宅が必要な人","det_transport":"トランスポート","det_data":"データ","det_debug":"デバッグ","det_err_last":"最後のエラー","det_err_in":"発生箇所","det_err_n":"起動以降のエラー","det_select":"選択","adv_html":"メール用テキスト（HTML）","adv_clip":"URL からの動画クリップ","adv_actions":"通知のボタン","adv_act_id":"アクション ID","adv_act_title":"ボタンのテキスト","adv_act_add":"+ ボタン","adv_groups":"ボタングループ（カンマ区切り）","adv_dc":"この通知のチャンネル設定","adv_dc_ph":"key: value、1行に1つ","adv_dc_add":"+ チャンネル","snz_active":"現在一時停止中","snz_resume":"再開","snz_resume_all":"すべて再開","snz_until_resumed":"再開するまで","snz_done":"一時停止しました","snz_resumed":"再開しました","no_notif":"通知はまだありません","st_title":"利用状況","st_days_short":"日","st_total":"通知","st_avg":"1日あたり","st_today":"今日","st_vs_avg":"平均比","st_peak_hour":"ピーク時間","st_top_channel":"最多チャンネル","st_errors":"チャンネルエラー","st_of_sends":"（チャンネル送信中）","st_daily":"日別","st_hourly":"時間帯別","st_weekday":"曜日別","st_channels":"チャンネル — 利用の多い順","st_priority":"優先度","st_period":"時間帯","st_insights":"気づき","st_no_data":"履歴はまだありません — 最初の通知の後にデータが表示されます。","st_loading":"読み込み中…","st_installed":"インストール済み","st_latest":"最新","st_uptodate":"最新です","st_update":"アップデートあり","st_restart":"再起動が必要","st_logged":"記録済み","st_from_archive":"SuperNotify のアーカイブから","st_archive_err":"アーカイブを一部のみ読み込み","st_wd":["月","火","水","木","金","土","日"],"st_i_share":"チャンネル送信全体の {p}% が {c} 経由です。","st_i_peak":"最も多いのは {h}:00 台です（{d} 日間で {n} 件の通知）。","st_i_night":"通知の {p}% が 23:00〜07:00 に届いています — 不要なら「おやすみ」シナリオを検討してください。","st_i_night_ok":"夜間（23〜07時）に届く通知は {p}% だけです。静かな時間帯が機能しています。","st_i_weekend":"週末は平日より通知が {p}% {dir}です。","st_i_errors":"{d} 日間でチャンネルエラーが {n} 件、主に {c} です。","st_i_noerr":"過去 {d} 日間、チャンネルエラーはありません。","st_i_prio":"通知の {p}% が優先度「{prio}」です。","st_i_trend":"直近7日間: 1日 {n} 件、前の7日間より {p}% {dir}。","st_more":"多い","st_less":"少ない","st_up":"増加","st_down":"減少"},"SN_ARCH_STRINGS":{"search":"タイトルやメッセージを検索…","f_all":"すべて","f_today":"今日","f_whisper":"ささやき","wh":"ささやき","said":"Alexa の発話","said_by":"{ch} の発話","none":"一致する通知はありません","loading":"アーカイブを読み込み中…","recent":"最新の通知","read_at":"読み込み時刻","today":"今日","yesterday":"昨日","failed":"失敗","missed":"未送信","prio":{"critical":"緊急","high":"高","low":"低","minimum":"最低","medium":"中"},"reasons":{"doppione":"重複","nessun target":"ターゲットなし","errore":"エラー","condizione":"条件","scenario":"シナリオ","presenza":"在宅状況","priorita":"優先度","spento":"オフ","pausa":"一時停止中","transport spento":"トランスポートがオフ","nessuna azione":"アクションなし","dati non validi":"無効なデータ","sconosciuto":"不明"},"f_appliance":"家電","ap_scope":"全文を読み込んだ最新{n}件のみ。それより古いものは識別されません"},"SN_WHY_STRINGS":{"pick":"通知を選ぶと、なぜその宛先に届いたのかを確認できます。","loading":"読み込み中…","none":"通知なし","gone":"この通知はもうアーカイブにありません","priority":"優先度","dupe":"重複","outcomes":{"success":"配信済み","partial_delivery":"一部配信","dupe":"重複","failed":"失敗","error":"失敗","fallback_delivery":"フォールバックチャンネルで配信","no_delivery":"未配信"},"step_call":"呼び出し","step_scen":"シナリオ","step_people":"人","step_ch":"チャンネル","call_auto":"チャンネル指定なし: 通常のルーティング","call_named":"呼び出しで指定:","call_debug":"デバッグあり","nobody":"誰も在宅していません","ch_sent":"送信済み","ch_problems":"要確認","ch_skipped":"スキップ","pb_failed":"失敗","pb_missed":"指定されたが送信されず","grp_skipped":"ルールによりスキップ: 正常","grp_not":"対象外","trace_title":"選択トレース全体","fix":{"NO_TARGET":"このチャンネル用のアドレスを持つ受信者がいません: 受信者にアドレスを追加するか、チャンネルに固定ターゲットを設定するか、この呼び出しから外してください。","ERROR":"このチャンネルの元になっている統合がエラーを返しました: その統合のログを確認してください。","NO_ACTION":"このチャンネルには呼び出すアクションがありません: 配信に `action:` を設定してください。","INVALID_ACTION_DATA":"アクションに渡したデータが拒否されました: 呼び出しまたは配信の `data:` を確認してください。"},"no_scenarios":"有効なシナリオなし","applied":"呼び出しで強制","required":"呼び出しで必須","constrain":"呼び出しで制限:","home":"在宅","away":"外出","no_channels":"選択されたチャンネルはありません","st_ok":"配信済み","st_err":"失敗","st_skip":"スキップ","calls":"回の呼び出し","calls_1":"回の呼び出し","target_required":"ターゲットが必要:","started_by":"選択元","scen_would_off":"オフにしようとしたもの（無効化）","src_default":"常にオン（デフォルト）","src_scen":"シナリオ","src_call":"呼び出し自体","src_recipient":"受信者","r_off_by":"オフにしたもの:","call_targets":"呼び出し内のターゲット","cats":{"entity_id":"エンティティ","mobile_app_id":"デバイス","person_id":"人","email":"メール","phone":"電話","device_id":"デバイス"},"r_call_off":"呼び出しで除外","r_scen_off":"有効なシナリオによりオフ","r_disabled":"オフにされています","r_transport_off":"トランスポートがオフ","r_only_scen":"シナリオでオンにされたときのみ開始","r_only_fallback":"フォールバック専用","r_only_explicit":"名前で指定されたときのみ開始","r_priority":"この優先度は対象外","r_unknown":"トレースなしでは再構成できません","from_config":"開始しなかったチャンネルの理由は、当時ではなく現在の設定から再構成しています。","from_trace":"理由は通知と一緒にアーカイブされた選択トレースに基づいています。","st_time":"所要時間","st_slow":"最も遅い","st_rate":"のチャンネルが成功","ua_title":"どのチャンネルも受け付けなかったターゲット","ua_hint":"呼び出しには含まれていましたが、選択されたチャンネルのどれもこの種類のターゲットを受け付けません。","un_title":"存在しない名前","sent_by":"送信元","sent_auto":"オートメーション","sent_script":"スクリプト","sent_person":"","sent_unknown":"送信元不明（コンテキストにオートメーションや人がありません）","no_trace":"選択トレース全体は notify 呼び出しに debug: true がある場合のみ記録され、アーカイブの診断に含まれる場合にアーカイブされます。","reasons":{"NO_TARGET":"使えるターゲットなし","DUPE":"最近の通知と重複","PRIORITY":"この優先度は対象外","SNOOZE":"一時停止中","SNOOZED":"一時停止中","DELIVERY_CONDITION":"配信条件が偽","OCCUPANCY":"在宅ルール","ERROR":"エラー","DELIVERY_DISABLED":"オフにされています","SCENARIO":"シナリオ","TRANSPORT_DISABLED":"トランスポートがオフ","NO_SCENARIO":"必須シナリオが有効でない","NO_ACTION":"呼び出すアクションなし","INVALID_ACTION_DATA":"無効なアクションデータ","UNKNOWN":"不明な理由"}},"SN_TOOLS_STRINGS":{"maint":"メンテナンス","enq":"SuperNotify に照会","refresh":"すべてのエンティティを再公開","refresh_btn":"更新","resume_btn":"再開","refreshed":"エンティティを再公開しました。","resume_all":"すべての一時停止を再開","cleared_n":"件の一時停止を再開しました","purge_arch":"アーカイブを整理","purge_media":"画像を整理","older":"次より古いもの:","days":"日","purge_btn":"整理","confirm":"もう一度タップで確定","purged":"削除","remaining":"残り","reset":"手動で行った変更を元に戻す","reset_btn":"リセット","reset_none":"リセットするものはありません: すべて設定どおりです。","reset_done":"設定に戻しました:","k_all":"すべて","k_scenario":"シナリオ","k_delivery":"チャンネル","k_recipient":"人","k_transport":"トランスポート","q_config":"設定","q_scen":"シナリオ","q_active":"有効なシナリオ","q_by_scen":"シナリオ別チャンネル","q_implicit":"デフォルトのチャンネル","q_recipients":"受信者","q_occupancy":"在宅中の人","q_snoozes":"一時停止","q_last":"最後の通知","copy":"JSON をコピー","copied":"コピーしました","close":"閉じる","empty":"（空）","err":"SuperNotify がエラーを返しました:","settings":"統合の設定","running":"処理中…","more":"もっと見る"},"SN_FORM_LABELS":{"_common":"外観とテキスト","style":"配色","icons":"アイコン","show_version":"カードのバージョンを表示","intro":"上部の説明文","title":"タイトル","dnd_entity":"おやすみモードのスイッチ","quiet_entity":"計算された静音状態（オプション）","presence_entity":"ステータスバーに表示する人","archive_days":"アーカイブ整理: 次の日数より古いもの","media_days":"画像整理: 次の日数より古いもの","occupancy":"在宅中の人（SuperNotify から）","repairs":"状態リストに SuperNotify の修復を表示","snooze_announce":"一時停止を読み上げる（アナウンスチャンネル）","snooze_via":"一時停止の経路","o_event":"プッシュボタンのイベント（管理者）","o_voice":"音声コマンド","snooze_minutes":"一時停止の長さ（分）","snooze_panel":"一時停止タイルで一時停止パネルを開く","announce_delivery":"アナウンス用のチャンネル","last_notification":"最後の通知を表示","last_channels":"最後の通知のチャンネルごとにチップを表示","repeat_entity":"最後を繰り返すボタン（オプション）","tile_layout":"タイル","tile_columns":"タイルの列数（空欄 = 自動）","update_entity":"SuperNotify のアップデートエンティティ","cards_update_entity":"カードのアップデートエンティティ","health":"上部に状態を表示","poll_seconds":"更新間隔（秒）","group":"チャンネルの開始方法でグループ化","hide_defaults":"自動の DEFAULT_ チャンネルを非表示","limit":"リストの通知数","expand":"折りたたまれた部分を開く","max_height":"最大の高さ（CSS、例: 70vh）","trigger_entity":"これが変化したら更新","dry_run":"「送信せずに試す」を表示","dry_run_dupe_check":"重複チェックもシミュレート","days":"デフォルトの表示日数","manifest_url":"オートメーションのマニフェスト URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant のテーマ","o_mdi":"Home Assistant のアイコン","o_emoji":"絵文字","o_row":"アイコンを左に","o_stacked":"縦長、アイコンを上に","o_auto":"自動"},"SN_NATIVE_STR":{"all_good":"問題なし","paused":"一時停止中","until":"まで","resume":"再開","test":"テスト送信","sure":"もう一度タップで送信","sent":"送信しました","last":"最後","none":"通知はまだありません","ago":"前","min":"分","h":"時間","err":"件のトランスポートでエラー","off":"件のチャンネルがオフ"},"SN_STRATEGY_TITLES":{"home":"ホーム","archive":"アーカイブ","send":"送信","setup":"設定","stats":"統計","tools":"ツール","title":"SuperNotify","appliances":"家電"},"SN_APPL_STRINGS":{"title":"家電","loading":"読み込み中…","none":"家電がありません。Appliance Autonotify で追加してください（設定 → デバイスとサービス）。","st_run":"運転中","st_cleaning":"掃除中","st_done":"完了 · 取り出してください","st_done_other":"完了","st_err":"助けが必要","m_switch_on":"プラグをオン","done_switch_on":"プラグをオンにしました。","done_action":"完了: {n}","confirm_action":"「{n}」を実行しますか?","open_entity":"開いて変更","chip_notifs":"通知","chip_device":"デバイス","not_found":"「{n}」という機器はありません。","last7":"過去 7 日間","col_day":"日","col_cycles":"サイクル","col_time":"時間","col_energy":"消費","source_h":"ソース","manual_src":"手動で追加: {w} を超えると稼働中","tab_info":"概要","tab_stats":"消費とサイクル","tab_cleans":"掃除","tab_prints":"印刷","last_run":"前回のサイクル","avg_run":"平均","reminders_h":"通知","plug":"プラグ","plug_on":"オン","plug_off":"オフ","error_h":"エラー","open_device":"Home Assistant のデバイス","prints":"回の印刷","print1":"回の印刷","per_print":"今月の各印刷","last_prints":"最近の印刷","no_print_month":"今月はまだ印刷していません","no_print":"まだ印刷していません","col_fil":"フィラメント","failed":"失敗","per_run":"今月の各サイクル","dev_hist":"各項目は Home Assistant の履歴から(過去 {n} 日)、時間は機器のカウンターがあればそこから取得しています。","cleans":"回の掃除","clean1":"回の掃除","per_clean":"今月の各掃除","avg_clean":"平均 {d}","col_area":"面積","last_cleans":"最近の掃除","no_clean_month":"今月はまだ掃除していません","no_clean":"まだ掃除していません","vac_hist":"合計はロボットのカウンターから、各掃除は Home Assistant の履歴から取得しています(過去 {n} 日)。","st_paused":"一時停止中","st_returning":"ドックに戻っています","st_charging":"充電中","st_docked_w":"ドックにいます","st_idle":"停止中","st_off":"オフ","stopped":"停止中","yesterday":"昨日","u_min":"分","u_h":"時間","start":"開始","so_far":"これまで","no_cycle":"まだサイクルなし","last_cycle":"前回のサイクル {d}","ended_at":"{t} に完了","reminders":"{t} まで +{n} 件のリマインダー","reminder1":"{t} に +1 件のリマインダー","end_est":"終了予定","left":"残り {d}","almost":"まもなく終了","est_from_avg":"似たサイクルからの推定","running_for":"{d} 運転中","btn_empty":"取り出した","btn_seen":"完了","btn_resume":"掃除を再開","m_switch_off":"プラグをオフ","m_remind":"あとで通知","details":"詳細","settings":"設定","more":"その他","details_link":"詳細・消費電力・サイクル","done_empty":"完了: リマインダーを止めました。","done_remind":"あとでお知らせします。","done_switch":"プラグをオフにしました。","done_resume":"掃除を再開しました。","err":"エラー","new_dev":"新しいデバイス {n} 台","new_dev1":"新しいデバイス 1 台","battery":"バッテリー","consumable":"{n} {p}%","maint_in":"あと {c} サイクル","maint_next":"次のサイクルで","maint_due":"今すぐ必要","maint_of":"{d} / {e}","maint_done":"完了","confirm_maint":"「{n}」を完了にしますか?カウントは最初からになります。","conn_lost":"接続が切れました: 最後の状態","cons_h":"消耗品","commands":"操作","tap_again":"もう一度タップして確定","empty_since":"取り出し待ち","done_since":"完了から","avg_cycle":"平均サイクル","maint_tab":"メンテナンス","tab_stats_short":"消費","read_failed":"履歴を読み込めませんでした ({e})。まもなく再試行します。","retry":"再試行","see_chart":"グラフを表示","back":"戻る","avg_line":"平均 {v}","tap_bar":"棒をタップするとそのサイクルを表示","k_station":"ステーション","off_since":"オフになってから","close":"閉じる","power_now":"現在","p_today":"今日","p_week":"今週","p_month":"今月","p_year":"今年","cycles":"サイクル","cycle1":"サイクル","per_cycle":"今月のサイクルごとの消費","short":"短い","long":"長い","anomalous":"異常","avg":"平均 {d}、{k}","last_cycles":"最近のサイクル","col_start":"開始","col_dur":"時間","col_cost":"費用","no_cycle_month":"今月はまだサイクルなし","coarse":"10 日以上前のサイクルは 1 時間単位で数えます。","open_notifs":"この家電の通知","no_power":"電力センサーが見つかりません。`appliances:` の `power_entity` で指定してください。","no_power_vac":"ロボット掃除機には電力センサーがないため、消費とサイクルは数えません。"}},"zh":{"SN_STRINGS":{"presence":"在家情况","time_band":"时段","quiet":"安静","act_scen":"活动场景","on":"开","off":"关","active":"活动","dnd":"勿扰","tap_silence":"点按静音","snooze":"暂停","min":"分钟","pause_nc":"暂停非紧急通知","snoozed":"已暂停","until":"直到","tap_clear":"点按清除","announce":"播报","intercom":"对讲","announce_ph":"在所有音箱上播报…","send":"发送","announced":"已播报","cleared":"暂停已清除","snoozed_for":"已暂停非紧急通知，时长","sent":"已发送","yesterday":"昨天","deliveries":"推送","last_notif":"最后一条通知","transports":"传输方式","delivered":"已送达","failed":"失败","channels":"个渠道","none":"无","no_transports":"未找到传输方式实体","tr_used":"使用者","tr_unused":"没有渠道使用它","start":"开始","volume":"音量","now":"现在","crosses":"跨越午夜","no_voice":"无语音","mute_hint":"音量为 <b>0%</b> 的时段完全<b>不发送语音播报</b>（Alexa 和 TTS 关闭，推送通知和仪表板照常送达）。紧急和高优先级提醒始终会播报。","enabled":"已启用","grp_auto":"自动启动","grp_named":"仅在调用中指定时","grp_scen":"仅在有场景时","grp_fallback":"备用，其他渠道失败时","ch_title":"渠道","ch_count":"{tot} 个中 {on} 个开启","off_manual":"已关闭","paused_by":"当前被暂停，原因","on_by":"当前开启，通过","fixed_targets":"固定目标","no_deliveries":"未找到推送实体","home":"在家","away":"外出","devices":"个设备","devices_1":"个设备","rc_test":"发送测试","rc_test_confirm":"再次点按以发送","rc_test_sent":"测试已发送","rc_test_title":"SuperNotify 测试","rc_test_msg":"来自仪表板的测试消息，","overrides":"个推送覆盖","overrides_1":"个推送覆盖","no_contact":"无联系方式","no_recipients":"未找到接收人实体","details":"详情","h_update":"有可用更新：","h_restart":"重启 Home Assistant 以完成更新","h_uptodate":"已是最新","h_transport_err":"个传输方式出错","h_channels_off":"个渠道已关闭","h_all_good":"一切正常","h_failures":"次失败","h_failures_1":"次失败","h_transport_err_1":"个传输方式出错","h_channels_off_1":"个渠道已关闭","channels_1":"个渠道","band_early_morning":"清晨","band_morning":"上午","band_afternoon":"下午","band_evening":"傍晚","band_night":"夜间","band_late_night":"深夜","h_look_1":"有 1 项需要查看","h_look_n":"有 {n} 项需要查看","h_rest_ok":"其余一切正常","h_ch_on":"{tot} 个渠道中 {on} 个开启","h_open":"打开","ln_delivered":"已送达","ln_failed":"失败","ln_why":"原因","tgt_loading":"正在加载选择器…","bands_empty_t":"还没有时段","bands_empty":"为一天中的每个时段添加一项：用一个 input_datetime 设置开始时间，用一个 input_number 设置语音音量。","active_now":"当前活动","disabled":"已禁用","other":"其他","manual":"手动","apply_now":"立即应用","applied":"已应用","apply_off":"点按停止应用","enabled_lbl":"已启用","reset_overrides":"重置覆盖","reset_done":"覆盖已重置","transport_off":"传输方式已关闭","last_notified":"上次通知","never_notified":"从未通知","media":"媒体","no_scenarios":"未找到场景实体","sim_pick":"🎬 场景 — 点按以模拟","sim_fire":"📤 渠道","sim_hint":"真实引擎数据（查询服务）。基于优先级的推送筛选在引擎端进行，此处不模拟。与运行时合并一样，禁用优先于启用。","sim_none":"不会触发任何推送","sim_go":"会发出","sim_stop":"不会发出","sim_r_default":"自动启动","sim_r_on":"开启者","sim_r_off":"关闭者","sim_r_named":"仅在调用中指定时","sim_r_scen":"仅在有场景开启它时","sim_r_fallback":"备用，其他渠道失败时","sim_r_switched":"已关闭","title":"标题","message":"消息","priority":"优先级","channels_lbl":"渠道 — 不选 = 正常路由","camera_lbl":"摄像头快照","preview":"预览","no_title":"（无标题）","no_message":"（无消息）","default_prio":"默认（中）","comp_hint":"选中的渠道以 delivery_selection: fixed 发送（只有它们会触发）。紧急就是真的紧急 — 包括警报器。","critical_confirm":"发送一条紧急通知？包括警报器和最大音量。","sent_toast":"已发送","write_or_pick":"写一条消息，或选择一个摄像头或渠道","send_err":"未发送","dry_btn":"试一下，不发送","dry_title":"如果现在发送","dry_err":"演练失败","dry_nobody":"无接收人，仅直接目标","dry_none":"未选择渠道","dry_scen":"活动场景","dry_raw":"原始响应","dry_prio":"优先级","dry_would_n":"个渠道会发送","dry_nothing":"不会发送任何内容","dry_dupe":"与最近的通知重复：将被丢弃","dry_no_dupe":"未模拟重复检查，因此紧接着的真正发送不会被拦截。","dry_home":"在家","dry_empty":"SuperNotify 没有返回结果：是否为 2.12 或更高版本？","dry_reasons":{"NO_TARGET":"无可用目标","DUPE":"重复","PRIORITY":"不适用于此优先级","SNOOZED":"已暂停","DELIVERY_CONDITION":"推送条件为假","OCCUPANCY":"在家规则","TRANSPORT_DISABLED":"传输方式已关闭","DELIVERY_DISABLED":"已关闭","NO_SCENARIO":"所需场景未生效","NO_ACTION":"无操作","INVALID_ACTION_DATA":"数据无效","UNKNOWN":"未知原因","ERROR":"错误"},"prio_minimum":"最低","prio_low":"低","prio_medium":"中","prio_high":"高","prio_critical":"紧急","target_lbl":"目标 — 人员、设备、区域、楼层、标签","custom_target_lbl":"自定义目标（电子邮件、Telegram ID 等）— 以逗号分隔","adv_title":"高级选项","adv_spoken":"语音消息（Alexa、TTS）","adv_spoken_ph":"音箱播报的内容（如与文字不同）","adv_apply":"应用这些场景","adv_require":"仅当这些场景活动时发送","adv_constrain":"仅考虑这些场景","adv_snapshot":"来自 URL 的图片","adv_debug":"调试：记录完整的选择追踪（在“原因”卡片中显示）","custom_target_ph":"例如 user@example.com, 123456789","native_target_tag":"🎯 原生区域/楼层/标签","target_warn":"⚠️ 区域、楼层和标签仅由 notify_entity、alexa_devices、html5、ntfy、kodi、media_player、tts 和 chime 解析。使用其他任何渠道 — 或上方未选择渠道时的默认路由 — 通知可能会在无提示的情况下没有目标。请选择兼容的渠道，或直接添加人员/设备。","aut_search":"搜索自动化…","aut_all":"全部","aut_none":"无匹配项","aut_err":"未找到清单 — 请用 tools/genera_vista_automazioni.py 生成","aut_updated":"列表已更新","aut_count":"个自动化","aut_count_1":"个自动化","never":"从不","ago_now":"刚刚","ago_min":"分钟前","ago_h":"小时前","ago_d":"天前","aut_disabled_only":"仅已禁用","grp_active":"活动","repeat":"重复","skipped_n":"已跳过","left":"剩余","missed_n":"未发出","snz_all":"全部","snz_nc":"非紧急","snz_prio":"优先级","snz_transport":"传输方式","snz_for":"时长","snz_choose":"选择内容和时长","snz_title":"暂停通知","snz_what":"内容","snz_nc_l":"非紧急","snz_all_l":"全部","snz_ch":"一个渠道","snz_pr":"一个优先级","snz_who":"对象","snz_everyone":"所有人","snz_me":"仅我","snz_len":"时长","snz_forever":"直到我恢复","snz_go":"暂停","snz_close":"关闭","rs_hand":"手动","rs_voice":"通过语音","rs_assist":"通过助手","snz_voice_info":"你的暂停通过 SuperNotify 的语音命令执行：只对你生效。","snz_voice_off":"SuperNotify 的语音命令已关闭：请在集成选项中开启。","snz_resume_mine":"恢复我的","go_open":"显示","dl_probe":"试用此渠道","probe_msg":"来自仪表板的渠道测试","sc_why":"原因","sc_yes":"当前适用","sc_no":"当前不适用","sc_manual_why":"手动场景：手动应用","sc_no_cond":"无条件","sc_off_sw":"已关闭","sc_not_eval":"未检查","sc_now":"现在","sc_diff_btn_on":"如果适用会有什么变化","sc_diff_btn_off":"没有它会有什么变化","sc_diff_on":"如果它适用，对于现在的一条中优先级通知：","sc_diff_off":"没有它，对于现在的一条中优先级通知：","sc_diff_add":"还会发送","sc_diff_rem":"将不再发送","sc_diff_none":"没有区别","c_state":"{e} 为 {s}","c_template":"模板条件","c_time":"时间","c_after":"晚于","c_before":"早于","c_numeric":"{e}","c_above":"高于","c_below":"低于","c_and":"以下全部","c_or":"以下至少一项","c_not":"以下均不","c_or_join":" 或 ","sim_hint_dry":"SuperNotify 自己的回答（演练，不会发送任何内容）：现在的一条通知，使用上方选择的优先级，且仅包含上方选择的场景。","sim_msg":"模拟器测试","sim_prio":"优先级","sa_snooze":"{what}已暂停 {len}。","sa_silence":"{what}已静音，直到另行通知。","sa_resume":"{what}已恢复。","sa_resume_one":"暂停结束：{x}。","sa_resume_all":"通知已恢复。","sa_w_nc":"非紧急通知","sa_w_all":"所有通知","sa_w_ch":"渠道 {x}","sa_w_pr":"{x}优先级通知","sa_w_mine":"你的通知","sa_for":"给 {x}","sa_min":"{n} 分钟","sa_hour":"一小时","sa_hours":"{n} 小时","occ_title":"谁在家","occ_home_l":"在家","occ_ALL_HOME":"所有人在家","occ_ALL_AWAY":"所有人外出","occ_LONE_HOME":"只有一人在家","occ_MULTI_HOME":"部分人在家","occ_UNDEFINED_OCCUPANTS":"无人被跟踪","h_repairs":"个 SuperNotify 修复","h_repairs_1":"个 SuperNotify 修复","det_more":"所有属性","det_yes":"是","det_no":"否","det_action":"操作","det_target":"固定目标","det_target_req":"需要目标","det_target_use":"目标使用","det_inclusion":"使用时机","det_prio":"优先级","det_occ":"谁必须在家","det_transport":"传输方式","det_data":"数据","det_debug":"调试","det_err_last":"最后错误","det_err_in":"位置","det_err_n":"启动以来的错误","det_select":"选择","adv_html":"电子邮件文本（HTML）","adv_clip":"来自 URL 的视频片段","adv_actions":"通知上的按钮","adv_act_id":"操作 ID","adv_act_title":"按钮文字","adv_act_add":"+ 按钮","adv_groups":"按钮组（逗号分隔）","adv_dc":"此通知的渠道设置","adv_dc_ph":"键: 值，每行一个","adv_dc_add":"+ 渠道","snz_active":"当前已暂停","snz_resume":"恢复","snz_resume_all":"全部恢复","snz_until_resumed":"直到恢复","snz_done":"已暂停","snz_resumed":"已恢复","no_notif":"还没有通知","st_title":"使用情况","st_days_short":"天","st_total":"通知","st_avg":"每天","st_today":"今天","st_vs_avg":"与平均相比","st_peak_hour":"高峰时段","st_top_channel":"最常用渠道","st_errors":"渠道错误","st_of_sends":"的渠道发送","st_daily":"每天","st_hourly":"按一天中的时段","st_weekday":"按星期","st_channels":"渠道 — 最常用","st_priority":"优先级","st_period":"时段","st_insights":"洞察","st_no_data":"暂无历史 — 发送第一批通知后会显示数据。","st_loading":"正在加载…","st_installed":"已安装","st_latest":"最新","st_uptodate":"已是最新","st_update":"有可用更新","st_restart":"需要重启","st_logged":"已记录","st_from_archive":"来自 SuperNotify 存档","st_archive_err":"存档仅部分读取","st_wd":["周一","周二","周三","周四","周五","周六","周日"],"st_i_share":"所有渠道发送中有 {p}% 通过 {c}。","st_i_peak":"最忙的时段是 {h}:00（{d} 天内 {n} 条通知）。","st_i_night":"{p}% 的通知在 23:00 到 07:00 之间到达 — 如果不希望这样，可以考虑设置一个勿扰场景。","st_i_night_ok":"只有 {p}% 的通知在夜间（23–07）到达：安静时段运作良好。","st_i_weekend":"周末的通知比工作日{dir} {p}%。","st_i_errors":"{d} 天内有 {n} 次渠道错误，主要发生在 {c}。","st_i_noerr":"最近 {d} 天没有渠道错误。","st_i_prio":"{p}% 的通知为{prio}优先级。","st_i_trend":"最近 7 天：{n}/天，比之前 7 天{dir} {p}%。","st_more":"多","st_less":"少","st_up":"增加","st_down":"减少"},"SN_ARCH_STRINGS":{"search":"搜索标题或消息…","f_all":"全部","f_today":"今天","f_whisper":"低语播报","wh":"低语","said":"Alexa 说","said_by":"{ch} 说","none":"没有匹配的通知","loading":"正在读取存档…","recent":"最新通知","read_at":"读取于","today":"今天","yesterday":"昨天","failed":"失败","missed":"未发出","prio":{"critical":"紧急","high":"高","low":"低","minimum":"最低","medium":"中"},"reasons":{"doppione":"重复","nessun target":"无目标","errore":"错误","condizione":"条件","scenario":"场景","presenza":"在家情况","priorita":"优先级","spento":"已关闭","pausa":"已暂停","transport spento":"传输方式已关闭","nessuna azione":"无操作","dati non validi":"数据无效","sconosciuto":"未知"},"f_appliance":"家电","ap_scope":"仅限完整读取的最近 {n} 条，更早的无法识别"},"SN_WHY_STRINGS":{"pick":"选择一条通知，查看它为何这样发送。","loading":"正在加载…","none":"无通知","gone":"这条通知已不在存档中","priority":"优先级","dupe":"重复","outcomes":{"success":"已送达","partial_delivery":"部分送达","dupe":"重复","failed":"失败","error":"失败","fallback_delivery":"由备用渠道送达","no_delivery":"未送达"},"step_call":"调用","step_scen":"场景","step_people":"人员","step_ch":"渠道","call_auto":"未指定渠道：正常路由","call_named":"调用中指定：","call_debug":"带调试","nobody":"无人在家","ch_sent":"已发送","ch_problems":"需查看","ch_skipped":"已跳过","pb_failed":"失败","pb_missed":"已请求但未发送","grp_skipped":"被规则跳过：正常","grp_not":"未涉及","trace_title":"完整选择追踪","fix":{"NO_TARGET":"没有接收人拥有此渠道的地址：为某个接收人添加地址，为渠道设置固定目标，或在此调用中不使用它。","ERROR":"此渠道背后的集成返回了错误：请查看它自己的日志条目。","NO_ACTION":"该渠道没有可调用的操作：请在推送上设置 `action:`。","INVALID_ACTION_DATA":"传给操作的数据被拒绝：请检查调用或推送的 `data:`。"},"no_scenarios":"没有生效的场景","applied":"由调用强制","required":"调用要求","constrain":"调用限制为","home":"在家","away":"外出","no_channels":"未选择任何渠道","st_ok":"已送达","st_err":"失败","st_skip":"已跳过","calls":"次调用","calls_1":"次调用","target_required":"需要目标：","started_by":"选择者","scen_would_off":"被关闭（已被否决）","src_default":"始终开启（默认）","src_scen":"场景","src_call":"调用本身","src_recipient":"接收人","r_off_by":"关闭者","call_targets":"调用中的目标","cats":{"entity_id":"实体","mobile_app_id":"设备","person_id":"人员","email":"电子邮件","phone":"电话","device_id":"设备"},"r_call_off":"被调用排除","r_scen_off":"被生效的场景关闭","r_disabled":"已关闭","r_transport_off":"其传输方式已关闭","r_only_scen":"仅在场景开启它时启动","r_only_fallback":"仅作备用","r_only_explicit":"仅在按名称请求时启动","r_priority":"不适用于此优先级","r_unknown":"没有追踪无法还原","from_config":"未启动渠道的原因是根据当前的配置还原的，而不是当时的配置。","from_trace":"原因来自随通知存档的选择追踪。","st_time":"耗时","st_slow":"最慢","st_rate":"的渠道成功","ua_title":"没有渠道接收的目标","ua_hint":"它们在调用中，但没有选中的渠道接受这类目标。","un_title":"不存在的名称","sent_by":"发送者","sent_auto":"自动化","sent_script":"脚本","sent_person":"","sent_unknown":"发送者未知（其上下文中没有自动化或人员）","no_trace":"只有当通知调用带有 debug: true 时才会记录完整的选择追踪，并在存档诊断包含它时存档。","reasons":{"NO_TARGET":"无可用目标","DUPE":"与最近的通知重复","PRIORITY":"不适用于此优先级","SNOOZE":"已暂停","SNOOZED":"已暂停","DELIVERY_CONDITION":"推送条件为假","OCCUPANCY":"在家规则","ERROR":"错误","DELIVERY_DISABLED":"已关闭","SCENARIO":"场景","TRANSPORT_DISABLED":"其传输方式已关闭","NO_SCENARIO":"所需场景未生效","NO_ACTION":"无可调用的操作","INVALID_ACTION_DATA":"操作数据无效","UNKNOWN":"未知原因"}},"SN_TOOLS_STRINGS":{"maint":"维护","enq":"询问 SuperNotify","refresh":"重新发布所有实体","refresh_btn":"刷新","resume_btn":"恢复","refreshed":"实体已重新发布。","resume_all":"恢复所有暂停","cleared_n":"个暂停已恢复","purge_arch":"清理存档","purge_media":"清理图片","older":"早于","days":"天","purge_btn":"清理","confirm":"再次点按以确认","purged":"已删除","remaining":"剩余","reset":"撤销手动所做的更改","reset_btn":"重置","reset_none":"无需重置：一切与配置一致。","reset_done":"已恢复为配置：","k_all":"全部","k_scenario":"场景","k_delivery":"渠道","k_recipient":"人员","k_transport":"传输方式","q_config":"配置","q_scen":"场景","q_active":"活动场景","q_by_scen":"按场景的渠道","q_implicit":"默认渠道","q_recipients":"接收人","q_occupancy":"谁在家","q_snoozes":"暂停","q_last":"最后一条通知","copy":"复制 JSON","copied":"已复制","close":"关闭","empty":"（空）","err":"SuperNotify 返回了错误：","settings":"集成设置","running":"处理中…","more":"更多"},"SN_FORM_LABELS":{"_common":"外观和文字","style":"颜色","icons":"图标","show_version":"显示卡片版本","intro":"顶部的介绍文字","title":"标题","dnd_entity":"勿扰开关","quiet_entity":"计算得出的安静状态（可选）","presence_entity":"状态栏中的人员","archive_days":"存档清理：早于（天）","media_days":"图片清理：早于（天）","occupancy":"谁在家（来自 SuperNotify）","repairs":"在健康列表中显示 SuperNotify 修复","snooze_announce":"大声播报暂停（播报渠道）","snooze_via":"暂停的执行方式","o_event":"推送按钮事件（管理员）","o_voice":"语音命令","snooze_minutes":"暂停时长（分钟）","snooze_panel":"暂停磁贴打开暂停面板","announce_delivery":"播报渠道","last_notification":"显示最后一条通知","last_channels":"最后一条通知中每个渠道一个标签","repeat_entity":"重复上一条按钮（可选）","tile_layout":"磁贴","tile_columns":"磁贴列数（留空 = 自动）","update_entity":"SuperNotify 更新实体","cards_update_entity":"卡片更新实体","health":"顶部显示健康状况","poll_seconds":"刷新间隔（秒）","group":"按渠道启动方式分组","hide_defaults":"隐藏自动的 DEFAULT_ 渠道","limit":"列表中的通知数","expand":"展开折叠部分","max_height":"最大高度（CSS，例如 70vh）","trigger_entity":"此项变化时刷新","dry_run":"显示“试一下，不发送”","dry_run_dupe_check":"同时模拟重复检查","days":"默认显示天数","manifest_url":"自动化清单 URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant 主题","o_mdi":"Home Assistant 图标","o_emoji":"Emoji","o_row":"图标在左侧","o_stacked":"高型，图标在上方","o_auto":"自动"},"SN_NATIVE_STR":{"all_good":"一切正常","paused":"已暂停","until":"直到","resume":"恢复","test":"发送测试","sure":"再次点按以发送","sent":"已发送","last":"最后","none":"还没有通知","ago":"前","min":"分钟","h":"小时","err":"个传输方式出错","off":"个渠道已关闭"},"SN_STRATEGY_TITLES":{"home":"主页","archive":"归档","send":"发送","setup":"设置","stats":"统计","tools":"工具","title":"SuperNotify","appliances":"家电"},"SN_APPL_STRINGS":{"title":"家电","loading":"读取中…","none":"没有家电：请在 Appliance Autonotify 中添加（设置 → 设备与服务）。","st_run":"运行中","st_cleaning":"清扫中","st_done":"已完成 · 待取出","st_done_other":"已完成","st_err":"需要帮助","m_switch_on":"打开插座","done_switch_on":"插座已打开。","done_action":"完成：{n}","confirm_action":"执行「{n}」？","open_entity":"打开以修改","chip_notifs":"通知","chip_device":"设备","not_found":"没有名为「{n}」的设备。","last7":"最近 7 天","col_day":"日期","col_cycles":"周期","col_time":"时间","col_energy":"能耗","source_h":"来源","manual_src":"手动添加:高于 {w} 时为运行中","tab_info":"概览","tab_stats":"能耗与周期","tab_cleans":"清扫","tab_prints":"打印","last_run":"上次周期","avg_run":"平均","reminders_h":"通知","plug":"插座","plug_on":"开","plug_off":"关","error_h":"错误","open_device":"Home Assistant 中的设备","prints":"次打印","print1":"次打印","per_print":"本月每次打印","last_prints":"最近的打印","no_print_month":"本月尚无打印","no_print":"尚无打印","col_fil":"耗材","failed":"失败","per_run":"本月每个周期","dev_hist":"每一项来自 Home Assistant 的历史记录(最近 {n} 天);小时数来自设备自身的计数器(如有)。","cleans":"次清扫","clean1":"次清扫","per_clean":"本月每次清扫","avg_clean":"平均 {d}","col_area":"面积","last_cleans":"最近的清扫","no_clean_month":"本月尚无清扫","no_clean":"尚无清扫","vac_hist":"总计来自机器人的计数器;每次清扫来自 Home Assistant 的历史记录(最近 {n} 天)。","st_paused":"已暂停","st_returning":"正在返回基座","st_charging":"充电中","st_docked_w":"在基座上","st_idle":"空闲","st_off":"已关闭","stopped":"空闲","yesterday":"昨天","u_min":"分钟","u_h":"小时","start":"开始","so_far":"目前","no_cycle":"尚无周期","last_cycle":"上次周期 {d}","ended_at":"{t} 完成","reminders":"+{n} 次提醒，直到 {t}","reminder1":"{t} +1 次提醒","end_est":"预计结束","left":"还剩 {d}","almost":"即将完成","est_from_avg":"根据相似周期估计","running_for":"已运行 {d}","btn_empty":"已取出","btn_seen":"完成","btn_resume":"继续清扫","m_switch_off":"关闭插座","m_remind":"稍后提醒","details":"详情","settings":"设置","more":"更多","details_link":"详情、能耗和周期","done_empty":"完成：提醒已停止。","done_remind":"稍后会再提醒。","done_switch":"插座已关闭。","done_resume":"已继续清扫。","err":"错误","new_dev":"{n} 个新设备","new_dev1":"1 个新设备","battery":"电量","consumable":"{n} {p}%","maint_in":"还有 {c} 个周期","maint_next":"下个周期","maint_due":"现在需要","maint_of":"{d} / {e}","maint_done":"完成","confirm_maint":"将「{n}」标记为完成?计数将重新开始。","conn_lost":"连接中断:最后已知状态","cons_h":"耗材","commands":"命令","tap_again":"再点一次以确认","empty_since":"待取出已","done_since":"已完成","avg_cycle":"平均周期","maint_tab":"保养","tab_stats_short":"能耗","read_failed":"无法读取历史记录 ({e}),稍后重试。","retry":"重试","see_chart":"查看图表","back":"返回","avg_line":"平均 {v}","tap_bar":"点按柱形查看该周期","k_station":"基站","off_since":"已关闭","close":"关闭","power_now":"当前","p_today":"今天","p_week":"本周","p_month":"本月","p_year":"今年","cycles":"个周期","cycle1":"个周期","per_cycle":"本月每个周期的能耗","short":"短","long":"长","anomalous":"异常","avg":"平均 {d}，{k}","last_cycles":"最近的周期","col_start":"开始","col_dur":"时长","col_cost":"费用","no_cycle_month":"本月尚无周期","coarse":"10 天前的周期按小时统计。","open_notifs":"该家电的通知","no_power":"未找到功率传感器：请在 `appliances:` 中用 `power_entity` 指定。","no_power_vac":"扫地机器人没有功率传感器：不统计能耗和周期。"}},"hi":{"SN_STRINGS":{"presence":"उपस्थिति","time_band":"समय खंड","quiet":"शांत","act_scen":"सक्रिय परिदृश्य","on":"चालू","off":"बंद","active":"सक्रिय","dnd":"परेशान न करें","tap_silence":"शांत करने के लिए टैप करें","snooze":"स्नूज़","min":"मिनट","pause_nc":"गैर-गंभीर रोकें","snoozed":"स्नूज़ किया गया","until":"तक","tap_clear":"हटाने के लिए टैप करें","announce":"घोषणा","intercom":"इंटरकॉम","announce_ph":"सभी स्पीकर पर घोषणा करें…","send":"भेजें","announced":"घोषित","cleared":"स्नूज़ हटाए गए","snoozed_for":"गैर-गंभीर सूचनाएँ स्नूज़ की गईं:","sent":"भेजी गईं","yesterday":"कल","deliveries":"डिलीवरी","last_notif":"अंतिम सूचना","transports":"परिवहन","delivered":"पहुँचाई गई","failed":"विफल","channels":"चैनल","none":"कोई नहीं","no_transports":"कोई परिवहन entity नहीं मिली","tr_used":"इसके द्वारा उपयोग","tr_unused":"कोई चैनल इसका उपयोग नहीं करता","start":"शुरुआत","volume":"वॉल्यूम","now":"अभी","crosses":"आधी रात पार करता है","no_voice":"आवाज़ नहीं","mute_hint":"<b>0%</b> वाला खंड बिल्कुल <b>कोई आवाज़ घोषणा नहीं</b> भेजता (Alexa और TTS बंद, पुश और डैशबोर्ड फिर भी पहुँचते हैं)। गंभीर और उच्च प्राथमिकता वाली चेतावनियाँ हमेशा बोलती हैं।","enabled":"सक्षम","grp_auto":"अपने आप शुरू होते हैं","grp_named":"केवल जब कॉल में नाम हो","grp_scen":"केवल किसी परिदृश्य के साथ","grp_fallback":"बैकअप, जब बाकी विफल हों","ch_title":"चैनल","ch_count":"{tot} में से {on} चालू","off_manual":"बंद किया गया","paused_by":"अभी रोका गया:","on_by":"अभी चालू, इसके ज़रिए:","fixed_targets":"निश्चित लक्ष्य","no_deliveries":"कोई डिलीवरी entity नहीं मिली","home":"घर पर","away":"बाहर","devices":"डिवाइस","devices_1":"डिवाइस","rc_test":"परीक्षण भेजें","rc_test_confirm":"भेजने के लिए फिर टैप करें","rc_test_sent":"परीक्षण भेजा गया","rc_test_title":"SuperNotify परीक्षण","rc_test_msg":"डैशबोर्ड से परीक्षण संदेश,","overrides":"डिलीवरी ओवरराइड","overrides_1":"डिलीवरी ओवरराइड","no_contact":"कोई संपर्क बिंदु नहीं","no_recipients":"कोई प्राप्तकर्ता entity नहीं मिली","details":"विवरण","h_update":"अपडेट उपलब्ध:","h_restart":"अपडेट पूरा करने के लिए Home Assistant रीस्टार्ट करें","h_uptodate":"अद्यतित","h_transport_err":"त्रुटियों वाले परिवहन","h_channels_off":"चैनल बंद","h_all_good":"सब ठीक है","h_failures":"विफलताएँ","h_failures_1":"विफलता","h_transport_err_1":"त्रुटि वाला परिवहन","h_channels_off_1":"चैनल बंद","channels_1":"चैनल","band_early_morning":"सुबह-सवेरे","band_morning":"सुबह","band_afternoon":"दोपहर","band_evening":"शाम","band_night":"रात","band_late_night":"देर रात","h_look_1":"1 चीज़ देखनी है","h_look_n":"{n} चीज़ें देखनी हैं","h_rest_ok":"बाकी सब काम कर रहा है","h_ch_on":"{tot} में से {on} चैनल चालू","h_open":"खोलें","ln_delivered":"पहुँचाई गई","ln_failed":"विफल","ln_why":"क्यों","tgt_loading":"चयनकर्ता लोड हो रहा है…","bands_empty_t":"अभी कोई समय खंड नहीं","bands_empty":"दिन के हर हिस्से के लिए एक खंड जोड़ें: उसकी शुरुआत के लिए एक input_datetime और आवाज़ के वॉल्यूम के लिए एक input_number।","active_now":"अभी सक्रिय","disabled":"अक्षम","other":"अन्य","manual":"मैनुअल","apply_now":"अभी लागू करें","applied":"लागू","apply_off":"लागू करना रोकने के लिए टैप करें","enabled_lbl":"सक्षम","reset_overrides":"ओवरराइड रीसेट करें","reset_done":"ओवरराइड रीसेट हुए","transport_off":"परिवहन बंद","last_notified":"अंतिम सूचना","never_notified":"कभी सूचना नहीं","media":"मीडिया","no_scenarios":"कोई परिदृश्य entity नहीं मिली","sim_pick":"🎬 परिदृश्य — सिम्युलेट करने के लिए टैप करें","sim_fire":"📤 चैनल","sim_hint":"इंजन का वास्तविक डेटा (enquire सेवाएँ)। प्राथमिकता के आधार पर डिलीवरी फ़िल्टरिंग इंजन में होती है और यहाँ सिम्युलेट नहीं की जाती। रनटाइम मर्ज की तरह, अक्षम सक्षम पर भारी पड़ता है।","sim_none":"कोई डिलीवरी नहीं चलेगी","sim_go":"भेजी जाएगी","sim_stop":"नहीं भेजी जाएगी","sim_r_default":"अपने आप शुरू होती है","sim_r_on":"चालू की गई:","sim_r_off":"बंद की गई:","sim_r_named":"केवल जब कॉल में नाम हो","sim_r_scen":"केवल ऐसे परिदृश्य के साथ जो इसे चालू करे","sim_r_fallback":"बैकअप, जब बाकी विफल हों","sim_r_switched":"बंद किया गया","title":"शीर्षक","message":"संदेश","priority":"प्राथमिकता","channels_lbl":"चैनल — कोई न चुना = सामान्य रूटिंग","camera_lbl":"कैमरा स्नैपशॉट","preview":"पूर्वावलोकन","no_title":"(कोई शीर्षक नहीं)","no_message":"(कोई संदेश नहीं)","default_prio":"डिफ़ॉल्ट (मध्यम)","comp_hint":"चुने गए चैनल delivery_selection: fixed के साथ भेजे जाते हैं (केवल वही चलते हैं)। गंभीर सचमुच गंभीर है — सायरन सहित।","critical_confirm":"गंभीर सूचना भेजें? सायरन और अधिकतम वॉल्यूम सहित।","sent_toast":"भेजी गई","write_or_pick":"एक संदेश लिखें, या कोई कैमरा या चैनल चुनें","send_err":"नहीं भेजी गई","dry_btn":"बिना भेजे आज़माएँ","dry_title":"अगर आप इसे अभी भेजते","dry_err":"ड्राई रन विफल","dry_nobody":"कोई प्राप्तकर्ता नहीं, केवल सीधे लक्ष्य","dry_none":"कोई चैनल नहीं चुना गया","dry_scen":"सक्रिय परिदृश्य","dry_raw":"कच्चा उत्तर","dry_prio":"प्राथमिकता","dry_would_n":"चैनल भेजेंगे","dry_nothing":"कुछ नहीं भेजा जाएगा","dry_dupe":"हाल की सूचना का डुप्लिकेट: इसे छोड़ दिया जाएगा","dry_no_dupe":"डुप्लिकेट जाँच सिम्युलेट नहीं हुई, इसलिए ठीक बाद का असली भेजना अवरुद्ध नहीं होगा।","dry_home":"घर पर","dry_empty":"SuperNotify ने कोई उत्तर नहीं दिया: क्या यह 2.12 या नया है?","dry_reasons":{"NO_TARGET":"कोई उपयोगी लक्ष्य नहीं","DUPE":"डुप्लिकेट","PRIORITY":"इस प्राथमिकता के लिए नहीं","SNOOZED":"स्नूज़ किया गया","DELIVERY_CONDITION":"डिलीवरी शर्त असत्य","OCCUPANCY":"उपस्थिति नियम","TRANSPORT_DISABLED":"परिवहन बंद","DELIVERY_DISABLED":"बंद किया गया","NO_SCENARIO":"आवश्यक परिदृश्य लागू नहीं","NO_ACTION":"कोई क्रिया नहीं","INVALID_ACTION_DATA":"अमान्य डेटा","UNKNOWN":"अज्ञात कारण","ERROR":"त्रुटि"},"prio_minimum":"न्यूनतम","prio_low":"कम","prio_medium":"मध्यम","prio_high":"उच्च","prio_critical":"गंभीर","target_lbl":"लक्ष्य — लोग, डिवाइस, क्षेत्र, मंज़िलें, लेबल","custom_target_lbl":"कस्टम लक्ष्य (ईमेल, Telegram ID, …) — कॉमा से अलग","adv_title":"उन्नत विकल्प","adv_spoken":"बोला जाने वाला संदेश (Alexa, TTS)","adv_spoken_ph":"स्पीकर क्या बोलें, अगर टेक्स्ट से अलग हो","adv_apply":"ये परिदृश्य लागू करें","adv_require":"केवल तभी भेजें जब ये परिदृश्य सक्रिय हों","adv_constrain":"केवल इन परिदृश्यों पर विचार करें","adv_snapshot":"URL से चित्र","adv_debug":"डीबग: पूरा चयन ट्रेस दर्ज करें (\"क्यों\" कार्ड में दिखता है)","custom_target_ph":"जैसे user@example.com, 123456789","native_target_tag":"🎯 नेटिव क्षेत्र/मंज़िल/लेबल","target_warn":"⚠️ क्षेत्र, मंज़िलें और लेबल केवल notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts और chime द्वारा हल किए जाते हैं। किसी अन्य चैनल के साथ — या ऊपर कोई चैनल न चुनने पर डिफ़ॉल्ट रूटिंग के साथ — सूचना चुपचाप बिना लक्ष्य के रह सकती है। कोई संगत चैनल चुनें, या सीधे कोई व्यक्ति/डिवाइस जोड़ें।","aut_search":"स्वचालन खोजें…","aut_all":"सभी","aut_none":"कोई मेल नहीं","aut_err":"मैनिफ़ेस्ट नहीं मिला — इसे tools/genera_vista_automazioni.py से बनाएँ","aut_updated":"सूची अपडेट हुई","aut_count":"स्वचालन","aut_count_1":"स्वचालन","never":"कभी नहीं","ago_now":"अभी","ago_min":"मिनट पहले","ago_h":"घंटे पहले","ago_d":"दिन पहले","aut_disabled_only":"केवल अक्षम","grp_active":"सक्रिय","repeat":"दोहराएँ","skipped_n":"छोड़ी गईं","left":"शेष","missed_n":"छूटी","snz_all":"सब कुछ","snz_nc":"गैर-गंभीर","snz_prio":"प्राथमिकता","snz_transport":"परिवहन","snz_for":"के लिए","snz_choose":"क्या और कितनी देर चुनें","snz_title":"सूचनाएँ रोकें","snz_what":"क्या","snz_nc_l":"गैर-गंभीर","snz_all_l":"सब कुछ","snz_ch":"एक चैनल","snz_pr":"एक प्राथमिकता","snz_who":"किसके लिए","snz_everyone":"सभी","snz_me":"केवल मैं","snz_len":"कितनी देर","snz_forever":"जब तक मैं फिर शुरू न करूँ","snz_go":"रोकें","snz_close":"बंद करें","rs_hand":"हाथ से","rs_voice":"आवाज़ से","rs_assist":"सहायक द्वारा","snz_voice_info":"आपके विराम SuperNotify के वॉइस कमांड से जाते हैं: वे केवल आपके हैं।","snz_voice_off":"SuperNotify के वॉइस कमांड बंद हैं: उन्हें इंटीग्रेशन विकल्पों में चालू करें।","snz_resume_mine":"मेरे फिर शुरू करें","go_open":"दिखाएँ","dl_probe":"यह चैनल आज़माएँ","probe_msg":"डैशबोर्ड से चैनल परीक्षण","sc_why":"क्यों","sc_yes":"अभी लागू","sc_no":"अभी लागू नहीं","sc_manual_why":"मैनुअल परिदृश्य: हाथ से लागू किया गया","sc_no_cond":"कोई शर्त नहीं","sc_off_sw":"बंद किया गया","sc_not_eval":"जाँचा नहीं गया","sc_now":"अभी","sc_diff_btn_on":"लागू होने पर क्या बदलेगा","sc_diff_btn_off":"इसके बिना क्या बदलेगा","sc_diff_on":"अगर यह लागू होता, अभी एक मध्यम सूचना के लिए:","sc_diff_off":"इसके बिना, अभी एक मध्यम सूचना के लिए:","sc_diff_add":"यह भी भेजेगा","sc_diff_rem":"अब नहीं भेजेगा","sc_diff_none":"कोई अंतर नहीं","c_state":"{e} {s} है","c_template":"टेम्पलेट शर्त","c_time":"समय","c_after":"के बाद","c_before":"से पहले","c_numeric":"{e}","c_above":"से ऊपर","c_below":"से नीचे","c_and":"ये सभी","c_or":"इनमें से कम से कम एक","c_not":"इनमें से कोई नहीं","c_or_join":" या ","sim_hint_dry":"SuperNotify का अपना उत्तर (ड्राई रन, कुछ नहीं भेजा जाता): अभी एक सूचना, ऊपर चुनी गई प्राथमिकता और केवल चुने गए परिदृश्यों के साथ।","sim_msg":"सिम्युलेटर परीक्षण","sim_prio":"प्राथमिकता","sa_snooze":"{what} {len} के लिए रोकी गईं।","sa_silence":"{what} अगली सूचना तक शांत।","sa_resume":"{what} फिर से चालू।","sa_resume_one":"विराम समाप्त: {x}।","sa_resume_all":"सूचनाएँ फिर से चालू।","sa_w_nc":"गैर-गंभीर सूचनाएँ","sa_w_all":"सभी सूचनाएँ","sa_w_ch":"चैनल {x}","sa_w_pr":"{x} प्राथमिकता की सूचनाएँ","sa_w_mine":"आपकी सूचनाएँ","sa_for":"{x} के लिए","sa_min":"{n} मिनट","sa_hour":"एक घंटा","sa_hours":"{n} घंटे","occ_title":"कौन घर पर है","occ_home_l":"घर पर","occ_ALL_HOME":"सभी घर पर","occ_ALL_AWAY":"सभी बाहर","occ_LONE_HOME":"केवल एक घर पर","occ_MULTI_HOME":"कुछ घर पर","occ_UNDEFINED_OCCUPANTS":"कोई ट्रैक नहीं","h_repairs":"SuperNotify मरम्मत","h_repairs_1":"SuperNotify मरम्मत","det_more":"सभी विशेषताएँ","det_yes":"हाँ","det_no":"नहीं","det_action":"क्रिया","det_target":"निश्चित लक्ष्य","det_target_req":"लक्ष्य चाहिए","det_target_use":"लक्ष्य उपयोग","det_inclusion":"कब उपयोग","det_prio":"प्राथमिकताएँ","det_occ":"किसे घर पर होना चाहिए","det_transport":"परिवहन","det_data":"डेटा","det_debug":"डीबग","det_err_last":"अंतिम त्रुटि","det_err_in":"में","det_err_n":"शुरू से त्रुटियाँ","det_select":"चयन","adv_html":"ईमेल के लिए टेक्स्ट (HTML)","adv_clip":"URL से वीडियो क्लिप","adv_actions":"सूचना पर बटन","adv_act_id":"क्रिया id","adv_act_title":"बटन टेक्स्ट","adv_act_add":"+ बटन","adv_groups":"बटन समूह (कॉमा)","adv_dc":"इस सूचना के लिए चैनल सेटिंग्स","adv_dc_ph":"key: value, हर पंक्ति में एक","adv_dc_add":"+ चैनल","snz_active":"अभी रुका हुआ","snz_resume":"फिर शुरू करें","snz_resume_all":"सब फिर शुरू करें","snz_until_resumed":"फिर शुरू होने तक","snz_done":"रोका गया","snz_resumed":"फिर शुरू हुआ","no_notif":"अभी कोई सूचना नहीं","st_title":"उपयोग","st_days_short":"दि","st_total":"सूचनाएँ","st_avg":"प्रति दिन","st_today":"आज","st_vs_avg":"औसत की तुलना में","st_peak_hour":"सबसे व्यस्त घंटा","st_top_channel":"शीर्ष चैनल","st_errors":"चैनल त्रुटियाँ","st_of_sends":"चैनल भेजे गए में से","st_daily":"प्रति दिन","st_hourly":"दिन के घंटे के अनुसार","st_weekday":"सप्ताह के दिन के अनुसार","st_channels":"चैनल — सबसे अधिक उपयोग","st_priority":"प्राथमिकता","st_period":"दिन का समय","st_insights":"जानकारियाँ","st_no_data":"अभी कोई इतिहास नहीं — पहली सूचनाओं के बाद डेटा दिखेगा।","st_loading":"लोड हो रहा है…","st_installed":"इंस्टॉल","st_latest":"नवीनतम","st_uptodate":"अद्यतित","st_update":"अपडेट उपलब्ध","st_restart":"रीस्टार्ट आवश्यक","st_logged":"दर्ज","st_from_archive":"SuperNotify के संग्रह से","st_archive_err":"संग्रह आंशिक रूप से पढ़ा गया","st_wd":["सोम","मंगल","बुध","गुरु","शुक्र","शनि","रवि"],"st_i_share":"सभी चैनल भेजे गए में से {p}% {c} से जाते हैं।","st_i_peak":"सबसे व्यस्त घंटा {h}:00 है ({d} दिनों में {n} सूचनाएँ)।","st_i_night":"{p}% सूचनाएँ 23:00 और 07:00 के बीच आती हैं — अगर यह नहीं चाहिए तो DND परिदृश्य पर विचार करें।","st_i_night_ok":"केवल {p}% सूचनाएँ रात में (23–07) आती हैं: शांत घंटे काम कर रहे हैं।","st_i_weekend":"सप्ताहांत के दिनों में कार्यदिवसों की तुलना में {p}% {dir} सूचनाएँ आती हैं।","st_i_errors":"{d} दिनों में {n} चैनल त्रुटियाँ, ज़्यादातर {c} पर।","st_i_noerr":"पिछले {d} दिनों में कोई चैनल त्रुटि नहीं।","st_i_prio":"{p}% सूचनाएँ {prio} प्राथमिकता की हैं।","st_i_trend":"पिछले 7 दिन: {n}/दिन, पहले के 7 दिनों की तुलना में {p}% {dir}।","st_more":"अधिक","st_less":"कम","st_up":"ऊपर","st_down":"नीचे"},"SN_ARCH_STRINGS":{"search":"शीर्षक या संदेश खोजें…","f_all":"सभी","f_today":"आज","f_whisper":"फुसफुसाई गईं","wh":"फुसफुसाई गई","said":"Alexa ने कहा","said_by":"{ch} ने कहा","none":"कोई सूचना मेल नहीं खाती","loading":"संग्रह पढ़ा जा रहा है…","recent":"नवीनतम सूचनाएँ","read_at":"पढ़ा गया","today":"आज","yesterday":"कल","failed":"विफल","missed":"छूटी","prio":{"critical":"गंभीर","high":"उच्च","low":"कम","minimum":"न्यूनतम","medium":"मध्यम"},"reasons":{"doppione":"डुप्लिकेट","nessun target":"कोई लक्ष्य नहीं","errore":"त्रुटि","condizione":"शर्त","scenario":"परिदृश्य","presenza":"उपस्थिति","priorita":"प्राथमिकता","spento":"बंद","pausa":"स्नूज़ किया गया","transport spento":"परिवहन बंद","nessuna azione":"कोई क्रिया नहीं","dati non validi":"अमान्य डेटा","sconosciuto":"अज्ञात"},"f_appliance":"उपकरण","ap_scope":"पूरी पढ़ी गई पिछली {n} सूचनाओं में से - पुरानी पहचानी नहीं जातीं"},"SN_WHY_STRINGS":{"pick":"कोई सूचना चुनें यह देखने के लिए कि वह जहाँ गई वहाँ क्यों गई।","loading":"लोड हो रहा है…","none":"कोई सूचना नहीं","gone":"यह सूचना अब संग्रह में नहीं है","priority":"प्राथमिकता","dupe":"डुप्लिकेट","outcomes":{"success":"पहुँचाई गई","partial_delivery":"आंशिक रूप से पहुँचाई गई","dupe":"डुप्लिकेट","failed":"विफल","error":"विफल","fallback_delivery":"फ़ॉलबैक चैनल से पहुँचाई गई","no_delivery":"नहीं पहुँचाई गई"},"step_call":"कॉल","step_scen":"परिदृश्य","step_people":"लोग","step_ch":"चैनल","call_auto":"कोई चैनल नामित नहीं: सामान्य रूटिंग","call_named":"कॉल में नामित:","call_debug":"डीबग के साथ","nobody":"घर पर कोई नहीं","ch_sent":"भेजे गए","ch_problems":"देखने योग्य","ch_skipped":"छोड़े गए","pb_failed":"विफल","pb_missed":"माँगा गया पर भेजा नहीं गया","grp_skipped":"किसी नियम से छोड़े गए: सामान्य","grp_not":"शामिल नहीं","trace_title":"पूरा चयन ट्रेस","fix":{"NO_TARGET":"किसी प्राप्तकर्ता के पास इस चैनल का पता नहीं है: किसी प्राप्तकर्ता में एक जोड़ें, चैनल को निश्चित लक्ष्य दें, या इसे इस कॉल से हटा दें।","ERROR":"इस चैनल के पीछे के इंटीग्रेशन ने त्रुटि लौटाई: उसकी अपनी लॉग प्रविष्टि देखें।","NO_ACTION":"चैनल के पास कॉल करने के लिए कोई क्रिया नहीं है: डिलीवरी पर `action:` सेट करें।","INVALID_ACTION_DATA":"क्रिया को दिया गया डेटा अस्वीकार कर दिया गया: कॉल या डिलीवरी का `data:` जाँचें।"},"no_scenarios":"कोई परिदृश्य लागू नहीं","applied":"कॉल द्वारा बाध्य","required":"कॉल द्वारा आवश्यक","constrain":"कॉल द्वारा सीमित:","home":"घर पर","away":"बाहर","no_channels":"कोई चैनल नहीं चुना गया","st_ok":"पहुँचाई गई","st_err":"विफल","st_skip":"छोड़ी गई","calls":"कॉल","calls_1":"कॉल","target_required":"लक्ष्य आवश्यक:","started_by":"इसके द्वारा चुना गया:","scen_would_off":"बंद करता (रद्द किया गया):","src_default":"हमेशा चालू (डिफ़ॉल्ट)","src_scen":"परिदृश्य","src_call":"कॉल स्वयं","src_recipient":"प्राप्तकर्ता","r_off_by":"बंद किया गया:","call_targets":"कॉल में लक्ष्य","cats":{"entity_id":"entities","mobile_app_id":"डिवाइस","person_id":"लोग","email":"ईमेल","phone":"फ़ोन","device_id":"डिवाइस"},"r_call_off":"कॉल द्वारा बाहर रखा गया","r_scen_off":"लागू परिदृश्य द्वारा बंद किया गया","r_disabled":"बंद किया गया","r_transport_off":"इसका परिवहन बंद है","r_only_scen":"केवल तब शुरू होता है जब कोई परिदृश्य इसे चालू करे","r_only_fallback":"केवल फ़ॉलबैक","r_only_explicit":"केवल नाम से माँगने पर शुरू होता है","r_priority":"इस प्राथमिकता के लिए नहीं","r_unknown":"ट्रेस के बिना पुनर्निर्मित नहीं किया जा सकता","from_config":"शुरू न हुए चैनलों के कारण कॉन्फ़िगरेशन से पुनर्निर्मित किए जाते हैं जैसा वह अभी है, न कि जैसा तब था।","from_trace":"कारण सूचना के साथ संग्रहीत चयन ट्रेस से आते हैं।","st_time":"लगा समय","st_slow":"सबसे धीमा","st_rate":"चैनल सफल हुए","ua_title":"लक्ष्य जिन्हें किसी चैनल ने नहीं लिया","ua_hint":"वे कॉल में थे, पर कोई चुना गया चैनल इस प्रकार का लक्ष्य स्वीकार नहीं करता।","un_title":"नाम जो मौजूद नहीं हैं","sent_by":"भेजने वाला","sent_auto":"स्वचालन","sent_script":"स्क्रिप्ट","sent_person":"","sent_unknown":"भेजने वाला अज्ञात (इसके संदर्भ में कोई स्वचालन या व्यक्ति नहीं)","no_trace":"पूरा चयन ट्रेस केवल तभी दर्ज होता है जब notify कॉल में debug: true हो, और तभी संग्रहीत होता है जब संग्रह डायग्नोस्टिक्स में यह शामिल हो।","reasons":{"NO_TARGET":"कोई उपयोगी लक्ष्य नहीं","DUPE":"हाल की सूचना का डुप्लिकेट","PRIORITY":"इस प्राथमिकता के लिए नहीं","SNOOZE":"स्नूज़ किया गया","SNOOZED":"स्नूज़ किया गया","DELIVERY_CONDITION":"डिलीवरी शर्त असत्य","OCCUPANCY":"उपस्थिति नियम","ERROR":"त्रुटि","DELIVERY_DISABLED":"बंद किया गया","SCENARIO":"परिदृश्य","TRANSPORT_DISABLED":"इसका परिवहन बंद है","NO_SCENARIO":"एक आवश्यक परिदृश्य लागू नहीं है","NO_ACTION":"कॉल करने के लिए कोई क्रिया नहीं","INVALID_ACTION_DATA":"अमान्य क्रिया डेटा","UNKNOWN":"अज्ञात कारण"}},"SN_TOOLS_STRINGS":{"maint":"रखरखाव","enq":"SuperNotify से पूछें","refresh":"हर entity फिर से प्रकाशित करें","refresh_btn":"रीफ़्रेश","resume_btn":"फिर शुरू करें","refreshed":"Entities फिर से प्रकाशित हुईं।","resume_all":"हर विराम फिर शुरू करें","cleared_n":"विराम फिर शुरू हुए","purge_arch":"संग्रह साफ़ करें","purge_media":"चित्र साफ़ करें","older":"इससे पुराने","days":"दिन","purge_btn":"साफ़ करें","confirm":"पुष्टि के लिए फिर टैप करें","purged":"हटाए गए","remaining":"शेष","reset":"हाथ से किए गए बदलाव पूर्ववत करें","reset_btn":"रीसेट","reset_none":"रीसेट करने को कुछ नहीं: सब कुछ कॉन्फ़िगरेशन के अनुसार है।","reset_done":"कॉन्फ़िगरेशन पर वापस:","k_all":"सब कुछ","k_scenario":"परिदृश्य","k_delivery":"चैनल","k_recipient":"लोग","k_transport":"परिवहन","q_config":"कॉन्फ़िगरेशन","q_scen":"परिदृश्य","q_active":"सक्रिय परिदृश्य","q_by_scen":"परिदृश्य के अनुसार चैनल","q_implicit":"डिफ़ॉल्ट चैनल","q_recipients":"प्राप्तकर्ता","q_occupancy":"कौन घर पर है","q_snoozes":"विराम","q_last":"अंतिम सूचना","copy":"JSON कॉपी करें","copied":"कॉपी हुआ","close":"बंद करें","empty":"(खाली)","err":"SuperNotify ने त्रुटि के साथ उत्तर दिया:","settings":"इंटीग्रेशन सेटिंग्स","running":"काम चल रहा है…","more":"और"},"SN_FORM_LABELS":{"_common":"रूप और टेक्स्ट","style":"रंग","icons":"आइकन","show_version":"कार्ड संस्करण दिखाएँ","intro":"ऊपर परिचय टेक्स्ट","title":"शीर्षक","dnd_entity":"परेशान-न-करें स्विच","quiet_entity":"गणना की गई शांत स्थिति (वैकल्पिक)","presence_entity":"स्थिति पट्टी के लिए व्यक्ति","archive_days":"संग्रह सफ़ाई: इससे पुराने (दिन)","media_days":"चित्र सफ़ाई: इससे पुराने (दिन)","occupancy":"कौन घर पर है (SuperNotify से)","repairs":"स्वास्थ्य सूची में SuperNotify मरम्मत","snooze_announce":"विराम ज़ोर से बोलें (घोषणा चैनल)","snooze_via":"विराम इसके ज़रिए जाते हैं","o_event":"पुश बटन इवेंट (व्यवस्थापक)","o_voice":"वॉइस कमांड","snooze_minutes":"स्नूज़ अवधि (मिनट)","snooze_panel":"स्नूज़ टाइल विराम पैनल खोलती है","announce_delivery":"घोषणाओं के लिए चैनल","last_notification":"अंतिम सूचना दिखाएँ","last_channels":"अंतिम सूचना में हर चैनल के लिए एक चिप","repeat_entity":"अंतिम-दोहराएँ बटन (वैकल्पिक)","tile_layout":"टाइलें","tile_columns":"टाइल कॉलम (खाली = स्वचालित)","update_entity":"SuperNotify अपडेट entity","cards_update_entity":"कार्ड अपडेट entity","health":"ऊपर स्वास्थ्य","poll_seconds":"हर इतने में रीफ़्रेश (सेकंड)","group":"चैनल कैसे शुरू होता है उसके अनुसार समूह","hide_defaults":"स्वचालित DEFAULT_ चैनल छिपाएँ","limit":"सूची में सूचनाएँ","expand":"मुड़े हुए हिस्से खोलें","max_height":"अधिकतम ऊँचाई (CSS, जैसे 70vh)","trigger_entity":"इसके बदलने पर रीफ़्रेश करें","dry_run":"\"बिना भेजे आज़माएँ\" दिखाएँ","dry_run_dupe_check":"डुप्लिकेट जाँच भी सिम्युलेट करें","days":"डिफ़ॉल्ट रूप से दिखाए गए दिन","manifest_url":"स्वचालन मैनिफ़ेस्ट URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant थीम","o_mdi":"Home Assistant आइकन","o_emoji":"इमोजी","o_row":"बाईं ओर आइकन","o_stacked":"ऊँची, ऊपर आइकन","o_auto":"स्वचालित"},"SN_NATIVE_STR":{"all_good":"सब ठीक है","paused":"रुका हुआ","until":"तक","resume":"फिर शुरू करें","test":"परीक्षण भेजें","sure":"भेजने के लिए फिर टैप करें","sent":"भेजी गईं","last":"अंतिम","none":"अभी कोई सूचना नहीं","ago":"पहले","min":"मिनट","h":"घं","err":"त्रुटियों वाले परिवहन","off":"चैनल बंद"},"SN_STRATEGY_TITLES":{"home":"होम","archive":"संग्रह","send":"भेजें","setup":"सेटअप","stats":"आँकड़े","tools":"टूल","title":"SuperNotify","appliances":"उपकरण"},"SN_APPL_STRINGS":{"title":"उपकरण","loading":"पढ़ा जा रहा है…","none":"कोई उपकरण नहीं: Appliance Autonotify में जोड़ें (सेटिंग्स → डिवाइस और सेवाएँ)।","st_run":"चल रहा है","st_cleaning":"सफ़ाई कर रहा है","st_done":"पूरा · खाली करें","st_done_other":"पूरा","st_err":"मदद चाहिए","m_switch_on":"प्लग चालू करें","done_switch_on":"प्लग चालू हो गया।","done_action":"हो गया: {n}","confirm_action":"«{n}» चलाएँ?","open_entity":"बदलने के लिए खोलें","chip_notifs":"सूचनाएँ","chip_device":"डिवाइस","not_found":"«{n}» नाम का कोई उपकरण नहीं।","last7":"पिछले 7 दिन","col_day":"दिन","col_cycles":"चक्र","col_time":"समय","col_energy":"खपत","source_h":"स्रोत","manual_src":"हाथ से जोड़ा गया: {w} से ऊपर चालू","tab_info":"सारांश","tab_stats":"खपत और चक्र","tab_cleans":"सफ़ाइयाँ","tab_prints":"प्रिंट","last_run":"पिछला चक्र","avg_run":"औसत","reminders_h":"सूचनाएँ","plug":"प्लग","plug_on":"चालू","plug_off":"बंद","error_h":"त्रुटि","open_device":"Home Assistant में डिवाइस","prints":"प्रिंट","print1":"प्रिंट","per_print":"इस महीने का हर प्रिंट","last_prints":"पिछले प्रिंट","no_print_month":"इस महीने अभी कोई प्रिंट नहीं","no_print":"अभी कोई प्रिंट नहीं","col_fil":"फ़िलामेंट","failed":"विफल","per_run":"इस महीने का हर चक्र","dev_hist":"हर एक Home Assistant के इतिहास से आता है (पिछले {n} दिन); घंटे उपकरण के अपने काउंटर से, अगर हो।","cleans":"सफ़ाइयाँ","clean1":"सफ़ाई","per_clean":"इस महीने की हर सफ़ाई","avg_clean":"औसत {d}","col_area":"क्षेत्रफल","last_cleans":"पिछली सफ़ाइयाँ","no_clean_month":"इस महीने अभी कोई सफ़ाई नहीं","no_clean":"अभी कोई सफ़ाई नहीं","vac_hist":"कुल योग रोबोट के काउंटर से आते हैं; हर सफ़ाई Home Assistant के इतिहास से (पिछले {n} दिन)।","st_paused":"रुका हुआ","st_returning":"डॉक पर लौट रहा है","st_charging":"चार्ज हो रहा है","st_docked_w":"डॉक पर","st_idle":"रुका हुआ","st_off":"बंद","stopped":"रुके हुए","yesterday":"कल","u_min":"मिनट","u_h":"घंटे","start":"शुरू","so_far":"अब तक","no_cycle":"अभी कोई चक्र नहीं","last_cycle":"पिछला चक्र {d}","ended_at":"{t} पर पूरा","reminders":"{t} तक +{n} रिमाइंडर","reminder1":"{t} पर +1 रिमाइंडर","end_est":"अनुमानित अंत","left":"{d} बाकी","almost":"बस पूरा होने वाला है","est_from_avg":"मिलते-जुलते चक्रों से अनुमान","running_for":"{d} से चल रहा है","btn_empty":"खाली किया","btn_seen":"हो गया","btn_resume":"सफ़ाई फिर शुरू करें","m_switch_off":"प्लग बंद करें","m_remind":"बाद में याद दिलाएँ","details":"विवरण","settings":"सेटिंग्स","more":"और","details_link":"विवरण, खपत और चक्र","done_empty":"हो गया: रिमाइंडर बंद।","done_remind":"बाद में याद दिलाएगा।","done_switch":"प्लग बंद किया गया।","done_resume":"सफ़ाई फिर शुरू हुई।","err":"त्रुटि","new_dev":"{n} नए डिवाइस","new_dev1":"1 नया डिवाइस","battery":"बैटरी","consumable":"{n} {p}%","maint_in":"{c} चक्र बाकी","maint_next":"अगले चक्र पर","maint_due":"अभी करना है","maint_of":"{e} में से {d}","maint_done":"हो गया","confirm_maint":"«{n}» को हो गया मानें? गिनती फिर से शुरू होगी।","conn_lost":"कनेक्शन टूटा: आख़िरी ज्ञात स्थिति","cons_h":"उपभोग्य सामग्री","commands":"आदेश","tap_again":"पुष्टि के लिए फिर से टैप करें","empty_since":"खाली करना बाकी","done_since":"पूरा हुए","avg_cycle":"औसत चक्र","maint_tab":"रखरखाव","tab_stats_short":"खपत","read_failed":"इतिहास नहीं पढ़ा जा सका ({e}); थोड़ी देर में फिर कोशिश करेंगे।","retry":"फिर कोशिश करें","see_chart":"चार्ट देखें","back":"वापस","avg_line":"औसत {v}","tap_bar":"उस चक्र को देखने के लिए बार पर टैप करें","k_station":"डॉक","off_since":"बंद है","close":"बंद करें","power_now":"अभी","p_today":"आज","p_week":"सप्ताह","p_month":"महीना","p_year":"साल","cycles":"चक्र","cycle1":"चक्र","per_cycle":"इस महीने प्रति चक्र खपत","short":"छोटे","long":"लंबे","anomalous":"असामान्य","avg":"औसत {d}, {k}","last_cycles":"हाल के चक्र","col_start":"शुरू","col_dur":"अवधि","col_cost":"लागत","no_cycle_month":"इस महीने अभी कोई चक्र नहीं","coarse":"10 दिन से पुराने चक्र घंटे के हिसाब से गिने जाते हैं।","open_notifs":"उपकरण की सूचनाएँ","no_power":"पावर सेंसर नहीं मिला: `appliances:` में `power_entity` से बताएँ।","no_power_vac":"रोबोट वैक्यूम में पावर सेंसर नहीं होता: खपत और चक्र नहीं गिने जाते।"}}};
+const SN_I18N_EXTRA = {"de":{"SN_STRINGS":{"presence":"Anwesenheit","time_band":"Zeitfenster","quiet":"Ruhe","act_scen":"Aktive Szenarien","on":"an","off":"aus","active":"aktiv","dnd":"Nicht stören","tap_silence":"tippen zum Stummschalten","snooze":"Pause","min":"Min.","pause_nc":"Nicht-Kritisches pausieren","snoozed":"Pausiert","until":"bis","tap_clear":"tippen zum Aufheben","announce":"Durchsage","intercom":"Gegensprechen","announce_ph":"Auf allen Lautsprechern durchsagen…","send":"Senden","announced":"Durchgesagt","cleared":"Pausen aufgehoben","snoozed_for":"Nicht-kritische Benachrichtigungen pausiert für","sent":"Gesendet","yesterday":"gestern","deliveries":"Kanäle","last_notif":"Letzte Benachrichtigung","transports":"Transporte","delivered":"zugestellt","failed":"fehlgeschlagen","channels":"Kanäle","none":"keine","no_transports":"keine Transport-Entitäten gefunden","tr_used":"genutzt von","tr_unused":"kein Kanal nutzt ihn","start":"Start","volume":"Lautstärke","now":"jetzt","crosses":"über Mitternacht","no_voice":"keine Sprache","mute_hint":"Ein Zeitfenster mit <b>0%</b> sendet <b>keine Sprachdurchsage</b> (Alexa und TTS aus, Push und Dashboard werden trotzdem zugestellt). Kritische und hohe Priorität werden immer gesprochen.","enabled":"aktiv","grp_auto":"Starten von selbst","grp_named":"Nur wenn im Aufruf genannt","grp_scen":"Nur mit einem Szenario","grp_fallback":"Reserve, wenn die anderen scheitern","ch_title":"Kanäle","ch_count":"{on} von {tot} an","off_manual":"ausgeschaltet","paused_by":"gerade pausiert durch","on_by":"gerade an durch","fixed_targets":"feste Ziele","no_deliveries":"keine Zustellungs-Entitäten gefunden","home":"zu Hause","away":"unterwegs","devices":"Geräte","devices_1":"Gerät","rc_test":"Test senden","rc_test_confirm":"Zum Senden erneut tippen","rc_test_sent":"Test gesendet","rc_test_title":"SuperNotify-Test","rc_test_msg":"Testnachricht vom Dashboard,","overrides":"Zustellungs-Übersteuerungen","overrides_1":"Zustellungs-Übersteuerung","no_contact":"keine Kontaktpunkte","no_recipients":"keine Empfänger-Entitäten gefunden","details":"Details","h_update":"Update verfügbar:","h_restart":"Home Assistant neu starten, um das Update abzuschließen","h_uptodate":"aktuell","h_transport_err":"Transporte mit Fehlern","h_channels_off":"Kanäle aus","h_all_good":"Alles in Ordnung","h_failures":"Fehler","h_failures_1":"Fehler","h_transport_err_1":"Transport mit Fehlern","h_channels_off_1":"Kanal aus","channels_1":"Kanal","band_early_morning":"Früher Morgen","band_morning":"Morgen","band_afternoon":"Nachmittag","band_evening":"Abend","band_night":"Nacht","band_late_night":"Späte Nacht","h_look_1":"1 Sache zum Ansehen","h_look_n":"{n} Sachen zum Ansehen","h_rest_ok":"alles andere funktioniert","h_ch_on":"{on} von {tot} Kanälen an","h_open":"Öffnen","ln_delivered":"zugestellt","ln_failed":"fehlgeschlagen","ln_why":"Warum","tgt_loading":"Auswahl wird geladen…","bands_empty_t":"Noch keine Zeitfenster","bands_empty":"Füge ein Zeitfenster pro Tagesabschnitt hinzu: ein input_datetime für den Beginn und ein input_number für die Sprachlautstärke.","active_now":"gerade aktiv","disabled":"deaktiviert","other":"Sonstige","manual":"manuell","apply_now":"jetzt anwenden","applied":"Angewendet","apply_off":"tippen, um es nicht mehr anzuwenden","enabled_lbl":"aktiviert","reset_overrides":"Übersteuerungen zurücksetzen","reset_done":"Übersteuerungen zurückgesetzt","transport_off":"Transport aus","last_notified":"zuletzt benachrichtigt","never_notified":"nie benachrichtigt","media":"Medien","no_scenarios":"keine Szenario-Entitäten gefunden","sim_pick":"🎬 Szenarien — zum Simulieren tippen","sim_fire":"📤 Kanäle","sim_hint":"Echte Daten der Engine (enquire-Dienste). Die Filterung nach Priorität passiert in der Engine und wird hier nicht simuliert. Deaktiviert gewinnt gegen aktiviert, wie beim Zusammenführen zur Laufzeit.","sim_none":"keine Zustellung würde ausgelöst","sim_go":"Würde gesendet","sim_stop":"Würde nicht gesendet","sim_r_default":"startet von selbst","sim_r_on":"eingeschaltet durch","sim_r_off":"ausgeschaltet durch","sim_r_named":"nur wenn im Aufruf genannt","sim_r_scen":"nur mit einem Szenario, das ihn einschaltet","sim_r_fallback":"Reserve, wenn die anderen scheitern","sim_r_switched":"ausgeschaltet","title":"Titel","message":"Nachricht","priority":"Priorität","channels_lbl":"Kanäle — keiner gewählt = normales Routing","camera_lbl":"Kamera-Schnappschuss","preview":"Vorschau","no_title":"(kein Titel)","no_message":"(keine Nachricht)","default_prio":"Standard (mittel)","comp_hint":"Gewählte Kanäle werden mit delivery_selection: fixed gesendet (nur diese lösen aus). Kritisch ist wirklich kritisch — Sirenen inklusive.","critical_confirm":"Eine KRITISCHE Benachrichtigung senden? Sirenen und maximale Lautstärke inklusive.","sent_toast":"Gesendet","write_or_pick":"Schreib eine Nachricht oder wähle eine Kamera oder einen Kanal","send_err":"Nicht gesendet","dry_btn":"Testen ohne Senden","dry_title":"Wenn du es jetzt sendest","dry_err":"Testlauf fehlgeschlagen","dry_nobody":"kein Empfänger, nur direkte Ziele","dry_none":"Kein Kanal ausgewählt","dry_scen":"Aktive Szenarien","dry_raw":"Rohe Antwort","dry_prio":"Priorität","dry_would_n":"Kanäle würden senden","dry_nothing":"Es würde nichts gesendet","dry_dupe":"Duplikat einer kürzlichen Benachrichtigung: sie würde verworfen","dry_no_dupe":"Duplikatprüfung nicht simuliert, damit das echte Senden direkt danach nicht blockiert wird.","dry_home":"Zu Hause","dry_empty":"SuperNotify hat nicht geantwortet: ist es 2.12 oder neuer?","prio_minimum":"Minimal","prio_low":"Niedrig","prio_medium":"Mittel","prio_high":"Hoch","prio_critical":"Kritisch","target_lbl":"Ziel — Personen, Geräte, Bereiche, Etagen, Labels","custom_target_lbl":"Eigene Ziele (E-Mail, Telegram-IDs, …) — durch Komma getrennt","adv_title":"Erweiterte Optionen","adv_spoken":"Gesprochene Nachricht (Alexa, TTS)","adv_spoken_ph":"was die Lautsprecher sagen, falls anders als der Text","adv_apply":"Diese Szenarien anwenden","adv_require":"Nur senden, wenn diese Szenarien aktiv sind","adv_constrain":"Nur diese Szenarien berücksichtigen","adv_snapshot":"Bild von einer URL","adv_debug":"Debug: vollständige Auswahl-Ablaufverfolgung aufzeichnen (in der Warum-Karte angezeigt)","custom_target_ph":"z. B. user@example.com, 123456789","native_target_tag":"🎯 nativer Bereich/Etage/Label","target_warn":"⚠️ Bereiche, Etagen und Labels werden nur von notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts und chime aufgelöst. Mit jedem anderen Kanal — oder dem Standard-Routing, wenn oben kein Kanal gewählt ist — kann die Benachrichtigung unbemerkt ohne Ziel bleiben. Wähle einen kompatiblen Kanal oder füge direkt eine Person bzw. ein Gerät hinzu.","aut_search":"Automationen suchen…","aut_all":"Alle","aut_none":"Keine Treffer","aut_err":"Manifest nicht gefunden — erzeuge es mit tools/genera_vista_automazioni.py","aut_updated":"Liste aktualisiert","aut_count":"Automationen","aut_count_1":"Automation","never":"nie","ago_now":"jetzt","ago_min":"Min. her","ago_h":"Std. her","ago_d":"T. her","aut_disabled_only":"Nur deaktivierte","grp_active":"aktiv","repeat":"Wiederholen","skipped_n":"übersprungen","left":"übrig","missed_n":"verpasst","snz_all":"alles","snz_nc":"nicht kritisch","snz_prio":"Priorität","snz_transport":"Transport","snz_for":"für","snz_choose":"wähle was und wie lange","snz_title":"Benachrichtigungen pausieren","snz_what":"Was","snz_nc_l":"Nicht kritisch","snz_all_l":"Alles","snz_ch":"Ein Kanal","snz_pr":"Eine Priorität","snz_who":"Für wen","snz_everyone":"Alle","snz_me":"Nur ich","snz_len":"Wie lange","snz_forever":"Bis ich fortsetze","snz_go":"Pausieren","snz_close":"Schließen","rs_hand":"von Hand","rs_voice":"per Sprache","rs_assist":"vom Assistenten","snz_voice_info":"Deine Pausen laufen über die Sprachbefehle von SuperNotify: sie gelten nur für dich.","snz_voice_off":"Die Sprachbefehle von SuperNotify sind aus: schalte sie in den Integrationsoptionen ein.","snz_resume_mine":"Meine fortsetzen","go_open":"Anzeigen","dl_probe":"Diesen Kanal testen","probe_msg":"Kanaltest vom Dashboard","sc_why":"Warum","sc_yes":"Gilt jetzt","sc_no":"Gilt jetzt nicht","sc_manual_why":"Manuelles Szenario: von Hand angewendet","sc_no_cond":"Keine Bedingungen","sc_off_sw":"Ausgeschaltet","sc_not_eval":"nicht geprüft","sc_now":"jetzt","sc_diff_btn_on":"Was sich ändert, wenn es gilt","sc_diff_btn_off":"Was sich ohne es ändert","sc_diff_on":"Wenn es gälte, für eine mittlere Benachrichtigung jetzt:","sc_diff_off":"Ohne es, für eine mittlere Benachrichtigung jetzt:","sc_diff_add":"würde zusätzlich senden","sc_diff_rem":"würde nicht mehr senden","sc_diff_none":"kein Unterschied","c_state":"{e} ist {s}","c_template":"Template-Bedingung","c_time":"Zeit","c_after":"nach","c_before":"vor","c_numeric":"{e}","c_above":"über","c_below":"unter","c_and":"alle davon","c_or":"mindestens eine davon","c_not":"keine davon","c_or_join":" oder ","sim_hint_dry":"Die Antwort von SuperNotify selbst (Testlauf, nichts wird gesendet): eine Benachrichtigung jetzt, mit der Priorität und nur den oben gewählten Szenarien.","sim_msg":"Simulator-Test","sim_prio":"Priorität","sa_snooze":"{what} pausiert für {len}.","sa_silence":"{what} bis auf Weiteres stummgeschaltet.","sa_resume":"{what} wieder an.","sa_resume_one":"Pause beendet: {x}.","sa_resume_all":"Benachrichtigungen wieder an.","sa_w_nc":"Nicht-kritische Benachrichtigungen","sa_w_all":"Alle Benachrichtigungen","sa_w_ch":"Kanal {x}","sa_w_pr":"Benachrichtigungen mit Priorität {x}","sa_w_mine":"Deine Benachrichtigungen","sa_for":"für {x}","sa_min":"{n} Minuten","sa_hour":"eine Stunde","sa_hours":"{n} Stunden","occ_title":"Wer ist zu Hause","occ_home_l":"Zu Hause","occ_ALL_HOME":"Alle zu Hause","occ_ALL_AWAY":"Alle unterwegs","occ_LONE_HOME":"Nur eine Person zu Hause","occ_MULTI_HOME":"Einige zu Hause","occ_UNDEFINED_OCCUPANTS":"Niemand erfasst","h_repairs":"SuperNotify-Reparaturen","h_repairs_1":"SuperNotify-Reparatur","det_more":"Alle Attribute","det_yes":"ja","det_no":"nein","det_action":"Aktion","det_target":"Feste Ziele","det_target_req":"Braucht ein Ziel","det_target_use":"Ziele nutzen","det_inclusion":"Verwendet, wenn","det_prio":"Prioritäten","det_occ":"Wer zu Hause sein muss","det_transport":"Transport","det_data":"Daten","det_debug":"Debug","det_err_last":"Letzter Fehler","det_err_in":"In","det_err_n":"Fehler seit Start","det_select":"Auswahl","adv_html":"Text für E-Mail (HTML)","adv_clip":"Videoclip von einer URL","adv_actions":"Schaltflächen in der Benachrichtigung","adv_act_id":"Aktions-ID","adv_act_title":"Schaltflächentext","adv_act_add":"+ Schaltfläche","adv_groups":"Schaltflächengruppen (Komma)","adv_dc":"Kanaleinstellungen für diese Benachrichtigung","adv_dc_ph":"schlüssel: wert, einer pro Zeile","adv_dc_add":"+ Kanal","snz_active":"Gerade pausiert","snz_resume":"Fortsetzen","snz_resume_all":"Alles fortsetzen","snz_until_resumed":"bis zur Fortsetzung","snz_done":"Pausiert","snz_resumed":"Fortgesetzt","no_notif":"noch keine Benachrichtigung","st_title":"Nutzung","st_days_short":"T","st_total":"Benachrichtigungen","st_avg":"pro Tag","st_today":"Heute","st_vs_avg":"ggü. Durchschnitt","st_peak_hour":"Spitzenstunde","st_top_channel":"Top-Kanal","st_errors":"Kanalfehler","st_of_sends":"der Kanal-Sendungen","st_daily":"Pro Tag","st_hourly":"Nach Tageszeit","st_weekday":"Nach Wochentag","st_channels":"Kanäle — meistgenutzt","st_priority":"Priorität","st_period":"Tagesabschnitt","st_insights":"Erkenntnisse","st_no_data":"Noch kein Verlauf — Daten erscheinen nach den ersten Benachrichtigungen.","st_loading":"wird geladen…","st_installed":"installiert","st_latest":"neueste","st_uptodate":"aktuell","st_update":"Update verfügbar","st_restart":"Neustart erforderlich","st_logged":"erfasst","st_from_archive":"aus dem SuperNotify-Archiv","st_archive_err":"Archiv teilweise gelesen","st_wd":["Mo","Di","Mi","Do","Fr","Sa","So"],"st_i_share":"{p}% aller Kanal-Sendungen laufen über {c}.","st_i_peak":"Die meisten Benachrichtigungen kommen um {h}:00 ({n} in {d} Tagen).","st_i_night":"{p}% der Benachrichtigungen kommen zwischen 23:00 und 07:00 — erwäge ein Nicht-stören-Szenario, falls das unerwünscht ist.","st_i_night_ok":"Nur {p}% der Benachrichtigungen kommen nachts (23–07): die Ruhezeiten funktionieren.","st_i_weekend":"Am Wochenende gibt es {p}% {dir} Benachrichtigungen als an Werktagen.","st_i_errors":"{n} Kanalfehler in {d} Tagen, vor allem bei {c}.","st_i_noerr":"Keine Kanalfehler in den letzten {d} Tagen.","st_i_prio":"{p}% der Benachrichtigungen haben Priorität {prio}.","st_i_trend":"Letzte 7 Tage: {n}/Tag, {dir} {p}% ggü. den 7 davor.","st_more":"mehr","st_less":"weniger","st_up":"plus","st_down":"minus"},"SN_ARCH_STRINGS":{"search":"Titel oder Nachricht suchen…","f_all":"Alle","f_today":"Heute","f_whisper":"Geflüstert","wh":"geflüstert","said":"Alexa sagte","said_by":"{ch} sagte","none":"keine passende Benachrichtigung","loading":"Archiv wird gelesen…","recent":"neueste Benachrichtigungen","read_at":"gelesen um","today":"Heute","yesterday":"Gestern","failed":"fehlgeschlagen","missed":"verpasst","reasons":{"doppione":"Duplikat","nessun target":"kein Ziel","errore":"Fehler","condizione":"Bedingung","scenario":"Szenario","presenza":"Anwesenheit","priorita":"Priorität","spento":"aus","pausa":"pausiert","transport spento":"Transport aus","nessuna azione":"keine Aktion","dati non validi":"ungültige Daten","sconosciuto":"unbekannt"},"f_appliance":"Haushaltsgeräte","ap_scope":"unter den letzten {n} vollständig gelesenen – ältere werden nicht erkannt"},"SN_WHY_STRINGS":{"pick":"Wähle eine Benachrichtigung, um zu sehen, warum sie dorthin ging, wo sie hinging.","loading":"wird geladen…","none":"keine Benachrichtigung","gone":"diese Benachrichtigung ist nicht mehr im Archiv","priority":"Priorität","dupe":"Duplikat","outcomes":{"success":"zugestellt","partial_delivery":"teilweise zugestellt","dupe":"Duplikat","failed":"fehlgeschlagen","error":"fehlgeschlagen","fallback_delivery":"über den Fallback-Kanal zugestellt","no_delivery":"nicht zugestellt"},"step_call":"Aufruf","step_scen":"Szenarien","step_people":"Personen","step_ch":"Kanäle","call_auto":"kein Kanal genannt: normales Routing","call_named":"im Aufruf genannt:","call_debug":"mit Debug","nobody":"niemand zu Hause","ch_sent":"gesendet","ch_problems":"zum Ansehen","ch_skipped":"übersprungen","pb_failed":"fehlgeschlagen","pb_missed":"angefordert, aber nicht gesendet","grp_skipped":"per Regel übersprungen: normal","grp_not":"nicht beteiligt","trace_title":"Vollständige Auswahl-Ablaufverfolgung","fix":{"NO_TARGET":"Kein Empfänger hat eine Adresse für diesen Kanal: füge einem Empfänger eine hinzu, gib dem Kanal feste Ziele oder lass ihn bei diesem Aufruf weg.","ERROR":"Die Integration hinter diesem Kanal hat mit einem Fehler geantwortet: sieh in ihrem eigenen Logeintrag nach.","NO_ACTION":"Der Kanal hat keine Aktion zum Aufrufen: setze `action:` in der Zustellung.","INVALID_ACTION_DATA":"Die an die Aktion übergebenen Daten wurden abgelehnt: prüfe `data:` im Aufruf oder in der Zustellung."},"no_scenarios":"kein Szenario aktiv","applied":"vom Aufruf erzwungen","required":"vom Aufruf verlangt","constrain":"vom Aufruf beschränkt auf","home":"zu Hause","away":"unterwegs","no_channels":"kein Kanal wurde ausgewählt","st_ok":"zugestellt","st_err":"fehlgeschlagen","st_skip":"übersprungen","calls":"Aufrufe","calls_1":"Aufruf","target_required":"Ziel erforderlich:","started_by":"ausgewählt durch","scen_would_off":"ausgeschaltet durch (überstimmt)","src_default":"immer an (Standard)","src_scen":"Szenario","src_call":"den Aufruf selbst","src_recipient":"Empfänger","r_off_by":"ausgeschaltet durch","call_targets":"Ziele im Aufruf","cats":{"entity_id":"Entitäten","mobile_app_id":"Geräte","person_id":"Personen","email":"E-Mail","phone":"Telefon","device_id":"Geräte"},"r_call_off":"vom Aufruf ausgeschlossen","r_scen_off":"von einem aktiven Szenario ausgeschaltet","r_disabled":"ausgeschaltet","r_transport_off":"sein Transport ist aus","r_only_scen":"startet nur, wenn ein Szenario ihn einschaltet","r_only_fallback":"nur ein Fallback","r_only_explicit":"startet nur, wenn namentlich angefordert","r_priority":"nicht für diese Priorität","r_unknown":"ohne Ablaufverfolgung nicht rekonstruierbar","from_config":"Gründe für nicht gestartete Kanäle werden aus der Konfiguration rekonstruiert, wie sie JETZT ist, nicht wie sie damals war.","from_trace":"Die Gründe stammen aus der Auswahl-Ablaufverfolgung, die mit der Benachrichtigung archiviert wurde.","st_time":"Dauer","st_slow":"langsamster","st_rate":"der Kanäle erfolgreich","ua_title":"Ziele, die kein Kanal übernommen hat","ua_hint":"Sie waren im Aufruf, aber kein ausgewählter Kanal akzeptiert diese Art von Ziel.","un_title":"Namen, die nicht existieren","sent_by":"Gesendet von","sent_auto":"Automation","sent_script":"Skript","sent_person":"","sent_unknown":"Absender unbekannt (keine Automation oder Person im Kontext)","no_trace":"Die vollständige Auswahl-Ablaufverfolgung wird nur aufgezeichnet, wenn der notify-Aufruf debug: true hat, und archiviert, wenn die Archiv-Diagnose sie einschließt.","reasons":{"NO_TARGET":"kein nutzbares Ziel","DUPE":"Duplikat einer kürzlichen Benachrichtigung","PRIORITY":"nicht für diese Priorität","SNOOZE":"pausiert","SNOOZED":"pausiert","DELIVERY_CONDITION":"Zustellungsbedingung falsch","OCCUPANCY":"Anwesenheitsregel","ERROR":"Fehler","DELIVERY_DISABLED":"ausgeschaltet","SCENARIO":"Szenario","TRANSPORT_DISABLED":"sein Transport ist aus","NO_SCENARIO":"ein erforderliches Szenario ist nicht aktiv","NO_ACTION":"keine Aktion zum Aufrufen","INVALID_ACTION_DATA":"ungültige Aktionsdaten","UNKNOWN":"unbekannter Grund"}},"SN_TOOLS_STRINGS":{"maint":"Wartung","enq":"SuperNotify fragen","refresh":"Alle Entitäten neu veröffentlichen","refresh_btn":"Aktualisieren","resume_btn":"Fortsetzen","refreshed":"Entitäten neu veröffentlicht.","resume_all":"Alle Pausen fortsetzen","cleared_n":"Pausen fortgesetzt","purge_arch":"Archiv bereinigen","purge_media":"Bilder bereinigen","older":"älter als","days":"Tage","purge_btn":"Bereinigen","confirm":"Zum Bestätigen erneut tippen","purged":"gelöscht","remaining":"übrig","reset":"Manuelle Änderungen rückgängig machen","reset_btn":"Zurücksetzen","reset_none":"Nichts zurückzusetzen: alles ist wie konfiguriert.","reset_done":"Zurück zur Konfiguration:","k_all":"alles","k_scenario":"Szenarien","k_delivery":"Kanäle","k_recipient":"Personen","k_transport":"Transporte","q_config":"Konfiguration","q_scen":"Szenarien","q_active":"Aktive Szenarien","q_by_scen":"Kanäle nach Szenario","q_implicit":"Standardkanäle","q_recipients":"Empfänger","q_occupancy":"Wer ist zu Hause","q_snoozes":"Pausen","q_last":"Letzte Benachrichtigung","copy":"JSON kopieren","copied":"Kopiert","close":"Schließen","empty":"(leer)","err":"SuperNotify hat mit einem Fehler geantwortet:","settings":"Integrationseinstellungen","running":"läuft…","more":"mehr"},"SN_FORM_LABELS":{"_common":"Aussehen und Text","style":"Farben","icons":"Symbole","show_version":"Kartenversion anzeigen","intro":"Einleitungstext oben","title":"Titel","dnd_entity":"Nicht-stören-Schalter","quiet_entity":"Berechneter Ruhezustand (optional)","presence_entity":"Person für die Statusleiste","archive_days":"Archivbereinigung: älter als (Tage)","media_days":"Bilderbereinigung: älter als (Tage)","occupancy":"Wer ist zu Hause (von SuperNotify)","repairs":"SuperNotify-Reparaturen in der Zustandsliste","snooze_announce":"Pausen laut ansagen (Durchsage-Kanal)","snooze_via":"Pausen laufen über","o_event":"das Push-Schaltflächen-Ereignis (Admin)","o_voice":"die Sprachbefehle","snooze_minutes":"Pausendauer (Minuten)","snooze_panel":"Pause-Kachel öffnet das Pausen-Panel","announce_delivery":"Kanal für Durchsagen","last_notification":"Letzte Benachrichtigung anzeigen","last_channels":"Ein Chip pro Kanal der letzten Benachrichtigung","repeat_entity":"Schaltfläche „Letzte wiederholen“ (optional)","tile_layout":"Kacheln","tile_columns":"Kachelspalten (leer = automatisch)","update_entity":"SuperNotify-Update-Entität","cards_update_entity":"Karten-Update-Entität","health":"Zustand oben","poll_seconds":"Aktualisieren alle (Sekunden)","group":"Nach Startart der Kanäle gruppieren","hide_defaults":"Automatische DEFAULT_-Kanäle ausblenden","limit":"Benachrichtigungen in der Liste","expand":"Eingeklappte Teile öffnen","max_height":"Maximale Höhe (CSS, z. B. 70vh)","trigger_entity":"Aktualisieren, wenn sich dies ändert","dry_run":"„Testen ohne Senden“ anzeigen","dry_run_dupe_check":"Auch die Duplikatprüfung simulieren","days":"Standardmäßig angezeigte Tage","manifest_url":"URL des Automationen-Manifests","o_supernotify":"SuperNotify","o_theme":"Home Assistant-Design","o_mdi":"Home Assistant-Symbole","o_emoji":"Emoji","o_row":"Symbol links","o_stacked":"Hoch, Symbol oben","o_auto":"Automatisch"},"SN_NATIVE_STR":{"all_good":"Alles in Ordnung","paused":"Pausiert","resume":"Fortsetzen","test":"Test senden","sure":"Zum Senden erneut tippen","sent":"Gesendet","last":"Zuletzt","none":"Noch keine Benachrichtigung","ago":"her","h":"Std.","err":"Transporte mit Fehlern","off":"Kanäle aus"},"SN_STRATEGY_TITLES":{"home":"Start","archive":"Archiv","send":"Senden","setup":"Einrichtung","stats":"Statistik","tools":"Werkzeuge","title":"SuperNotify","appliances":"Haushaltsgeräte"},"SN_APPL_STRINGS":{"title":"Haushaltsgeräte","loading":"wird gelesen…","none":"Keine Geräte: richte eines in Appliance Autonotify ein (Einstellungen → Geräte & Dienste).","st_run":"Läuft","st_cleaning":"Reinigt","st_done":"Fertig · ausräumen","st_done_other":"Fertig","st_err":"Braucht Hilfe","m_switch_on":"Steckdose einschalten","done_switch_on":"Steckdose eingeschaltet.","done_action":"Erledigt: {n}.","confirm_action":"«{n}» ausführen?","open_entity":"Zum Ändern öffnen","chip_notifs":"Benachrichtigungen","chip_device":"Gerät","not_found":"Kein Gerät mit dem Namen «{n}».","last7":"Letzte 7 Tage","col_day":"Tag","col_cycles":"Zyklen","col_time":"Zeit","col_energy":"Verbrauch","source_h":"Quelle","manual_src":"von Hand hinzugefügt: läuft über {w}","tab_info":"Übersicht","tab_stats":"Verbrauch und Zyklen","tab_cleans":"Reinigungen","tab_prints":"Drucke","last_run":"Letzter Zyklus","avg_run":"Durchschnitt","reminders_h":"Benachrichtigungen","plug":"Steckdose","plug_on":"an","plug_off":"aus","error_h":"Fehler","open_device":"Das Gerät in Home Assistant","prints":"Drucke","print1":"Druck","per_print":"Jeder Druck in diesem Monat","last_prints":"Letzte Drucke","no_print_month":"Noch kein Druck in diesem Monat","no_print":"Noch kein Druck","col_fil":"Filament","failed":"fehlgeschlagen","per_run":"Jeder Zyklus in diesem Monat","dev_hist":"Jeder Eintrag stammt aus dem Verlauf von Home Assistant (letzte {n} Tage); die Stunden aus dem Zähler des Geräts, wenn es einen hat.","cleans":"Reinigungen","clean1":"Reinigung","per_clean":"Jede Reinigung in diesem Monat","avg_clean":"Durchschnitt {d}","col_area":"Fläche","last_cleans":"Letzte Reinigungen","no_clean_month":"Noch keine Reinigung in diesem Monat","no_clean":"Noch keine Reinigung","vac_hist":"Die Summen stammen aus den Zählern des Roboters, die einzelnen Reinigungen aus dem Verlauf von Home Assistant (letzte {n} Tage).","st_paused":"Pausiert","st_returning":"Fährt zur Station","st_charging":"Lädt","st_docked_w":"In der Station","st_idle":"Aus","st_off":"Ausgeschaltet","stopped":"Inaktiv","yesterday":"gestern","u_min":"Min.","u_h":"Std.","start":"Start","so_far":"bisher","no_cycle":"Noch kein Durchlauf","last_cycle":"Letzter Durchlauf {d}","ended_at":"Fertig um {t}","reminders":"+{n} Erinnerungen bis {t}","reminder1":"+1 Erinnerung um {t}","end_est":"Voraussichtliches Ende","left":"noch {d}","almost":"gleich fertig","est_from_avg":"geschätzt aus ähnlichen Durchläufen","running_for":"Läuft seit {d}","btn_empty":"Ausgeräumt","btn_seen":"Erledigt","btn_resume":"Reinigung fortsetzen","m_switch_off":"Steckdose ausschalten","m_remind":"Später erinnern","details":"Details","settings":"Einstellungen","more":"Mehr","details_link":"Details, Verbrauch und Durchläufe","done_empty":"Erledigt: keine Erinnerungen mehr.","done_remind":"Es erinnert dich später.","done_switch":"Steckdose ausgeschaltet.","done_resume":"Reinigung fortgesetzt.","err":"Fehler","new_dev":"{n} neue Geräte","new_dev1":"1 neues Gerät","battery":"Akku","consumable":"{n} bei {p}%","maint_in":"in {c} Zyklen","maint_next":"beim nächsten Zyklus","maint_due":"fällig","maint_of":"{d} von {e}","maint_done":"Erledigt","confirm_maint":"«{n}» als erledigt markieren? Die Zählung beginnt neu.","conn_lost":"Verbindung verloren: letzter bekannter Zustand","cons_h":"Verbrauchsmaterial","commands":"Befehle","tap_again":"Zum Bestätigen erneut tippen","empty_since":"Auszuräumen seit","done_since":"Fertig seit","avg_cycle":"Durchschnittlicher Zyklus","maint_tab":"Wartung","tab_stats_short":"Verbrauch","read_failed":"Der Verlauf konnte nicht gelesen werden ({e}); neuer Versuch in Kürze.","retry":"Erneut versuchen","see_chart":"Diagramm anzeigen","back":"Zurück","avg_line":"Schnitt {v}","tap_bar":"Tippe auf einen Balken für den Zyklus","k_station":"Station","off_since":"Aus seit","close":"Schließen","power_now":"jetzt","p_today":"Heute","p_week":"Woche","p_month":"Monat","p_year":"Jahr","cycles":"Durchläufe","cycle1":"Durchlauf","per_cycle":"Verbrauch pro Durchlauf in diesem Monat","short":"Kurz","long":"Lang","anomalous":"Ungewöhnlich","avg":"Ø {d}, {k}","last_cycles":"Letzte Durchläufe","col_start":"Start","col_dur":"Dauer","col_cost":"Kosten","no_cycle_month":"Diesen Monat noch kein Durchlauf","coarse":"Durchläufe vor mehr als 10 Tagen werden stundenweise gezählt.","open_notifs":"Benachrichtigungen des Geräts","no_power":"Kein Leistungssensor gefunden: gib ihn mit `power_entity` in `appliances:` an.","no_power_vac":"Ein Saugroboter hat keinen Leistungssensor: Verbrauch und Durchläufe werden nicht gezählt."}},"es":{"SN_STRINGS":{"presence":"Presencia","time_band":"Franja horaria","quiet":"Silencio","act_scen":"Escenarios activos","on":"sí","off":"no","active":"activo","dnd":"No molestar","tap_silence":"toca para silenciar","snooze":"Pausa","min":"min","pause_nc":"pausar las no críticas","snoozed":"En pausa","until":"hasta","tap_clear":"toca para quitar","announce":"Anunciar","intercom":"intercomunicador","announce_ph":"Anunciar en todos los altavoces…","send":"Enviar","announced":"Anunciado","cleared":"Pausas quitadas","snoozed_for":"Notificaciones no críticas en pausa durante","sent":"Enviadas","yesterday":"ayer","deliveries":"Entregas","last_notif":"Última notificación","transports":"Transportes","delivered":"entregada","failed":"fallida","channels":"canales","none":"ninguno","no_transports":"no se encontraron entidades de transporte","tr_used":"usado por","tr_unused":"ningún canal lo usa","start":"inicio","volume":"volumen","now":"ahora","crosses":"pasa la medianoche","no_voice":"sin voz","mute_hint":"Una franja al <b>0%</b> no envía <b>ningún anuncio de voz</b> (Alexa y TTS apagados; push y panel siguen recibiendo). Las alertas críticas y de prioridad alta siempre hablan.","enabled":"activo","grp_auto":"Arrancan solos","grp_named":"Solo si se nombran en la llamada","grp_scen":"Solo con un escenario","grp_fallback":"Respaldo, cuando los demás fallan","ch_title":"Canales","ch_count":"{on} de {tot} activos","off_manual":"apagado","paused_by":"en pausa ahora por","on_by":"activo ahora por","fixed_targets":"destinos fijos","no_deliveries":"no se encontraron entidades de entrega","home":"en casa","away":"fuera","devices":"dispositivos","devices_1":"dispositivo","rc_test":"Enviar una prueba","rc_test_confirm":"Toca otra vez para enviar","rc_test_sent":"Prueba enviada","rc_test_title":"Prueba de SuperNotify","rc_test_msg":"Mensaje de prueba desde el panel,","overrides":"ajustes de entrega","overrides_1":"ajuste de entrega","no_contact":"sin puntos de contacto","no_recipients":"no se encontraron entidades de destinatario","details":"Detalles","h_update":"actualización disponible:","h_restart":"reinicia Home Assistant para terminar la actualización","h_uptodate":"actualizado","h_transport_err":"transportes con errores","h_channels_off":"canales apagados","h_all_good":"Todo bien","h_failures":"fallos","h_failures_1":"fallo","h_transport_err_1":"transporte con errores","h_channels_off_1":"canal apagado","channels_1":"canal","band_early_morning":"Madrugada","band_morning":"Mañana","band_afternoon":"Tarde","band_evening":"Noche temprana","band_night":"Noche","band_late_night":"Noche cerrada","h_look_1":"1 cosa que revisar","h_look_n":"{n} cosas que revisar","h_rest_ok":"todo lo demás funciona","h_ch_on":"{on} de {tot} canales activos","h_open":"Abrir","ln_delivered":"entregada","ln_failed":"fallida","ln_why":"Por qué","tgt_loading":"cargando el selector…","bands_empty_t":"Aún no hay franjas horarias","bands_empty":"Añade una franja por cada parte del día: un input_datetime para su inicio y un input_number para el volumen de voz.","active_now":"activo ahora","disabled":"desactivado","other":"Otros","manual":"manual","apply_now":"aplicar ahora","applied":"Aplicado","apply_off":"toca para dejar de aplicarlo","enabled_lbl":"activado","reset_overrides":"Restablecer ajustes","reset_done":"ajustes restablecidos","transport_off":"transporte apagado","last_notified":"última notificación","never_notified":"nunca notificado","media":"multimedia","no_scenarios":"no se encontraron entidades de escenario","sim_pick":"🎬 Escenarios — toca para simular","sim_fire":"📤 Canales","sim_hint":"Datos reales del motor (servicios de consulta). El filtrado de entregas por prioridad lo hace el motor y no se simula aquí. Desactivado gana sobre activado, como en la fusión en tiempo real.","sim_none":"no saldría ninguna entrega","sim_go":"Saldrían","sim_stop":"No saldrían","sim_r_default":"arranca solo","sim_r_on":"activado por","sim_r_off":"desactivado por","sim_r_named":"solo si se nombra en la llamada","sim_r_scen":"solo con un escenario que lo active","sim_r_fallback":"respaldo, cuando los demás fallan","sim_r_switched":"apagado","title":"Título","message":"Mensaje","priority":"Prioridad","channels_lbl":"Canales — ninguno elegido = envío normal","camera_lbl":"Instantánea de cámara","preview":"Vista previa","no_title":"(sin título)","no_message":"(sin mensaje)","default_prio":"predeterminada (media)","comp_hint":"Los canales elegidos se envían con delivery_selection: fixed (solo salen esos). Crítica es crítica de verdad — sirenas incluidas.","critical_confirm":"¿Enviar una notificación CRÍTICA? Incluye sirenas y volumen máximo.","sent_toast":"Enviada","write_or_pick":"Escribe un mensaje, o elige una cámara o un canal","send_err":"No enviada","dry_btn":"Probar sin enviar","dry_title":"Si la enviaras ahora","dry_err":"La simulación falló","dry_nobody":"sin destinatario, solo destinos directos","dry_none":"Ningún canal elegido","dry_scen":"Escenarios activos","dry_raw":"Respuesta en bruto","dry_prio":"Prioridad","dry_would_n":"canales enviarían","dry_nothing":"No se enviaría nada","dry_dupe":"Duplicado de una notificación reciente: se descartaría","dry_no_dupe":"La comprobación de duplicados no se simula, así que el Enviar real justo después no se bloquea.","dry_home":"En casa","dry_empty":"SuperNotify no dio respuesta: ¿es la 2.12 o posterior?","prio_minimum":"Mínima","prio_low":"Baja","prio_medium":"Media","prio_high":"Alta","prio_critical":"Crítica","target_lbl":"Destino — personas, dispositivos, áreas, plantas, etiquetas","custom_target_lbl":"Destinos personalizados (correo, IDs de Telegram, …) — separados por comas","adv_title":"Opciones avanzadas","adv_spoken":"Mensaje hablado (Alexa, TTS)","adv_spoken_ph":"lo que dicen los altavoces, si es distinto del texto","adv_apply":"Aplicar estos escenarios","adv_require":"Enviar solo si estos escenarios están activos","adv_constrain":"Tener en cuenta solo estos escenarios","adv_snapshot":"Imagen desde una URL","adv_debug":"Depuración: registrar la traza de selección completa (la muestra la tarjeta del porqué)","custom_target_ph":"p. ej. user@example.com, 123456789","native_target_tag":"🎯 área/planta/etiqueta nativa","target_warn":"⚠️ Las áreas, plantas y etiquetas solo las resuelven notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts y chime. Con cualquier otro canal — o con el envío normal si no eliges canal arriba — la notificación puede quedarse sin destino sin avisar. Elige un canal compatible, o añade directamente una persona o un dispositivo.","aut_search":"Buscar automatizaciones…","aut_all":"Todas","aut_none":"Sin resultados","aut_err":"Manifiesto no encontrado — genéralo con tools/genera_vista_automazioni.py","aut_updated":"lista actualizada","aut_count":"automatizaciones","aut_count_1":"automatización","never":"nunca","ago_now":"ahora","ago_min":"min atrás","ago_h":"h atrás","ago_d":"d atrás","aut_disabled_only":"Solo desactivadas","grp_active":"activos","repeat":"Repetir","skipped_n":"omitidos","left":"restantes","missed_n":"perdidos","snz_all":"todo","snz_nc":"no críticas","snz_prio":"prioridad","snz_transport":"transporte","snz_for":"para","snz_choose":"elige qué y cuánto tiempo","snz_title":"Pausar notificaciones","snz_what":"Qué","snz_nc_l":"No críticas","snz_all_l":"Todo","snz_ch":"Un canal","snz_pr":"Una prioridad","snz_who":"Para quién","snz_everyone":"Todos","snz_me":"Solo yo","snz_len":"Cuánto tiempo","snz_forever":"Hasta que reanude","snz_go":"Pausar","snz_close":"Cerrar","rs_hand":"a mano","rs_voice":"por voz","rs_assist":"por el asistente","snz_voice_info":"Tus pausas pasan por los comandos de voz de SuperNotify: son solo tuyas.","snz_voice_off":"Los comandos de voz de SuperNotify están apagados: actívalos en las opciones de la integración.","snz_resume_mine":"Reanudar las mías","go_open":"Mostrar","dl_probe":"Probar este canal","probe_msg":"Prueba de canal desde el panel","sc_why":"Por qué","sc_yes":"Se aplica ahora","sc_no":"No se aplica ahora","sc_manual_why":"Escenario manual: se aplica a mano","sc_no_cond":"Sin condiciones","sc_off_sw":"Apagado","sc_not_eval":"no comprobado","sc_now":"ahora","sc_diff_btn_on":"Qué cambia si se aplica","sc_diff_btn_off":"Qué cambia sin él","sc_diff_on":"Si se aplicara, para una notificación media ahora:","sc_diff_off":"Sin él, para una notificación media ahora:","sc_diff_add":"también enviaría","sc_diff_rem":"ya no enviaría","sc_diff_none":"ninguna diferencia","c_state":"{e} está en {s}","c_template":"condición de plantilla","c_time":"hora","c_after":"después de","c_before":"antes de","c_numeric":"{e}","c_above":"por encima de","c_below":"por debajo de","c_and":"todas estas","c_or":"al menos una de estas","c_not":"ninguna de estas","c_or_join":" o ","sim_hint_dry":"La respuesta del propio SuperNotify (simulación, no se envía nada): una notificación ahora, con la prioridad y solo los escenarios elegidos arriba.","sim_msg":"Prueba del simulador","sim_prio":"Prioridad","sa_snooze":"{what} en pausa durante {len}.","sa_silence":"{what} silenciadas hasta nuevo aviso.","sa_resume":"{what} reactivadas.","sa_resume_one":"Pausa terminada: {x}.","sa_resume_all":"Notificaciones reactivadas.","sa_w_nc":"Las notificaciones no críticas","sa_w_all":"Todas las notificaciones","sa_w_ch":"Canal {x}","sa_w_pr":"Las notificaciones de prioridad {x}","sa_w_mine":"Tus notificaciones","sa_for":"para {x}","sa_min":"{n} minutos","sa_hour":"una hora","sa_hours":"{n} horas","occ_title":"Quién está en casa","occ_home_l":"En casa","occ_ALL_HOME":"Todos en casa","occ_ALL_AWAY":"Todos fuera","occ_LONE_HOME":"Solo uno en casa","occ_MULTI_HOME":"Algunos en casa","occ_UNDEFINED_OCCUPANTS":"Nadie con seguimiento","h_repairs":"reparaciones de SuperNotify","h_repairs_1":"reparación de SuperNotify","det_more":"Todos los atributos","det_yes":"sí","det_no":"no","det_action":"Acción","det_target":"Destinos fijos","det_target_req":"Necesita un destino","det_target_use":"Destinos usados","det_inclusion":"Se usa cuando","det_prio":"Prioridades","det_occ":"Quién debe estar en casa","det_transport":"Transporte","det_data":"Datos","det_debug":"Depuración","det_err_last":"Último error","det_err_in":"En","det_err_n":"Errores desde el arranque","det_select":"Selección","adv_html":"Texto para correo (HTML)","adv_clip":"Videoclip desde una URL","adv_actions":"Botones en la notificación","adv_act_id":"id de acción","adv_act_title":"texto del botón","adv_act_add":"+ botón","adv_groups":"Grupos de botones (comas)","adv_dc":"Ajustes de canal para esta notificación","adv_dc_ph":"clave: valor, uno por línea","adv_dc_add":"+ canal","snz_active":"En pausa ahora","snz_resume":"Reanudar","snz_resume_all":"Reanudar todo","snz_until_resumed":"hasta reanudar","snz_done":"En pausa","snz_resumed":"Reanudado","no_notif":"aún no hay notificaciones","st_title":"Uso","st_days_short":"d","st_total":"Notificaciones","st_avg":"al día","st_today":"Hoy","st_vs_avg":"vs. media","st_peak_hour":"Hora punta","st_top_channel":"Canal principal","st_errors":"Errores de canal","st_of_sends":"de los envíos a canales","st_daily":"Por día","st_hourly":"Por hora del día","st_weekday":"Por día de la semana","st_channels":"Canales — más usados","st_priority":"Prioridad","st_period":"Parte del día","st_insights":"Observaciones","st_no_data":"Aún no hay historial — los datos aparecen tras las primeras notificaciones.","st_loading":"cargando…","st_installed":"instalada","st_latest":"última","st_uptodate":"actualizado","st_update":"actualización disponible","st_restart":"hay que reiniciar","st_logged":"registradas","st_from_archive":"del archivo de SuperNotify","st_archive_err":"archivo leído en parte","st_wd":["lun","mar","mié","jue","vie","sáb","dom"],"st_i_share":"El {p}% de los envíos a canales pasa por {c}.","st_i_peak":"La hora con más actividad es las {h}:00 ({n} notificaciones en {d} días).","st_i_night":"El {p}% de las notificaciones llega entre las 23:00 y las 07:00 — plantéate un escenario de No molestar si no lo quieres.","st_i_night_ok":"Solo el {p}% de las notificaciones llega de noche (23–07): las horas de silencio funcionan.","st_i_weekend":"Los fines de semana tienen un {p}% {dir} notificaciones que los días laborables.","st_i_errors":"{n} errores de canal en {d} días, sobre todo en {c}.","st_i_noerr":"Ningún error de canal en los últimos {d} días.","st_i_prio":"El {p}% de las notificaciones son de prioridad {prio}.","st_i_trend":"Últimos 7 días: {n}/día, {dir} un {p}% respecto a los 7 anteriores.","st_more":"más","st_less":"menos","st_up":"sube","st_down":"baja"},"SN_ARCH_STRINGS":{"search":"Buscar en título o mensaje…","f_all":"Todas","f_today":"Hoy","f_whisper":"Susurradas","wh":"susurrada","said":"Alexa dijo","said_by":"{ch} dijo","none":"ninguna notificación coincide","loading":"leyendo el archivo…","recent":"últimas notificaciones","read_at":"leído a las","today":"Hoy","yesterday":"Ayer","failed":"fallida","missed":"perdida","reasons":{"doppione":"duplicado","nessun target":"sin destino","errore":"error","condizione":"condición","scenario":"escenario","presenza":"presencia","priorita":"prioridad","spento":"apagado","pausa":"en pausa","transport spento":"transporte apagado","nessuna azione":"sin acción","dati non validi":"datos no válidos","sconosciuto":"desconocido"},"f_appliance":"Electrodomésticos","ap_scope":"entre las últimas {n} leídas completas: las más antiguas no se reconocen"},"SN_WHY_STRINGS":{"pick":"Elige una notificación para ver por qué fue a donde fue.","loading":"cargando…","none":"ninguna notificación","gone":"esta notificación ya no está en el archivo","priority":"prioridad","dupe":"duplicado","outcomes":{"success":"entregada","partial_delivery":"entregada en parte","dupe":"duplicado","failed":"fallida","error":"fallida","fallback_delivery":"entregada por el canal de respaldo","no_delivery":"no entregada"},"step_call":"Llamada","step_scen":"Escenarios","step_people":"Personas","step_ch":"Canales","call_auto":"ningún canal nombrado: envío normal","call_named":"nombrados en la llamada:","call_debug":"con depuración","nobody":"nadie en casa","ch_sent":"enviados","ch_problems":"por revisar","ch_skipped":"omitidos","pb_failed":"fallido","pb_missed":"pedido pero no enviado","grp_skipped":"omitidos por una regla: normal","grp_not":"no implicados","trace_title":"Traza de selección completa","fix":{"NO_TARGET":"Ningún destinatario tiene una dirección para este canal: añade una a un destinatario, da al canal destinos fijos o déjalo fuera de esta llamada.","ERROR":"La integración detrás de este canal respondió con un error: revisa su propia entrada en el registro.","NO_ACTION":"El canal no tiene ninguna acción que llamar: define `action:` en la entrega.","INVALID_ACTION_DATA":"Los datos pasados a la acción fueron rechazados: revisa el `data:` de la llamada o de la entrega."},"no_scenarios":"ningún escenario vigente","applied":"forzado por la llamada","required":"requerido por la llamada","constrain":"limitado por la llamada a","home":"en casa","away":"fuera","no_channels":"no se eligió ningún canal","st_ok":"entregado","st_err":"fallido","st_skip":"omitido","calls":"llamadas","calls_1":"llamada","target_required":"destino requerido:","started_by":"elegido por","scen_would_off":"apagado por (anulado)","src_default":"siempre activo (predeterminado)","src_scen":"escenario","src_call":"la propia llamada","src_recipient":"destinatario","r_off_by":"apagado por","call_targets":"destinos en la llamada","cats":{"entity_id":"entidades","mobile_app_id":"dispositivos","person_id":"personas","email":"correo","phone":"teléfono","device_id":"dispositivos"},"r_call_off":"excluido por la llamada","r_scen_off":"apagado por un escenario vigente","r_disabled":"apagado","r_transport_off":"su transporte está apagado","r_only_scen":"solo arranca cuando un escenario lo activa","r_only_fallback":"solo de respaldo","r_only_explicit":"solo arranca si se pide por nombre","r_priority":"no para esta prioridad","r_unknown":"no se puede reconstruir sin la traza","from_config":"Los motivos de los canales que no arrancaron se reconstruyen a partir de la configuración ACTUAL, no de la de entonces.","from_trace":"Los motivos vienen de la traza de selección archivada con la notificación.","st_time":"tardó","st_slow":"el más lento","st_rate":"de los canales funcionaron","ua_title":"Destinos que ningún canal aceptó","ua_hint":"Estaban en la llamada, pero ningún canal elegido acepta este tipo de destino.","un_title":"Nombres que no existen","sent_by":"Enviada por","sent_auto":"automatización","sent_script":"script","sent_person":"","sent_unknown":"remitente desconocido (ninguna automatización ni persona en su contexto)","no_trace":"La traza de selección completa solo se registra cuando la llamada notify tiene debug: true, y se archiva cuando los diagnósticos del archivo la incluyen.","reasons":{"NO_TARGET":"sin destino utilizable","DUPE":"duplicado de una notificación reciente","PRIORITY":"no para esta prioridad","SNOOZE":"en pausa","SNOOZED":"en pausa","DELIVERY_CONDITION":"condición de entrega falsa","OCCUPANCY":"regla de presencia","ERROR":"error","DELIVERY_DISABLED":"apagado","SCENARIO":"escenario","TRANSPORT_DISABLED":"su transporte está apagado","NO_SCENARIO":"falta un escenario requerido","NO_ACTION":"ninguna acción que llamar","INVALID_ACTION_DATA":"datos de acción no válidos","UNKNOWN":"motivo desconocido"}},"SN_TOOLS_STRINGS":{"maint":"Mantenimiento","enq":"Preguntar a SuperNotify","refresh":"Volver a publicar todas las entidades","refresh_btn":"Actualizar","resume_btn":"Reanudar","refreshed":"Entidades publicadas de nuevo.","resume_all":"Reanudar todas las pausas","cleared_n":"pausas reanudadas","purge_arch":"Limpiar el archivo","purge_media":"Limpiar las imágenes","older":"más antiguos de","days":"días","purge_btn":"Limpiar","confirm":"Toca otra vez para confirmar","purged":"eliminados","remaining":"restantes","reset":"Deshacer los cambios hechos a mano","reset_btn":"Restablecer","reset_none":"Nada que restablecer: todo está como en la configuración.","reset_done":"De vuelta a la configuración:","k_all":"todo","k_scenario":"escenarios","k_delivery":"canales","k_recipient":"personas","k_transport":"transportes","q_config":"Configuración","q_scen":"Escenarios","q_active":"Escenarios activos","q_by_scen":"Canales por escenario","q_implicit":"Canales predeterminados","q_recipients":"Destinatarios","q_occupancy":"Quién está en casa","q_snoozes":"Pausas","q_last":"Última notificación","copy":"Copiar JSON","copied":"Copiado","close":"Cerrar","empty":"(vacío)","err":"SuperNotify respondió con un error:","settings":"Ajustes de la integración","running":"trabajando…","more":"más"},"SN_FORM_LABELS":{"_common":"Aspecto y texto","style":"Colores","icons":"Iconos","show_version":"Mostrar la versión de la tarjeta","intro":"Texto de introducción arriba","title":"Título","dnd_entity":"Interruptor de No molestar","quiet_entity":"Estado de silencio calculado (opcional)","presence_entity":"Persona para la barra de estado","archive_days":"Limpieza del archivo: más antiguos de (días)","media_days":"Limpieza de imágenes: más antiguas de (días)","occupancy":"Quién está en casa (de SuperNotify)","repairs":"Reparaciones de SuperNotify en la lista de estado","snooze_announce":"Decir las pausas en voz alta (canal de anuncios)","snooze_via":"Las pausas pasan por","o_event":"el evento de los botones push (admin)","o_voice":"los comandos de voz","snooze_minutes":"Duración de la pausa (minutos)","snooze_panel":"La ficha de pausa abre el panel de pausas","announce_delivery":"Canal para anuncios","last_notification":"Mostrar la última notificación","last_channels":"Una etiqueta por canal en la última notificación","repeat_entity":"Botón de repetir la última (opcional)","tile_layout":"Fichas","tile_columns":"Columnas de fichas (vacío = automático)","update_entity":"Entidad de actualización de SuperNotify","cards_update_entity":"Entidad de actualización de las tarjetas","health":"Estado arriba","poll_seconds":"Actualizar cada (segundos)","group":"Agrupar según cómo arranca un canal","hide_defaults":"Ocultar los canales automáticos DEFAULT_","limit":"Notificaciones en la lista","expand":"Abrir las partes plegadas","max_height":"Altura máxima (CSS, p. ej. 70vh)","trigger_entity":"Actualizar cuando esto cambie","dry_run":"Mostrar \"Probar sin enviar\"","dry_run_dupe_check":"Simular también la comprobación de duplicados","days":"Días mostrados por defecto","manifest_url":"URL del manifiesto de automatizaciones","o_supernotify":"SuperNotify","o_theme":"Tema de Home Assistant","o_mdi":"Iconos de Home Assistant","o_emoji":"Emoji","o_row":"Icono a la izquierda","o_stacked":"Alta, icono arriba","o_auto":"Automático"},"SN_NATIVE_STR":{"all_good":"Todo bien","paused":"En pausa","resume":"Reanudar","test":"Enviar una prueba","sure":"Toca otra vez para enviar","sent":"Enviadas","last":"Última","none":"Aún no hay notificaciones","ago":"atrás","h":"h","err":"transportes con errores","off":"canales apagados"},"SN_STRATEGY_TITLES":{"home":"Inicio","archive":"Archivo","send":"Enviar","setup":"Configuración","stats":"Estadísticas","tools":"Herramientas","title":"SuperNotify","appliances":"Electrodomésticos"},"SN_APPL_STRINGS":{"title":"Electrodomésticos","loading":"leyendo…","none":"No hay electrodomésticos: añade uno en Appliance Autonotify (Ajustes → Dispositivos y servicios).","st_run":"En marcha","st_cleaning":"Limpiando","st_done":"Terminado · por vaciar","st_done_other":"Terminado","st_err":"Necesita ayuda","m_switch_on":"Encender enchufe","done_switch_on":"Enchufe encendido.","done_action":"Hecho: {n}.","confirm_action":"¿Ejecutar «{n}»?","open_entity":"Abrir para cambiarlo","chip_notifs":"Notificaciones","chip_device":"Dispositivo","not_found":"Ningún aparato o dispositivo llamado «{n}».","last7":"Últimos 7 días","col_day":"Día","col_cycles":"Ciclos","col_time":"Tiempo","col_energy":"Consumo","source_h":"Origen","manual_src":"añadido a mano: en marcha por encima de {w}","tab_info":"Resumen","tab_stats":"Consumo y ciclos","tab_cleans":"Limpiezas","tab_prints":"Impresiones","last_run":"Último ciclo","avg_run":"Media","reminders_h":"Notificaciones","plug":"Enchufe","plug_on":"encendido","plug_off":"apagado","error_h":"Error","open_device":"El dispositivo en Home Assistant","prints":"impresiones","print1":"impresión","per_print":"Cada impresión del mes","last_prints":"Últimas impresiones","no_print_month":"Aún ninguna impresión este mes","no_print":"Aún ninguna impresión","col_fil":"Filamento","failed":"fallida","per_run":"Cada ciclo del mes","dev_hist":"Cada una viene del historial de Home Assistant (últimos {n} días); las horas, del contador del aparato cuando lo tiene.","cleans":"limpiezas","clean1":"limpieza","per_clean":"Cada limpieza del mes","avg_clean":"media {d}","col_area":"Área","last_cleans":"Últimas limpiezas","no_clean_month":"Aún ninguna limpieza este mes","no_clean":"Aún ninguna limpieza","vac_hist":"Los totales vienen de los contadores del robot; cada limpieza, del historial de Home Assistant (últimos {n} días).","st_paused":"En pausa","st_returning":"Vuelve a la base","st_charging":"Cargando","st_docked_w":"En la base","st_idle":"Parado","st_off":"Apagado","stopped":"Parados","yesterday":"ayer","u_min":"min","u_h":"h","start":"Inicio","so_far":"hasta ahora","no_cycle":"Aún ningún ciclo","last_cycle":"Último ciclo {d}","ended_at":"Terminó a las {t}","reminders":"+{n} recordatorios hasta las {t}","reminder1":"+1 recordatorio a las {t}","end_est":"Fin previsto","left":"faltan {d}","almost":"está por terminar","est_from_avg":"estimado por ciclos parecidos","running_for":"En marcha desde hace {d}","btn_empty":"Vaciado","btn_seen":"Hecho","btn_resume":"Reanudar limpieza","m_switch_off":"Apagar el enchufe","m_remind":"Recordármelo luego","details":"Detalles","settings":"Ajustes","more":"Más","details_link":"Detalles, consumo y ciclos","done_empty":"Hecho: los recordatorios se detienen.","done_remind":"Te lo recordará más tarde.","done_switch":"Enchufe apagado.","done_resume":"Limpieza reanudada.","err":"Error","new_dev":"{n} dispositivos nuevos","new_dev1":"1 dispositivo nuevo","battery":"Batería","consumable":"{n} al {p}%","maint_in":"en {c} ciclos","maint_next":"en el próximo ciclo","maint_due":"toca ahora","maint_of":"{d} de {e}","maint_done":"Hecho","confirm_maint":"¿Marcar «{n}» como hecho? La cuenta vuelve a empezar.","conn_lost":"conexión perdida: último estado conocido","cons_h":"Consumibles","commands":"Comandos","tap_again":"Toca otra vez para confirmar","empty_since":"Por vaciar desde hace","done_since":"Terminado hace","avg_cycle":"Ciclo medio","maint_tab":"Mantenimiento","tab_stats_short":"Consumo","read_failed":"No se pudo leer el historial ({e}); vuelvo a intentarlo en breve.","retry":"Reintentar","see_chart":"Ver gráfico","back":"Atrás","avg_line":"media {v}","tap_bar":"Toca una barra para ver ese ciclo","k_station":"Base","off_since":"Apagado desde hace","close":"Cerrar","power_now":"ahora","p_today":"Hoy","p_week":"Semana","p_month":"Mes","p_year":"Año","cycles":"ciclos","cycle1":"ciclo","per_cycle":"Consumo por ciclo este mes","short":"Cortos","long":"Largos","anomalous":"Anómalos","avg":"media {d}, {k}","last_cycles":"Últimos ciclos","col_start":"Inicio","col_dur":"Duración","col_cost":"Coste","no_cycle_month":"Aún ningún ciclo este mes","coarse":"Los ciclos de hace más de 10 días se cuentan por horas.","open_notifs":"Notificaciones del electrodoméstico","no_power":"No se encontró un sensor de potencia: indícalo con `power_entity` en `appliances:`.","no_power_vac":"Un robot aspirador no tiene sensor de potencia: no se cuentan consumo ni ciclos."}},"fr":{"SN_STRINGS":{"presence":"Présence","time_band":"Plage horaire","quiet":"Calme","act_scen":"Scénarios actifs","on":"activé","off":"désactivé","active":"actif","dnd":"Ne pas déranger","tap_silence":"touchez pour couper le son","snooze":"Pause","min":"min","pause_nc":"mettre en pause le non critique","snoozed":"En pause","until":"jusqu'à","tap_clear":"touchez pour annuler","announce":"Annonce","intercom":"interphone","announce_ph":"Annoncer sur toutes les enceintes…","send":"Envoyer","announced":"Annoncé","cleared":"Pauses annulées","snoozed_for":"Notifications non critiques en pause pendant","sent":"Envoyées","yesterday":"hier","deliveries":"Livraisons","last_notif":"Dernière notification","transports":"Transports","delivered":"livré","failed":"échoué","channels":"canaux","none":"aucun","no_transports":"aucune entité de transport trouvée","tr_used":"utilisé par","tr_unused":"aucun canal ne l'utilise","start":"début","volume":"volume","now":"maintenant","crosses":"passe minuit","no_voice":"pas de voix","mute_hint":"Une plage à <b>0 %</b> n'envoie <b>aucune annonce vocale</b> (Alexa et TTS coupés, push et tableau de bord toujours livrés). Les alertes critiques et de priorité haute parlent toujours.","enabled":"activé","grp_auto":"Partent d'eux-mêmes","grp_named":"Seulement si nommés dans l'appel","grp_scen":"Seulement avec un scénario","grp_fallback":"Secours, quand les autres échouent","ch_title":"Canaux","ch_count":"{on} sur {tot} actifs","off_manual":"désactivé","paused_by":"en pause à cause de","on_by":"actif grâce à","fixed_targets":"cibles fixes","no_deliveries":"aucune entité de livraison trouvée","home":"à la maison","away":"absent","devices":"appareils","devices_1":"appareil","rc_test":"Envoyer un test","rc_test_confirm":"Touchez encore pour envoyer","rc_test_sent":"Test envoyé","rc_test_title":"Test SuperNotify","rc_test_msg":"Message de test depuis le tableau de bord,","overrides":"modifications de livraison","overrides_1":"modification de livraison","no_contact":"aucun moyen de contact","no_recipients":"aucune entité de destinataire trouvée","details":"Détails","h_update":"mise à jour disponible :","h_restart":"redémarrez Home Assistant pour terminer la mise à jour","h_uptodate":"à jour","h_transport_err":"transports en erreur","h_channels_off":"canaux désactivés","h_all_good":"Tout va bien","h_failures":"échecs","h_failures_1":"échec","h_transport_err_1":"transport en erreur","h_channels_off_1":"canal désactivé","channels_1":"canal","band_early_morning":"Petit matin","band_morning":"Matin","band_afternoon":"Après-midi","band_evening":"Soir","band_night":"Nuit","band_late_night":"Tard dans la nuit","h_look_1":"1 point à vérifier","h_look_n":"{n} points à vérifier","h_rest_ok":"tout le reste fonctionne","h_ch_on":"{on} canaux actifs sur {tot}","h_open":"Ouvrir","ln_delivered":"livré","ln_failed":"échoué","ln_why":"Pourquoi","tgt_loading":"chargement du sélecteur…","bands_empty_t":"Aucune plage horaire","bands_empty":"Ajoutez une plage par moment de la journée : un input_datetime pour son début et un input_number pour le volume de la voix.","active_now":"actif maintenant","disabled":"désactivé","other":"Autre","manual":"manuel","apply_now":"appliquer maintenant","applied":"Appliqué","apply_off":"touchez pour ne plus l'appliquer","enabled_lbl":"activé","reset_overrides":"Réinitialiser les modifications","reset_done":"modifications réinitialisées","transport_off":"transport désactivé","last_notified":"dernière notification","never_notified":"jamais notifié","media":"médias","no_scenarios":"aucune entité de scénario trouvée","sim_pick":"🎬 Scénarios — touchez pour simuler","sim_fire":"📤 Canaux","sim_hint":"Données réelles du moteur (services enquire). Le filtrage des livraisons par priorité se fait dans le moteur et n'est pas simulé ici. Désactivé l'emporte sur activé, comme la fusion à l'exécution.","sim_none":"aucune livraison ne partirait","sim_go":"Partiraient","sim_stop":"Ne partiraient pas","sim_r_default":"part de lui-même","sim_r_on":"activé par","sim_r_off":"désactivé par","sim_r_named":"seulement si nommé dans l'appel","sim_r_scen":"seulement avec un scénario qui l'active","sim_r_fallback":"secours, quand les autres échouent","sim_r_switched":"désactivé","title":"Titre","message":"Message","priority":"Priorité","channels_lbl":"Canaux — aucun choisi = routage normal","camera_lbl":"Instantané de caméra","preview":"Aperçu","no_title":"(sans titre)","no_message":"(sans message)","default_prio":"par défaut (moyenne)","comp_hint":"Les canaux choisis sont envoyés avec delivery_selection: fixed (seuls ceux-ci partent). Critique veut vraiment dire critique — sirènes comprises.","critical_confirm":"Envoyer une notification CRITIQUE ? Sirènes et volume maximal compris.","sent_toast":"Envoyé","write_or_pick":"Écrivez un message, ou choisissez une caméra ou un canal","send_err":"Non envoyé","dry_btn":"Essayer sans envoyer","dry_title":"Si vous l'envoyiez maintenant","dry_err":"La simulation a échoué","dry_nobody":"aucun destinataire, cibles directes seulement","dry_none":"Aucun canal sélectionné","dry_scen":"Scénarios actifs","dry_raw":"Réponse brute","dry_prio":"Priorité","dry_would_n":"canaux enverraient","dry_nothing":"Rien ne serait envoyé","dry_dupe":"Doublon d'une notification récente : elle serait écartée","dry_no_dupe":"Contrôle des doublons non simulé, donc le vrai Envoyer juste après n'est pas bloqué.","dry_home":"À la maison","dry_empty":"SuperNotify n'a pas répondu : est-ce la 2.12 ou plus récente ?","prio_minimum":"Minimum","prio_low":"Faible","prio_medium":"Moyenne","prio_high":"Haute","prio_critical":"Critique","target_lbl":"Cible — personnes, appareils, pièces, étages, étiquettes","custom_target_lbl":"Cibles personnalisées (e-mail, ID Telegram, …) — séparées par des virgules","adv_title":"Options avancées","adv_spoken":"Message parlé (Alexa, TTS)","adv_spoken_ph":"ce que disent les enceintes, si différent du texte","adv_apply":"Appliquer ces scénarios","adv_require":"Envoyer seulement si ces scénarios sont actifs","adv_constrain":"Ne considérer que ces scénarios","adv_snapshot":"Image depuis une URL","adv_debug":"Débogage : enregistrer la trace complète de sélection (affichée par la carte Pourquoi)","custom_target_ph":"ex. user@example.com, 123456789","native_target_tag":"🎯 pièce/étage/étiquette natif","target_warn":"⚠️ Les pièces, étages et étiquettes ne sont résolus que par notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts et chime. Avec tout autre canal — ou le routage par défaut quand aucun canal n'est choisi ci-dessus — la notification peut se retrouver sans cible sans le signaler. Choisissez un canal compatible, ou ajoutez directement une personne/un appareil.","aut_search":"Rechercher des automatisations…","aut_all":"Toutes","aut_none":"Aucun résultat","aut_err":"Manifeste introuvable — générez-le avec tools/genera_vista_automazioni.py","aut_updated":"liste mise à jour","aut_count":"automatisations","aut_count_1":"automatisation","never":"jamais","ago_now":"maintenant","ago_min":"min","ago_h":"h","ago_d":"j","aut_disabled_only":"Désactivées seulement","grp_active":"actifs","repeat":"Répéter","skipped_n":"ignorés","left":"restant","missed_n":"manqués","snz_all":"tout","snz_nc":"non critique","snz_prio":"priorité","snz_transport":"transport","snz_for":"pour","snz_choose":"choisir quoi et combien de temps","snz_title":"Mettre les notifications en pause","snz_what":"Quoi","snz_nc_l":"Non critiques","snz_all_l":"Tout","snz_ch":"Un canal","snz_pr":"Une priorité","snz_who":"Pour qui","snz_everyone":"Tout le monde","snz_me":"Moi seulement","snz_len":"Combien de temps","snz_forever":"Jusqu'à ce que je reprenne","snz_go":"Pause","snz_close":"Fermer","rs_hand":"à la main","rs_voice":"à la voix","rs_assist":"par l'assistant","snz_voice_info":"Vos pauses passent par les commandes vocales de SuperNotify : elles ne concernent que vous.","snz_voice_off":"Les commandes vocales de SuperNotify sont désactivées : activez-les dans les options de l'intégration.","snz_resume_mine":"Reprendre les miennes","go_open":"Afficher","dl_probe":"Essayer ce canal","probe_msg":"Test du canal depuis le tableau de bord","sc_why":"Pourquoi","sc_yes":"S'applique maintenant","sc_no":"Ne s'applique pas maintenant","sc_manual_why":"Scénario manuel : appliqué à la main","sc_no_cond":"Aucune condition","sc_off_sw":"Désactivé","sc_not_eval":"non vérifié","sc_now":"maintenant","sc_diff_btn_on":"Ce qui change s'il s'applique","sc_diff_btn_off":"Ce qui change sans lui","sc_diff_on":"S'il s'appliquait, pour une notification moyenne maintenant :","sc_diff_off":"Sans lui, pour une notification moyenne maintenant :","sc_diff_add":"enverrait aussi","sc_diff_rem":"n'enverrait plus","sc_diff_none":"aucune différence","c_state":"{e} est {s}","c_template":"condition de modèle","c_time":"heure","c_after":"après","c_before":"avant","c_numeric":"{e}","c_above":"au-dessus de","c_below":"en dessous de","c_and":"toutes celles-ci","c_or":"au moins une de celles-ci","c_not":"aucune de celles-ci","c_or_join":" ou ","sim_hint_dry":"La réponse de SuperNotify lui-même (simulation, rien n'est envoyé) : une notification maintenant, avec la priorité et seulement les scénarios choisis ci-dessus.","sim_msg":"Test du simulateur","sim_prio":"Priorité","sa_snooze":"Pause de {len} : {what}.","sa_silence":"Silence jusqu'à nouvel ordre : {what}.","sa_resume":"Reprise : {what}.","sa_resume_one":"Fin de la pause : {x}.","sa_resume_all":"Notifications réactivées.","sa_w_nc":"Les notifications non critiques","sa_w_all":"Toutes les notifications","sa_w_ch":"Le canal {x}","sa_w_pr":"Les notifications de priorité {x}","sa_w_mine":"Vos notifications","sa_for":"pour {x}","sa_min":"{n} minutes","sa_hour":"une heure","sa_hours":"{n} heures","occ_title":"Qui est à la maison","occ_home_l":"À la maison","occ_ALL_HOME":"Tout le monde à la maison","occ_ALL_AWAY":"Tout le monde absent","occ_LONE_HOME":"Une seule personne à la maison","occ_MULTI_HOME":"Quelques-uns à la maison","occ_UNDEFINED_OCCUPANTS":"Personne n'est suivi","h_repairs":"réparations SuperNotify","h_repairs_1":"réparation SuperNotify","det_more":"Tous les attributs","det_yes":"oui","det_no":"non","det_action":"Action","det_target":"Cibles fixes","det_target_req":"Nécessite une cible","det_target_use":"Cibles utilisées","det_inclusion":"Utilisé quand","det_prio":"Priorités","det_occ":"Qui doit être à la maison","det_transport":"Transport","det_data":"Données","det_debug":"Débogage","det_err_last":"Dernière erreur","det_err_in":"Dans","det_err_n":"Erreurs depuis le démarrage","det_select":"Sélection","adv_html":"Texte pour l'e-mail (HTML)","adv_clip":"Clip vidéo depuis une URL","adv_actions":"Boutons sur la notification","adv_act_id":"id de l'action","adv_act_title":"texte du bouton","adv_act_add":"+ bouton","adv_groups":"Groupes de boutons (virgule)","adv_dc":"Réglages des canaux pour cette notification","adv_dc_ph":"clé: valeur, une par ligne","adv_dc_add":"+ canal","snz_active":"En pause maintenant","snz_resume":"Reprendre","snz_resume_all":"Tout reprendre","snz_until_resumed":"jusqu'à la reprise","snz_done":"En pause","snz_resumed":"Repris","no_notif":"aucune notification pour l'instant","st_title":"Utilisation","st_days_short":"j","st_total":"Notifications","st_avg":"par jour","st_today":"Aujourd'hui","st_vs_avg":"vs moyenne","st_peak_hour":"Heure de pointe","st_top_channel":"Canal principal","st_errors":"Erreurs de canal","st_of_sends":"des envois par canal","st_daily":"Par jour","st_hourly":"Par heure de la journée","st_weekday":"Par jour de la semaine","st_channels":"Canaux — les plus utilisés","st_priority":"Priorité","st_period":"Moment de la journée","st_insights":"Observations","st_no_data":"Pas encore d'historique — les données apparaissent après les premières notifications.","st_loading":"chargement…","st_installed":"installée","st_latest":"dernière","st_uptodate":"à jour","st_update":"mise à jour disponible","st_restart":"redémarrage requis","st_logged":"enregistrées","st_from_archive":"depuis l'archive de SuperNotify","st_archive_err":"archive lue en partie","st_wd":["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"],"st_i_share":"{p} % de tous les envois passent par {c}.","st_i_peak":"L'heure la plus chargée est {h}:00 ({n} notifications en {d} jours).","st_i_night":"{p} % des notifications arrivent entre 23:00 et 07:00 — envisagez un scénario Ne pas déranger si ce n'est pas voulu.","st_i_night_ok":"Seulement {p} % des notifications arrivent la nuit (23–07) : les heures calmes fonctionnent.","st_i_weekend":"Le week-end compte {p} % de notifications {dir} qu'en semaine.","st_i_errors":"{n} erreurs de canal en {d} jours, surtout sur {c}.","st_i_noerr":"Aucune erreur de canal ces {d} derniers jours.","st_i_prio":"{p} % des notifications sont de priorité {prio}.","st_i_trend":"7 derniers jours : {n}/jour, {dir} de {p} % par rapport aux 7 précédents.","st_more":"en plus","st_less":"en moins","st_up":"en hausse","st_down":"en baisse"},"SN_ARCH_STRINGS":{"search":"Rechercher dans le titre ou le message…","f_all":"Toutes","f_today":"Aujourd'hui","f_whisper":"Chuchotées","wh":"chuchoté","said":"Alexa a dit","said_by":"{ch} a dit","none":"aucune notification ne correspond","loading":"lecture de l'archive…","recent":"dernières notifications","read_at":"lu à","today":"Aujourd'hui","yesterday":"Hier","failed":"échoué","missed":"manqué","reasons":{"doppione":"doublon","nessun target":"aucune cible","errore":"erreur","condizione":"condition","scenario":"scénario","presenza":"présence","priorita":"priorité","spento":"désactivé","pausa":"en pause","transport spento":"transport désactivé","nessuna azione":"aucune action","dati non validi":"données non valides","sconosciuto":"inconnu"},"f_appliance":"Électroménager","ap_scope":"parmi les {n} dernières lues en entier : les plus anciennes ne sont pas reconnues"},"SN_WHY_STRINGS":{"pick":"Choisissez une notification pour voir pourquoi elle est allée là où elle est allée.","loading":"chargement…","none":"aucune notification","gone":"cette notification n'est plus dans l'archive","priority":"priorité","dupe":"doublon","outcomes":{"success":"livrée","partial_delivery":"livrée en partie","dupe":"doublon","failed":"échouée","error":"échouée","fallback_delivery":"livrée par le canal de secours","no_delivery":"non livrée"},"step_call":"Appel","step_scen":"Scénarios","step_people":"Personnes","step_ch":"Canaux","call_auto":"aucun canal nommé : routage normal","call_named":"nommés dans l'appel :","call_debug":"avec débogage","nobody":"personne à la maison","ch_sent":"envoyé","ch_problems":"à vérifier","ch_skipped":"ignoré","pb_failed":"échoué","pb_missed":"demandé mais non envoyé","grp_skipped":"ignoré par une règle : normal","grp_not":"non concerné","trace_title":"Trace complète de sélection","fix":{"NO_TARGET":"Aucun destinataire n'a d'adresse pour ce canal : ajoutez-en une à un destinataire, donnez des cibles fixes au canal, ou laissez-le hors de cet appel.","ERROR":"L'intégration derrière ce canal a répondu par une erreur : consultez sa propre entrée dans le journal.","NO_ACTION":"Le canal n'a aucune action à appeler : définissez `action:` sur la livraison.","INVALID_ACTION_DATA":"Les données passées à l'action ont été refusées : vérifiez le `data:` de l'appel ou de la livraison."},"no_scenarios":"aucun scénario actif","applied":"forcé par l'appel","required":"requis par l'appel","constrain":"limité par l'appel à","home":"à la maison","away":"absent","no_channels":"aucun canal n'a été sélectionné","st_ok":"livré","st_err":"échoué","st_skip":"ignoré","calls":"appels","calls_1":"appel","target_required":"cible requise :","started_by":"sélectionné par","scen_would_off":"désactivé par (outrepassé)","src_default":"toujours actif (par défaut)","src_scen":"scénario","src_call":"l'appel lui-même","src_recipient":"destinataire","r_off_by":"désactivé par","call_targets":"cibles dans l'appel","cats":{"entity_id":"entités","mobile_app_id":"appareils","person_id":"personnes","email":"e-mail","phone":"téléphone","device_id":"appareils"},"r_call_off":"exclu par l'appel","r_scen_off":"désactivé par un scénario actif","r_disabled":"désactivé","r_transport_off":"son transport est désactivé","r_only_scen":"ne part que si un scénario l'active","r_only_fallback":"secours uniquement","r_only_explicit":"ne part que si demandé par son nom","r_priority":"pas pour cette priorité","r_unknown":"impossible à reconstituer sans la trace","from_config":"Les raisons des canaux qui ne sont pas partis sont reconstituées à partir de la configuration ACTUELLE, pas de celle de l'époque.","from_trace":"Les raisons proviennent de la trace de sélection archivée avec la notification.","st_time":"durée","st_slow":"le plus lent","st_rate":"des canaux ont réussi","ua_title":"Cibles qu'aucun canal n'a prises","ua_hint":"Elles étaient dans l'appel, mais aucun canal sélectionné n'accepte ce type de cible.","un_title":"Noms qui n'existent pas","sent_by":"Envoyé par","sent_auto":"automatisation","sent_script":"script","sent_person":"","sent_unknown":"expéditeur inconnu (aucune automatisation ni personne dans son contexte)","no_trace":"La trace complète de sélection n'est enregistrée que lorsque l'appel notify contient debug: true, et archivée lorsque les diagnostics de l'archive l'incluent.","reasons":{"NO_TARGET":"aucune cible utilisable","DUPE":"doublon d'une notification récente","PRIORITY":"pas pour cette priorité","SNOOZE":"en pause","SNOOZED":"en pause","DELIVERY_CONDITION":"condition de livraison fausse","OCCUPANCY":"règle de présence","ERROR":"erreur","DELIVERY_DISABLED":"désactivé","SCENARIO":"scénario","TRANSPORT_DISABLED":"son transport est désactivé","NO_SCENARIO":"un scénario requis n'est pas actif","NO_ACTION":"aucune action à appeler","INVALID_ACTION_DATA":"données d'action non valides","UNKNOWN":"raison inconnue"}},"SN_TOOLS_STRINGS":{"maint":"Maintenance","enq":"Interroger SuperNotify","refresh":"Republier toutes les entités","refresh_btn":"Actualiser","resume_btn":"Reprendre","refreshed":"Entités republiées.","resume_all":"Reprendre toutes les pauses","cleared_n":"pauses reprises","purge_arch":"Nettoyer l'archive","purge_media":"Nettoyer les images","older":"plus anciennes que","days":"jours","purge_btn":"Nettoyer","confirm":"Touchez encore pour confirmer","purged":"supprimés","remaining":"restants","reset":"Annuler les modifications faites à la main","reset_btn":"Réinitialiser","reset_none":"Rien à réinitialiser : tout est comme configuré.","reset_done":"Retour à la configuration :","k_all":"tout","k_scenario":"scénarios","k_delivery":"canaux","k_recipient":"personnes","k_transport":"transports","q_config":"Configuration","q_scen":"Scénarios","q_active":"Scénarios actifs","q_by_scen":"Canaux par scénario","q_implicit":"Canaux par défaut","q_recipients":"Destinataires","q_occupancy":"Qui est à la maison","q_snoozes":"Pauses","q_last":"Dernière notification","copy":"Copier le JSON","copied":"Copié","close":"Fermer","empty":"(vide)","err":"SuperNotify a répondu par une erreur :","settings":"Paramètres de l'intégration","running":"en cours…","more":"plus"},"SN_FORM_LABELS":{"_common":"Apparence et textes","style":"Couleurs","icons":"Icônes","show_version":"Afficher la version de la carte","intro":"Texte d'introduction en haut","title":"Titre","dnd_entity":"Interrupteur Ne pas déranger","quiet_entity":"État calme calculé (facultatif)","presence_entity":"Personne pour la barre d'état","archive_days":"Nettoyage de l'archive : plus ancien que (jours)","media_days":"Nettoyage des images : plus ancien que (jours)","occupancy":"Qui est à la maison (depuis SuperNotify)","repairs":"Réparations SuperNotify dans la liste d'état","snooze_announce":"Annoncer les pauses à voix haute (canal d'annonce)","snooze_via":"Les pauses passent par","o_event":"l'événement des boutons push (admin)","o_voice":"les commandes vocales","snooze_minutes":"Durée de la pause (minutes)","snooze_panel":"La tuile Pause ouvre le panneau des pauses","announce_delivery":"Canal pour les annonces","last_notification":"Afficher la dernière notification","last_channels":"Une puce par canal dans la dernière notification","repeat_entity":"Bouton Répéter la dernière (facultatif)","tile_layout":"Tuiles","tile_columns":"Colonnes de tuiles (vide = automatique)","update_entity":"Entité de mise à jour SuperNotify","cards_update_entity":"Entité de mise à jour des cartes","health":"État en haut","poll_seconds":"Actualiser toutes les (secondes)","group":"Grouper selon la façon dont un canal part","hide_defaults":"Masquer les canaux automatiques DEFAULT_","limit":"Notifications dans la liste","expand":"Ouvrir les parties repliées","max_height":"Hauteur maximale (CSS, ex. 70vh)","trigger_entity":"Actualiser quand ceci change","dry_run":"Afficher « Essayer sans envoyer »","dry_run_dupe_check":"Simuler aussi le contrôle des doublons","days":"Jours affichés par défaut","manifest_url":"URL du manifeste des automatisations","o_supernotify":"SuperNotify","o_theme":"Thème Home Assistant","o_mdi":"Icônes Home Assistant","o_emoji":"Emoji","o_row":"Icône à gauche","o_stacked":"Haute, icône en haut","o_auto":"Automatique"},"SN_NATIVE_STR":{"all_good":"Tout va bien","paused":"En pause","resume":"Reprendre","test":"Envoyer un test","sure":"Touchez encore pour envoyer","sent":"Envoyé","last":"Dernière","none":"Aucune notification pour l'instant","ago":"il y a","h":"h","err":"transports en erreur","off":"canaux désactivés"},"SN_STRATEGY_TITLES":{"home":"Accueil","archive":"Archives","send":"Envoyer","setup":"Configuration","stats":"Statistiques","tools":"Outils","title":"SuperNotify","appliances":"Électroménager"},"SN_APPL_STRINGS":{"title":"Électroménager","loading":"lecture…","none":"Aucun appareil : ajoutez-en un dans Appliance Autonotify (Paramètres → Appareils et services).","st_run":"En marche","st_cleaning":"Nettoie","st_done":"Terminé · à vider","st_done_other":"Terminé","st_err":"A besoin d'aide","m_switch_on":"Allumer la prise","done_switch_on":"Prise allumée.","done_action":"Fait : {n}.","confirm_action":"Lancer « {n} » ?","open_entity":"Ouvrir pour le modifier","chip_notifs":"Notifications","chip_device":"Appareil","not_found":"Aucun appareil nommé « {n} ».","last7":"7 derniers jours","col_day":"Jour","col_cycles":"Cycles","col_time":"Durée","col_energy":"Consommation","source_h":"Origine","manual_src":"ajouté à la main : en marche au-dessus de {w}","tab_info":"Aperçu","tab_stats":"Consommation et cycles","tab_cleans":"Nettoyages","tab_prints":"Impressions","last_run":"Dernier cycle","avg_run":"Moyenne","reminders_h":"Notifications","plug":"Prise","plug_on":"allumée","plug_off":"éteinte","error_h":"Erreur","open_device":"L'appareil dans Home Assistant","prints":"impressions","print1":"impression","per_print":"Chaque impression du mois","last_prints":"Dernières impressions","no_print_month":"Pas encore d'impression ce mois-ci","no_print":"Pas encore d'impression","col_fil":"Filament","failed":"échouée","per_run":"Chaque cycle du mois","dev_hist":"Chacune vient de l'historique de Home Assistant ({n} derniers jours) ; les heures, du compteur de l'appareil quand il en a un.","cleans":"nettoyages","clean1":"nettoyage","per_clean":"Chaque nettoyage du mois","avg_clean":"moyenne {d}","col_area":"Surface","last_cleans":"Derniers nettoyages","no_clean_month":"Pas encore de nettoyage ce mois-ci","no_clean":"Pas encore de nettoyage","vac_hist":"Les totaux viennent des compteurs du robot ; chaque nettoyage, de l'historique de Home Assistant ({n} derniers jours).","st_paused":"En pause","st_returning":"Retourne à la base","st_charging":"En charge","st_docked_w":"Sur sa base","st_idle":"À l'arrêt","st_off":"Éteint","stopped":"À l'arrêt","yesterday":"hier","u_min":"min","u_h":"h","start":"Début","so_far":"jusqu'ici","no_cycle":"Aucun cycle pour l'instant","last_cycle":"Dernier cycle {d}","ended_at":"Terminé à {t}","reminders":"+{n} rappels jusqu'à {t}","reminder1":"+1 rappel à {t}","end_est":"Fin prévue","left":"encore {d}","almost":"presque fini","est_from_avg":"estimé d'après des cycles similaires","running_for":"En marche depuis {d}","btn_empty":"Vidé","btn_seen":"Fait","btn_resume":"Reprendre le nettoyage","m_switch_off":"Éteindre la prise","m_remind":"Me le rappeler plus tard","details":"Détails","settings":"Paramètres","more":"Plus","details_link":"Détails, consommation et cycles","done_empty":"Fait : les rappels s'arrêtent.","done_remind":"Il vous le rappellera plus tard.","done_switch":"Prise éteinte.","done_resume":"Nettoyage repris.","err":"Erreur","new_dev":"{n} nouveaux appareils","new_dev1":"1 nouvel appareil","battery":"Batterie","consumable":"{n} à {p} %","maint_in":"dans {c} cycles","maint_next":"au prochain cycle","maint_due":"à faire","maint_of":"{d} sur {e}","maint_done":"Fait","confirm_maint":"Marquer « {n} » comme fait ? Le compte repart de zéro.","conn_lost":"connexion perdue : dernier état connu","cons_h":"Consommables","commands":"Commandes","tap_again":"Touchez encore pour confirmer","empty_since":"À vider depuis","done_since":"Terminé depuis","avg_cycle":"Cycle moyen","maint_tab":"Entretien","tab_stats_short":"Consommation","read_failed":"Impossible de lire l'historique ({e}) ; nouvel essai sous peu.","retry":"Réessayer","see_chart":"Voir le graphique","back":"Retour","avg_line":"moyenne {v}","tap_bar":"Touchez une barre pour voir ce cycle","k_station":"Station","off_since":"Éteint depuis","close":"Fermer","power_now":"maintenant","p_today":"Aujourd'hui","p_week":"Semaine","p_month":"Mois","p_year":"Année","cycles":"cycles","cycle1":"cycle","per_cycle":"Consommation par cycle ce mois-ci","short":"Courts","long":"Longs","anomalous":"Inhabituels","avg":"moy. {d}, {k}","last_cycles":"Derniers cycles","col_start":"Début","col_dur":"Durée","col_cost":"Coût","no_cycle_month":"Aucun cycle ce mois-ci pour l'instant","coarse":"Les cycles de plus de 10 jours sont comptés à l'heure.","open_notifs":"Notifications de l'appareil","no_power":"Aucun capteur de puissance trouvé : indiquez-le avec `power_entity` dans `appliances:`.","no_power_vac":"Un robot aspirateur n'a pas de capteur de puissance : consommation et cycles ne sont pas comptés."}},"nl":{"SN_STRINGS":{"presence":"Aanwezigheid","time_band":"Tijdvak","quiet":"Stil","act_scen":"Actieve scenario's","on":"aan","off":"uit","active":"actief","dnd":"Niet storen","tap_silence":"tik om te dempen","snooze":"Pauzeren","min":"min","pause_nc":"niet-kritieke pauzeren","snoozed":"Gepauzeerd","until":"tot","tap_clear":"tik om te wissen","announce":"Omroepen","intercom":"intercom","announce_ph":"Omroepen op alle speakers…","send":"Versturen","announced":"Omgeroepen","cleared":"Pauzes gewist","snoozed_for":"Niet-kritieke meldingen gepauzeerd voor","sent":"Verstuurd","yesterday":"gisteren","deliveries":"Bezorgingen","last_notif":"Laatste melding","transports":"Transporten","delivered":"bezorgd","failed":"mislukt","channels":"kanalen","none":"geen","no_transports":"geen transport-entiteiten gevonden","tr_used":"gebruikt door","tr_unused":"geen kanaal gebruikt het","start":"start","volume":"volume","now":"nu","crosses":"gaat over middernacht","no_voice":"geen stem","mute_hint":"Een tijdvak op <b>0%</b> stuurt <b>helemaal geen gesproken melding</b> (Alexa en TTS uit, push en dashboard worden nog wel bezorgd). Kritieke meldingen en meldingen met hoge prioriteit spreken altijd.","enabled":"ingeschakeld","grp_auto":"Starten vanzelf","grp_named":"Alleen als genoemd in de aanroep","grp_scen":"Alleen met een scenario","grp_fallback":"Reserve, als de andere mislukken","ch_title":"Kanalen","ch_count":"{on} van {tot} aan","off_manual":"uitgeschakeld","paused_by":"nu gepauzeerd door","on_by":"nu aan via","fixed_targets":"vaste doelen","no_deliveries":"geen bezorging-entiteiten gevonden","home":"thuis","away":"afwezig","devices":"apparaten","devices_1":"apparaat","rc_test":"Test versturen","rc_test_confirm":"Tik nogmaals om te versturen","rc_test_sent":"Test verstuurd","rc_test_title":"SuperNotify-test","rc_test_msg":"Testbericht vanaf het dashboard,","overrides":"bezorgingsaanpassingen","overrides_1":"bezorgingsaanpassing","no_contact":"geen contactpunten","no_recipients":"geen ontvanger-entiteiten gevonden","details":"Details","h_update":"update beschikbaar:","h_restart":"herstart Home Assistant om de update af te ronden","h_uptodate":"up-to-date","h_transport_err":"transporten met fouten","h_channels_off":"kanalen uit","h_all_good":"Alles in orde","h_failures":"mislukkingen","h_failures_1":"mislukking","h_transport_err_1":"transport met fouten","h_channels_off_1":"kanaal uit","channels_1":"kanaal","band_early_morning":"Vroege ochtend","band_morning":"Ochtend","band_afternoon":"Middag","band_evening":"Avond","band_night":"Nacht","band_late_night":"Late nacht","h_look_1":"1 ding om naar te kijken","h_look_n":"{n} dingen om naar te kijken","h_rest_ok":"de rest werkt","h_ch_on":"{on} van {tot} kanalen aan","h_open":"Openen","ln_delivered":"bezorgd","ln_failed":"mislukt","ln_why":"Waarom","tgt_loading":"kiezer laden…","bands_empty_t":"Nog geen tijdvakken","bands_empty":"Voeg één tijdvak per dagdeel toe: een input_datetime voor de start en een input_number voor het stemvolume.","active_now":"nu actief","disabled":"uitgeschakeld","other":"Overig","manual":"handmatig","apply_now":"nu toepassen","applied":"Toegepast","apply_off":"tik om niet meer toe te passen","enabled_lbl":"ingeschakeld","reset_overrides":"Aanpassingen resetten","reset_done":"aanpassingen gereset","transport_off":"transport uit","last_notified":"laatst gemeld","never_notified":"nooit gemeld","media":"media","no_scenarios":"geen scenario-entiteiten gevonden","sim_pick":"🎬 Scenario's — tik om te simuleren","sim_fire":"📤 Kanalen","sim_hint":"Echte gegevens van de engine (opvraagacties). Filteren van bezorgingen op prioriteit gebeurt in de engine en wordt hier niet gesimuleerd. Uitgeschakeld wint van ingeschakeld, net als bij het samenvoegen tijdens gebruik.","sim_none":"er zouden geen bezorgingen starten","sim_go":"Zou verstuurd worden","sim_stop":"Zou niet verstuurd worden","sim_r_default":"start vanzelf","sim_r_on":"aangezet door","sim_r_off":"uitgezet door","sim_r_named":"alleen als genoemd in de aanroep","sim_r_scen":"alleen met een scenario dat het aanzet","sim_r_fallback":"reserve, als de andere mislukken","sim_r_switched":"uitgeschakeld","title":"Titel","message":"Bericht","priority":"Prioriteit","channels_lbl":"Kanalen — niets gekozen = normale routering","camera_lbl":"Camera-snapshot","preview":"Voorbeeld","no_title":"(geen titel)","no_message":"(geen bericht)","default_prio":"standaard (gemiddeld)","comp_hint":"Gekozen kanalen worden verstuurd met delivery_selection: fixed (alleen die starten). Kritiek is echt kritiek — sirenes inbegrepen.","critical_confirm":"Een KRITIEKE melding versturen? Sirenes en maximaal volume inbegrepen.","sent_toast":"Verstuurd","write_or_pick":"Schrijf een bericht, of kies een camera of een kanaal","send_err":"Niet verstuurd","dry_btn":"Proberen zonder versturen","dry_title":"Als je het nu verstuurde","dry_err":"Testrun mislukt","dry_nobody":"geen ontvanger, alleen directe doelen","dry_none":"Geen kanaal geselecteerd","dry_scen":"Actieve scenario's","dry_raw":"Ruw antwoord","dry_prio":"Prioriteit","dry_would_n":"kanalen zouden versturen","dry_nothing":"Er zou niets worden verstuurd","dry_dupe":"Duplicaat van een recente melding: zou worden weggegooid","dry_no_dupe":"Duplicaatcontrole niet gesimuleerd, dus het echte Versturen direct daarna wordt niet geblokkeerd.","dry_home":"Thuis","dry_empty":"SuperNotify gaf geen antwoord: is het 2.12 of nieuwer?","prio_minimum":"Minimaal","prio_low":"Laag","prio_medium":"Gemiddeld","prio_high":"Hoog","prio_critical":"Kritiek","target_lbl":"Doel — personen, apparaten, ruimtes, verdiepingen, labels","custom_target_lbl":"Eigen doelen (e-mail, Telegram-ID's, …) — gescheiden door komma's","adv_title":"Geavanceerde opties","adv_spoken":"Gesproken bericht (Alexa, TTS)","adv_spoken_ph":"wat de speakers zeggen, als het anders is dan de tekst","adv_apply":"Deze scenario's toepassen","adv_require":"Alleen versturen als deze scenario's actief zijn","adv_constrain":"Alleen deze scenario's meenemen","adv_snapshot":"Afbeelding van een URL","adv_debug":"Debug: volledige selectietrace vastleggen (getoond door de waarom-kaart)","custom_target_ph":"bijv. user@example.com, 123456789","native_target_tag":"🎯 native ruimte/verdieping/label","target_warn":"⚠️ Ruimtes, verdiepingen en labels worden alleen opgelost door notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts en chime. Met elk ander kanaal — of de standaardroutering als hierboven geen kanaal is gekozen — kan de melding ongemerkt zonder doel eindigen. Kies een compatibel kanaal, of voeg direct een persoon/apparaat toe.","aut_search":"Automatiseringen zoeken…","aut_all":"Alle","aut_none":"Geen resultaten","aut_err":"Manifest niet gevonden — genereer het met tools/genera_vista_automazioni.py","aut_updated":"lijst bijgewerkt","aut_count":"automatiseringen","aut_count_1":"automatisering","never":"nooit","ago_now":"nu","ago_min":"min geleden","ago_h":"u geleden","ago_d":"d geleden","aut_disabled_only":"Alleen uitgeschakeld","grp_active":"actief","repeat":"Herhalen","skipped_n":"overgeslagen","left":"over","missed_n":"gemist","snz_all":"alles","snz_nc":"niet-kritiek","snz_prio":"prioriteit","snz_transport":"transport","snz_for":"voor","snz_choose":"kies wat en hoe lang","snz_title":"Meldingen pauzeren","snz_what":"Wat","snz_nc_l":"Niet-kritiek","snz_all_l":"Alles","snz_ch":"Een kanaal","snz_pr":"Een prioriteit","snz_who":"Voor wie","snz_everyone":"Iedereen","snz_me":"Alleen ik","snz_len":"Hoe lang","snz_forever":"Tot ik hervat","snz_go":"Pauzeren","snz_close":"Sluiten","rs_hand":"handmatig","rs_voice":"met spraak","rs_assist":"door de assistent","snz_voice_info":"Je pauzes lopen via de spraakopdrachten van SuperNotify: ze gelden alleen voor jou.","snz_voice_off":"De spraakopdrachten van SuperNotify staan uit: zet ze aan in de integratie-opties.","snz_resume_mine":"Mijn pauzes hervatten","go_open":"Tonen","dl_probe":"Dit kanaal proberen","probe_msg":"Kanaaltest vanaf het dashboard","sc_why":"Waarom","sc_yes":"Geldt nu","sc_no":"Geldt nu niet","sc_manual_why":"Handmatig scenario: met de hand toegepast","sc_no_cond":"Geen voorwaarden","sc_off_sw":"Uitgeschakeld","sc_not_eval":"niet gecontroleerd","sc_now":"nu","sc_diff_btn_on":"Wat verandert als het geldt","sc_diff_btn_off":"Wat verandert zonder","sc_diff_on":"Als het gold, voor een gemiddelde melding nu:","sc_diff_off":"Zonder, voor een gemiddelde melding nu:","sc_diff_add":"zou ook versturen","sc_diff_rem":"zou niet meer versturen","sc_diff_none":"geen verschil","c_state":"{e} is {s}","c_template":"sjabloonvoorwaarde","c_time":"tijd","c_after":"na","c_before":"voor","c_numeric":"{e}","c_above":"boven","c_below":"onder","c_and":"al deze","c_or":"minstens één hiervan","c_not":"geen van deze","c_or_join":" of ","sim_hint_dry":"Het eigen antwoord van SuperNotify (testrun, er wordt niets verstuurd): een melding nu, met de prioriteit en alleen de scenario's die hierboven zijn gekozen.","sim_msg":"Simulatortest","sim_prio":"Prioriteit","sa_snooze":"{what} gepauzeerd voor {len}.","sa_silence":"{what} gedempt tot nader order.","sa_resume":"{what} weer aan.","sa_resume_one":"Pauze voorbij: {x}.","sa_resume_all":"Meldingen weer aan.","sa_w_nc":"Niet-kritieke meldingen","sa_w_all":"Alle meldingen","sa_w_ch":"Kanaal {x}","sa_w_pr":"Meldingen met prioriteit {x}","sa_w_mine":"Je meldingen","sa_for":"voor {x}","sa_min":"{n} minuten","sa_hour":"een uur","sa_hours":"{n} uur","occ_title":"Wie is er thuis","occ_home_l":"Thuis","occ_ALL_HOME":"Iedereen thuis","occ_ALL_AWAY":"Iedereen weg","occ_LONE_HOME":"Eén persoon thuis","occ_MULTI_HOME":"Enkelen thuis","occ_UNDEFINED_OCCUPANTS":"Niemand gevolgd","h_repairs":"SuperNotify-reparaties","h_repairs_1":"SuperNotify-reparatie","det_more":"Alle attributen","det_yes":"ja","det_no":"nee","det_action":"Actie","det_target":"Vaste doelen","det_target_req":"Vereist een doel","det_target_use":"Doelen gebruiken","det_inclusion":"Gebruikt wanneer","det_prio":"Prioriteiten","det_occ":"Wie thuis moet zijn","det_transport":"Transport","det_data":"Gegevens","det_debug":"Debug","det_err_last":"Laatste fout","det_err_in":"In","det_err_n":"Fouten sinds start","det_select":"Selectie","adv_html":"Tekst voor e-mail (HTML)","adv_clip":"Videoclip van een URL","adv_actions":"Knoppen op de melding","adv_act_id":"actie-id","adv_act_title":"knoptekst","adv_act_add":"+ knop","adv_groups":"Knopgroepen (komma)","adv_dc":"Kanaalinstellingen voor deze melding","adv_dc_ph":"sleutel: waarde, één per regel","adv_dc_add":"+ kanaal","snz_active":"Nu gepauzeerd","snz_resume":"Hervatten","snz_resume_all":"Alles hervatten","snz_until_resumed":"tot hervat","snz_done":"Gepauzeerd","snz_resumed":"Hervat","no_notif":"nog geen melding","st_title":"Gebruik","st_days_short":"d","st_total":"Meldingen","st_avg":"per dag","st_today":"Vandaag","st_vs_avg":"t.o.v. gemiddelde","st_peak_hour":"Piekuur","st_top_channel":"Topkanaal","st_errors":"Kanaalfouten","st_of_sends":"van de kanaalverzendingen","st_daily":"Per dag","st_hourly":"Per uur van de dag","st_weekday":"Per weekdag","st_channels":"Kanalen — meest gebruikt","st_priority":"Prioriteit","st_period":"Dagdeel","st_insights":"Inzichten","st_no_data":"Nog geen geschiedenis — gegevens verschijnen na de eerste meldingen.","st_loading":"laden…","st_installed":"geïnstalleerd","st_latest":"nieuwste","st_uptodate":"up-to-date","st_update":"update beschikbaar","st_restart":"herstart vereist","st_logged":"vastgelegd","st_from_archive":"uit het archief van SuperNotify","st_archive_err":"archief deels gelezen","st_wd":["ma","di","wo","do","vr","za","zo"],"st_i_share":"{p}% van alle kanaalverzendingen gaat via {c}.","st_i_peak":"Drukste uur is {h}:00 ({n} meldingen in {d} dagen).","st_i_night":"{p}% van de meldingen komt binnen tussen 23:00 en 07:00 — overweeg een niet-storen-scenario als je dat niet wilt.","st_i_night_ok":"Slechts {p}% van de meldingen komt 's nachts binnen (23–07): de stille uren werken.","st_i_weekend":"Weekenddagen hebben {p}% {dir} meldingen dan doordeweekse dagen.","st_i_errors":"{n} kanaalfouten in {d} dagen, vooral bij {c}.","st_i_noerr":"Geen kanaalfouten in de laatste {d} dagen.","st_i_prio":"{p}% van de meldingen heeft prioriteit {prio}.","st_i_trend":"Laatste 7 dagen: {n}/dag, {dir} {p}% t.o.v. de 7 daarvoor.","st_more":"meer","st_less":"minder","st_up":"omhoog","st_down":"omlaag"},"SN_ARCH_STRINGS":{"search":"Zoek in titel of bericht…","f_all":"Alle","f_today":"Vandaag","f_whisper":"Gefluisterd","wh":"gefluisterd","said":"Alexa zei","said_by":"{ch} zei","none":"geen melding komt overeen","loading":"archief lezen…","recent":"laatste meldingen","read_at":"gelezen om","today":"Vandaag","yesterday":"Gisteren","failed":"mislukt","missed":"gemist","reasons":{"doppione":"duplicaat","nessun target":"geen doel","errore":"fout","condizione":"voorwaarde","scenario":"scenario","presenza":"aanwezigheid","priorita":"prioriteit","spento":"uit","pausa":"gepauzeerd","transport spento":"transport uit","nessuna azione":"geen actie","dati non validi":"ongeldige gegevens","sconosciuto":"onbekend"},"f_appliance":"Huishoudapparaten","ap_scope":"bij de laatste {n} die volledig zijn gelezen – oudere worden niet herkend"},"SN_WHY_STRINGS":{"pick":"Kies een melding om te zien waarom die ging waar die heen ging.","loading":"laden…","none":"geen melding","gone":"deze melding staat niet meer in het archief","priority":"prioriteit","dupe":"duplicaat","outcomes":{"success":"bezorgd","partial_delivery":"deels bezorgd","dupe":"duplicaat","failed":"mislukt","error":"mislukt","fallback_delivery":"bezorgd via het reservekanaal","no_delivery":"niet bezorgd"},"step_call":"Aanroep","step_scen":"Scenario's","step_people":"Personen","step_ch":"Kanalen","call_auto":"geen kanaal genoemd: normale routering","call_named":"genoemd in de aanroep:","call_debug":"met debug","nobody":"niemand thuis","ch_sent":"verstuurd","ch_problems":"om naar te kijken","ch_skipped":"overgeslagen","pb_failed":"mislukt","pb_missed":"gevraagd maar niet verstuurd","grp_skipped":"overgeslagen door een regel: normaal","grp_not":"niet betrokken","trace_title":"Volledige selectietrace","fix":{"NO_TARGET":"Geen enkele ontvanger heeft een adres voor dit kanaal: voeg er een toe aan een ontvanger, geef het kanaal vaste doelen, of laat het weg uit deze aanroep.","ERROR":"De integratie achter dit kanaal gaf een fout: bekijk de eigen logregel ervan.","NO_ACTION":"Het kanaal heeft geen actie om aan te roepen: stel `action:` in op de bezorging.","INVALID_ACTION_DATA":"De gegevens die aan de actie zijn doorgegeven werden geweigerd: controleer de `data:` van de aanroep of van de bezorging."},"no_scenarios":"geen scenario actief","applied":"geforceerd door de aanroep","required":"vereist door de aanroep","constrain":"door de aanroep beperkt tot","home":"thuis","away":"afwezig","no_channels":"er is geen kanaal geselecteerd","st_ok":"bezorgd","st_err":"mislukt","st_skip":"overgeslagen","calls":"aanroepen","calls_1":"aanroep","target_required":"doel vereist:","started_by":"geselecteerd door","scen_would_off":"uitgezet door (overruled)","src_default":"altijd aan (standaard)","src_scen":"scenario","src_call":"de aanroep zelf","src_recipient":"ontvanger","r_off_by":"uitgezet door","call_targets":"doelen in de aanroep","cats":{"entity_id":"entiteiten","mobile_app_id":"apparaten","person_id":"personen","email":"e-mail","phone":"telefoon","device_id":"apparaten"},"r_call_off":"uitgesloten door de aanroep","r_scen_off":"uitgezet door een actief scenario","r_disabled":"uitgeschakeld","r_transport_off":"het transport staat uit","r_only_scen":"start alleen als een scenario het aanzet","r_only_fallback":"alleen reserve","r_only_explicit":"start alleen als het bij naam wordt gevraagd","r_priority":"niet voor deze prioriteit","r_unknown":"niet te reconstrueren zonder de trace","from_config":"Redenen voor kanalen die niet zijn gestart, zijn gereconstrueerd uit de configuratie zoals die NU is, niet zoals die toen was.","from_trace":"Redenen komen uit de selectietrace die met de melding is gearchiveerd.","st_time":"duurde","st_slow":"traagste","st_rate":"van de kanalen gelukt","ua_title":"Doelen die geen kanaal oppakte","ua_hint":"Ze stonden in de aanroep, maar geen geselecteerd kanaal accepteert dit soort doel.","un_title":"Namen die niet bestaan","sent_by":"Verstuurd door","sent_auto":"automatisering","sent_script":"script","sent_person":"","sent_unknown":"afzender onbekend (geen automatisering of persoon in de context)","no_trace":"De volledige selectietrace wordt alleen vastgelegd als de notify-aanroep debug: true heeft, en gearchiveerd als de archiefdiagnostiek die bevat.","reasons":{"NO_TARGET":"geen bruikbaar doel","DUPE":"duplicaat van een recente melding","PRIORITY":"niet voor deze prioriteit","SNOOZE":"gepauzeerd","SNOOZED":"gepauzeerd","DELIVERY_CONDITION":"bezorgingsvoorwaarde onwaar","OCCUPANCY":"aanwezigheidsregel","ERROR":"fout","DELIVERY_DISABLED":"uitgeschakeld","SCENARIO":"scenario","TRANSPORT_DISABLED":"het transport staat uit","NO_SCENARIO":"een vereist scenario is niet actief","NO_ACTION":"geen actie om aan te roepen","INVALID_ACTION_DATA":"ongeldige actiegegevens","UNKNOWN":"onbekende reden"}},"SN_TOOLS_STRINGS":{"maint":"Onderhoud","enq":"SuperNotify bevragen","refresh":"Alle entiteiten opnieuw publiceren","refresh_btn":"Vernieuwen","resume_btn":"Hervatten","refreshed":"Entiteiten opnieuw gepubliceerd.","resume_all":"Alle pauzes hervatten","cleared_n":"pauzes hervat","purge_arch":"Archief opschonen","purge_media":"Afbeeldingen opschonen","older":"ouder dan","days":"dagen","purge_btn":"Opschonen","confirm":"Tik nogmaals om te bevestigen","purged":"verwijderd","remaining":"over","reset":"Handmatige wijzigingen ongedaan maken","reset_btn":"Resetten","reset_none":"Niets te resetten: alles is zoals geconfigureerd.","reset_done":"Terug naar de configuratie:","k_all":"alles","k_scenario":"scenario's","k_delivery":"kanalen","k_recipient":"personen","k_transport":"transporten","q_config":"Configuratie","q_scen":"Scenario's","q_active":"Actieve scenario's","q_by_scen":"Kanalen per scenario","q_implicit":"Standaardkanalen","q_recipients":"Ontvangers","q_occupancy":"Wie is er thuis","q_snoozes":"Pauzes","q_last":"Laatste melding","copy":"JSON kopiëren","copied":"Gekopieerd","close":"Sluiten","empty":"(leeg)","err":"SuperNotify antwoordde met een fout:","settings":"Integratie-instellingen","running":"bezig…","more":"meer"},"SN_FORM_LABELS":{"_common":"Uiterlijk en tekst","style":"Kleuren","icons":"Pictogrammen","show_version":"Kaartversie tonen","intro":"Introtekst bovenaan","title":"Titel","dnd_entity":"Niet-storen-schakelaar","quiet_entity":"Berekende stille status (optioneel)","presence_entity":"Persoon voor de statusbalk","archive_days":"Archief opschonen: ouder dan (dagen)","media_days":"Afbeeldingen opschonen: ouder dan (dagen)","occupancy":"Wie is er thuis (van SuperNotify)","repairs":"SuperNotify-reparaties in de statuslijst","snooze_announce":"Pauzes hardop zeggen (omroepkanaal)","snooze_via":"Pauzes lopen via","o_event":"de gebeurtenis van de pushknoppen (beheerder)","o_voice":"de spraakopdrachten","snooze_minutes":"Pauzeduur (minuten)","snooze_panel":"Pauzetegel opent het pauzepaneel","announce_delivery":"Kanaal voor omroepen","last_notification":"Laatste melding tonen","last_channels":"Eén chip per kanaal in de laatste melding","repeat_entity":"Knop laatste herhalen (optioneel)","tile_layout":"Tegels","tile_columns":"Tegelkolommen (leeg = automatisch)","update_entity":"SuperNotify-update-entiteit","cards_update_entity":"Update-entiteit van de kaarten","health":"Status bovenaan","poll_seconds":"Vernieuwen elke (seconden)","group":"Groeperen op hoe een kanaal start","hide_defaults":"Automatische DEFAULT_-kanalen verbergen","limit":"Meldingen in de lijst","expand":"Ingeklapte delen openen","max_height":"Maximale hoogte (CSS, bijv. 70vh)","trigger_entity":"Vernieuwen als dit verandert","dry_run":"\"Proberen zonder versturen\" tonen","dry_run_dupe_check":"Ook de duplicaatcontrole simuleren","days":"Standaard getoonde dagen","manifest_url":"URL van het automatiseringsmanifest","o_supernotify":"SuperNotify","o_theme":"Home Assistant-thema","o_mdi":"Home Assistant-pictogrammen","o_emoji":"Emoji","o_row":"Pictogram links","o_stacked":"Hoog, pictogram bovenaan","o_auto":"Automatisch"},"SN_NATIVE_STR":{"all_good":"Alles in orde","paused":"Gepauzeerd","resume":"Hervatten","test":"Test versturen","sure":"Tik nogmaals om te versturen","sent":"Verstuurd","last":"Laatste","none":"Nog geen melding","ago":"geleden","h":"u","err":"transporten met fouten","off":"kanalen uit"},"SN_STRATEGY_TITLES":{"home":"Home","archive":"Archief","send":"Versturen","setup":"Instellingen","stats":"Statistieken","tools":"Hulpmiddelen","title":"SuperNotify","appliances":"Huishoudapparaten"},"SN_APPL_STRINGS":{"title":"Huishoudapparaten","loading":"lezen…","none":"Geen apparaten: stel er een in via Appliance Autonotify (Instellingen → Apparaten en diensten).","st_run":"Bezig","st_cleaning":"Maakt schoon","st_done":"Klaar · leeghalen","st_done_other":"Klaar","st_err":"Heeft hulp nodig","m_switch_on":"Stekker aanzetten","done_switch_on":"Stekker aangezet.","done_action":"Gedaan: {n}.","confirm_action":"«{n}» uitvoeren?","open_entity":"Openen om te wijzigen","chip_notifs":"Meldingen","chip_device":"Apparaat","not_found":"Geen apparaat met de naam «{n}».","last7":"Laatste 7 dagen","col_day":"Dag","col_cycles":"Cycli","col_time":"Tijd","col_energy":"Verbruik","source_h":"Bron","manual_src":"handmatig toegevoegd: draait boven {w}","tab_info":"Overzicht","tab_stats":"Verbruik en cycli","tab_cleans":"Schoonmaakbeurten","tab_prints":"Afdrukken","last_run":"Laatste cyclus","avg_run":"Gemiddeld","reminders_h":"Meldingen","plug":"Stekker","plug_on":"aan","plug_off":"uit","error_h":"Fout","open_device":"Het apparaat in Home Assistant","prints":"afdrukken","print1":"afdruk","per_print":"Elke afdruk deze maand","last_prints":"Laatste afdrukken","no_print_month":"Nog geen afdruk deze maand","no_print":"Nog geen afdruk","col_fil":"Filament","failed":"mislukt","per_run":"Elke cyclus deze maand","dev_hist":"Elk komt uit de geschiedenis van Home Assistant (laatste {n} dagen); de uren uit de teller van het apparaat als het die heeft.","cleans":"schoonmaakbeurten","clean1":"schoonmaakbeurt","per_clean":"Elke schoonmaakbeurt deze maand","avg_clean":"gemiddeld {d}","col_area":"Oppervlak","last_cleans":"Laatste schoonmaakbeurten","no_clean_month":"Nog geen schoonmaakbeurt deze maand","no_clean":"Nog geen schoonmaakbeurt","vac_hist":"De totalen komen uit de tellers van de robot; elke schoonmaakbeurt uit de geschiedenis van Home Assistant (laatste {n} dagen).","st_paused":"Gepauzeerd","st_returning":"Keert terug naar het dock","st_charging":"Laadt op","st_docked_w":"In het dock","st_idle":"Stil","st_off":"Uit","stopped":"Stil","yesterday":"gisteren","u_min":"min","u_h":"u","start":"Start","so_far":"tot nu toe","no_cycle":"Nog geen cyclus","last_cycle":"Laatste cyclus {d}","ended_at":"Klaar om {t}","reminders":"+{n} herinneringen tot {t}","reminder1":"+1 herinnering om {t}","end_est":"Verwacht einde","left":"nog {d}","almost":"bijna klaar","est_from_avg":"geschat uit vergelijkbare cycli","running_for":"Bezig sinds {d}","btn_empty":"Leeggehaald","btn_seen":"Gedaan","btn_resume":"Schoonmaken hervatten","m_switch_off":"Stekker uitschakelen","m_remind":"Herinner me later","details":"Details","settings":"Instellingen","more":"Meer","details_link":"Details, verbruik en cycli","done_empty":"Gedaan: de herinneringen stoppen.","done_remind":"Je wordt later herinnerd.","done_switch":"Stekker uitgeschakeld.","done_resume":"Schoonmaken hervat.","err":"Fout","new_dev":"{n} nieuwe apparaten","new_dev1":"1 nieuw apparaat","battery":"Batterij","consumable":"{n} op {p}%","maint_in":"over {c} cycli","maint_next":"bij de volgende cyclus","maint_due":"nu nodig","maint_of":"{d} van {e}","maint_done":"Gedaan","confirm_maint":"«{n}» als gedaan markeren? De telling begint opnieuw.","conn_lost":"verbinding verbroken: laatst bekende toestand","cons_h":"Verbruiksartikelen","commands":"Opdrachten","tap_again":"Tik nogmaals om te bevestigen","empty_since":"Uit te ruimen sinds","done_since":"Klaar sinds","avg_cycle":"Gemiddelde cyclus","maint_tab":"Onderhoud","tab_stats_short":"Verbruik","read_failed":"De geschiedenis kon niet worden gelezen ({e}); straks opnieuw.","retry":"Opnieuw","see_chart":"Grafiek bekijken","back":"Terug","avg_line":"gemiddeld {v}","tap_bar":"Tik op een balk voor die cyclus","k_station":"Station","off_since":"Uit sinds","close":"Sluiten","power_now":"nu","p_today":"Vandaag","p_week":"Week","p_month":"Maand","p_year":"Jaar","cycles":"cycli","cycle1":"cyclus","per_cycle":"Verbruik per cyclus deze maand","short":"Kort","long":"Lang","anomalous":"Afwijkend","avg":"gem. {d}, {k}","last_cycles":"Laatste cycli","col_start":"Start","col_dur":"Duur","col_cost":"Kosten","no_cycle_month":"Deze maand nog geen cyclus","coarse":"Cycli van meer dan 10 dagen geleden worden per uur geteld.","open_notifs":"Meldingen van het apparaat","no_power":"Geen vermogenssensor gevonden: geef hem op met `power_entity` in `appliances:`.","no_power_vac":"Een robotstofzuiger heeft geen vermogenssensor: verbruik en cycli worden niet geteld."}},"pl":{"SN_STRINGS":{"presence":"Obecność","time_band":"Pora dnia","quiet":"Cisza","act_scen":"Aktywne scenariusze","on":"wł.","off":"wył.","active":"aktywny","dnd":"Nie przeszkadzać","tap_silence":"dotknij, aby wyciszyć","snooze":"Drzemka","min":"min","pause_nc":"wstrzymaj niekrytyczne","snoozed":"Wstrzymane","until":"do","tap_clear":"dotknij, aby wyczyścić","announce":"Ogłoś","intercom":"interkom","announce_ph":"Ogłoś na wszystkich głośnikach…","send":"Wyślij","announced":"Ogłoszono","cleared":"Drzemki wyczyszczone","snoozed_for":"Wstrzymano niekrytyczne powiadomienia na","sent":"Wysłane","yesterday":"wczoraj","deliveries":"Dostarczenia","last_notif":"Ostatnie powiadomienie","transports":"Transporty","delivered":"dostarczone","failed":"nieudane","channels":"kanałów","none":"brak","no_transports":"nie znaleziono encji transportów","tr_used":"używany przez","tr_unused":"żaden kanał go nie używa","start":"początek","volume":"głośność","now":"teraz","crosses":"przechodzi przez północ","no_voice":"bez głosu","mute_hint":"Pora z <b>0%</b> nie wysyła <b>żadnego ogłoszenia głosowego</b> (Alexa i TTS wyłączone, push i pulpit nadal dostarczane). Alerty krytyczne i o wysokim priorytecie zawsze są wypowiadane.","enabled":"włączone","grp_auto":"Startują same","grp_named":"Tylko gdy wskazane w wywołaniu","grp_scen":"Tylko ze scenariuszem","grp_fallback":"Zapasowe, gdy inne zawiodą","ch_title":"Kanały","ch_count":"{on} z {tot} wł.","off_manual":"wyłączony","paused_by":"teraz wstrzymany przez","on_by":"teraz włączony przez","fixed_targets":"stałe cele","no_deliveries":"nie znaleziono encji dostarczeń","home":"w domu","away":"poza domem","devices":"urządzeń","devices_1":"urządzenie","rc_test":"Wyślij test","rc_test_confirm":"Dotknij ponownie, aby wysłać","rc_test_sent":"Test wysłany","rc_test_title":"Test SuperNotify","rc_test_msg":"Wiadomość testowa z pulpitu,","overrides":"nadpisań dostarczeń","overrides_1":"nadpisanie dostarczenia","no_contact":"brak danych kontaktowych","no_recipients":"nie znaleziono encji odbiorców","details":"Szczegóły","h_update":"dostępna aktualizacja:","h_restart":"uruchom ponownie Home Assistant, aby dokończyć aktualizację","h_uptodate":"aktualne","h_transport_err":"transportów z błędami","h_channels_off":"kanałów wył.","h_all_good":"Wszystko w porządku","h_failures":"błędów","h_failures_1":"błąd","h_transport_err_1":"transport z błędami","h_channels_off_1":"kanał wył.","channels_1":"kanał","band_early_morning":"Wczesny ranek","band_morning":"Rano","band_afternoon":"Popołudnie","band_evening":"Wieczór","band_night":"Noc","band_late_night":"Późna noc","h_look_1":"1 rzecz do sprawdzenia","h_look_n":"Rzeczy do sprawdzenia: {n}","h_rest_ok":"reszta działa","h_ch_on":"{on} z {tot} kanałów wł.","h_open":"Otwórz","ln_delivered":"dostarczone","ln_failed":"nieudane","ln_why":"Dlaczego","tgt_loading":"ładowanie selektora…","bands_empty_t":"Brak pór dnia","bands_empty":"Dodaj jedną porę na każdą część dnia: input_datetime dla jej początku i input_number dla głośności głosu.","active_now":"aktywny teraz","disabled":"wyłączony","other":"Inne","manual":"ręczny","apply_now":"zastosuj teraz","applied":"Zastosowany","apply_off":"dotknij, aby przestać stosować","enabled_lbl":"włączony","reset_overrides":"Resetuj nadpisania","reset_done":"nadpisania zresetowane","transport_off":"transport wył.","last_notified":"ostatnio powiadomiony","never_notified":"nigdy nie powiadomiony","media":"media","no_scenarios":"nie znaleziono encji scenariuszy","sim_pick":"🎬 Scenariusze — dotknij, aby zasymulować","sim_fire":"📤 Kanały","sim_hint":"Prawdziwe dane silnika (usługi enquire). Filtrowanie dostarczeń według priorytetu odbywa się w silniku i nie jest tu symulowane. Wyłączenie wygrywa z włączeniem, jak przy scalaniu w trakcie działania.","sim_none":"żadne dostarczenie by nie ruszyło","sim_go":"Zostałoby wysłane","sim_stop":"Nie zostałoby wysłane","sim_r_default":"startuje samo","sim_r_on":"włączony przez","sim_r_off":"wyłączony przez","sim_r_named":"tylko gdy wskazany w wywołaniu","sim_r_scen":"tylko ze scenariuszem, który go włącza","sim_r_fallback":"zapasowy, gdy inne zawiodą","sim_r_switched":"wyłączony","title":"Tytuł","message":"Wiadomość","priority":"Priorytet","channels_lbl":"Kanały — brak wyboru = zwykłe kierowanie","camera_lbl":"Zrzut z kamery","preview":"Podgląd","no_title":"(bez tytułu)","no_message":"(bez wiadomości)","default_prio":"domyślny (średni)","comp_hint":"Wybrane kanały są wysyłane z delivery_selection: fixed (tylko one ruszają). Krytyczny naprawdę jest krytyczny — łącznie z syrenami.","critical_confirm":"Wysłać KRYTYCZNE powiadomienie? Łącznie z syrenami i maksymalną głośnością.","sent_toast":"Wysłano","write_or_pick":"Napisz wiadomość albo wybierz kamerę lub kanał","send_err":"Nie wysłano","dry_btn":"Wypróbuj bez wysyłania","dry_title":"Gdybyś wysłał je teraz","dry_err":"Próba nie powiodła się","dry_nobody":"brak odbiorcy, tylko cele bezpośrednie","dry_none":"Nie wybrano kanału","dry_scen":"Aktywne scenariusze","dry_raw":"Surowa odpowiedź","dry_prio":"Priorytet","dry_would_n":"kanałów by wysłało","dry_nothing":"Nic nie zostałoby wysłane","dry_dupe":"Duplikat niedawnego powiadomienia: zostałoby odrzucone","dry_no_dupe":"Wykrywanie duplikatów nie jest symulowane, więc prawdziwe Wyślij zaraz potem nie zostanie zablokowane.","dry_home":"W domu","dry_empty":"SuperNotify nie odpowiedział: czy to wersja 2.12 lub nowsza?","prio_minimum":"Minimalny","prio_low":"Niski","prio_medium":"Średni","prio_high":"Wysoki","prio_critical":"Krytyczny","target_lbl":"Cel — osoby, urządzenia, obszary, piętra, etykiety","custom_target_lbl":"Własne cele (e-mail, ID Telegram, …) — oddzielone przecinkami","adv_title":"Opcje zaawansowane","adv_spoken":"Wiadomość mówiona (Alexa, TTS)","adv_spoken_ph":"co mówią głośniki, jeśli inaczej niż tekst","adv_apply":"Zastosuj te scenariusze","adv_require":"Wyślij tylko, gdy te scenariusze są aktywne","adv_constrain":"Uwzględnij tylko te scenariusze","adv_snapshot":"Obraz z adresu URL","adv_debug":"Debug: zapisz pełny ślad wyboru (pokazywany przez kartę Dlaczego)","custom_target_ph":"np. user@example.com, 123456789","native_target_tag":"🎯 natywny obszar/piętro/etykieta","target_warn":"⚠️ Obszary, piętra i etykiety są rozwiązywane tylko przez notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts i chime. Z każdym innym kanałem — albo przy domyślnym kierowaniu, gdy powyżej nie wybrano kanału — powiadomienie może po cichu zostać bez celu. Wybierz zgodny kanał albo dodaj osobę/urządzenie bezpośrednio.","aut_search":"Szukaj automatyzacji…","aut_all":"Wszystkie","aut_none":"Brak wyników","aut_err":"Nie znaleziono manifestu — wygeneruj go przez tools/genera_vista_automazioni.py","aut_updated":"lista zaktualizowana","aut_count":"automatyzacji","aut_count_1":"automatyzacja","never":"nigdy","ago_now":"teraz","ago_min":"min temu","ago_h":"godz. temu","ago_d":"dni temu","aut_disabled_only":"Tylko wyłączone","grp_active":"aktywne","repeat":"Powtórz","skipped_n":"pominięte","left":"zostało","missed_n":"nieodebrane","snz_all":"wszystko","snz_nc":"niekrytyczne","snz_prio":"priorytet","snz_transport":"transport","snz_for":"na","snz_choose":"wybierz co i na jak długo","snz_title":"Wstrzymaj powiadomienia","snz_what":"Co","snz_nc_l":"Niekrytyczne","snz_all_l":"Wszystko","snz_ch":"Kanał","snz_pr":"Priorytet","snz_who":"Dla kogo","snz_everyone":"Wszyscy","snz_me":"Tylko ja","snz_len":"Jak długo","snz_forever":"Aż wznowię","snz_go":"Wstrzymaj","snz_close":"Zamknij","rs_hand":"ręcznie","rs_voice":"głosem","rs_assist":"przez asystenta","snz_voice_info":"Twoje pauzy idą przez komendy głosowe SuperNotify: dotyczą tylko ciebie.","snz_voice_off":"Komendy głosowe SuperNotify są wyłączone: włącz je w opcjach integracji.","snz_resume_mine":"Wznów moje","go_open":"Pokaż","dl_probe":"Wypróbuj ten kanał","probe_msg":"Test kanału z pulpitu","sc_why":"Dlaczego","sc_yes":"Obowiązuje teraz","sc_no":"Teraz nie obowiązuje","sc_manual_why":"Scenariusz ręczny: stosowany ręcznie","sc_no_cond":"Brak warunków","sc_off_sw":"Wyłączony","sc_not_eval":"nie sprawdzono","sc_now":"teraz","sc_diff_btn_on":"Co się zmieni, jeśli obowiązuje","sc_diff_btn_off":"Co się zmieni bez niego","sc_diff_on":"Gdyby obowiązywał, dla średniego powiadomienia teraz:","sc_diff_off":"Bez niego, dla średniego powiadomienia teraz:","sc_diff_add":"wysłałby też","sc_diff_rem":"już by nie wysłał","sc_diff_none":"bez różnicy","c_state":"{e} to {s}","c_template":"warunek szablonu","c_time":"czas","c_after":"po","c_before":"przed","c_numeric":"{e}","c_above":"powyżej","c_below":"poniżej","c_and":"wszystkie z tych","c_or":"co najmniej jeden z tych","c_not":"żaden z tych","c_or_join":" lub ","sim_hint_dry":"Własna odpowiedź SuperNotify (próba, nic nie jest wysyłane): powiadomienie teraz, z priorytetem i tylko scenariuszami wybranymi powyżej.","sim_msg":"Test symulatora","sim_prio":"Priorytet","sa_snooze":"{what} wstrzymane na {len}.","sa_silence":"{what} wyciszone do odwołania.","sa_resume":"{what} znów włączone.","sa_resume_one":"Koniec pauzy: {x}.","sa_resume_all":"Powiadomienia znów włączone.","sa_w_nc":"Niekrytyczne powiadomienia","sa_w_all":"Wszystkie powiadomienia","sa_w_ch":"Kanał {x}","sa_w_pr":"Powiadomienia o priorytecie {x}","sa_w_mine":"Twoje powiadomienia","sa_for":"dla {x}","sa_min":"{n} minut","sa_hour":"jedną godzinę","sa_hours":"{n} godz.","occ_title":"Kto jest w domu","occ_home_l":"W domu","occ_ALL_HOME":"Wszyscy w domu","occ_ALL_AWAY":"Wszyscy poza domem","occ_LONE_HOME":"Tylko jedna osoba w domu","occ_MULTI_HOME":"Kilka osób w domu","occ_UNDEFINED_OCCUPANTS":"Nikt nie jest śledzony","h_repairs":"naprawy SuperNotify","h_repairs_1":"naprawa SuperNotify","det_more":"Wszystkie atrybuty","det_yes":"tak","det_no":"nie","det_action":"Akcja","det_target":"Stałe cele","det_target_req":"Wymaga celu","det_target_use":"Cele używają","det_inclusion":"Używany, gdy","det_prio":"Priorytety","det_occ":"Kto musi być w domu","det_transport":"Transport","det_data":"Dane","det_debug":"Debug","det_err_last":"Ostatni błąd","det_err_in":"W","det_err_n":"Błędy od uruchomienia","det_select":"Wybór","adv_html":"Tekst do e-maila (HTML)","adv_clip":"Klip wideo z adresu URL","adv_actions":"Przyciski w powiadomieniu","adv_act_id":"id akcji","adv_act_title":"tekst przycisku","adv_act_add":"+ przycisk","adv_groups":"Grupy przycisków (przecinek)","adv_dc":"Ustawienia kanałów dla tego powiadomienia","adv_dc_ph":"klucz: wartość, jedno na linię","adv_dc_add":"+ kanał","snz_active":"Teraz wstrzymane","snz_resume":"Wznów","snz_resume_all":"Wznów wszystko","snz_until_resumed":"do wznowienia","snz_done":"Wstrzymano","snz_resumed":"Wznowiono","no_notif":"brak powiadomień","st_title":"Użycie","st_days_short":"d","st_total":"Powiadomienia","st_avg":"dziennie","st_today":"Dzisiaj","st_vs_avg":"vs. średnia","st_peak_hour":"Godzina szczytu","st_top_channel":"Główny kanał","st_errors":"Błędy kanałów","st_of_sends":"wysyłek kanałów","st_daily":"Dziennie","st_hourly":"Według godziny","st_weekday":"Według dnia tygodnia","st_channels":"Kanały — najczęściej używane","st_priority":"Priorytet","st_period":"Pora dnia","st_insights":"Wnioski","st_no_data":"Brak historii — dane pojawią się po pierwszych powiadomieniach.","st_loading":"ładowanie…","st_installed":"zainstalowana","st_latest":"najnowsza","st_uptodate":"aktualna","st_update":"dostępna aktualizacja","st_restart":"wymagany restart","st_logged":"zapisane","st_from_archive":"z archiwum SuperNotify","st_archive_err":"archiwum odczytane częściowo","st_wd":["Pn","Wt","Śr","Cz","Pt","So","Nd"],"st_i_share":"{p}% wszystkich wysyłek kanałów idzie przez {c}.","st_i_peak":"Najbardziej ruchliwa godzina to {h}:00 ({n} powiadomień w {d} dni).","st_i_night":"{p}% powiadomień przychodzi między 23:00 a 07:00 — rozważ scenariusz „Nie przeszkadzać”, jeśli to niepożądane.","st_i_night_ok":"Tylko {p}% powiadomień przychodzi w nocy (23–07): godziny ciszy działają.","st_i_weekend":"W weekendy jest {p}% {dir} powiadomień niż w dni robocze.","st_i_errors":"{n} błędów kanałów w {d} dni, głównie na {c}.","st_i_noerr":"Brak błędów kanałów w ostatnich {d} dniach.","st_i_prio":"{p}% powiadomień ma priorytet {prio}.","st_i_trend":"Ostatnie 7 dni: {n}/dzień, {dir} o {p}% względem 7 poprzednich.","st_more":"więcej","st_less":"mniej","st_up":"wzrost","st_down":"spadek"},"SN_ARCH_STRINGS":{"search":"Szukaj w tytule lub wiadomości…","f_all":"Wszystkie","f_today":"Dzisiaj","f_whisper":"Szeptane","wh":"szeptem","said":"Alexa powiedziała","said_by":"{ch} powiedział","none":"żadne powiadomienie nie pasuje","loading":"czytanie archiwum…","recent":"ostatnie powiadomienia","read_at":"odczytano o","today":"Dzisiaj","yesterday":"Wczoraj","failed":"nieudane","missed":"nieodebrane","reasons":{"doppione":"duplikat","nessun target":"brak celu","errore":"błąd","condizione":"warunek","scenario":"scenariusz","presenza":"obecność","priorita":"priorytet","spento":"wył.","pausa":"drzemka","transport spento":"transport wył.","nessuna azione":"brak akcji","dati non validi":"nieprawidłowe dane","sconosciuto":"nieznany"},"f_appliance":"AGD","ap_scope":"wśród ostatnich {n} odczytanych w całości – starsze nie są rozpoznawane"},"SN_WHY_STRINGS":{"pick":"Wybierz powiadomienie, aby zobaczyć, dlaczego trafiło tam, gdzie trafiło.","loading":"ładowanie…","none":"brak powiadomienia","gone":"tego powiadomienia nie ma już w archiwum","priority":"priorytet","dupe":"duplikat","outcomes":{"success":"dostarczone","partial_delivery":"częściowo dostarczone","dupe":"duplikat","failed":"nieudane","error":"nieudane","fallback_delivery":"dostarczone przez kanał zapasowy","no_delivery":"niedostarczone"},"step_call":"Wywołanie","step_scen":"Scenariusze","step_people":"Osoby","step_ch":"Kanały","call_auto":"nie wskazano kanału: zwykłe kierowanie","call_named":"wskazane w wywołaniu:","call_debug":"z debugiem","nobody":"nikogo nie ma w domu","ch_sent":"wysłane","ch_problems":"do sprawdzenia","ch_skipped":"pominięte","pb_failed":"nieudane","pb_missed":"żądane, ale nie wysłane","grp_skipped":"pominięte przez regułę: normalne","grp_not":"niezaangażowane","trace_title":"Pełny ślad wyboru","fix":{"NO_TARGET":"Żaden odbiorca nie ma adresu dla tego kanału: dodaj go odbiorcy, nadaj kanałowi stałe cele albo pomiń go w tym wywołaniu.","ERROR":"Integracja stojąca za tym kanałem odpowiedziała błędem: sprawdź jej wpis w logu.","NO_ACTION":"Kanał nie ma akcji do wywołania: ustaw `action:` w dostarczeniu.","INVALID_ACTION_DATA":"Dane przekazane do akcji zostały odrzucone: sprawdź `data:` wywołania lub dostarczenia."},"no_scenarios":"żaden scenariusz nie obowiązuje","applied":"wymuszony przez wywołanie","required":"wymagany przez wywołanie","constrain":"ograniczony przez wywołanie do","home":"w domu","away":"poza domem","no_channels":"nie wybrano żadnego kanału","st_ok":"dostarczone","st_err":"nieudane","st_skip":"pominięte","calls":"wywołań","calls_1":"wywołanie","target_required":"wymagany cel:","started_by":"wybrany przez","scen_would_off":"wyłączony przez (uchylone)","src_default":"zawsze wł. (domyślnie)","src_scen":"scenariusz","src_call":"samo wywołanie","src_recipient":"odbiorca","r_off_by":"wyłączony przez","call_targets":"cele w wywołaniu","cats":{"entity_id":"encje","mobile_app_id":"urządzenia","person_id":"osoby","email":"e-mail","phone":"telefon","device_id":"urządzenia"},"r_call_off":"wykluczony przez wywołanie","r_scen_off":"wyłączony przez obowiązujący scenariusz","r_disabled":"wyłączony","r_transport_off":"jego transport jest wyłączony","r_only_scen":"startuje tylko, gdy włączy go scenariusz","r_only_fallback":"tylko zapasowy","r_only_explicit":"startuje tylko, gdy wskazany z nazwy","r_priority":"nie dla tego priorytetu","r_unknown":"nie do odtworzenia bez śladu","from_config":"Powody dla kanałów, które nie ruszyły, są odtwarzane z konfiguracji w jej OBECNYM stanie, nie takim, jaki był wtedy.","from_trace":"Powody pochodzą ze śladu wyboru zarchiwizowanego z powiadomieniem.","st_time":"trwało","st_slow":"najwolniejszy","st_rate":"kanałów się powiodło","ua_title":"Cele, których nie przyjął żaden kanał","ua_hint":"Były w wywołaniu, ale żaden wybrany kanał nie przyjmuje tego rodzaju celu.","un_title":"Nazwy, które nie istnieją","sent_by":"Wysłane przez","sent_auto":"automatyzacja","sent_script":"skrypt","sent_person":"","sent_unknown":"nadawca nieznany (brak automatyzacji lub osoby w kontekście)","no_trace":"Pełny ślad wyboru jest zapisywany tylko, gdy wywołanie notify ma debug: true, i archiwizowany, gdy diagnostyka archiwum go uwzględnia.","reasons":{"NO_TARGET":"brak użytecznego celu","DUPE":"duplikat niedawnego powiadomienia","PRIORITY":"nie dla tego priorytetu","SNOOZE":"drzemka","SNOOZED":"drzemka","DELIVERY_CONDITION":"warunek dostarczenia niespełniony","OCCUPANCY":"reguła obecności","ERROR":"błąd","DELIVERY_DISABLED":"wyłączony","SCENARIO":"scenariusz","TRANSPORT_DISABLED":"jego transport jest wyłączony","NO_SCENARIO":"wymagany scenariusz nie obowiązuje","NO_ACTION":"brak akcji do wywołania","INVALID_ACTION_DATA":"nieprawidłowe dane akcji","UNKNOWN":"nieznany powód"}},"SN_TOOLS_STRINGS":{"maint":"Konserwacja","enq":"Zapytaj SuperNotify","refresh":"Opublikuj ponownie każdą encję","refresh_btn":"Odśwież","resume_btn":"Wznów","refreshed":"Encje opublikowane ponownie.","resume_all":"Wznów każdą pauzę","cleared_n":"pauz wznowionych","purge_arch":"Wyczyść archiwum","purge_media":"Wyczyść obrazy","older":"starsze niż","days":"dni","purge_btn":"Wyczyść","confirm":"Dotknij ponownie, aby potwierdzić","purged":"usunięte","remaining":"zostało","reset":"Cofnij zmiany wprowadzone ręcznie","reset_btn":"Resetuj","reset_none":"Nic do zresetowania: wszystko jest zgodne z konfiguracją.","reset_done":"Przywrócono konfigurację:","k_all":"wszystko","k_scenario":"scenariusze","k_delivery":"kanały","k_recipient":"osoby","k_transport":"transporty","q_config":"Konfiguracja","q_scen":"Scenariusze","q_active":"Aktywne scenariusze","q_by_scen":"Kanały według scenariusza","q_implicit":"Kanały domyślne","q_recipients":"Odbiorcy","q_occupancy":"Kto jest w domu","q_snoozes":"Pauzy","q_last":"Ostatnie powiadomienie","copy":"Kopiuj JSON","copied":"Skopiowano","close":"Zamknij","empty":"(puste)","err":"SuperNotify odpowiedział błędem:","settings":"Ustawienia integracji","running":"w toku…","more":"więcej"},"SN_FORM_LABELS":{"_common":"Wygląd i tekst","style":"Kolory","icons":"Ikony","show_version":"Pokaż wersję karty","intro":"Tekst wprowadzający na górze","title":"Tytuł","dnd_entity":"Przełącznik Nie przeszkadzać","quiet_entity":"Obliczony stan ciszy (opcjonalnie)","presence_entity":"Osoba na pasku stanu","archive_days":"Czyszczenie archiwum: starsze niż (dni)","media_days":"Czyszczenie obrazów: starsze niż (dni)","occupancy":"Kto jest w domu (z SuperNotify)","repairs":"Naprawy SuperNotify na liście stanu","snooze_announce":"Ogłaszaj pauzy na głos (kanał ogłoszeń)","snooze_via":"Pauzy idą przez","o_event":"zdarzenie przycisków push (admin)","o_voice":"komendy głosowe","snooze_minutes":"Długość drzemki (minuty)","snooze_panel":"Kafelek drzemki otwiera panel pauzy","announce_delivery":"Kanał do ogłoszeń","last_notification":"Pokaż ostatnie powiadomienie","last_channels":"Jeden chip na kanał w ostatnim powiadomieniu","repeat_entity":"Przycisk powtórzenia ostatniego (opcjonalnie)","tile_layout":"Kafelki","tile_columns":"Kolumny kafelków (puste = automatycznie)","update_entity":"Encja aktualizacji SuperNotify","cards_update_entity":"Encja aktualizacji kart","health":"Stan na górze","poll_seconds":"Odświeżaj co (sekundy)","group":"Grupuj według sposobu startu kanału","hide_defaults":"Ukryj automatyczne kanały DEFAULT_","limit":"Powiadomienia na liście","expand":"Rozwiń zwinięte części","max_height":"Maksymalna wysokość (CSS, np. 70vh)","trigger_entity":"Odśwież, gdy to się zmieni","dry_run":"Pokaż „Wypróbuj bez wysyłania”","dry_run_dupe_check":"Symuluj też wykrywanie duplikatów","days":"Domyślnie pokazywane dni","manifest_url":"URL manifestu automatyzacji","o_supernotify":"SuperNotify","o_theme":"Motyw Home Assistant","o_mdi":"Ikony Home Assistant","o_emoji":"Emoji","o_row":"Ikona po lewej","o_stacked":"Wysokie, ikona na górze","o_auto":"Automatycznie"},"SN_NATIVE_STR":{"all_good":"Wszystko w porządku","paused":"Wstrzymane","resume":"Wznów","test":"Wyślij test","sure":"Dotknij ponownie, aby wysłać","sent":"Wysłane","last":"Ostatnie","none":"Brak powiadomień","ago":"temu","h":"godz.","err":"transportów z błędami","off":"kanałów wył."},"SN_STRATEGY_TITLES":{"home":"Główna","archive":"Archiwum","send":"Wyślij","setup":"Ustawienia","stats":"Statystyki","tools":"Narzędzia","title":"SuperNotify","appliances":"AGD"},"SN_APPL_STRINGS":{"title":"AGD","loading":"odczyt…","none":"Brak urządzeń: dodaj je w Appliance Autonotify (Ustawienia → Urządzenia i usługi).","st_run":"Pracuje","st_cleaning":"Sprząta","st_done":"Gotowe · do opróżnienia","st_done_other":"Gotowe","st_err":"Potrzebuje pomocy","m_switch_on":"Włącz gniazdko","done_switch_on":"Gniazdko włączone.","done_action":"Gotowe: {n}.","confirm_action":"Wykonać «{n}»?","open_entity":"Otwórz, aby zmienić","chip_notifs":"Powiadomienia","chip_device":"Urządzenie","not_found":"Brak urządzenia o nazwie «{n}».","last7":"Ostatnie 7 dni","col_day":"Dzień","col_cycles":"Cykle","col_time":"Czas","col_energy":"Zużycie","source_h":"Źródło","manual_src":"dodane ręcznie: pracuje powyżej {w}","tab_info":"Przegląd","tab_stats":"Zużycie i cykle","tab_cleans":"Sprzątania","tab_prints":"Wydruki","last_run":"Ostatni cykl","avg_run":"Średnio","reminders_h":"Powiadomienia","plug":"Gniazdko","plug_on":"włączone","plug_off":"wyłączone","error_h":"Błąd","open_device":"Urządzenie w Home Assistant","prints":"wydruki","print1":"wydruk","per_print":"Każdy wydruk w tym miesiącu","last_prints":"Ostatnie wydruki","no_print_month":"W tym miesiącu jeszcze bez wydruku","no_print":"Jeszcze bez wydruku","col_fil":"Filament","failed":"nieudany","per_run":"Każdy cykl w tym miesiącu","dev_hist":"Każdy pochodzi z historii Home Assistant (ostatnie {n} dni); godziny z licznika urządzenia, jeśli go ma.","cleans":"sprzątania","clean1":"sprzątanie","per_clean":"Każde sprzątanie w tym miesiącu","avg_clean":"średnio {d}","col_area":"Powierzchnia","last_cleans":"Ostatnie sprzątania","no_clean_month":"W tym miesiącu jeszcze bez sprzątania","no_clean":"Jeszcze bez sprzątania","vac_hist":"Sumy pochodzą z liczników robota, pojedyncze sprzątania z historii Home Assistant (ostatnie {n} dni).","st_paused":"Wstrzymane","st_returning":"Wraca do stacji","st_charging":"Ładuje się","st_docked_w":"W stacji","st_idle":"Bezczynne","st_off":"Wyłączone","stopped":"Bezczynne","yesterday":"wczoraj","u_min":"min","u_h":"godz.","start":"Start","so_far":"dotąd","no_cycle":"Jeszcze bez cyklu","last_cycle":"Ostatni cykl {d}","ended_at":"Skończone o {t}","reminders":"+{n} przypomnień do {t}","reminder1":"+1 przypomnienie o {t}","end_est":"Przewidywany koniec","left":"zostało {d}","almost":"zaraz skończy","est_from_avg":"szacunek z podobnych cykli","running_for":"Pracuje od {d}","btn_empty":"Opróżnione","btn_seen":"Zrobione","btn_resume":"Wznów sprzątanie","m_switch_off":"Wyłącz gniazdko","m_remind":"Przypomnij później","details":"Szczegóły","settings":"Ustawienia","more":"Więcej","details_link":"Szczegóły, zużycie i cykle","done_empty":"Zrobione: przypomnienia ustają.","done_remind":"Przypomni później.","done_switch":"Gniazdko wyłączone.","done_resume":"Sprzątanie wznowione.","err":"Błąd","new_dev":"Nowe urządzenia: {n}","new_dev1":"1 nowe urządzenie","battery":"Bateria","consumable":"{n}: {p}%","maint_in":"pozostało cykli: {c}","maint_next":"przy następnym cyklu","maint_due":"do zrobienia","maint_of":"{d} z {e}","maint_done":"Zrobione","confirm_maint":"Oznaczyć «{n}» jako zrobione? Liczenie zacznie się od nowa.","conn_lost":"utracono połączenie: ostatni znany stan","cons_h":"Materiały eksploatacyjne","commands":"Polecenia","tap_again":"Dotknij ponownie, aby potwierdzić","empty_since":"Do opróżnienia od","done_since":"Zakończono","avg_cycle":"Średni cykl","maint_tab":"Konserwacja","tab_stats_short":"Zużycie","read_failed":"Nie udało się odczytać historii ({e}); ponowię za chwilę.","retry":"Ponów","see_chart":"Pokaż wykres","back":"Wstecz","avg_line":"średnio {v}","tap_bar":"Dotknij słupka, aby zobaczyć cykl","k_station":"Stacja","off_since":"Wyłączone od","close":"Zamknij","power_now":"teraz","p_today":"Dziś","p_week":"Tydzień","p_month":"Miesiąc","p_year":"Rok","cycles":"cykli","cycle1":"cykl","per_cycle":"Zużycie na cykl w tym miesiącu","short":"Krótkie","long":"Długie","anomalous":"Nietypowe","avg":"śr. {d}, {k}","last_cycles":"Ostatnie cykle","col_start":"Start","col_dur":"Czas","col_cost":"Koszt","no_cycle_month":"W tym miesiącu jeszcze bez cyklu","coarse":"Cykle sprzed ponad 10 dni liczone są co godzinę.","open_notifs":"Powiadomienia urządzenia","no_power":"Nie znaleziono czujnika mocy: podaj go jako `power_entity` w `appliances:`.","no_power_vac":"Robot sprzątający nie ma czujnika mocy: zużycie i cykle nie są liczone."}},"pt":{"SN_STRINGS":{"presence":"Presença","time_band":"Faixa horária","quiet":"Silêncio","act_scen":"Cenários ativos","on":"ligado","off":"desligado","active":"ativo","dnd":"Não incomodar","tap_silence":"toque para silenciar","snooze":"Pausa","min":"min","pause_nc":"pausar não críticas","snoozed":"Em pausa","until":"até","tap_clear":"toque para limpar","announce":"Anunciar","intercom":"intercomunicador","announce_ph":"Anunciar em todos os altifalantes…","send":"Enviar","announced":"Anunciado","cleared":"Pausas removidas","snoozed_for":"Notificações não críticas em pausa durante","sent":"Enviadas","yesterday":"ontem","deliveries":"Entregas","last_notif":"Última notificação","transports":"Transportes","delivered":"entregue","failed":"falhou","channels":"canais","none":"nenhum","no_transports":"nenhuma entidade de transporte encontrada","tr_used":"usado por","tr_unused":"nenhum canal o usa","start":"início","volume":"volume","now":"agora","crosses":"passa a meia-noite","no_voice":"sem voz","mute_hint":"Uma faixa a <b>0%</b> não envia <b>nenhum anúncio por voz</b> (Alexa e TTS desligados, push e painel continuam a ser entregues). Os alertas críticos e de prioridade alta falam sempre.","enabled":"ativado","grp_auto":"Arrancam sozinhos","grp_named":"Só quando indicados na chamada","grp_scen":"Só com um cenário","grp_fallback":"Reserva, quando os outros falham","ch_title":"Canais","ch_count":"{on} de {tot} ligados","off_manual":"desligado","paused_by":"em pausa agora por","on_by":"ligado agora através de","fixed_targets":"destinos fixos","no_deliveries":"nenhuma entidade de entrega encontrada","home":"em casa","away":"fora","devices":"dispositivos","devices_1":"dispositivo","rc_test":"Enviar um teste","rc_test_confirm":"Toque de novo para enviar","rc_test_sent":"Teste enviado","rc_test_title":"Teste SuperNotify","rc_test_msg":"Mensagem de teste do painel,","overrides":"substituições de entrega","overrides_1":"substituição de entrega","no_contact":"sem contactos","no_recipients":"nenhuma entidade de destinatário encontrada","details":"Detalhes","h_update":"atualização disponível:","h_restart":"reinicie o Home Assistant para concluir a atualização","h_uptodate":"atualizado","h_transport_err":"transportes com erros","h_channels_off":"canais desligados","h_all_good":"Tudo bem","h_failures":"falhas","h_failures_1":"falha","h_transport_err_1":"transporte com erros","h_channels_off_1":"canal desligado","channels_1":"canal","band_early_morning":"Madrugada","band_morning":"Manhã","band_afternoon":"Tarde","band_evening":"Fim de tarde","band_night":"Noite","band_late_night":"Noite avançada","h_look_1":"1 coisa a verificar","h_look_n":"{n} coisas a verificar","h_rest_ok":"todo o resto funciona","h_ch_on":"{on} de {tot} canais ligados","h_open":"Abrir","ln_delivered":"entregue","ln_failed":"falhou","ln_why":"Porquê","tgt_loading":"a carregar o seletor…","bands_empty_t":"Ainda sem faixas horárias","bands_empty":"Adicione uma faixa por cada parte do dia: um input_datetime para o início e um input_number para o volume da voz.","active_now":"ativo agora","disabled":"desativado","other":"Outros","manual":"manual","apply_now":"aplicar agora","applied":"Aplicado","apply_off":"toque para deixar de aplicar","enabled_lbl":"ativado","reset_overrides":"Repor substituições","reset_done":"substituições repostas","transport_off":"transporte desligado","last_notified":"última notificação","never_notified":"nunca notificado","media":"multimédia","no_scenarios":"nenhuma entidade de cenário encontrada","sim_pick":"🎬 Cenários — toque para simular","sim_fire":"📤 Canais","sim_hint":"Dados reais do motor (serviços enquire). A filtragem de entregas por prioridade acontece no motor e não é simulada aqui. Desativado prevalece sobre ativado, como na combinação em execução.","sim_none":"nenhuma entrega seria acionada","sim_go":"Seria enviado","sim_stop":"Não seria enviado","sim_r_default":"arranca sozinho","sim_r_on":"ligado por","sim_r_off":"desligado por","sim_r_named":"só quando indicado na chamada","sim_r_scen":"só com um cenário que o ligue","sim_r_fallback":"reserva, quando os outros falham","sim_r_switched":"desligado","title":"Título","message":"Mensagem","priority":"Prioridade","channels_lbl":"Canais — nenhum escolhido = encaminhamento normal","camera_lbl":"Captura da câmara","preview":"Pré-visualização","no_title":"(sem título)","no_message":"(sem mensagem)","default_prio":"predefinida (média)","comp_hint":"Os canais escolhidos são enviados com delivery_selection: fixed (só esses são acionados). Crítica é mesmo crítica — sirenes incluídas.","critical_confirm":"Enviar uma notificação CRÍTICA? Sirenes e volume máximo incluídos.","sent_toast":"Enviado","write_or_pick":"Escreva uma mensagem, ou escolha uma câmara ou um canal","send_err":"Não enviado","dry_btn":"Experimentar sem enviar","dry_title":"Se o enviasse agora","dry_err":"A simulação falhou","dry_nobody":"nenhum destinatário, só destinos diretos","dry_none":"Nenhum canal selecionado","dry_scen":"Cenários ativos","dry_raw":"Resposta em bruto","dry_prio":"Prioridade","dry_would_n":"canais enviariam","dry_nothing":"Nada seria enviado","dry_dupe":"Duplicado de uma notificação recente: seria descartada","dry_no_dupe":"Verificação de duplicados não simulada, por isso o Enviar real logo a seguir não é bloqueado.","dry_home":"Casa","dry_empty":"O SuperNotify não deu resposta: é a 2.12 ou posterior?","prio_minimum":"Mínima","prio_low":"Baixa","prio_medium":"Média","prio_high":"Alta","prio_critical":"Crítica","target_lbl":"Destino — pessoas, dispositivos, áreas, pisos, etiquetas","custom_target_lbl":"Destinos personalizados (e-mail, IDs do Telegram, …) — separados por vírgulas","adv_title":"Opções avançadas","adv_spoken":"Mensagem falada (Alexa, TTS)","adv_spoken_ph":"o que os altifalantes dizem, se for diferente do texto","adv_apply":"Aplicar estes cenários","adv_require":"Enviar só se estes cenários estiverem ativos","adv_constrain":"Considerar só estes cenários","adv_snapshot":"Imagem a partir de um URL","adv_debug":"Depuração: registar o rastreio completo da seleção (mostrado pelo cartão Porquê)","custom_target_ph":"ex. user@example.com, 123456789","native_target_tag":"🎯 área/piso/etiqueta nativos","target_warn":"⚠️ Áreas, pisos e etiquetas só são resolvidos por notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts e chime. Com qualquer outro canal — ou com o encaminhamento predefinido quando nenhum canal é escolhido acima — a notificação pode ficar silenciosamente sem destino. Escolha um canal compatível, ou adicione diretamente uma pessoa/dispositivo.","aut_search":"Pesquisar automações…","aut_all":"Todas","aut_none":"Sem resultados","aut_err":"Manifesto não encontrado — gere-o com tools/genera_vista_automazioni.py","aut_updated":"lista atualizada","aut_count":"automações","aut_count_1":"automação","never":"nunca","ago_now":"agora","ago_min":"min atrás","ago_h":"h atrás","ago_d":"d atrás","aut_disabled_only":"Só desativadas","grp_active":"ativos","repeat":"Repetir","skipped_n":"ignorados","left":"restantes","missed_n":"perdidos","snz_all":"tudo","snz_nc":"não críticas","snz_prio":"prioridade","snz_transport":"transporte","snz_for":"durante","snz_choose":"escolha o quê e por quanto tempo","snz_title":"Pausar notificações","snz_what":"O quê","snz_nc_l":"Não críticas","snz_all_l":"Tudo","snz_ch":"Um canal","snz_pr":"Uma prioridade","snz_who":"Para quem","snz_everyone":"Todos","snz_me":"Só eu","snz_len":"Quanto tempo","snz_forever":"Até eu retomar","snz_go":"Pausar","snz_close":"Fechar","rs_hand":"à mão","rs_voice":"por voz","rs_assist":"pelo assistente","snz_voice_info":"As suas pausas passam pelos comandos de voz do SuperNotify: são só suas.","snz_voice_off":"Os comandos de voz do SuperNotify estão desligados: ative-os nas opções da integração.","snz_resume_mine":"Retomar as minhas","go_open":"Mostrar","dl_probe":"Experimentar este canal","probe_msg":"Teste de canal a partir do painel","sc_why":"Porquê","sc_yes":"Aplica-se agora","sc_no":"Não se aplica agora","sc_manual_why":"Cenário manual: aplicado à mão","sc_no_cond":"Sem condições","sc_off_sw":"Desligado","sc_not_eval":"não verificado","sc_now":"agora","sc_diff_btn_on":"O que muda se se aplicar","sc_diff_btn_off":"O que muda sem ele","sc_diff_on":"Se se aplicasse, para uma notificação média agora:","sc_diff_off":"Sem ele, para uma notificação média agora:","sc_diff_add":"também enviaria","sc_diff_rem":"deixaria de enviar","sc_diff_none":"sem diferença","c_state":"{e} está {s}","c_template":"condição de modelo","c_time":"hora","c_after":"depois de","c_before":"antes de","c_numeric":"{e}","c_above":"acima de","c_below":"abaixo de","c_and":"todas estas","c_or":"pelo menos uma destas","c_not":"nenhuma destas","c_or_join":" ou ","sim_hint_dry":"A resposta do próprio SuperNotify (simulação, nada é enviado): uma notificação agora, com a prioridade e só os cenários escolhidos acima.","sim_msg":"Teste do simulador","sim_prio":"Prioridade","sa_snooze":"{what} em pausa durante {len}.","sa_silence":"{what} silenciadas até nova ordem.","sa_resume":"{what} reativadas.","sa_resume_one":"Pausa terminada: {x}.","sa_resume_all":"Notificações reativadas.","sa_w_nc":"Notificações não críticas","sa_w_all":"Todas as notificações","sa_w_ch":"Canal {x}","sa_w_pr":"Notificações de prioridade {x}","sa_w_mine":"As suas notificações","sa_for":"para {x}","sa_min":"{n} minutos","sa_hour":"uma hora","sa_hours":"{n} horas","occ_title":"Quem está em casa","occ_home_l":"Em casa","occ_ALL_HOME":"Todos em casa","occ_ALL_AWAY":"Todos fora","occ_LONE_HOME":"Só um em casa","occ_MULTI_HOME":"Alguns em casa","occ_UNDEFINED_OCCUPANTS":"Ninguém monitorizado","h_repairs":"reparações do SuperNotify","h_repairs_1":"reparação do SuperNotify","det_more":"Todos os atributos","det_yes":"sim","det_no":"não","det_action":"Ação","det_target":"Destinos fixos","det_target_req":"Requer um destino","det_target_use":"Os destinos usam","det_inclusion":"Usado quando","det_prio":"Prioridades","det_occ":"Quem tem de estar em casa","det_transport":"Transporte","det_data":"Dados","det_debug":"Depuração","det_err_last":"Último erro","det_err_in":"Em","det_err_n":"Erros desde o arranque","det_select":"Seleção","adv_html":"Texto para e-mail (HTML)","adv_clip":"Clipe de vídeo a partir de um URL","adv_actions":"Botões na notificação","adv_act_id":"id da ação","adv_act_title":"texto do botão","adv_act_add":"+ botão","adv_groups":"Grupos de botões (vírgula)","adv_dc":"Definições do canal para esta notificação","adv_dc_ph":"chave: valor, um por linha","adv_dc_add":"+ canal","snz_active":"Em pausa agora","snz_resume":"Retomar","snz_resume_all":"Retomar tudo","snz_until_resumed":"até retomar","snz_done":"Em pausa","snz_resumed":"Retomado","no_notif":"ainda sem notificações","st_title":"Utilização","st_days_short":"d","st_total":"Notificações","st_avg":"por dia","st_today":"Hoje","st_vs_avg":"vs. média","st_peak_hour":"Hora de pico","st_top_channel":"Canal mais usado","st_errors":"Erros de canal","st_of_sends":"dos envios por canal","st_daily":"Por dia","st_hourly":"Por hora do dia","st_weekday":"Por dia da semana","st_channels":"Canais — mais usados","st_priority":"Prioridade","st_period":"Período do dia","st_insights":"Observações","st_no_data":"Ainda sem histórico — os dados aparecem após as primeiras notificações.","st_loading":"a carregar…","st_installed":"instalada","st_latest":"mais recente","st_uptodate":"atualizado","st_update":"atualização disponível","st_restart":"reinício necessário","st_logged":"registadas","st_from_archive":"do arquivo do SuperNotify","st_archive_err":"arquivo lido em parte","st_wd":["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"],"st_i_share":"{p}% de todos os envios por canal passam por {c}.","st_i_peak":"A hora mais movimentada é às {h}:00 ({n} notificações em {d} dias).","st_i_night":"{p}% das notificações chegam entre as 23:00 e as 07:00 — considere um cenário Não incomodar se não as quiser.","st_i_night_ok":"Apenas {p}% das notificações chegam à noite (23–07): as horas de silêncio estão a funcionar.","st_i_weekend":"Os dias de fim de semana têm {p}% {dir} notificações do que os dias úteis.","st_i_errors":"{n} erros de canal em {d} dias, sobretudo em {c}.","st_i_noerr":"Nenhum erro de canal nos últimos {d} dias.","st_i_prio":"{p}% das notificações têm prioridade {prio}.","st_i_trend":"Últimos 7 dias: {n}/dia, {dir} {p}% face aos 7 anteriores.","st_more":"mais","st_less":"menos","st_up":"subida de","st_down":"descida de"},"SN_ARCH_STRINGS":{"search":"Pesquisar título ou mensagem…","f_all":"Todas","f_today":"Hoje","f_whisper":"Sussurradas","wh":"sussurrada","said":"A Alexa disse","said_by":"{ch} disse","none":"nenhuma notificação corresponde","loading":"a ler o arquivo…","recent":"últimas notificações","read_at":"lido às","today":"Hoje","yesterday":"Ontem","failed":"falhou","missed":"perdido","reasons":{"doppione":"duplicado","nessun target":"sem destino","errore":"erro","condizione":"condição","scenario":"cenário","presenza":"presença","priorita":"prioridade","spento":"desligado","pausa":"em pausa","transport spento":"transporte desligado","nessuna azione":"sem ação","dati non validi":"dados inválidos","sconosciuto":"desconhecido"},"f_appliance":"Eletrodomésticos","ap_scope":"entre as últimas {n} lidas por completo: as mais antigas não são reconhecidas"},"SN_WHY_STRINGS":{"pick":"Escolha uma notificação para ver porque foi para onde foi.","loading":"a carregar…","none":"nenhuma notificação","gone":"esta notificação já não está no arquivo","priority":"prioridade","dupe":"duplicado","outcomes":{"success":"entregue","partial_delivery":"entregue em parte","dupe":"duplicado","failed":"falhou","error":"falhou","fallback_delivery":"entregue pelo canal de reserva","no_delivery":"não entregue"},"step_call":"Chamada","step_scen":"Cenários","step_people":"Pessoas","step_ch":"Canais","call_auto":"nenhum canal indicado: encaminhamento normal","call_named":"indicados na chamada:","call_debug":"com depuração","nobody":"ninguém em casa","ch_sent":"enviados","ch_problems":"a verificar","ch_skipped":"ignorados","pb_failed":"falhou","pb_missed":"pedido mas não enviado","grp_skipped":"ignorados por uma regra: normal","grp_not":"não envolvidos","trace_title":"Rastreio completo da seleção","fix":{"NO_TARGET":"Nenhum destinatário tem um endereço para este canal: adicione um a um destinatário, dê ao canal destinos fixos ou deixe-o fora desta chamada.","ERROR":"A integração por trás deste canal respondeu com um erro: verifique a respetiva entrada no registo.","NO_ACTION":"O canal não tem nenhuma ação a chamar: defina `action:` na entrega.","INVALID_ACTION_DATA":"Os dados passados à ação foram rejeitados: verifique o `data:` da chamada ou da entrega."},"no_scenarios":"nenhum cenário em vigor","applied":"forçado pela chamada","required":"exigido pela chamada","constrain":"limitado pela chamada a","home":"em casa","away":"fora","no_channels":"nenhum canal foi selecionado","st_ok":"entregue","st_err":"falhou","st_skip":"ignorado","calls":"chamadas","calls_1":"chamada","target_required":"destino exigido:","started_by":"selecionado por","scen_would_off":"desligado por (anulado)","src_default":"sempre ligado (predefinição)","src_scen":"cenário","src_call":"a própria chamada","src_recipient":"destinatário","r_off_by":"desligado por","call_targets":"destinos na chamada","cats":{"entity_id":"entidades","mobile_app_id":"dispositivos","person_id":"pessoas","email":"e-mail","phone":"telefone","device_id":"dispositivos"},"r_call_off":"excluído pela chamada","r_scen_off":"desligado por um cenário em vigor","r_disabled":"desligado","r_transport_off":"o seu transporte está desligado","r_only_scen":"só arranca quando um cenário o liga","r_only_fallback":"apenas reserva","r_only_explicit":"só arranca quando pedido pelo nome","r_priority":"não para esta prioridade","r_unknown":"não reconstituível sem o rastreio","from_config":"Os motivos dos canais que não arrancaram são reconstituídos a partir da configuração ATUAL, não da que existia na altura.","from_trace":"Os motivos vêm do rastreio da seleção arquivado com a notificação.","st_time":"demorou","st_slow":"mais lento","st_rate":"dos canais tiveram êxito","ua_title":"Destinos que nenhum canal aceitou","ua_hint":"Estavam na chamada, mas nenhum canal selecionado aceita este tipo de destino.","un_title":"Nomes que não existem","sent_by":"Enviado por","sent_auto":"automação","sent_script":"script","sent_person":"","sent_unknown":"remetente desconhecido (nenhuma automação ou pessoa no seu contexto)","no_trace":"O rastreio completo da seleção só é registado quando a chamada notify tem debug: true, e arquivado quando os diagnósticos do arquivo o incluem.","reasons":{"NO_TARGET":"sem destino utilizável","DUPE":"duplicado de uma notificação recente","PRIORITY":"não para esta prioridade","SNOOZE":"em pausa","SNOOZED":"em pausa","DELIVERY_CONDITION":"condição da entrega falsa","OCCUPANCY":"regra de presença","ERROR":"erro","DELIVERY_DISABLED":"desligado","SCENARIO":"cenário","TRANSPORT_DISABLED":"o seu transporte está desligado","NO_SCENARIO":"um cenário exigido não está em vigor","NO_ACTION":"nenhuma ação a chamar","INVALID_ACTION_DATA":"dados da ação inválidos","UNKNOWN":"motivo desconhecido"}},"SN_TOOLS_STRINGS":{"maint":"Manutenção","enq":"Perguntar ao SuperNotify","refresh":"Publicar de novo todas as entidades","refresh_btn":"Atualizar","resume_btn":"Retomar","refreshed":"Entidades publicadas de novo.","resume_all":"Retomar todas as pausas","cleared_n":"pausas retomadas","purge_arch":"Limpar o arquivo","purge_media":"Limpar as imagens","older":"com mais de","days":"dias","purge_btn":"Limpar","confirm":"Toque de novo para confirmar","purged":"eliminados","remaining":"restantes","reset":"Desfazer as alterações feitas à mão","reset_btn":"Repor","reset_none":"Nada a repor: está tudo como configurado.","reset_done":"De volta à configuração:","k_all":"tudo","k_scenario":"cenários","k_delivery":"canais","k_recipient":"pessoas","k_transport":"transportes","q_config":"Configuração","q_scen":"Cenários","q_active":"Cenários ativos","q_by_scen":"Canais por cenário","q_implicit":"Canais predefinidos","q_recipients":"Destinatários","q_occupancy":"Quem está em casa","q_snoozes":"Pausas","q_last":"Última notificação","copy":"Copiar JSON","copied":"Copiado","close":"Fechar","empty":"(vazio)","err":"O SuperNotify respondeu com um erro:","settings":"Definições da integração","running":"a processar…","more":"mais"},"SN_FORM_LABELS":{"_common":"Aspeto e texto","style":"Cores","icons":"Ícones","show_version":"Mostrar a versão do cartão","intro":"Texto de introdução no topo","title":"Título","dnd_entity":"Interruptor Não incomodar","quiet_entity":"Estado de silêncio calculado (opcional)","presence_entity":"Pessoa para a barra de estado","archive_days":"Limpeza do arquivo: com mais de (dias)","media_days":"Limpeza das imagens: com mais de (dias)","occupancy":"Quem está em casa (do SuperNotify)","repairs":"Reparações do SuperNotify na lista de estado","snooze_announce":"Dizer as pausas em voz alta (canal de anúncios)","snooze_via":"As pausas passam por","o_event":"o evento dos botões push (admin)","o_voice":"os comandos de voz","snooze_minutes":"Duração da pausa (minutos)","snooze_panel":"O mosaico Pausa abre o painel de pausa","announce_delivery":"Canal para anúncios","last_notification":"Mostrar a última notificação","last_channels":"Um chip por canal na última notificação","repeat_entity":"Botão repetir a última (opcional)","tile_layout":"Mosaicos","tile_columns":"Colunas de mosaicos (vazio = automático)","update_entity":"Entidade de atualização do SuperNotify","cards_update_entity":"Entidade de atualização dos cartões","health":"Estado no topo","poll_seconds":"Atualizar a cada (segundos)","group":"Agrupar pela forma como um canal arranca","hide_defaults":"Ocultar canais automáticos DEFAULT_","limit":"Notificações na lista","expand":"Abrir as partes recolhidas","max_height":"Altura máxima (CSS, ex. 70vh)","trigger_entity":"Atualizar quando isto mudar","dry_run":"Mostrar \"Experimentar sem enviar\"","dry_run_dupe_check":"Simular também a verificação de duplicados","days":"Dias mostrados por predefinição","manifest_url":"URL do manifesto das automações","o_supernotify":"SuperNotify","o_theme":"Tema do Home Assistant","o_mdi":"Ícones do Home Assistant","o_emoji":"Emoji","o_row":"Ícone à esquerda","o_stacked":"Alto, ícone em cima","o_auto":"Automático"},"SN_NATIVE_STR":{"all_good":"Tudo bem","paused":"Em pausa","resume":"Retomar","test":"Enviar um teste","sure":"Toque de novo para enviar","sent":"Enviado","last":"Última","none":"Ainda sem notificações","ago":"atrás","h":"h","err":"transportes com erros","off":"canais desligados"},"SN_STRATEGY_TITLES":{"home":"Início","archive":"Arquivo","send":"Enviar","setup":"Configuração","stats":"Estatísticas","tools":"Ferramentas","title":"SuperNotify","appliances":"Eletrodomésticos"},"SN_APPL_STRINGS":{"title":"Eletrodomésticos","loading":"a ler…","none":"Sem eletrodomésticos: adicione um no Appliance Autonotify (Definições → Dispositivos e serviços).","st_run":"A funcionar","st_cleaning":"A limpar","st_done":"Terminado · por esvaziar","st_done_other":"Terminado","st_err":"Precisa de ajuda","m_switch_on":"Ligar tomada","done_switch_on":"Tomada ligada.","done_action":"Feito: {n}.","confirm_action":"Executar «{n}»?","open_entity":"Abrir para alterar","chip_notifs":"Notificações","chip_device":"Dispositivo","not_found":"Nenhum aparelho ou dispositivo chamado «{n}».","last7":"Últimos 7 dias","col_day":"Dia","col_cycles":"Ciclos","col_time":"Tempo","col_energy":"Consumo","source_h":"Origem","manual_src":"adicionado à mão: a funcionar acima de {w}","tab_info":"Resumo","tab_stats":"Consumo e ciclos","tab_cleans":"Limpezas","tab_prints":"Impressões","last_run":"Último ciclo","avg_run":"Média","reminders_h":"Notificações","plug":"Tomada","plug_on":"ligada","plug_off":"desligada","error_h":"Erro","open_device":"O dispositivo no Home Assistant","prints":"impressões","print1":"impressão","per_print":"Cada impressão do mês","last_prints":"Últimas impressões","no_print_month":"Ainda nenhuma impressão este mês","no_print":"Ainda nenhuma impressão","col_fil":"Filamento","failed":"falhada","per_run":"Cada ciclo do mês","dev_hist":"Cada uma vem do histórico do Home Assistant (últimos {n} dias); as horas, do contador do aparelho quando o tem.","cleans":"limpezas","clean1":"limpeza","per_clean":"Cada limpeza do mês","avg_clean":"média {d}","col_area":"Área","last_cleans":"Últimas limpezas","no_clean_month":"Ainda nenhuma limpeza este mês","no_clean":"Ainda nenhuma limpeza","vac_hist":"Os totais vêm dos contadores do robô; cada limpeza, do histórico do Home Assistant (últimos {n} dias).","st_paused":"Em pausa","st_returning":"A voltar à base","st_charging":"A carregar","st_docked_w":"Na base","st_idle":"Parado","st_off":"Desligado","stopped":"Parados","yesterday":"ontem","u_min":"min","u_h":"h","start":"Início","so_far":"até agora","no_cycle":"Ainda nenhum ciclo","last_cycle":"Último ciclo {d}","ended_at":"Terminou às {t}","reminders":"+{n} lembretes até às {t}","reminder1":"+1 lembrete às {t}","end_est":"Fim previsto","left":"faltam {d}","almost":"quase a terminar","est_from_avg":"estimativa de ciclos parecidos","running_for":"A funcionar há {d}","btn_empty":"Esvaziado","btn_seen":"Feito","btn_resume":"Retomar limpeza","m_switch_off":"Desligar a tomada","m_remind":"Lembrar mais tarde","details":"Detalhes","settings":"Definições","more":"Mais","details_link":"Detalhes, consumo e ciclos","done_empty":"Feito: os lembretes param.","done_remind":"Vai lembrar mais tarde.","done_switch":"Tomada desligada.","done_resume":"Limpeza retomada.","err":"Erro","new_dev":"{n} dispositivos novos","new_dev1":"1 dispositivo novo","battery":"Bateria","consumable":"{n} a {p}%","maint_in":"daqui a {c} ciclos","maint_next":"no próximo ciclo","maint_due":"a fazer","maint_of":"{d} de {e}","maint_done":"Feito","confirm_maint":"Marcar «{n}» como feito? A contagem recomeça.","conn_lost":"ligação perdida: último estado conhecido","cons_h":"Consumíveis","commands":"Comandos","tap_again":"Toque de novo para confirmar","empty_since":"Por esvaziar há","done_since":"Terminado há","avg_cycle":"Ciclo médio","maint_tab":"Manutenção","tab_stats_short":"Consumo","read_failed":"Não foi possível ler o histórico ({e}); tento de novo em breve.","retry":"Tentar de novo","see_chart":"Ver gráfico","back":"Voltar","avg_line":"média {v}","tap_bar":"Toque numa barra para ver esse ciclo","k_station":"Base","off_since":"Desligado há","close":"Fechar","power_now":"agora","p_today":"Hoje","p_week":"Semana","p_month":"Mês","p_year":"Ano","cycles":"ciclos","cycle1":"ciclo","per_cycle":"Consumo por ciclo este mês","short":"Curtos","long":"Longos","anomalous":"Anómalos","avg":"média {d}, {k}","last_cycles":"Últimos ciclos","col_start":"Início","col_dur":"Duração","col_cost":"Custo","no_cycle_month":"Ainda nenhum ciclo este mês","coarse":"Os ciclos com mais de 10 dias são contados à hora.","open_notifs":"Notificações do eletrodoméstico","no_power":"Nenhum sensor de potência encontrado: indique-o com `power_entity` em `appliances:`.","no_power_vac":"Um robot aspirador não tem sensor de potência: consumo e ciclos não são contados."}},"ja":{"SN_STRINGS":{"presence":"在宅状況","time_band":"時間帯","quiet":"静音","act_scen":"有効なシナリオ","on":"オン","off":"オフ","active":"有効","dnd":"おやすみモード","tap_silence":"タップで消音","snooze":"一時停止","min":"分","pause_nc":"重要でない通知を停止","snoozed":"一時停止中","until":"まで","tap_clear":"タップで解除","announce":"アナウンス","intercom":"インターホン","announce_ph":"すべてのスピーカーでアナウンス…","send":"送信","announced":"アナウンスしました","cleared":"一時停止を解除しました","snoozed_for":"重要でない通知を一時停止しました:","sent":"送信済み","yesterday":"昨日","deliveries":"配信","last_notif":"最後の通知","transports":"トランスポート","delivered":"配信済み","failed":"失敗","channels":"チャンネル","none":"なし","no_transports":"トランスポートのエンティティが見つかりません","tr_used":"使用中:","tr_unused":"使用しているチャンネルなし","start":"開始","volume":"音量","now":"現在","crosses":"日付をまたぐ","no_voice":"音声なし","mute_hint":"<b>0%</b> の時間帯は<b>音声アナウンスを一切行いません</b>（Alexa と TTS はオフ、プッシュとダッシュボードには届きます）。緊急・高優先度の通知は常に読み上げます。","enabled":"有効","grp_auto":"自動で開始","grp_named":"呼び出しで指定されたときのみ","grp_scen":"シナリオがあるときのみ","grp_fallback":"予備（他が失敗したとき）","ch_title":"チャンネル","ch_count":"{tot} 件中 {on} 件オン","off_manual":"オフにされています","paused_by":"現在停止中:","on_by":"現在オン:","fixed_targets":"固定ターゲット","no_deliveries":"配信のエンティティが見つかりません","home":"在宅","away":"外出","devices":"台のデバイス","devices_1":"台のデバイス","rc_test":"テスト送信","rc_test_confirm":"もう一度タップで送信","rc_test_sent":"テストを送信しました","rc_test_title":"SuperNotify テスト","rc_test_msg":"ダッシュボードからのテストメッセージ、","overrides":"件の配信オーバーライド","overrides_1":"件の配信オーバーライド","no_contact":"連絡先なし","no_recipients":"受信者のエンティティが見つかりません","details":"詳細","h_update":"アップデートあり:","h_restart":"アップデートを完了するには Home Assistant を再起動してください","h_uptodate":"最新です","h_transport_err":"件のトランスポートでエラー","h_channels_off":"件のチャンネルがオフ","h_all_good":"問題なし","h_failures":"件の失敗","h_failures_1":"件の失敗","h_transport_err_1":"件のトランスポートでエラー","h_channels_off_1":"件のチャンネルがオフ","channels_1":"チャンネル","band_early_morning":"早朝","band_morning":"朝","band_afternoon":"午後","band_evening":"夕方","band_night":"夜","band_late_night":"深夜","h_look_1":"確認が必要な項目が1件","h_look_n":"確認が必要な項目が {n} 件","h_rest_ok":"その他は正常です","h_ch_on":"{tot} チャンネル中 {on} 件オン","h_open":"開く","ln_delivered":"配信済み","ln_failed":"失敗","ln_why":"理由","tgt_loading":"選択画面を読み込み中…","bands_empty_t":"時間帯がまだありません","bands_empty":"1日の区切りごとに時間帯を1つ追加します。開始時刻用の input_datetime と音声音量用の input_number を用意してください。","active_now":"現在有効","disabled":"無効","other":"その他","manual":"手動","apply_now":"今すぐ適用","applied":"適用中","apply_off":"タップで適用を解除","enabled_lbl":"有効","reset_overrides":"オーバーライドをリセット","reset_done":"オーバーライドをリセットしました","transport_off":"トランスポートがオフ","last_notified":"最終通知","never_notified":"通知履歴なし","media":"メディア","no_scenarios":"シナリオのエンティティが見つかりません","sim_pick":"🎬 シナリオ — タップでシミュレート","sim_fire":"📤 チャンネル","sim_hint":"エンジンの実データ（照会サービス）です。優先度による配信の絞り込みはエンジン側で行われ、ここではシミュレートされません。実行時の統合と同様に、無効が有効より優先されます。","sim_none":"送信される配信はありません","sim_go":"送信される","sim_stop":"送信されない","sim_r_default":"自動で開始","sim_r_on":"オンにしたもの:","sim_r_off":"オフにしたもの:","sim_r_named":"呼び出しで指定されたときのみ","sim_r_scen":"オンにするシナリオがあるときのみ","sim_r_fallback":"予備（他が失敗したとき）","sim_r_switched":"オフにされています","title":"タイトル","message":"メッセージ","priority":"優先度","channels_lbl":"チャンネル — 未選択なら通常のルーティング","camera_lbl":"カメラのスナップショット","preview":"プレビュー","no_title":"（タイトルなし）","no_message":"（メッセージなし）","default_prio":"デフォルト（中）","comp_hint":"選択したチャンネルは delivery_selection: fixed で送信されます（それらのみ送信）。「緊急」は本当に緊急扱いです — サイレンも鳴ります。","critical_confirm":"緊急通知を送信しますか？サイレンと最大音量を含みます。","sent_toast":"送信しました","write_or_pick":"メッセージを入力するか、カメラかチャンネルを選んでください","send_err":"送信されませんでした","dry_btn":"送信せずに試す","dry_title":"今送信した場合","dry_err":"ドライランに失敗しました","dry_nobody":"受信者なし、直接ターゲットのみ","dry_none":"チャンネルが選択されていません","dry_scen":"有効なシナリオ","dry_raw":"生の応答","dry_prio":"優先度","dry_would_n":"チャンネルで送信予定","dry_nothing":"何も送信されません","dry_dupe":"最近の通知と重複しています: 破棄されます","dry_no_dupe":"重複チェックはシミュレートしていないため、直後の実際の送信はブロックされません。","dry_home":"在宅","dry_empty":"SuperNotify から応答がありません: バージョンは 2.12 以降ですか？","prio_minimum":"最低","prio_low":"低","prio_medium":"中","prio_high":"高","prio_critical":"緊急","target_lbl":"ターゲット — 人、デバイス、エリア、フロア、ラベル","custom_target_lbl":"カスタムターゲット（メール、Telegram ID など）— カンマ区切り","adv_title":"詳細オプション","adv_spoken":"読み上げメッセージ（Alexa、TTS）","adv_spoken_ph":"本文と異なる場合にスピーカーで読み上げる内容","adv_apply":"これらのシナリオを適用","adv_require":"これらのシナリオが有効な場合のみ送信","adv_constrain":"これらのシナリオのみを考慮","adv_snapshot":"URL からの画像","adv_debug":"デバッグ: 選択トレースをすべて記録（理由カードに表示）","custom_target_ph":"例: user@example.com, 123456789","native_target_tag":"🎯 ネイティブのエリア/フロア/ラベル","target_warn":"⚠️ エリア、フロア、ラベルを解決できるのは notify_entity、alexa_devices、html5、ntfy、kodi、media_player、tts、chime だけです。他のチャンネル — または上でチャンネルを選ばない場合のデフォルトのルーティング — では、通知がターゲットなしで黙って失われることがあります。対応するチャンネルを選ぶか、人やデバイスを直接追加してください。","aut_search":"オートメーションを検索…","aut_all":"すべて","aut_none":"一致なし","aut_err":"マニフェストが見つかりません — tools/genera_vista_automazioni.py で生成してください","aut_updated":"リスト更新","aut_count":"件のオートメーション","aut_count_1":"件のオートメーション","never":"なし","ago_now":"たった今","ago_min":"分前","ago_h":"時間前","ago_d":"日前","aut_disabled_only":"無効のみ","grp_active":"有効","repeat":"繰り返し","skipped_n":"スキップ","left":"残り","missed_n":"未送信","snz_all":"すべて","snz_nc":"重要でない通知","snz_prio":"優先度","snz_transport":"トランスポート","snz_for":"対象","snz_choose":"対象と時間を選択","snz_title":"通知を一時停止","snz_what":"対象","snz_nc_l":"重要でない通知","snz_all_l":"すべて","snz_ch":"チャンネル","snz_pr":"優先度","snz_who":"誰の分","snz_everyone":"全員","snz_me":"自分のみ","snz_len":"期間","snz_forever":"再開するまで","snz_go":"一時停止","snz_close":"閉じる","rs_hand":"手動","rs_voice":"音声","rs_assist":"アシスタント","snz_voice_info":"一時停止は SuperNotify の音声コマンド経由で行われ、あなたの分だけに適用されます。","snz_voice_off":"SuperNotify の音声コマンドがオフです: 統合のオプションでオンにしてください。","snz_resume_mine":"自分の分を再開","go_open":"表示","dl_probe":"このチャンネルを試す","probe_msg":"ダッシュボードからのチャンネルテスト","sc_why":"理由","sc_yes":"現在適用中","sc_no":"現在は適用されていません","sc_manual_why":"手動シナリオ: 手動で適用","sc_no_cond":"条件なし","sc_off_sw":"オフにされています","sc_not_eval":"未評価","sc_now":"現在","sc_diff_btn_on":"適用されたら何が変わるか","sc_diff_btn_off":"なければ何が変わるか","sc_diff_on":"適用された場合、今の「中」優先度の通知では:","sc_diff_off":"なかった場合、今の「中」優先度の通知では:","sc_diff_add":"追加で送信","sc_diff_rem":"送信されなくなる","sc_diff_none":"違いなし","c_state":"{e} が {s}","c_template":"テンプレート条件","c_time":"時刻","c_after":"以降","c_before":"以前","c_numeric":"{e}","c_above":"より上","c_below":"より下","c_and":"以下のすべて","c_or":"以下のいずれか","c_not":"以下のいずれでもない","c_or_join":" または ","sim_hint_dry":"SuperNotify 自身の回答です（ドライラン、何も送信されません）: 上で選んだ優先度とシナリオのみで今通知した場合。","sim_msg":"シミュレーターのテスト","sim_prio":"優先度","sa_snooze":"{what}を {len} 一時停止しました。","sa_silence":"{what}を追って通知があるまで消音しました。","sa_resume":"{what}を再開しました。","sa_resume_one":"一時停止終了: {x}。","sa_resume_all":"通知を再開しました。","sa_w_nc":"重要でない通知","sa_w_all":"すべての通知","sa_w_ch":"チャンネル {x}","sa_w_pr":"優先度「{x}」の通知","sa_w_mine":"あなたの通知","sa_for":"{x} の分","sa_min":"{n} 分間","sa_hour":"1時間","sa_hours":"{n} 時間","occ_title":"在宅中の人","occ_home_l":"在宅","occ_ALL_HOME":"全員在宅","occ_ALL_AWAY":"全員外出","occ_LONE_HOME":"1人だけ在宅","occ_MULTI_HOME":"数人が在宅","occ_UNDEFINED_OCCUPANTS":"追跡対象なし","h_repairs":"件の SuperNotify 修復","h_repairs_1":"件の SuperNotify 修復","det_more":"すべての属性","det_yes":"はい","det_no":"いいえ","det_action":"アクション","det_target":"固定ターゲット","det_target_req":"ターゲットが必要","det_target_use":"ターゲットの用途","det_inclusion":"使用条件","det_prio":"優先度","det_occ":"在宅が必要な人","det_transport":"トランスポート","det_data":"データ","det_debug":"デバッグ","det_err_last":"最後のエラー","det_err_in":"発生箇所","det_err_n":"起動以降のエラー","det_select":"選択","adv_html":"メール用テキスト（HTML）","adv_clip":"URL からの動画クリップ","adv_actions":"通知のボタン","adv_act_id":"アクション ID","adv_act_title":"ボタンのテキスト","adv_act_add":"+ ボタン","adv_groups":"ボタングループ（カンマ区切り）","adv_dc":"この通知のチャンネル設定","adv_dc_ph":"key: value、1行に1つ","adv_dc_add":"+ チャンネル","snz_active":"現在一時停止中","snz_resume":"再開","snz_resume_all":"すべて再開","snz_until_resumed":"再開するまで","snz_done":"一時停止しました","snz_resumed":"再開しました","no_notif":"通知はまだありません","st_title":"利用状況","st_days_short":"日","st_total":"通知","st_avg":"1日あたり","st_today":"今日","st_vs_avg":"平均比","st_peak_hour":"ピーク時間","st_top_channel":"最多チャンネル","st_errors":"チャンネルエラー","st_of_sends":"（チャンネル送信中）","st_daily":"日別","st_hourly":"時間帯別","st_weekday":"曜日別","st_channels":"チャンネル — 利用の多い順","st_priority":"優先度","st_period":"時間帯","st_insights":"気づき","st_no_data":"履歴はまだありません — 最初の通知の後にデータが表示されます。","st_loading":"読み込み中…","st_installed":"インストール済み","st_latest":"最新","st_uptodate":"最新です","st_update":"アップデートあり","st_restart":"再起動が必要","st_logged":"記録済み","st_from_archive":"SuperNotify のアーカイブから","st_archive_err":"アーカイブを一部のみ読み込み","st_wd":["月","火","水","木","金","土","日"],"st_i_share":"チャンネル送信全体の {p}% が {c} 経由です。","st_i_peak":"最も多いのは {h}:00 台です（{d} 日間で {n} 件の通知）。","st_i_night":"通知の {p}% が 23:00〜07:00 に届いています — 不要なら「おやすみ」シナリオを検討してください。","st_i_night_ok":"夜間（23〜07時）に届く通知は {p}% だけです。静かな時間帯が機能しています。","st_i_weekend":"週末は平日より通知が {p}% {dir}です。","st_i_errors":"{d} 日間でチャンネルエラーが {n} 件、主に {c} です。","st_i_noerr":"過去 {d} 日間、チャンネルエラーはありません。","st_i_prio":"通知の {p}% が優先度「{prio}」です。","st_i_trend":"直近7日間: 1日 {n} 件、前の7日間より {p}% {dir}。","st_more":"多い","st_less":"少ない","st_up":"増加","st_down":"減少"},"SN_ARCH_STRINGS":{"search":"タイトルやメッセージを検索…","f_all":"すべて","f_today":"今日","f_whisper":"ささやき","wh":"ささやき","said":"Alexa の発話","said_by":"{ch} の発話","none":"一致する通知はありません","loading":"アーカイブを読み込み中…","recent":"最新の通知","read_at":"読み込み時刻","today":"今日","yesterday":"昨日","failed":"失敗","missed":"未送信","reasons":{"doppione":"重複","nessun target":"ターゲットなし","errore":"エラー","condizione":"条件","scenario":"シナリオ","presenza":"在宅状況","priorita":"優先度","spento":"オフ","pausa":"一時停止中","transport spento":"トランスポートがオフ","nessuna azione":"アクションなし","dati non validi":"無効なデータ","sconosciuto":"不明"},"f_appliance":"家電","ap_scope":"全文を読み込んだ最新{n}件のみ。それより古いものは識別されません"},"SN_WHY_STRINGS":{"pick":"通知を選ぶと、なぜその宛先に届いたのかを確認できます。","loading":"読み込み中…","none":"通知なし","gone":"この通知はもうアーカイブにありません","priority":"優先度","dupe":"重複","outcomes":{"success":"配信済み","partial_delivery":"一部配信","dupe":"重複","failed":"失敗","error":"失敗","fallback_delivery":"フォールバックチャンネルで配信","no_delivery":"未配信"},"step_call":"呼び出し","step_scen":"シナリオ","step_people":"人","step_ch":"チャンネル","call_auto":"チャンネル指定なし: 通常のルーティング","call_named":"呼び出しで指定:","call_debug":"デバッグあり","nobody":"誰も在宅していません","ch_sent":"送信済み","ch_problems":"要確認","ch_skipped":"スキップ","pb_failed":"失敗","pb_missed":"指定されたが送信されず","grp_skipped":"ルールによりスキップ: 正常","grp_not":"対象外","trace_title":"選択トレース全体","fix":{"NO_TARGET":"このチャンネル用のアドレスを持つ受信者がいません: 受信者にアドレスを追加するか、チャンネルに固定ターゲットを設定するか、この呼び出しから外してください。","ERROR":"このチャンネルの元になっている統合がエラーを返しました: その統合のログを確認してください。","NO_ACTION":"このチャンネルには呼び出すアクションがありません: 配信に `action:` を設定してください。","INVALID_ACTION_DATA":"アクションに渡したデータが拒否されました: 呼び出しまたは配信の `data:` を確認してください。"},"no_scenarios":"有効なシナリオなし","applied":"呼び出しで強制","required":"呼び出しで必須","constrain":"呼び出しで制限:","home":"在宅","away":"外出","no_channels":"選択されたチャンネルはありません","st_ok":"配信済み","st_err":"失敗","st_skip":"スキップ","calls":"回の呼び出し","calls_1":"回の呼び出し","target_required":"ターゲットが必要:","started_by":"選択元","scen_would_off":"オフにしようとしたもの（無効化）","src_default":"常にオン（デフォルト）","src_scen":"シナリオ","src_call":"呼び出し自体","src_recipient":"受信者","r_off_by":"オフにしたもの:","call_targets":"呼び出し内のターゲット","cats":{"entity_id":"エンティティ","mobile_app_id":"デバイス","person_id":"人","email":"メール","phone":"電話","device_id":"デバイス"},"r_call_off":"呼び出しで除外","r_scen_off":"有効なシナリオによりオフ","r_disabled":"オフにされています","r_transport_off":"トランスポートがオフ","r_only_scen":"シナリオでオンにされたときのみ開始","r_only_fallback":"フォールバック専用","r_only_explicit":"名前で指定されたときのみ開始","r_priority":"この優先度は対象外","r_unknown":"トレースなしでは再構成できません","from_config":"開始しなかったチャンネルの理由は、当時ではなく現在の設定から再構成しています。","from_trace":"理由は通知と一緒にアーカイブされた選択トレースに基づいています。","st_time":"所要時間","st_slow":"最も遅い","st_rate":"のチャンネルが成功","ua_title":"どのチャンネルも受け付けなかったターゲット","ua_hint":"呼び出しには含まれていましたが、選択されたチャンネルのどれもこの種類のターゲットを受け付けません。","un_title":"存在しない名前","sent_by":"送信元","sent_auto":"オートメーション","sent_script":"スクリプト","sent_person":"","sent_unknown":"送信元不明（コンテキストにオートメーションや人がありません）","no_trace":"選択トレース全体は notify 呼び出しに debug: true がある場合のみ記録され、アーカイブの診断に含まれる場合にアーカイブされます。","reasons":{"NO_TARGET":"使えるターゲットなし","DUPE":"最近の通知と重複","PRIORITY":"この優先度は対象外","SNOOZE":"一時停止中","SNOOZED":"一時停止中","DELIVERY_CONDITION":"配信条件が偽","OCCUPANCY":"在宅ルール","ERROR":"エラー","DELIVERY_DISABLED":"オフにされています","SCENARIO":"シナリオ","TRANSPORT_DISABLED":"トランスポートがオフ","NO_SCENARIO":"必須シナリオが有効でない","NO_ACTION":"呼び出すアクションなし","INVALID_ACTION_DATA":"無効なアクションデータ","UNKNOWN":"不明な理由"}},"SN_TOOLS_STRINGS":{"maint":"メンテナンス","enq":"SuperNotify に照会","refresh":"すべてのエンティティを再公開","refresh_btn":"更新","resume_btn":"再開","refreshed":"エンティティを再公開しました。","resume_all":"すべての一時停止を再開","cleared_n":"件の一時停止を再開しました","purge_arch":"アーカイブを整理","purge_media":"画像を整理","older":"次より古いもの:","days":"日","purge_btn":"整理","confirm":"もう一度タップで確定","purged":"削除","remaining":"残り","reset":"手動で行った変更を元に戻す","reset_btn":"リセット","reset_none":"リセットするものはありません: すべて設定どおりです。","reset_done":"設定に戻しました:","k_all":"すべて","k_scenario":"シナリオ","k_delivery":"チャンネル","k_recipient":"人","k_transport":"トランスポート","q_config":"設定","q_scen":"シナリオ","q_active":"有効なシナリオ","q_by_scen":"シナリオ別チャンネル","q_implicit":"デフォルトのチャンネル","q_recipients":"受信者","q_occupancy":"在宅中の人","q_snoozes":"一時停止","q_last":"最後の通知","copy":"JSON をコピー","copied":"コピーしました","close":"閉じる","empty":"（空）","err":"SuperNotify がエラーを返しました:","settings":"統合の設定","running":"処理中…","more":"もっと見る"},"SN_FORM_LABELS":{"_common":"外観とテキスト","style":"配色","icons":"アイコン","show_version":"カードのバージョンを表示","intro":"上部の説明文","title":"タイトル","dnd_entity":"おやすみモードのスイッチ","quiet_entity":"計算された静音状態（オプション）","presence_entity":"ステータスバーに表示する人","archive_days":"アーカイブ整理: 次の日数より古いもの","media_days":"画像整理: 次の日数より古いもの","occupancy":"在宅中の人（SuperNotify から）","repairs":"状態リストに SuperNotify の修復を表示","snooze_announce":"一時停止を読み上げる（アナウンスチャンネル）","snooze_via":"一時停止の経路","o_event":"プッシュボタンのイベント（管理者）","o_voice":"音声コマンド","snooze_minutes":"一時停止の長さ（分）","snooze_panel":"一時停止タイルで一時停止パネルを開く","announce_delivery":"アナウンス用のチャンネル","last_notification":"最後の通知を表示","last_channels":"最後の通知のチャンネルごとにチップを表示","repeat_entity":"最後を繰り返すボタン（オプション）","tile_layout":"タイル","tile_columns":"タイルの列数（空欄 = 自動）","update_entity":"SuperNotify のアップデートエンティティ","cards_update_entity":"カードのアップデートエンティティ","health":"上部に状態を表示","poll_seconds":"更新間隔（秒）","group":"チャンネルの開始方法でグループ化","hide_defaults":"自動の DEFAULT_ チャンネルを非表示","limit":"リストの通知数","expand":"折りたたまれた部分を開く","max_height":"最大の高さ（CSS、例: 70vh）","trigger_entity":"これが変化したら更新","dry_run":"「送信せずに試す」を表示","dry_run_dupe_check":"重複チェックもシミュレート","days":"デフォルトの表示日数","manifest_url":"オートメーションのマニフェスト URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant のテーマ","o_mdi":"Home Assistant のアイコン","o_emoji":"絵文字","o_row":"アイコンを左に","o_stacked":"縦長、アイコンを上に","o_auto":"自動"},"SN_NATIVE_STR":{"all_good":"問題なし","paused":"一時停止中","resume":"再開","test":"テスト送信","sure":"もう一度タップで送信","sent":"送信しました","last":"最後","none":"通知はまだありません","ago":"前","h":"時間","err":"件のトランスポートでエラー","off":"件のチャンネルがオフ"},"SN_STRATEGY_TITLES":{"home":"ホーム","archive":"アーカイブ","send":"送信","setup":"設定","stats":"統計","tools":"ツール","title":"SuperNotify","appliances":"家電"},"SN_APPL_STRINGS":{"title":"家電","loading":"読み込み中…","none":"家電がありません。Appliance Autonotify で追加してください（設定 → デバイスとサービス）。","st_run":"運転中","st_cleaning":"掃除中","st_done":"完了 · 取り出してください","st_done_other":"完了","st_err":"助けが必要","m_switch_on":"プラグをオン","done_switch_on":"プラグをオンにしました。","done_action":"完了: {n}","confirm_action":"「{n}」を実行しますか?","open_entity":"開いて変更","chip_notifs":"通知","chip_device":"デバイス","not_found":"「{n}」という機器はありません。","last7":"過去 7 日間","col_day":"日","col_cycles":"サイクル","col_time":"時間","col_energy":"消費","source_h":"ソース","manual_src":"手動で追加: {w} を超えると稼働中","tab_info":"概要","tab_stats":"消費とサイクル","tab_cleans":"掃除","tab_prints":"印刷","last_run":"前回のサイクル","avg_run":"平均","reminders_h":"通知","plug":"プラグ","plug_on":"オン","plug_off":"オフ","error_h":"エラー","open_device":"Home Assistant のデバイス","prints":"回の印刷","print1":"回の印刷","per_print":"今月の各印刷","last_prints":"最近の印刷","no_print_month":"今月はまだ印刷していません","no_print":"まだ印刷していません","col_fil":"フィラメント","failed":"失敗","per_run":"今月の各サイクル","dev_hist":"各項目は Home Assistant の履歴から(過去 {n} 日)、時間は機器のカウンターがあればそこから取得しています。","cleans":"回の掃除","clean1":"回の掃除","per_clean":"今月の各掃除","avg_clean":"平均 {d}","col_area":"面積","last_cleans":"最近の掃除","no_clean_month":"今月はまだ掃除していません","no_clean":"まだ掃除していません","vac_hist":"合計はロボットのカウンターから、各掃除は Home Assistant の履歴から取得しています(過去 {n} 日)。","st_paused":"一時停止中","st_returning":"ドックに戻っています","st_charging":"充電中","st_docked_w":"ドックにいます","st_idle":"停止中","st_off":"オフ","stopped":"停止中","yesterday":"昨日","u_min":"分","u_h":"時間","start":"開始","so_far":"これまで","no_cycle":"まだサイクルなし","last_cycle":"前回のサイクル {d}","ended_at":"{t} に完了","reminders":"{t} まで +{n} 件のリマインダー","reminder1":"{t} に +1 件のリマインダー","end_est":"終了予定","left":"残り {d}","almost":"まもなく終了","est_from_avg":"似たサイクルからの推定","running_for":"{d} 運転中","btn_empty":"取り出した","btn_seen":"完了","btn_resume":"掃除を再開","m_switch_off":"プラグをオフ","m_remind":"あとで通知","details":"詳細","settings":"設定","more":"その他","details_link":"詳細・消費電力・サイクル","done_empty":"完了: リマインダーを止めました。","done_remind":"あとでお知らせします。","done_switch":"プラグをオフにしました。","done_resume":"掃除を再開しました。","err":"エラー","new_dev":"新しいデバイス {n} 台","new_dev1":"新しいデバイス 1 台","battery":"バッテリー","consumable":"{n} {p}%","maint_in":"あと {c} サイクル","maint_next":"次のサイクルで","maint_due":"今すぐ必要","maint_of":"{d} / {e}","maint_done":"完了","confirm_maint":"「{n}」を完了にしますか?カウントは最初からになります。","conn_lost":"接続が切れました: 最後の状態","cons_h":"消耗品","commands":"操作","tap_again":"もう一度タップして確定","empty_since":"取り出し待ち","done_since":"完了から","avg_cycle":"平均サイクル","maint_tab":"メンテナンス","tab_stats_short":"消費","read_failed":"履歴を読み込めませんでした ({e})。まもなく再試行します。","retry":"再試行","see_chart":"グラフを表示","back":"戻る","avg_line":"平均 {v}","tap_bar":"棒をタップするとそのサイクルを表示","k_station":"ステーション","off_since":"オフになってから","close":"閉じる","power_now":"現在","p_today":"今日","p_week":"今週","p_month":"今月","p_year":"今年","cycles":"サイクル","cycle1":"サイクル","per_cycle":"今月のサイクルごとの消費","short":"短い","long":"長い","anomalous":"異常","avg":"平均 {d}、{k}","last_cycles":"最近のサイクル","col_start":"開始","col_dur":"時間","col_cost":"費用","no_cycle_month":"今月はまだサイクルなし","coarse":"10 日以上前のサイクルは 1 時間単位で数えます。","open_notifs":"この家電の通知","no_power":"電力センサーが見つかりません。`appliances:` の `power_entity` で指定してください。","no_power_vac":"ロボット掃除機には電力センサーがないため、消費とサイクルは数えません。"}},"zh":{"SN_STRINGS":{"presence":"在家情况","time_band":"时段","quiet":"安静","act_scen":"活动场景","on":"开","off":"关","active":"活动","dnd":"勿扰","tap_silence":"点按静音","snooze":"暂停","min":"分钟","pause_nc":"暂停非紧急通知","snoozed":"已暂停","until":"直到","tap_clear":"点按清除","announce":"播报","intercom":"对讲","announce_ph":"在所有音箱上播报…","send":"发送","announced":"已播报","cleared":"暂停已清除","snoozed_for":"已暂停非紧急通知，时长","sent":"已发送","yesterday":"昨天","deliveries":"推送","last_notif":"最后一条通知","transports":"传输方式","delivered":"已送达","failed":"失败","channels":"个渠道","none":"无","no_transports":"未找到传输方式实体","tr_used":"使用者","tr_unused":"没有渠道使用它","start":"开始","volume":"音量","now":"现在","crosses":"跨越午夜","no_voice":"无语音","mute_hint":"音量为 <b>0%</b> 的时段完全<b>不发送语音播报</b>（Alexa 和 TTS 关闭，推送通知和仪表板照常送达）。紧急和高优先级提醒始终会播报。","enabled":"已启用","grp_auto":"自动启动","grp_named":"仅在调用中指定时","grp_scen":"仅在有场景时","grp_fallback":"备用，其他渠道失败时","ch_title":"渠道","ch_count":"{tot} 个中 {on} 个开启","off_manual":"已关闭","paused_by":"当前被暂停，原因","on_by":"当前开启，通过","fixed_targets":"固定目标","no_deliveries":"未找到推送实体","home":"在家","away":"外出","devices":"个设备","devices_1":"个设备","rc_test":"发送测试","rc_test_confirm":"再次点按以发送","rc_test_sent":"测试已发送","rc_test_title":"SuperNotify 测试","rc_test_msg":"来自仪表板的测试消息，","overrides":"个推送覆盖","overrides_1":"个推送覆盖","no_contact":"无联系方式","no_recipients":"未找到接收人实体","details":"详情","h_update":"有可用更新：","h_restart":"重启 Home Assistant 以完成更新","h_uptodate":"已是最新","h_transport_err":"个传输方式出错","h_channels_off":"个渠道已关闭","h_all_good":"一切正常","h_failures":"次失败","h_failures_1":"次失败","h_transport_err_1":"个传输方式出错","h_channels_off_1":"个渠道已关闭","channels_1":"个渠道","band_early_morning":"清晨","band_morning":"上午","band_afternoon":"下午","band_evening":"傍晚","band_night":"夜间","band_late_night":"深夜","h_look_1":"有 1 项需要查看","h_look_n":"有 {n} 项需要查看","h_rest_ok":"其余一切正常","h_ch_on":"{tot} 个渠道中 {on} 个开启","h_open":"打开","ln_delivered":"已送达","ln_failed":"失败","ln_why":"原因","tgt_loading":"正在加载选择器…","bands_empty_t":"还没有时段","bands_empty":"为一天中的每个时段添加一项：用一个 input_datetime 设置开始时间，用一个 input_number 设置语音音量。","active_now":"当前活动","disabled":"已禁用","other":"其他","manual":"手动","apply_now":"立即应用","applied":"已应用","apply_off":"点按停止应用","enabled_lbl":"已启用","reset_overrides":"重置覆盖","reset_done":"覆盖已重置","transport_off":"传输方式已关闭","last_notified":"上次通知","never_notified":"从未通知","media":"媒体","no_scenarios":"未找到场景实体","sim_pick":"🎬 场景 — 点按以模拟","sim_fire":"📤 渠道","sim_hint":"真实引擎数据（查询服务）。基于优先级的推送筛选在引擎端进行，此处不模拟。与运行时合并一样，禁用优先于启用。","sim_none":"不会触发任何推送","sim_go":"会发出","sim_stop":"不会发出","sim_r_default":"自动启动","sim_r_on":"开启者","sim_r_off":"关闭者","sim_r_named":"仅在调用中指定时","sim_r_scen":"仅在有场景开启它时","sim_r_fallback":"备用，其他渠道失败时","sim_r_switched":"已关闭","title":"标题","message":"消息","priority":"优先级","channels_lbl":"渠道 — 不选 = 正常路由","camera_lbl":"摄像头快照","preview":"预览","no_title":"（无标题）","no_message":"（无消息）","default_prio":"默认（中）","comp_hint":"选中的渠道以 delivery_selection: fixed 发送（只有它们会触发）。紧急就是真的紧急 — 包括警报器。","critical_confirm":"发送一条紧急通知？包括警报器和最大音量。","sent_toast":"已发送","write_or_pick":"写一条消息，或选择一个摄像头或渠道","send_err":"未发送","dry_btn":"试一下，不发送","dry_title":"如果现在发送","dry_err":"演练失败","dry_nobody":"无接收人，仅直接目标","dry_none":"未选择渠道","dry_scen":"活动场景","dry_raw":"原始响应","dry_prio":"优先级","dry_would_n":"个渠道会发送","dry_nothing":"不会发送任何内容","dry_dupe":"与最近的通知重复：将被丢弃","dry_no_dupe":"未模拟重复检查，因此紧接着的真正发送不会被拦截。","dry_home":"在家","dry_empty":"SuperNotify 没有返回结果：是否为 2.12 或更高版本？","prio_minimum":"最低","prio_low":"低","prio_medium":"中","prio_high":"高","prio_critical":"紧急","target_lbl":"目标 — 人员、设备、区域、楼层、标签","custom_target_lbl":"自定义目标（电子邮件、Telegram ID 等）— 以逗号分隔","adv_title":"高级选项","adv_spoken":"语音消息（Alexa、TTS）","adv_spoken_ph":"音箱播报的内容（如与文字不同）","adv_apply":"应用这些场景","adv_require":"仅当这些场景活动时发送","adv_constrain":"仅考虑这些场景","adv_snapshot":"来自 URL 的图片","adv_debug":"调试：记录完整的选择追踪（在“原因”卡片中显示）","custom_target_ph":"例如 user@example.com, 123456789","native_target_tag":"🎯 原生区域/楼层/标签","target_warn":"⚠️ 区域、楼层和标签仅由 notify_entity、alexa_devices、html5、ntfy、kodi、media_player、tts 和 chime 解析。使用其他任何渠道 — 或上方未选择渠道时的默认路由 — 通知可能会在无提示的情况下没有目标。请选择兼容的渠道，或直接添加人员/设备。","aut_search":"搜索自动化…","aut_all":"全部","aut_none":"无匹配项","aut_err":"未找到清单 — 请用 tools/genera_vista_automazioni.py 生成","aut_updated":"列表已更新","aut_count":"个自动化","aut_count_1":"个自动化","never":"从不","ago_now":"刚刚","ago_min":"分钟前","ago_h":"小时前","ago_d":"天前","aut_disabled_only":"仅已禁用","grp_active":"活动","repeat":"重复","skipped_n":"已跳过","left":"剩余","missed_n":"未发出","snz_all":"全部","snz_nc":"非紧急","snz_prio":"优先级","snz_transport":"传输方式","snz_for":"时长","snz_choose":"选择内容和时长","snz_title":"暂停通知","snz_what":"内容","snz_nc_l":"非紧急","snz_all_l":"全部","snz_ch":"一个渠道","snz_pr":"一个优先级","snz_who":"对象","snz_everyone":"所有人","snz_me":"仅我","snz_len":"时长","snz_forever":"直到我恢复","snz_go":"暂停","snz_close":"关闭","rs_hand":"手动","rs_voice":"通过语音","rs_assist":"通过助手","snz_voice_info":"你的暂停通过 SuperNotify 的语音命令执行：只对你生效。","snz_voice_off":"SuperNotify 的语音命令已关闭：请在集成选项中开启。","snz_resume_mine":"恢复我的","go_open":"显示","dl_probe":"试用此渠道","probe_msg":"来自仪表板的渠道测试","sc_why":"原因","sc_yes":"当前适用","sc_no":"当前不适用","sc_manual_why":"手动场景：手动应用","sc_no_cond":"无条件","sc_off_sw":"已关闭","sc_not_eval":"未检查","sc_now":"现在","sc_diff_btn_on":"如果适用会有什么变化","sc_diff_btn_off":"没有它会有什么变化","sc_diff_on":"如果它适用，对于现在的一条中优先级通知：","sc_diff_off":"没有它，对于现在的一条中优先级通知：","sc_diff_add":"还会发送","sc_diff_rem":"将不再发送","sc_diff_none":"没有区别","c_state":"{e} 为 {s}","c_template":"模板条件","c_time":"时间","c_after":"晚于","c_before":"早于","c_numeric":"{e}","c_above":"高于","c_below":"低于","c_and":"以下全部","c_or":"以下至少一项","c_not":"以下均不","c_or_join":" 或 ","sim_hint_dry":"SuperNotify 自己的回答（演练，不会发送任何内容）：现在的一条通知，使用上方选择的优先级，且仅包含上方选择的场景。","sim_msg":"模拟器测试","sim_prio":"优先级","sa_snooze":"{what}已暂停 {len}。","sa_silence":"{what}已静音，直到另行通知。","sa_resume":"{what}已恢复。","sa_resume_one":"暂停结束：{x}。","sa_resume_all":"通知已恢复。","sa_w_nc":"非紧急通知","sa_w_all":"所有通知","sa_w_ch":"渠道 {x}","sa_w_pr":"{x}优先级通知","sa_w_mine":"你的通知","sa_for":"给 {x}","sa_min":"{n} 分钟","sa_hour":"一小时","sa_hours":"{n} 小时","occ_title":"谁在家","occ_home_l":"在家","occ_ALL_HOME":"所有人在家","occ_ALL_AWAY":"所有人外出","occ_LONE_HOME":"只有一人在家","occ_MULTI_HOME":"部分人在家","occ_UNDEFINED_OCCUPANTS":"无人被跟踪","h_repairs":"个 SuperNotify 修复","h_repairs_1":"个 SuperNotify 修复","det_more":"所有属性","det_yes":"是","det_no":"否","det_action":"操作","det_target":"固定目标","det_target_req":"需要目标","det_target_use":"目标使用","det_inclusion":"使用时机","det_prio":"优先级","det_occ":"谁必须在家","det_transport":"传输方式","det_data":"数据","det_debug":"调试","det_err_last":"最后错误","det_err_in":"位置","det_err_n":"启动以来的错误","det_select":"选择","adv_html":"电子邮件文本（HTML）","adv_clip":"来自 URL 的视频片段","adv_actions":"通知上的按钮","adv_act_id":"操作 ID","adv_act_title":"按钮文字","adv_act_add":"+ 按钮","adv_groups":"按钮组（逗号分隔）","adv_dc":"此通知的渠道设置","adv_dc_ph":"键: 值，每行一个","adv_dc_add":"+ 渠道","snz_active":"当前已暂停","snz_resume":"恢复","snz_resume_all":"全部恢复","snz_until_resumed":"直到恢复","snz_done":"已暂停","snz_resumed":"已恢复","no_notif":"还没有通知","st_title":"使用情况","st_days_short":"天","st_total":"通知","st_avg":"每天","st_today":"今天","st_vs_avg":"与平均相比","st_peak_hour":"高峰时段","st_top_channel":"最常用渠道","st_errors":"渠道错误","st_of_sends":"的渠道发送","st_daily":"每天","st_hourly":"按一天中的时段","st_weekday":"按星期","st_channels":"渠道 — 最常用","st_priority":"优先级","st_period":"时段","st_insights":"洞察","st_no_data":"暂无历史 — 发送第一批通知后会显示数据。","st_loading":"正在加载…","st_installed":"已安装","st_latest":"最新","st_uptodate":"已是最新","st_update":"有可用更新","st_restart":"需要重启","st_logged":"已记录","st_from_archive":"来自 SuperNotify 存档","st_archive_err":"存档仅部分读取","st_wd":["周一","周二","周三","周四","周五","周六","周日"],"st_i_share":"所有渠道发送中有 {p}% 通过 {c}。","st_i_peak":"最忙的时段是 {h}:00（{d} 天内 {n} 条通知）。","st_i_night":"{p}% 的通知在 23:00 到 07:00 之间到达 — 如果不希望这样，可以考虑设置一个勿扰场景。","st_i_night_ok":"只有 {p}% 的通知在夜间（23–07）到达：安静时段运作良好。","st_i_weekend":"周末的通知比工作日{dir} {p}%。","st_i_errors":"{d} 天内有 {n} 次渠道错误，主要发生在 {c}。","st_i_noerr":"最近 {d} 天没有渠道错误。","st_i_prio":"{p}% 的通知为{prio}优先级。","st_i_trend":"最近 7 天：{n}/天，比之前 7 天{dir} {p}%。","st_more":"多","st_less":"少","st_up":"增加","st_down":"减少"},"SN_ARCH_STRINGS":{"search":"搜索标题或消息…","f_all":"全部","f_today":"今天","f_whisper":"低语播报","wh":"低语","said":"Alexa 说","said_by":"{ch} 说","none":"没有匹配的通知","loading":"正在读取存档…","recent":"最新通知","read_at":"读取于","today":"今天","yesterday":"昨天","failed":"失败","missed":"未发出","reasons":{"doppione":"重复","nessun target":"无目标","errore":"错误","condizione":"条件","scenario":"场景","presenza":"在家情况","priorita":"优先级","spento":"已关闭","pausa":"已暂停","transport spento":"传输方式已关闭","nessuna azione":"无操作","dati non validi":"数据无效","sconosciuto":"未知"},"f_appliance":"家电","ap_scope":"仅限完整读取的最近 {n} 条，更早的无法识别"},"SN_WHY_STRINGS":{"pick":"选择一条通知，查看它为何这样发送。","loading":"正在加载…","none":"无通知","gone":"这条通知已不在存档中","priority":"优先级","dupe":"重复","outcomes":{"success":"已送达","partial_delivery":"部分送达","dupe":"重复","failed":"失败","error":"失败","fallback_delivery":"由备用渠道送达","no_delivery":"未送达"},"step_call":"调用","step_scen":"场景","step_people":"人员","step_ch":"渠道","call_auto":"未指定渠道：正常路由","call_named":"调用中指定：","call_debug":"带调试","nobody":"无人在家","ch_sent":"已发送","ch_problems":"需查看","ch_skipped":"已跳过","pb_failed":"失败","pb_missed":"已请求但未发送","grp_skipped":"被规则跳过：正常","grp_not":"未涉及","trace_title":"完整选择追踪","fix":{"NO_TARGET":"没有接收人拥有此渠道的地址：为某个接收人添加地址，为渠道设置固定目标，或在此调用中不使用它。","ERROR":"此渠道背后的集成返回了错误：请查看它自己的日志条目。","NO_ACTION":"该渠道没有可调用的操作：请在推送上设置 `action:`。","INVALID_ACTION_DATA":"传给操作的数据被拒绝：请检查调用或推送的 `data:`。"},"no_scenarios":"没有生效的场景","applied":"由调用强制","required":"调用要求","constrain":"调用限制为","home":"在家","away":"外出","no_channels":"未选择任何渠道","st_ok":"已送达","st_err":"失败","st_skip":"已跳过","calls":"次调用","calls_1":"次调用","target_required":"需要目标：","started_by":"选择者","scen_would_off":"被关闭（已被否决）","src_default":"始终开启（默认）","src_scen":"场景","src_call":"调用本身","src_recipient":"接收人","r_off_by":"关闭者","call_targets":"调用中的目标","cats":{"entity_id":"实体","mobile_app_id":"设备","person_id":"人员","email":"电子邮件","phone":"电话","device_id":"设备"},"r_call_off":"被调用排除","r_scen_off":"被生效的场景关闭","r_disabled":"已关闭","r_transport_off":"其传输方式已关闭","r_only_scen":"仅在场景开启它时启动","r_only_fallback":"仅作备用","r_only_explicit":"仅在按名称请求时启动","r_priority":"不适用于此优先级","r_unknown":"没有追踪无法还原","from_config":"未启动渠道的原因是根据当前的配置还原的，而不是当时的配置。","from_trace":"原因来自随通知存档的选择追踪。","st_time":"耗时","st_slow":"最慢","st_rate":"的渠道成功","ua_title":"没有渠道接收的目标","ua_hint":"它们在调用中，但没有选中的渠道接受这类目标。","un_title":"不存在的名称","sent_by":"发送者","sent_auto":"自动化","sent_script":"脚本","sent_person":"","sent_unknown":"发送者未知（其上下文中没有自动化或人员）","no_trace":"只有当通知调用带有 debug: true 时才会记录完整的选择追踪，并在存档诊断包含它时存档。","reasons":{"NO_TARGET":"无可用目标","DUPE":"与最近的通知重复","PRIORITY":"不适用于此优先级","SNOOZE":"已暂停","SNOOZED":"已暂停","DELIVERY_CONDITION":"推送条件为假","OCCUPANCY":"在家规则","ERROR":"错误","DELIVERY_DISABLED":"已关闭","SCENARIO":"场景","TRANSPORT_DISABLED":"其传输方式已关闭","NO_SCENARIO":"所需场景未生效","NO_ACTION":"无可调用的操作","INVALID_ACTION_DATA":"操作数据无效","UNKNOWN":"未知原因"}},"SN_TOOLS_STRINGS":{"maint":"维护","enq":"询问 SuperNotify","refresh":"重新发布所有实体","refresh_btn":"刷新","resume_btn":"恢复","refreshed":"实体已重新发布。","resume_all":"恢复所有暂停","cleared_n":"个暂停已恢复","purge_arch":"清理存档","purge_media":"清理图片","older":"早于","days":"天","purge_btn":"清理","confirm":"再次点按以确认","purged":"已删除","remaining":"剩余","reset":"撤销手动所做的更改","reset_btn":"重置","reset_none":"无需重置：一切与配置一致。","reset_done":"已恢复为配置：","k_all":"全部","k_scenario":"场景","k_delivery":"渠道","k_recipient":"人员","k_transport":"传输方式","q_config":"配置","q_scen":"场景","q_active":"活动场景","q_by_scen":"按场景的渠道","q_implicit":"默认渠道","q_recipients":"接收人","q_occupancy":"谁在家","q_snoozes":"暂停","q_last":"最后一条通知","copy":"复制 JSON","copied":"已复制","close":"关闭","empty":"（空）","err":"SuperNotify 返回了错误：","settings":"集成设置","running":"处理中…","more":"更多"},"SN_FORM_LABELS":{"_common":"外观和文字","style":"颜色","icons":"图标","show_version":"显示卡片版本","intro":"顶部的介绍文字","title":"标题","dnd_entity":"勿扰开关","quiet_entity":"计算得出的安静状态（可选）","presence_entity":"状态栏中的人员","archive_days":"存档清理：早于（天）","media_days":"图片清理：早于（天）","occupancy":"谁在家（来自 SuperNotify）","repairs":"在健康列表中显示 SuperNotify 修复","snooze_announce":"大声播报暂停（播报渠道）","snooze_via":"暂停的执行方式","o_event":"推送按钮事件（管理员）","o_voice":"语音命令","snooze_minutes":"暂停时长（分钟）","snooze_panel":"暂停磁贴打开暂停面板","announce_delivery":"播报渠道","last_notification":"显示最后一条通知","last_channels":"最后一条通知中每个渠道一个标签","repeat_entity":"重复上一条按钮（可选）","tile_layout":"磁贴","tile_columns":"磁贴列数（留空 = 自动）","update_entity":"SuperNotify 更新实体","cards_update_entity":"卡片更新实体","health":"顶部显示健康状况","poll_seconds":"刷新间隔（秒）","group":"按渠道启动方式分组","hide_defaults":"隐藏自动的 DEFAULT_ 渠道","limit":"列表中的通知数","expand":"展开折叠部分","max_height":"最大高度（CSS，例如 70vh）","trigger_entity":"此项变化时刷新","dry_run":"显示“试一下，不发送”","dry_run_dupe_check":"同时模拟重复检查","days":"默认显示天数","manifest_url":"自动化清单 URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant 主题","o_mdi":"Home Assistant 图标","o_emoji":"Emoji","o_row":"图标在左侧","o_stacked":"高型，图标在上方","o_auto":"自动"},"SN_NATIVE_STR":{"all_good":"一切正常","paused":"已暂停","resume":"恢复","test":"发送测试","sure":"再次点按以发送","sent":"已发送","last":"最后","none":"还没有通知","ago":"前","h":"小时","err":"个传输方式出错","off":"个渠道已关闭"},"SN_STRATEGY_TITLES":{"home":"主页","archive":"归档","send":"发送","setup":"设置","stats":"统计","tools":"工具","title":"SuperNotify","appliances":"家电"},"SN_APPL_STRINGS":{"title":"家电","loading":"读取中…","none":"没有家电：请在 Appliance Autonotify 中添加（设置 → 设备与服务）。","st_run":"运行中","st_cleaning":"清扫中","st_done":"已完成 · 待取出","st_done_other":"已完成","st_err":"需要帮助","m_switch_on":"打开插座","done_switch_on":"插座已打开。","done_action":"完成：{n}","confirm_action":"执行「{n}」？","open_entity":"打开以修改","chip_notifs":"通知","chip_device":"设备","not_found":"没有名为「{n}」的设备。","last7":"最近 7 天","col_day":"日期","col_cycles":"周期","col_time":"时间","col_energy":"能耗","source_h":"来源","manual_src":"手动添加:高于 {w} 时为运行中","tab_info":"概览","tab_stats":"能耗与周期","tab_cleans":"清扫","tab_prints":"打印","last_run":"上次周期","avg_run":"平均","reminders_h":"通知","plug":"插座","plug_on":"开","plug_off":"关","error_h":"错误","open_device":"Home Assistant 中的设备","prints":"次打印","print1":"次打印","per_print":"本月每次打印","last_prints":"最近的打印","no_print_month":"本月尚无打印","no_print":"尚无打印","col_fil":"耗材","failed":"失败","per_run":"本月每个周期","dev_hist":"每一项来自 Home Assistant 的历史记录(最近 {n} 天);小时数来自设备自身的计数器(如有)。","cleans":"次清扫","clean1":"次清扫","per_clean":"本月每次清扫","avg_clean":"平均 {d}","col_area":"面积","last_cleans":"最近的清扫","no_clean_month":"本月尚无清扫","no_clean":"尚无清扫","vac_hist":"总计来自机器人的计数器;每次清扫来自 Home Assistant 的历史记录(最近 {n} 天)。","st_paused":"已暂停","st_returning":"正在返回基座","st_charging":"充电中","st_docked_w":"在基座上","st_idle":"空闲","st_off":"已关闭","stopped":"空闲","yesterday":"昨天","u_min":"分钟","u_h":"小时","start":"开始","so_far":"目前","no_cycle":"尚无周期","last_cycle":"上次周期 {d}","ended_at":"{t} 完成","reminders":"+{n} 次提醒，直到 {t}","reminder1":"{t} +1 次提醒","end_est":"预计结束","left":"还剩 {d}","almost":"即将完成","est_from_avg":"根据相似周期估计","running_for":"已运行 {d}","btn_empty":"已取出","btn_seen":"完成","btn_resume":"继续清扫","m_switch_off":"关闭插座","m_remind":"稍后提醒","details":"详情","settings":"设置","more":"更多","details_link":"详情、能耗和周期","done_empty":"完成：提醒已停止。","done_remind":"稍后会再提醒。","done_switch":"插座已关闭。","done_resume":"已继续清扫。","err":"错误","new_dev":"{n} 个新设备","new_dev1":"1 个新设备","battery":"电量","consumable":"{n} {p}%","maint_in":"还有 {c} 个周期","maint_next":"下个周期","maint_due":"现在需要","maint_of":"{d} / {e}","maint_done":"完成","confirm_maint":"将「{n}」标记为完成?计数将重新开始。","conn_lost":"连接中断:最后已知状态","cons_h":"耗材","commands":"命令","tap_again":"再点一次以确认","empty_since":"待取出已","done_since":"已完成","avg_cycle":"平均周期","maint_tab":"保养","tab_stats_short":"能耗","read_failed":"无法读取历史记录 ({e}),稍后重试。","retry":"重试","see_chart":"查看图表","back":"返回","avg_line":"平均 {v}","tap_bar":"点按柱形查看该周期","k_station":"基站","off_since":"已关闭","close":"关闭","power_now":"当前","p_today":"今天","p_week":"本周","p_month":"本月","p_year":"今年","cycles":"个周期","cycle1":"个周期","per_cycle":"本月每个周期的能耗","short":"短","long":"长","anomalous":"异常","avg":"平均 {d}，{k}","last_cycles":"最近的周期","col_start":"开始","col_dur":"时长","col_cost":"费用","no_cycle_month":"本月尚无周期","coarse":"10 天前的周期按小时统计。","open_notifs":"该家电的通知","no_power":"未找到功率传感器：请在 `appliances:` 中用 `power_entity` 指定。","no_power_vac":"扫地机器人没有功率传感器：不统计能耗和周期。"}},"hi":{"SN_STRINGS":{"presence":"उपस्थिति","time_band":"समय खंड","quiet":"शांत","act_scen":"सक्रिय परिदृश्य","on":"चालू","off":"बंद","active":"सक्रिय","dnd":"परेशान न करें","tap_silence":"शांत करने के लिए टैप करें","snooze":"स्नूज़","min":"मिनट","pause_nc":"गैर-गंभीर रोकें","snoozed":"स्नूज़ किया गया","until":"तक","tap_clear":"हटाने के लिए टैप करें","announce":"घोषणा","intercom":"इंटरकॉम","announce_ph":"सभी स्पीकर पर घोषणा करें…","send":"भेजें","announced":"घोषित","cleared":"स्नूज़ हटाए गए","snoozed_for":"गैर-गंभीर सूचनाएँ स्नूज़ की गईं:","sent":"भेजी गईं","yesterday":"कल","deliveries":"डिलीवरी","last_notif":"अंतिम सूचना","transports":"परिवहन","delivered":"पहुँचाई गई","failed":"विफल","channels":"चैनल","none":"कोई नहीं","no_transports":"कोई परिवहन entity नहीं मिली","tr_used":"इसके द्वारा उपयोग","tr_unused":"कोई चैनल इसका उपयोग नहीं करता","start":"शुरुआत","volume":"वॉल्यूम","now":"अभी","crosses":"आधी रात पार करता है","no_voice":"आवाज़ नहीं","mute_hint":"<b>0%</b> वाला खंड बिल्कुल <b>कोई आवाज़ घोषणा नहीं</b> भेजता (Alexa और TTS बंद, पुश और डैशबोर्ड फिर भी पहुँचते हैं)। गंभीर और उच्च प्राथमिकता वाली चेतावनियाँ हमेशा बोलती हैं।","enabled":"सक्षम","grp_auto":"अपने आप शुरू होते हैं","grp_named":"केवल जब कॉल में नाम हो","grp_scen":"केवल किसी परिदृश्य के साथ","grp_fallback":"बैकअप, जब बाकी विफल हों","ch_title":"चैनल","ch_count":"{tot} में से {on} चालू","off_manual":"बंद किया गया","paused_by":"अभी रोका गया:","on_by":"अभी चालू, इसके ज़रिए:","fixed_targets":"निश्चित लक्ष्य","no_deliveries":"कोई डिलीवरी entity नहीं मिली","home":"घर पर","away":"बाहर","devices":"डिवाइस","devices_1":"डिवाइस","rc_test":"परीक्षण भेजें","rc_test_confirm":"भेजने के लिए फिर टैप करें","rc_test_sent":"परीक्षण भेजा गया","rc_test_title":"SuperNotify परीक्षण","rc_test_msg":"डैशबोर्ड से परीक्षण संदेश,","overrides":"डिलीवरी ओवरराइड","overrides_1":"डिलीवरी ओवरराइड","no_contact":"कोई संपर्क बिंदु नहीं","no_recipients":"कोई प्राप्तकर्ता entity नहीं मिली","details":"विवरण","h_update":"अपडेट उपलब्ध:","h_restart":"अपडेट पूरा करने के लिए Home Assistant रीस्टार्ट करें","h_uptodate":"अद्यतित","h_transport_err":"त्रुटियों वाले परिवहन","h_channels_off":"चैनल बंद","h_all_good":"सब ठीक है","h_failures":"विफलताएँ","h_failures_1":"विफलता","h_transport_err_1":"त्रुटि वाला परिवहन","h_channels_off_1":"चैनल बंद","channels_1":"चैनल","band_early_morning":"सुबह-सवेरे","band_morning":"सुबह","band_afternoon":"दोपहर","band_evening":"शाम","band_night":"रात","band_late_night":"देर रात","h_look_1":"1 चीज़ देखनी है","h_look_n":"{n} चीज़ें देखनी हैं","h_rest_ok":"बाकी सब काम कर रहा है","h_ch_on":"{tot} में से {on} चैनल चालू","h_open":"खोलें","ln_delivered":"पहुँचाई गई","ln_failed":"विफल","ln_why":"क्यों","tgt_loading":"चयनकर्ता लोड हो रहा है…","bands_empty_t":"अभी कोई समय खंड नहीं","bands_empty":"दिन के हर हिस्से के लिए एक खंड जोड़ें: उसकी शुरुआत के लिए एक input_datetime और आवाज़ के वॉल्यूम के लिए एक input_number।","active_now":"अभी सक्रिय","disabled":"अक्षम","other":"अन्य","manual":"मैनुअल","apply_now":"अभी लागू करें","applied":"लागू","apply_off":"लागू करना रोकने के लिए टैप करें","enabled_lbl":"सक्षम","reset_overrides":"ओवरराइड रीसेट करें","reset_done":"ओवरराइड रीसेट हुए","transport_off":"परिवहन बंद","last_notified":"अंतिम सूचना","never_notified":"कभी सूचना नहीं","media":"मीडिया","no_scenarios":"कोई परिदृश्य entity नहीं मिली","sim_pick":"🎬 परिदृश्य — सिम्युलेट करने के लिए टैप करें","sim_fire":"📤 चैनल","sim_hint":"इंजन का वास्तविक डेटा (enquire सेवाएँ)। प्राथमिकता के आधार पर डिलीवरी फ़िल्टरिंग इंजन में होती है और यहाँ सिम्युलेट नहीं की जाती। रनटाइम मर्ज की तरह, अक्षम सक्षम पर भारी पड़ता है।","sim_none":"कोई डिलीवरी नहीं चलेगी","sim_go":"भेजी जाएगी","sim_stop":"नहीं भेजी जाएगी","sim_r_default":"अपने आप शुरू होती है","sim_r_on":"चालू की गई:","sim_r_off":"बंद की गई:","sim_r_named":"केवल जब कॉल में नाम हो","sim_r_scen":"केवल ऐसे परिदृश्य के साथ जो इसे चालू करे","sim_r_fallback":"बैकअप, जब बाकी विफल हों","sim_r_switched":"बंद किया गया","title":"शीर्षक","message":"संदेश","priority":"प्राथमिकता","channels_lbl":"चैनल — कोई न चुना = सामान्य रूटिंग","camera_lbl":"कैमरा स्नैपशॉट","preview":"पूर्वावलोकन","no_title":"(कोई शीर्षक नहीं)","no_message":"(कोई संदेश नहीं)","default_prio":"डिफ़ॉल्ट (मध्यम)","comp_hint":"चुने गए चैनल delivery_selection: fixed के साथ भेजे जाते हैं (केवल वही चलते हैं)। गंभीर सचमुच गंभीर है — सायरन सहित।","critical_confirm":"गंभीर सूचना भेजें? सायरन और अधिकतम वॉल्यूम सहित।","sent_toast":"भेजी गई","write_or_pick":"एक संदेश लिखें, या कोई कैमरा या चैनल चुनें","send_err":"नहीं भेजी गई","dry_btn":"बिना भेजे आज़माएँ","dry_title":"अगर आप इसे अभी भेजते","dry_err":"ड्राई रन विफल","dry_nobody":"कोई प्राप्तकर्ता नहीं, केवल सीधे लक्ष्य","dry_none":"कोई चैनल नहीं चुना गया","dry_scen":"सक्रिय परिदृश्य","dry_raw":"कच्चा उत्तर","dry_prio":"प्राथमिकता","dry_would_n":"चैनल भेजेंगे","dry_nothing":"कुछ नहीं भेजा जाएगा","dry_dupe":"हाल की सूचना का डुप्लिकेट: इसे छोड़ दिया जाएगा","dry_no_dupe":"डुप्लिकेट जाँच सिम्युलेट नहीं हुई, इसलिए ठीक बाद का असली भेजना अवरुद्ध नहीं होगा।","dry_home":"घर पर","dry_empty":"SuperNotify ने कोई उत्तर नहीं दिया: क्या यह 2.12 या नया है?","prio_minimum":"न्यूनतम","prio_low":"कम","prio_medium":"मध्यम","prio_high":"उच्च","prio_critical":"गंभीर","target_lbl":"लक्ष्य — लोग, डिवाइस, क्षेत्र, मंज़िलें, लेबल","custom_target_lbl":"कस्टम लक्ष्य (ईमेल, Telegram ID, …) — कॉमा से अलग","adv_title":"उन्नत विकल्प","adv_spoken":"बोला जाने वाला संदेश (Alexa, TTS)","adv_spoken_ph":"स्पीकर क्या बोलें, अगर टेक्स्ट से अलग हो","adv_apply":"ये परिदृश्य लागू करें","adv_require":"केवल तभी भेजें जब ये परिदृश्य सक्रिय हों","adv_constrain":"केवल इन परिदृश्यों पर विचार करें","adv_snapshot":"URL से चित्र","adv_debug":"डीबग: पूरा चयन ट्रेस दर्ज करें (\"क्यों\" कार्ड में दिखता है)","custom_target_ph":"जैसे user@example.com, 123456789","native_target_tag":"🎯 नेटिव क्षेत्र/मंज़िल/लेबल","target_warn":"⚠️ क्षेत्र, मंज़िलें और लेबल केवल notify_entity, alexa_devices, html5, ntfy, kodi, media_player, tts और chime द्वारा हल किए जाते हैं। किसी अन्य चैनल के साथ — या ऊपर कोई चैनल न चुनने पर डिफ़ॉल्ट रूटिंग के साथ — सूचना चुपचाप बिना लक्ष्य के रह सकती है। कोई संगत चैनल चुनें, या सीधे कोई व्यक्ति/डिवाइस जोड़ें।","aut_search":"स्वचालन खोजें…","aut_all":"सभी","aut_none":"कोई मेल नहीं","aut_err":"मैनिफ़ेस्ट नहीं मिला — इसे tools/genera_vista_automazioni.py से बनाएँ","aut_updated":"सूची अपडेट हुई","aut_count":"स्वचालन","aut_count_1":"स्वचालन","never":"कभी नहीं","ago_now":"अभी","ago_min":"मिनट पहले","ago_h":"घंटे पहले","ago_d":"दिन पहले","aut_disabled_only":"केवल अक्षम","grp_active":"सक्रिय","repeat":"दोहराएँ","skipped_n":"छोड़ी गईं","left":"शेष","missed_n":"छूटी","snz_all":"सब कुछ","snz_nc":"गैर-गंभीर","snz_prio":"प्राथमिकता","snz_transport":"परिवहन","snz_for":"के लिए","snz_choose":"क्या और कितनी देर चुनें","snz_title":"सूचनाएँ रोकें","snz_what":"क्या","snz_nc_l":"गैर-गंभीर","snz_all_l":"सब कुछ","snz_ch":"एक चैनल","snz_pr":"एक प्राथमिकता","snz_who":"किसके लिए","snz_everyone":"सभी","snz_me":"केवल मैं","snz_len":"कितनी देर","snz_forever":"जब तक मैं फिर शुरू न करूँ","snz_go":"रोकें","snz_close":"बंद करें","rs_hand":"हाथ से","rs_voice":"आवाज़ से","rs_assist":"सहायक द्वारा","snz_voice_info":"आपके विराम SuperNotify के वॉइस कमांड से जाते हैं: वे केवल आपके हैं।","snz_voice_off":"SuperNotify के वॉइस कमांड बंद हैं: उन्हें इंटीग्रेशन विकल्पों में चालू करें।","snz_resume_mine":"मेरे फिर शुरू करें","go_open":"दिखाएँ","dl_probe":"यह चैनल आज़माएँ","probe_msg":"डैशबोर्ड से चैनल परीक्षण","sc_why":"क्यों","sc_yes":"अभी लागू","sc_no":"अभी लागू नहीं","sc_manual_why":"मैनुअल परिदृश्य: हाथ से लागू किया गया","sc_no_cond":"कोई शर्त नहीं","sc_off_sw":"बंद किया गया","sc_not_eval":"जाँचा नहीं गया","sc_now":"अभी","sc_diff_btn_on":"लागू होने पर क्या बदलेगा","sc_diff_btn_off":"इसके बिना क्या बदलेगा","sc_diff_on":"अगर यह लागू होता, अभी एक मध्यम सूचना के लिए:","sc_diff_off":"इसके बिना, अभी एक मध्यम सूचना के लिए:","sc_diff_add":"यह भी भेजेगा","sc_diff_rem":"अब नहीं भेजेगा","sc_diff_none":"कोई अंतर नहीं","c_state":"{e} {s} है","c_template":"टेम्पलेट शर्त","c_time":"समय","c_after":"के बाद","c_before":"से पहले","c_numeric":"{e}","c_above":"से ऊपर","c_below":"से नीचे","c_and":"ये सभी","c_or":"इनमें से कम से कम एक","c_not":"इनमें से कोई नहीं","c_or_join":" या ","sim_hint_dry":"SuperNotify का अपना उत्तर (ड्राई रन, कुछ नहीं भेजा जाता): अभी एक सूचना, ऊपर चुनी गई प्राथमिकता और केवल चुने गए परिदृश्यों के साथ।","sim_msg":"सिम्युलेटर परीक्षण","sim_prio":"प्राथमिकता","sa_snooze":"{what} {len} के लिए रोकी गईं।","sa_silence":"{what} अगली सूचना तक शांत।","sa_resume":"{what} फिर से चालू।","sa_resume_one":"विराम समाप्त: {x}।","sa_resume_all":"सूचनाएँ फिर से चालू।","sa_w_nc":"गैर-गंभीर सूचनाएँ","sa_w_all":"सभी सूचनाएँ","sa_w_ch":"चैनल {x}","sa_w_pr":"{x} प्राथमिकता की सूचनाएँ","sa_w_mine":"आपकी सूचनाएँ","sa_for":"{x} के लिए","sa_min":"{n} मिनट","sa_hour":"एक घंटा","sa_hours":"{n} घंटे","occ_title":"कौन घर पर है","occ_home_l":"घर पर","occ_ALL_HOME":"सभी घर पर","occ_ALL_AWAY":"सभी बाहर","occ_LONE_HOME":"केवल एक घर पर","occ_MULTI_HOME":"कुछ घर पर","occ_UNDEFINED_OCCUPANTS":"कोई ट्रैक नहीं","h_repairs":"SuperNotify मरम्मत","h_repairs_1":"SuperNotify मरम्मत","det_more":"सभी विशेषताएँ","det_yes":"हाँ","det_no":"नहीं","det_action":"क्रिया","det_target":"निश्चित लक्ष्य","det_target_req":"लक्ष्य चाहिए","det_target_use":"लक्ष्य उपयोग","det_inclusion":"कब उपयोग","det_prio":"प्राथमिकताएँ","det_occ":"किसे घर पर होना चाहिए","det_transport":"परिवहन","det_data":"डेटा","det_debug":"डीबग","det_err_last":"अंतिम त्रुटि","det_err_in":"में","det_err_n":"शुरू से त्रुटियाँ","det_select":"चयन","adv_html":"ईमेल के लिए टेक्स्ट (HTML)","adv_clip":"URL से वीडियो क्लिप","adv_actions":"सूचना पर बटन","adv_act_id":"क्रिया id","adv_act_title":"बटन टेक्स्ट","adv_act_add":"+ बटन","adv_groups":"बटन समूह (कॉमा)","adv_dc":"इस सूचना के लिए चैनल सेटिंग्स","adv_dc_ph":"key: value, हर पंक्ति में एक","adv_dc_add":"+ चैनल","snz_active":"अभी रुका हुआ","snz_resume":"फिर शुरू करें","snz_resume_all":"सब फिर शुरू करें","snz_until_resumed":"फिर शुरू होने तक","snz_done":"रोका गया","snz_resumed":"फिर शुरू हुआ","no_notif":"अभी कोई सूचना नहीं","st_title":"उपयोग","st_days_short":"दि","st_total":"सूचनाएँ","st_avg":"प्रति दिन","st_today":"आज","st_vs_avg":"औसत की तुलना में","st_peak_hour":"सबसे व्यस्त घंटा","st_top_channel":"शीर्ष चैनल","st_errors":"चैनल त्रुटियाँ","st_of_sends":"चैनल भेजे गए में से","st_daily":"प्रति दिन","st_hourly":"दिन के घंटे के अनुसार","st_weekday":"सप्ताह के दिन के अनुसार","st_channels":"चैनल — सबसे अधिक उपयोग","st_priority":"प्राथमिकता","st_period":"दिन का समय","st_insights":"जानकारियाँ","st_no_data":"अभी कोई इतिहास नहीं — पहली सूचनाओं के बाद डेटा दिखेगा।","st_loading":"लोड हो रहा है…","st_installed":"इंस्टॉल","st_latest":"नवीनतम","st_uptodate":"अद्यतित","st_update":"अपडेट उपलब्ध","st_restart":"रीस्टार्ट आवश्यक","st_logged":"दर्ज","st_from_archive":"SuperNotify के संग्रह से","st_archive_err":"संग्रह आंशिक रूप से पढ़ा गया","st_wd":["सोम","मंगल","बुध","गुरु","शुक्र","शनि","रवि"],"st_i_share":"सभी चैनल भेजे गए में से {p}% {c} से जाते हैं।","st_i_peak":"सबसे व्यस्त घंटा {h}:00 है ({d} दिनों में {n} सूचनाएँ)।","st_i_night":"{p}% सूचनाएँ 23:00 और 07:00 के बीच आती हैं — अगर यह नहीं चाहिए तो DND परिदृश्य पर विचार करें।","st_i_night_ok":"केवल {p}% सूचनाएँ रात में (23–07) आती हैं: शांत घंटे काम कर रहे हैं।","st_i_weekend":"सप्ताहांत के दिनों में कार्यदिवसों की तुलना में {p}% {dir} सूचनाएँ आती हैं।","st_i_errors":"{d} दिनों में {n} चैनल त्रुटियाँ, ज़्यादातर {c} पर।","st_i_noerr":"पिछले {d} दिनों में कोई चैनल त्रुटि नहीं।","st_i_prio":"{p}% सूचनाएँ {prio} प्राथमिकता की हैं।","st_i_trend":"पिछले 7 दिन: {n}/दिन, पहले के 7 दिनों की तुलना में {p}% {dir}।","st_more":"अधिक","st_less":"कम","st_up":"ऊपर","st_down":"नीचे"},"SN_ARCH_STRINGS":{"search":"शीर्षक या संदेश खोजें…","f_all":"सभी","f_today":"आज","f_whisper":"फुसफुसाई गईं","wh":"फुसफुसाई गई","said":"Alexa ने कहा","said_by":"{ch} ने कहा","none":"कोई सूचना मेल नहीं खाती","loading":"संग्रह पढ़ा जा रहा है…","recent":"नवीनतम सूचनाएँ","read_at":"पढ़ा गया","today":"आज","yesterday":"कल","failed":"विफल","missed":"छूटी","reasons":{"doppione":"डुप्लिकेट","nessun target":"कोई लक्ष्य नहीं","errore":"त्रुटि","condizione":"शर्त","scenario":"परिदृश्य","presenza":"उपस्थिति","priorita":"प्राथमिकता","spento":"बंद","pausa":"स्नूज़ किया गया","transport spento":"परिवहन बंद","nessuna azione":"कोई क्रिया नहीं","dati non validi":"अमान्य डेटा","sconosciuto":"अज्ञात"},"f_appliance":"उपकरण","ap_scope":"पूरी पढ़ी गई पिछली {n} सूचनाओं में से - पुरानी पहचानी नहीं जातीं"},"SN_WHY_STRINGS":{"pick":"कोई सूचना चुनें यह देखने के लिए कि वह जहाँ गई वहाँ क्यों गई।","loading":"लोड हो रहा है…","none":"कोई सूचना नहीं","gone":"यह सूचना अब संग्रह में नहीं है","priority":"प्राथमिकता","dupe":"डुप्लिकेट","outcomes":{"success":"पहुँचाई गई","partial_delivery":"आंशिक रूप से पहुँचाई गई","dupe":"डुप्लिकेट","failed":"विफल","error":"विफल","fallback_delivery":"फ़ॉलबैक चैनल से पहुँचाई गई","no_delivery":"नहीं पहुँचाई गई"},"step_call":"कॉल","step_scen":"परिदृश्य","step_people":"लोग","step_ch":"चैनल","call_auto":"कोई चैनल नामित नहीं: सामान्य रूटिंग","call_named":"कॉल में नामित:","call_debug":"डीबग के साथ","nobody":"घर पर कोई नहीं","ch_sent":"भेजे गए","ch_problems":"देखने योग्य","ch_skipped":"छोड़े गए","pb_failed":"विफल","pb_missed":"माँगा गया पर भेजा नहीं गया","grp_skipped":"किसी नियम से छोड़े गए: सामान्य","grp_not":"शामिल नहीं","trace_title":"पूरा चयन ट्रेस","fix":{"NO_TARGET":"किसी प्राप्तकर्ता के पास इस चैनल का पता नहीं है: किसी प्राप्तकर्ता में एक जोड़ें, चैनल को निश्चित लक्ष्य दें, या इसे इस कॉल से हटा दें।","ERROR":"इस चैनल के पीछे के इंटीग्रेशन ने त्रुटि लौटाई: उसकी अपनी लॉग प्रविष्टि देखें।","NO_ACTION":"चैनल के पास कॉल करने के लिए कोई क्रिया नहीं है: डिलीवरी पर `action:` सेट करें।","INVALID_ACTION_DATA":"क्रिया को दिया गया डेटा अस्वीकार कर दिया गया: कॉल या डिलीवरी का `data:` जाँचें।"},"no_scenarios":"कोई परिदृश्य लागू नहीं","applied":"कॉल द्वारा बाध्य","required":"कॉल द्वारा आवश्यक","constrain":"कॉल द्वारा सीमित:","home":"घर पर","away":"बाहर","no_channels":"कोई चैनल नहीं चुना गया","st_ok":"पहुँचाई गई","st_err":"विफल","st_skip":"छोड़ी गई","calls":"कॉल","calls_1":"कॉल","target_required":"लक्ष्य आवश्यक:","started_by":"इसके द्वारा चुना गया:","scen_would_off":"बंद करता (रद्द किया गया):","src_default":"हमेशा चालू (डिफ़ॉल्ट)","src_scen":"परिदृश्य","src_call":"कॉल स्वयं","src_recipient":"प्राप्तकर्ता","r_off_by":"बंद किया गया:","call_targets":"कॉल में लक्ष्य","cats":{"entity_id":"entities","mobile_app_id":"डिवाइस","person_id":"लोग","email":"ईमेल","phone":"फ़ोन","device_id":"डिवाइस"},"r_call_off":"कॉल द्वारा बाहर रखा गया","r_scen_off":"लागू परिदृश्य द्वारा बंद किया गया","r_disabled":"बंद किया गया","r_transport_off":"इसका परिवहन बंद है","r_only_scen":"केवल तब शुरू होता है जब कोई परिदृश्य इसे चालू करे","r_only_fallback":"केवल फ़ॉलबैक","r_only_explicit":"केवल नाम से माँगने पर शुरू होता है","r_priority":"इस प्राथमिकता के लिए नहीं","r_unknown":"ट्रेस के बिना पुनर्निर्मित नहीं किया जा सकता","from_config":"शुरू न हुए चैनलों के कारण कॉन्फ़िगरेशन से पुनर्निर्मित किए जाते हैं जैसा वह अभी है, न कि जैसा तब था।","from_trace":"कारण सूचना के साथ संग्रहीत चयन ट्रेस से आते हैं।","st_time":"लगा समय","st_slow":"सबसे धीमा","st_rate":"चैनल सफल हुए","ua_title":"लक्ष्य जिन्हें किसी चैनल ने नहीं लिया","ua_hint":"वे कॉल में थे, पर कोई चुना गया चैनल इस प्रकार का लक्ष्य स्वीकार नहीं करता।","un_title":"नाम जो मौजूद नहीं हैं","sent_by":"भेजने वाला","sent_auto":"स्वचालन","sent_script":"स्क्रिप्ट","sent_person":"","sent_unknown":"भेजने वाला अज्ञात (इसके संदर्भ में कोई स्वचालन या व्यक्ति नहीं)","no_trace":"पूरा चयन ट्रेस केवल तभी दर्ज होता है जब notify कॉल में debug: true हो, और तभी संग्रहीत होता है जब संग्रह डायग्नोस्टिक्स में यह शामिल हो।","reasons":{"NO_TARGET":"कोई उपयोगी लक्ष्य नहीं","DUPE":"हाल की सूचना का डुप्लिकेट","PRIORITY":"इस प्राथमिकता के लिए नहीं","SNOOZE":"स्नूज़ किया गया","SNOOZED":"स्नूज़ किया गया","DELIVERY_CONDITION":"डिलीवरी शर्त असत्य","OCCUPANCY":"उपस्थिति नियम","ERROR":"त्रुटि","DELIVERY_DISABLED":"बंद किया गया","SCENARIO":"परिदृश्य","TRANSPORT_DISABLED":"इसका परिवहन बंद है","NO_SCENARIO":"एक आवश्यक परिदृश्य लागू नहीं है","NO_ACTION":"कॉल करने के लिए कोई क्रिया नहीं","INVALID_ACTION_DATA":"अमान्य क्रिया डेटा","UNKNOWN":"अज्ञात कारण"}},"SN_TOOLS_STRINGS":{"maint":"रखरखाव","enq":"SuperNotify से पूछें","refresh":"हर entity फिर से प्रकाशित करें","refresh_btn":"रीफ़्रेश","resume_btn":"फिर शुरू करें","refreshed":"Entities फिर से प्रकाशित हुईं।","resume_all":"हर विराम फिर शुरू करें","cleared_n":"विराम फिर शुरू हुए","purge_arch":"संग्रह साफ़ करें","purge_media":"चित्र साफ़ करें","older":"इससे पुराने","days":"दिन","purge_btn":"साफ़ करें","confirm":"पुष्टि के लिए फिर टैप करें","purged":"हटाए गए","remaining":"शेष","reset":"हाथ से किए गए बदलाव पूर्ववत करें","reset_btn":"रीसेट","reset_none":"रीसेट करने को कुछ नहीं: सब कुछ कॉन्फ़िगरेशन के अनुसार है।","reset_done":"कॉन्फ़िगरेशन पर वापस:","k_all":"सब कुछ","k_scenario":"परिदृश्य","k_delivery":"चैनल","k_recipient":"लोग","k_transport":"परिवहन","q_config":"कॉन्फ़िगरेशन","q_scen":"परिदृश्य","q_active":"सक्रिय परिदृश्य","q_by_scen":"परिदृश्य के अनुसार चैनल","q_implicit":"डिफ़ॉल्ट चैनल","q_recipients":"प्राप्तकर्ता","q_occupancy":"कौन घर पर है","q_snoozes":"विराम","q_last":"अंतिम सूचना","copy":"JSON कॉपी करें","copied":"कॉपी हुआ","close":"बंद करें","empty":"(खाली)","err":"SuperNotify ने त्रुटि के साथ उत्तर दिया:","settings":"इंटीग्रेशन सेटिंग्स","running":"काम चल रहा है…","more":"और"},"SN_FORM_LABELS":{"_common":"रूप और टेक्स्ट","style":"रंग","icons":"आइकन","show_version":"कार्ड संस्करण दिखाएँ","intro":"ऊपर परिचय टेक्स्ट","title":"शीर्षक","dnd_entity":"परेशान-न-करें स्विच","quiet_entity":"गणना की गई शांत स्थिति (वैकल्पिक)","presence_entity":"स्थिति पट्टी के लिए व्यक्ति","archive_days":"संग्रह सफ़ाई: इससे पुराने (दिन)","media_days":"चित्र सफ़ाई: इससे पुराने (दिन)","occupancy":"कौन घर पर है (SuperNotify से)","repairs":"स्वास्थ्य सूची में SuperNotify मरम्मत","snooze_announce":"विराम ज़ोर से बोलें (घोषणा चैनल)","snooze_via":"विराम इसके ज़रिए जाते हैं","o_event":"पुश बटन इवेंट (व्यवस्थापक)","o_voice":"वॉइस कमांड","snooze_minutes":"स्नूज़ अवधि (मिनट)","snooze_panel":"स्नूज़ टाइल विराम पैनल खोलती है","announce_delivery":"घोषणाओं के लिए चैनल","last_notification":"अंतिम सूचना दिखाएँ","last_channels":"अंतिम सूचना में हर चैनल के लिए एक चिप","repeat_entity":"अंतिम-दोहराएँ बटन (वैकल्पिक)","tile_layout":"टाइलें","tile_columns":"टाइल कॉलम (खाली = स्वचालित)","update_entity":"SuperNotify अपडेट entity","cards_update_entity":"कार्ड अपडेट entity","health":"ऊपर स्वास्थ्य","poll_seconds":"हर इतने में रीफ़्रेश (सेकंड)","group":"चैनल कैसे शुरू होता है उसके अनुसार समूह","hide_defaults":"स्वचालित DEFAULT_ चैनल छिपाएँ","limit":"सूची में सूचनाएँ","expand":"मुड़े हुए हिस्से खोलें","max_height":"अधिकतम ऊँचाई (CSS, जैसे 70vh)","trigger_entity":"इसके बदलने पर रीफ़्रेश करें","dry_run":"\"बिना भेजे आज़माएँ\" दिखाएँ","dry_run_dupe_check":"डुप्लिकेट जाँच भी सिम्युलेट करें","days":"डिफ़ॉल्ट रूप से दिखाए गए दिन","manifest_url":"स्वचालन मैनिफ़ेस्ट URL","o_supernotify":"SuperNotify","o_theme":"Home Assistant थीम","o_mdi":"Home Assistant आइकन","o_emoji":"इमोजी","o_row":"बाईं ओर आइकन","o_stacked":"ऊँची, ऊपर आइकन","o_auto":"स्वचालित"},"SN_NATIVE_STR":{"all_good":"सब ठीक है","paused":"रुका हुआ","resume":"फिर शुरू करें","test":"परीक्षण भेजें","sure":"भेजने के लिए फिर टैप करें","sent":"भेजी गईं","last":"अंतिम","none":"अभी कोई सूचना नहीं","ago":"पहले","h":"घं","err":"त्रुटियों वाले परिवहन","off":"चैनल बंद"},"SN_STRATEGY_TITLES":{"home":"होम","archive":"संग्रह","send":"भेजें","setup":"सेटअप","stats":"आँकड़े","tools":"टूल","title":"SuperNotify","appliances":"उपकरण"},"SN_APPL_STRINGS":{"title":"उपकरण","loading":"पढ़ा जा रहा है…","none":"कोई उपकरण नहीं: Appliance Autonotify में जोड़ें (सेटिंग्स → डिवाइस और सेवाएँ)।","st_run":"चल रहा है","st_cleaning":"सफ़ाई कर रहा है","st_done":"पूरा · खाली करें","st_done_other":"पूरा","st_err":"मदद चाहिए","m_switch_on":"प्लग चालू करें","done_switch_on":"प्लग चालू हो गया।","done_action":"हो गया: {n}","confirm_action":"«{n}» चलाएँ?","open_entity":"बदलने के लिए खोलें","chip_notifs":"सूचनाएँ","chip_device":"डिवाइस","not_found":"«{n}» नाम का कोई उपकरण नहीं।","last7":"पिछले 7 दिन","col_day":"दिन","col_cycles":"चक्र","col_time":"समय","col_energy":"खपत","source_h":"स्रोत","manual_src":"हाथ से जोड़ा गया: {w} से ऊपर चालू","tab_info":"सारांश","tab_stats":"खपत और चक्र","tab_cleans":"सफ़ाइयाँ","tab_prints":"प्रिंट","last_run":"पिछला चक्र","avg_run":"औसत","reminders_h":"सूचनाएँ","plug":"प्लग","plug_on":"चालू","plug_off":"बंद","error_h":"त्रुटि","open_device":"Home Assistant में डिवाइस","prints":"प्रिंट","print1":"प्रिंट","per_print":"इस महीने का हर प्रिंट","last_prints":"पिछले प्रिंट","no_print_month":"इस महीने अभी कोई प्रिंट नहीं","no_print":"अभी कोई प्रिंट नहीं","col_fil":"फ़िलामेंट","failed":"विफल","per_run":"इस महीने का हर चक्र","dev_hist":"हर एक Home Assistant के इतिहास से आता है (पिछले {n} दिन); घंटे उपकरण के अपने काउंटर से, अगर हो।","cleans":"सफ़ाइयाँ","clean1":"सफ़ाई","per_clean":"इस महीने की हर सफ़ाई","avg_clean":"औसत {d}","col_area":"क्षेत्रफल","last_cleans":"पिछली सफ़ाइयाँ","no_clean_month":"इस महीने अभी कोई सफ़ाई नहीं","no_clean":"अभी कोई सफ़ाई नहीं","vac_hist":"कुल योग रोबोट के काउंटर से आते हैं; हर सफ़ाई Home Assistant के इतिहास से (पिछले {n} दिन)।","st_paused":"रुका हुआ","st_returning":"डॉक पर लौट रहा है","st_charging":"चार्ज हो रहा है","st_docked_w":"डॉक पर","st_idle":"रुका हुआ","st_off":"बंद","stopped":"रुके हुए","yesterday":"कल","u_min":"मिनट","u_h":"घंटे","start":"शुरू","so_far":"अब तक","no_cycle":"अभी कोई चक्र नहीं","last_cycle":"पिछला चक्र {d}","ended_at":"{t} पर पूरा","reminders":"{t} तक +{n} रिमाइंडर","reminder1":"{t} पर +1 रिमाइंडर","end_est":"अनुमानित अंत","left":"{d} बाकी","almost":"बस पूरा होने वाला है","est_from_avg":"मिलते-जुलते चक्रों से अनुमान","running_for":"{d} से चल रहा है","btn_empty":"खाली किया","btn_seen":"हो गया","btn_resume":"सफ़ाई फिर शुरू करें","m_switch_off":"प्लग बंद करें","m_remind":"बाद में याद दिलाएँ","details":"विवरण","settings":"सेटिंग्स","more":"और","details_link":"विवरण, खपत और चक्र","done_empty":"हो गया: रिमाइंडर बंद।","done_remind":"बाद में याद दिलाएगा।","done_switch":"प्लग बंद किया गया।","done_resume":"सफ़ाई फिर शुरू हुई।","err":"त्रुटि","new_dev":"{n} नए डिवाइस","new_dev1":"1 नया डिवाइस","battery":"बैटरी","consumable":"{n} {p}%","maint_in":"{c} चक्र बाकी","maint_next":"अगले चक्र पर","maint_due":"अभी करना है","maint_of":"{e} में से {d}","maint_done":"हो गया","confirm_maint":"«{n}» को हो गया मानें? गिनती फिर से शुरू होगी।","conn_lost":"कनेक्शन टूटा: आख़िरी ज्ञात स्थिति","cons_h":"उपभोग्य सामग्री","commands":"आदेश","tap_again":"पुष्टि के लिए फिर से टैप करें","empty_since":"खाली करना बाकी","done_since":"पूरा हुए","avg_cycle":"औसत चक्र","maint_tab":"रखरखाव","tab_stats_short":"खपत","read_failed":"इतिहास नहीं पढ़ा जा सका ({e}); थोड़ी देर में फिर कोशिश करेंगे।","retry":"फिर कोशिश करें","see_chart":"चार्ट देखें","back":"वापस","avg_line":"औसत {v}","tap_bar":"उस चक्र को देखने के लिए बार पर टैप करें","k_station":"डॉक","off_since":"बंद है","close":"बंद करें","power_now":"अभी","p_today":"आज","p_week":"सप्ताह","p_month":"महीना","p_year":"साल","cycles":"चक्र","cycle1":"चक्र","per_cycle":"इस महीने प्रति चक्र खपत","short":"छोटे","long":"लंबे","anomalous":"असामान्य","avg":"औसत {d}, {k}","last_cycles":"हाल के चक्र","col_start":"शुरू","col_dur":"अवधि","col_cost":"लागत","no_cycle_month":"इस महीने अभी कोई चक्र नहीं","coarse":"10 दिन से पुराने चक्र घंटे के हिसाब से गिने जाते हैं।","open_notifs":"उपकरण की सूचनाएँ","no_power":"पावर सेंसर नहीं मिला: `appliances:` में `power_entity` से बताएँ।","no_power_vac":"रोबोट वैक्यूम में पावर सेंसर नहीं होता: खपत और चक्र नहीं गिने जाते।"}}};
 (() => {
   const dicts = { SN_STRINGS, SN_ARCH_STRINGS, SN_WHY_STRINGS, SN_TOOLS_STRINGS, SN_FORM_LABELS, SN_APPL_STRINGS,
     SN_NATIVE_STR, SN_STRATEGY_TITLES };
@@ -12389,5 +12290,13 @@ const SN_I18N_EXTRA = {"de":{"SN_STRINGS":{"presence":"Anwesenheit","time_band":
     for (const [name, d] of Object.entries(dicts)) {
       if (d && d.en && byDict[name] && !d[lang]) d[lang] = { ...d.en, ...byDict[name] };
     }
+  }
+  // 1.0.0: one table for what is said twice - the skip reasons (the why texts, also in dry runs and in a channel's
+  // last send), the priorities (the archive's badges), "until" and "min" of the tile features
+  for (const [lang, S] of Object.entries(SN_STRINGS)) {
+    S.dry_reasons = (SN_WHY_STRINGS[lang] || SN_WHY_STRINGS.en).reasons;
+    const A = SN_ARCH_STRINGS[lang], N = SN_NATIVE_STR[lang];
+    if (A) A.prio = Object.fromEntries(["critical", "high", "low", "minimum", "medium"].map((p) => [p, S["prio_" + p]]));
+    if (N) Object.assign(N, { until: S.until, min: S.min });
   }
 })();

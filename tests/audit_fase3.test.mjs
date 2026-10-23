@@ -295,7 +295,7 @@ const svcCalls = (name) => ws.filter((m) => m.service === name).length;
   ok(el.shadowRoot.querySelector(".ov .sheet") === sheet && /1[.,]7\s?kW|1700/.test(sheet.textContent), `P-5: pannello aperto -> stesso foglio, potenza aggiornata (innerHTML ${html})`);
   // P-16: no _update after the card left the page
   const upd = count("supernotify-appliances-card", "_update");
-  el._msg[ap.id] = { ok: true, text: "x" }; el._msgLater(ap.id);
+  el._flash(ap.id, true, "x"); // 1.0.0 (phase 4): _flash = the result line and its timer (was _msg + _msgLater)
   el._arm("e1|switch_off");
   upd.n = 0;
   el.remove();

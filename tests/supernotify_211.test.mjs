@@ -1,17 +1,10 @@
 // v0.46.0: allineamento a SuperNotify 2.11 / 2.11.1 — conteggio `missed`, motivi
 // SNOOZED / TRANSPORT_DISABLED, esiti error / fallback_delivery, snooze per tag.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, fail } from "./_harness.mjs";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
+boot({ scroll: true });
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const tick = () => new Promise((r) => setTimeout(r, 30));
 const iso = (msAgo) => new Date(Date.now() - msAgo).toISOString();
 const hms = (d) => [d.getHours(), d.getMinutes(), d.getSeconds()].map((x) => String(x).padStart(2, "0")).join(":");

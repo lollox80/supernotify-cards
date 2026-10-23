@@ -118,6 +118,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   particular installation (`notifiche_vocali_solo_ufficio`, `notifiche_vocali_off`, `cn_dnd_orario`, `dnd_globale`,
   `presenza_ingresso`). New option `icons` sets the icon of any scenario: `icons: {my_scenario: "🔔"}`; without it
   a scenario that is not in the built-in list shows 🎬.
+- **simulator** (0.18.0), **composer** (0.25.1), **deliveries** (0.33.2): why a channel would not send (dry run,
+  "Try this channel", the last send of a channel) now uses the same words as the archive's detail, in every language -
+  for example "its transport is off" instead of "transport off", "no action to call" instead of "no action",
+  and, in the languages other than English and Italian, "duplicate of a recent notification" instead of "duplicate".
 
 ## [0.92.0] - 2026-10-21
 

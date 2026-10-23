@@ -1,16 +1,10 @@
 // v0.54.0: singolare/plurale, nomi leggibili in simulatore e scenari, fasce tradotte e dalla mattina.
 // 2026-10-05 v0.78.0: il tooltip del tag scenario ora inizia col nome tecnico e prosegue con cosa fa lo scenario.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, fail } from "./_harness.mjs";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true, url: "http://ha.local/" });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
+boot({ url: "http://ha.local/" });
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const tick = () => new Promise((r) => setTimeout(r, 40));
 const st = (state, attributes = {}) => ({ state, attributes });
 const del = (name, fn, on = "on") => st(on, { name, enabled: on === "on", transport: "mobile_push", inclusion: ["default"], friendly_name: `SuperNotify Delivery ${fn} abilitata` });

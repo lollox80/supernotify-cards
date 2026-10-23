@@ -1,17 +1,10 @@
 // v0.53.0: why-card - percorso in 4 passi, problemi in cima con cosa fare, il resto ripiegato.
 // 2026-10-05 v0.79.0: il gruppo dei saltati dice il motivo («1 saltato · in pausa») invece di «per regola: normale».
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { boot, load, ok, fail } from "./_harness.mjs";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
+boot({ scroll: true });
+load();
 
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const tick = () => new Promise((r) => setTimeout(r, 40));
 const T0 = Math.floor(Date.now() / 1000) - 600;
 // 1.0.0: the sensor index and shell_command detail are gone; this test is about how the why engine

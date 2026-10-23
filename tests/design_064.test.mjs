@@ -1,17 +1,9 @@
 // CHANGELOG
 // 2026-10-04 v0.64.0: pulizia del codice - base comune SnCard, un solo snEsc, helper condivisi.
-import { JSDOM } from "jsdom";
-import fs from "fs";
+import { SRC, boot, load, ok, fail } from "./_harness.mjs";
 
-const SRC = fs.readFileSync("dist/supernotify-control-card.js", "utf8");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
-global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
-dom.window.customCards = [];
-new dom.window.Function(SRC)();
-
-let fail = 0;
-const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
+boot();
+load();
 
 // 0.72.0: the badge and the tile features (not cards, no SnCard) have their own setter: leave their block out
 const NB = SRC.indexOf(" * 0.72.0: SuperNotify inside Home Assistant's own cards");
