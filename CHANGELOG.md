@@ -3,6 +3,37 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.0] - 2026-10-23
+
+### Fixed
+- **deliveries** (0.33.2), **transports** (0.27.2), **recipients** (0.31.1), **scenarios** (0.32.1): a switch
+  that Home Assistant refuses (a user who is not an administrator gets "401 Unauthorized") goes back where it
+  was and says why when you hover it, instead of staying moved as if it had worked.
+- **control** (0.39.2): the pause panel and the "held back during the pause" list are no longer redrawn on every
+  notification sent - an open channel / priority menu closed under your finger and the open list folded back.
+- **control** (0.39.2): with `status: false` the card no longer asks SuperNotify for the active scenarios and
+  who is home, which it did not show anyway; at start the last notification is read once (it was read twice)
+  and who is home is read right away instead of after the first minute.
+- **bands** (0.21.2): a volume slider let go on the value it started from no longer freezes the card until the
+  next real change.
+- **archive** (0.45.2): a detail that failed to load (a timeout, a lost connection) is asked again when you open
+  it, instead of showing the error until the page is reloaded; at most 60 details are kept in memory.
+- **archive** (0.45.2): a channel skipped as a duplicate is routine in the list as it already was in the detail:
+  a delivered notification with one channel skipped as a duplicate is no longer flagged "to look at" in the list
+  while its detail shows no problem. The list and the detail now share one set of routine skip reasons.
+- **appliances** (0.2.23): the statistics kept in this browser are no longer lost for all appliances but one
+  when they load together (each wrote back its own copy); values are stored with one decimal.
+- **stats** (0.33.2), **automations** (0.21.5): a timeout or a lost connection on the first read of the daily
+  totals no longer switches them off until the page is reloaded (the card then read notification by
+  notification); only an answer without days, or `daily` refused, does.
+- **stats** (0.33.2): the totals come from the archive whenever SuperNotify's `enquire_archive` action takes
+  `verbosity`, also without the `update.supernotify_update` entity (the slow history path was used).
+- **tools** (0.2.3), **simulator** (0.17.1), **composer** (0.25.1): the actions, the simulator's and the
+  composer's dry run give up after 30 s instead of waiting forever.
+- Links to a card on another view: a failed read of the dashboard configuration is tried again after a minute
+  instead of never; cards removed from the dashboard are no longer kept in memory; technical names are fully
+  escaped.
+
 ## [0.92.0] - 2026-10-21
 
 ### Performance

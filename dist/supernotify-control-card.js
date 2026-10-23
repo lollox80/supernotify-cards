@@ -736,7 +736,7 @@
  *   Backup of the pre-change file: X:\sn_backups\supernotify_cards_20260908\supernotify-control-card_pre_toggle.js
  */
 
-const VERSION = "0.92.0"; // bundle / HACS release
+const VERSION = "1.0.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
@@ -747,20 +747,20 @@ const VERSION = "0.92.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.39.1",
+  control: "0.39.2",
   overview: "0.40.0",
-  bands: "0.21.1",
-  deliveries: "0.33.1",
-  transports: "0.27.1",
-  recipients: "0.31.0",
-  scenarios: "0.32.0",
-  simulator: "0.17.0",
-  composer: "0.25.0",
-  automations: "0.21.4",
-  stats: "0.33.1",
-  archive: "0.45.1",
-  appliances: "0.2.22",
-  tools: "0.2.2",
+  bands: "0.21.2",
+  deliveries: "0.33.2",
+  transports: "0.27.2",
+  recipients: "0.31.1",
+  scenarios: "0.32.1",
+  simulator: "0.17.1",
+  composer: "0.25.1",
+  automations: "0.21.5",
+  stats: "0.33.2",
+  archive: "0.45.2",
+  appliances: "0.2.23",
+  tools: "0.2.3",
   why: "0.17.0",
 };
 
@@ -1387,10 +1387,15 @@ function snA11yInit(card) {
 }
 
 /* ── 0.65.0: the cards on the page know each other ── */
+// 1.0.0: weak references - a card on another view is only disconnected and HA keeps it, so it
+// stays reachable; a card HA threw away (an edited dashboard) is no longer kept alive here
 const snCards = new Set();
+const snCardsSeen = new WeakSet();
+const snCardRef = (c) => (typeof WeakRef === "function" ? new WeakRef(c) : { deref: () => c });
 function snCardRegister(card) {
-  if (snCards.has(card)) return;
-  snCards.add(card);
+  if (snCardsSeen.has(card)) return;
+  snCardsSeen.add(card);
+  snCards.add(snCardRef(card));
   // the others may now show a link to this one; 0.92.0 (perf): one event for all the cards that
   // arrive together, not one per card (each listener redrew N times while a dashboard opened)
   if (!snCardsT) snCardsT = setTimeout(() => { snCardsT = 0; window.dispatchEvent(new CustomEvent("supernotify-cards")); }, 0);
@@ -1401,7 +1406,9 @@ let snCardsT = 0;
 function snCardOn(kind, filter) {
   const tag = `supernotify-${kind}-card`.toUpperCase();
   // 0.67.0: a card on another view is only disconnected - it comes back when that view opens
-  for (const c of snCards) {
+  for (const ref of snCards) {
+    const c = ref.deref();
+    if (!c) { snCards.delete(ref); continue; } // collected: prune
     if (c.isConnected && c.tagName === tag && (!filter || filter(c))) return c;
   }
   return null;
@@ -1412,7 +1419,7 @@ function snCardOn(kind, filter) {
  * configuration (WS lovelace/config), read once per dashboard. Views the user cannot see
  * (`visible:` users) are left out.
  */
-const snDash = { key: null, map: null, busy: false, hass: null };
+const snDash = { key: null, map: null, busy: false, hass: null, failedAt: 0 };
 function snDashKey() {
   const seg = String((window.location && window.location.pathname) || "").split("/")[1] || "";
   return seg || "lovelace";
@@ -1421,6 +1428,8 @@ function snDashEnsure(hass) {
   if (!hass || !hass.callWS) return;
   const key = snDashKey();
   if (snDash.busy || (snDash.key === key && snDash.map)) return;
+  // 1.0.0: after a failed read, try again for this dashboard only after 60 s
+  if (snDash.key === key && snDash.failedAt && Date.now() - snDash.failedAt < 60000) return;
   snDash.busy = true;
   snDash.key = key;
   const uid = hass.user && hass.user.id;
@@ -1444,8 +1453,9 @@ function snDashEnsure(hass) {
       walk([...(v.sections || []), ...(v.cards || [])], v.path || String(i));
     });
     snDash.map = map;
+    snDash.failedAt = 0;
     window.dispatchEvent(new CustomEvent("supernotify-cards"));
-  }).catch(() => { snDash.map = {}; }).finally(() => { snDash.busy = false; });
+  }).catch(() => { snDash.map = null; snDash.failedAt = Date.now(); }).finally(() => { snDash.busy = false; });
 }
 
 /** A card of that kind on this page or on another view of the dashboard. */
@@ -2460,6 +2470,26 @@ function snToggle(hass, entityId, on) {
 }
 
 /**
+ * 1.0.0: snToggle for a switch <input>: when the call fails (a non-admin gets 401
+ * on POST /api/states) the switch goes back where it was and says why in its
+ * tooltip, instead of staying moved with an unhandled rejection.
+ */
+function snToggleSafe(hass, entityId, input) {
+  const was = !input.checked;
+  const box = input.closest(".sw") || input;
+  let p;
+  try { p = snToggle(hass, entityId, input.checked); } catch (e) { p = Promise.reject(e); }
+  return Promise.resolve(p).then(() => {
+    if (box.dataset.snErr) { box.removeAttribute("title"); delete box.dataset.snErr; }
+  }, (e) => {
+    input.checked = was;
+    const msg = `✖ ${(e && (e.message || e.body && e.body.message || e.code)) || e}`;
+    box.title = msg; box.dataset.snErr = "1";
+    console.warn("supernotify: toggle failed", entityId, e);
+  });
+}
+
+/**
  * Human name from a SuperNotify friendly_name. Since 2.7.0 entity names are
  * translated and type-first ("SuperNotify Recipient Lorenzo abilitato",
  * "SuperNotify Condizione scenario Morning"): strip the integration name,
@@ -2574,7 +2604,7 @@ function snSame(a, b) {
 }
 function snTech(name, shown) {
   if (!name || snSame(name, shown)) return "";
-  return `<span class="tech sn-tech" style="font-family:ui-monospace,'Roboto Mono',monospace;font-size:11px;font-weight:400">${String(name).replace(/&/g, "&amp;").replace(/</g, "&lt;")}</span>`;
+  return `<span class="tech sn-tech" style="font-family:ui-monospace,'Roboto Mono',monospace;font-size:11px;font-weight:400">${snEsc(name)}</span>`;
 }
 
 /**
@@ -3048,8 +3078,12 @@ const SN_ARCHIVE_REASONS = {
  * SuppressionReason.is_rule, plus a channel switched off, plus no target, which on 2.11
  * only stays quiet for an implicit channel: a requested one is counted in `missed`).
  */
-const SN_ARCHIVE_ROUTINE = new Set(["pausa", "transport spento", "scenario", "priorita", "condizione",
-  "presenza", "spento", "nessun target"]);
+// 1.0.0: ONE set of SuperNotify codes for the list and the detail (the detail had its own,
+// with DUPE: a channel skipped as a duplicate was routine there and a problem in the list).
+// NO_TARGET: the detail still counts it as a problem when the channel was asked for by name.
+const SN_ARCHIVE_ROUTINE_CODES = new Set(["SNOOZE", "SNOOZED", "PRIORITY", "DELIVERY_CONDITION", "OCCUPANCY",
+  "DELIVERY_DISABLED", "SCENARIO", "TRANSPORT_DISABLED", "NO_SCENARIO", "DUPE", "NO_TARGET"]);
+const SN_ARCHIVE_ROUTINE = new Set([...SN_ARCHIVE_ROUTINE_CODES].map((k) => SN_ARCHIVE_REASONS[k]));
 
 /** True when an archive row deserves a look: failures, missed channels, odd skips, odd outcomes. */
 function snArchiveProblem(r) {
@@ -4145,12 +4179,14 @@ class SupernotifyControlCard extends SnCard {
 
   _onHass(hass, fresh, changed) {
     super._onHass(hass, fresh, changed);
+    const boot = !this._booted;
     if (this._config.last_notification) {
       const cnt = this._st("sensor.supernotify_notifications");
-      if (cnt !== this._lastCount) { this._lastCount = cnt; this._refreshLast(); }
+      if (cnt !== this._lastCount) { this._lastCount = cnt; if (!boot) this._refreshLast(); }
     }
-    // first hass after connect: connectedCallback may have run without hass
-    if (!this._booted) { this._booted = true; this._refreshSnoozes(); this._refreshLast(); }
+    // first hass after connect: connectedCallback may have run without hass.
+    // 1.0.0: each read once (the last notification was read twice) and who is home too
+    if (boot) { this._booted = true; this._refreshSnoozes(); this._refreshLast(); this._refreshOcc(); }
   }
 
   getCardSize() {
@@ -4198,7 +4234,7 @@ class SupernotifyControlCard extends SnCard {
   }
 
   async _refreshOcc() {
-    if (!this._hass || this._config.presence_entity || this._config.occupancy === false) return;
+    if (!this._hass || this._config.presence_entity || this._config.occupancy === false || this._config.status === false) return;
     try {
       const r = await snEnquire(this._hass, "enquire_occupancy");
       const o = snOccupancy(this._hass, r && r.response);
@@ -4270,7 +4306,7 @@ class SupernotifyControlCard extends SnCard {
     const el = this.shadowRoot && this.shadowRoot.getElementById("cu");
     if (!el) return;
     const held = this._cu;
-    if (!held || !held.length) { el.hidden = true; el.innerHTML = ""; return; }
+    if (!held || !held.length) { el.hidden = true; el.innerHTML = ""; this._cuHtml = ""; return; }
     const T = snT(this._config, this._hass);
     const esc = snEsc;
     const hm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -4282,10 +4318,19 @@ class SupernotifyControlCard extends SnCard {
     const span = `${T.cu_from} ${hm(held[0].t)} ${T.cu_to} ${hm(held[held.length - 1].t)}`;
     const rows = held.slice(-30).reverse().map((h) => `<div class="sr"><span class="sl">${esc(snTitleShow(h.ti) || "—")}</span><span class="su">${hm(h.t)}${h.all ? "" : " · " + esc(T.cu_part.replace("{n} ", ""))}</span></div>`).join("");
     el.hidden = false;
-    el.innerHTML = snIconify(`<div class="sh"><b>😴 ${esc(T.cu_title)}</b><button class="sb" id="cuOk">${esc(T.cu_ok)}</button></div>
+    const html = snIconify(`<div class="sh"><b>😴 ${esc(T.cu_title)}</b><button class="sb" id="cuOk">${esc(T.cu_ok)}</button></div>
       <div class="sk">${esc(T.cu_held.replace("{n}", held.length))}${nSome ? ` (${esc(T.cu_part.replace("{n}", nSome))})` : ""} · ${esc(span)}</div>
       <div class="su">${esc(top)}</div>
       <details><summary class="su">${esc(T.cu_list)}</summary><div class="slist">${rows}</div></details>`, this._config);
+    // 1.0.0: redrawn on every update before - the open list folded back while being read
+    if (html !== this._cuHtml) {
+      const det = el.querySelector("details");
+      const open = !!(det && det.open);
+      el.innerHTML = html;
+      this._cuHtml = html;
+      const d2 = el.querySelector("details");
+      if (open && d2) d2.open = true;
+    }
     el.querySelector("#cuOk").onclick = () => {
       try { window.localStorage.setItem(SN_CU_KEY, String(Date.now())); } catch (e) { /* private mode */ }
       this._cu = null;
@@ -4346,7 +4391,7 @@ class SupernotifyControlCard extends SnCard {
     // force, each one resumable); `snooze_panel: false` keeps the one-tap behaviour below
     if (this._config.snooze_panel !== false) {
       this._snzOpen = !this._snzOpen;
-      this._renderSnz();
+      this._renderSnz(true);
       if (this._snzOpen) {
         const el = this.shadowRoot.getElementById("snzp");
         if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -4412,6 +4457,7 @@ class SupernotifyControlCard extends SnCard {
     this._rendered = true;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const p = this._palette();
+    this._snzHtml = this._cuHtml = null; // 1.0.0: fresh elements, draw them again
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
@@ -4614,6 +4660,12 @@ class SupernotifyControlCard extends SnCard {
 
   _renderStatus() {
     const c = this._config;
+    // 1.0.0: status: false - out before anything below asks SuperNotify for scenarios / occupancy
+    if (c.status === false) {
+      const bar0 = this.shadowRoot && this.shadowRoot.getElementById("statusbar");
+      if (bar0) { bar0.innerHTML = ""; bar0.style.display = "none"; }
+      return;
+    }
     const p = this._palette();
     const T = snT(c, this._hass);
     const segs = [];
@@ -4645,7 +4697,6 @@ class SupernotifyControlCard extends SnCard {
     if (act !== null) segs.push(seg("🎬 " + T.act_scen, String(act.length))
       .replace('<div class="sseg"', snCardReach("scenarios") ? '<div class="sseg go" data-go="scenarios"' : '<div class="sseg"'));
     const bar = this.shadowRoot.getElementById("statusbar");
-    if (c.status === false) { bar.innerHTML = ""; bar.style.display = "none"; return; } // 0.74.0
     bar.innerHTML = snIconify(segs.join(""), this && this._config);
     // 0.65.0: who is home -> recipients card, active scenarios -> scenarios card
     bar.querySelectorAll("[data-go]").forEach((g) => {
@@ -4729,10 +4780,14 @@ class SupernotifyControlCard extends SnCard {
    * SUPERNOTIFY_<SNOOZE|SILENCE|NORMAL>_<EVERYONE|USER>_<target>[_<minutes>] (snoozer.py).
    * USER = the person whose user_id is the one logged in. NORMAL resumes one pause.
    */
-  _renderSnz() {
+  _renderSnz(force) {
     const el = this.shadowRoot && this.shadowRoot.getElementById("snzp");
     if (!el) return;
-    if (!this._snzOpen) { el.hidden = true; el.innerHTML = ""; return; }
+    if (!this._snzOpen) { el.hidden = true; el.innerHTML = ""; this._snzHtml = ""; return; }
+    // 1.0.0: an update must not redraw the panel under the user (an open <select> closed).
+    // Only a focused <select>: a button keeps the focus after a click and would freeze the list.
+    const act = this.shadowRoot.activeElement;
+    if (!force && !el.hidden && act && act.tagName === "SELECT" && el.contains(act)) return;
     el.hidden = false;
     const T = snT(this._config, this._hass);
     const esc = snEsc;
@@ -4765,25 +4820,26 @@ class SupernotifyControlCard extends SnCard {
     const rows = live.map((s, i) => `<div class="sr"><div class="sm"><span class="sl">${esc(snSnoozeLabel(this._hass, s, T))}</span>
         <span class="su">${s._end ? `${esc(T.until)} ${esc(snSnzUntil(s._end, this._hass))}` : esc(T.snz_until_resumed)}${snSnoozeReason(s, T) ? ` · ${esc(snSnoozeReason(s, T))}` : ""}</span></div>
         ${canResume(s) && !voice ? `<button class="sb" data-r="${i}">${esc(T.snz_resume)}</button>` : ""}</div>`).join("");
-    el.innerHTML = snIconify(`<div class="sh"><b>${esc(T.snz_title)}</b><button class="sx" id="snzX" aria-label="${esc(T.snz_close)}">✕</button></div>
+    const html = snIconify(`<div class="sh"><b>${esc(T.snz_title)}</b><button class="sx" id="snzX" aria-label="${esc(T.snz_close)}">✕</button></div>
       ${voice ? `<div class="sk">${esc(T.snz_voice_info)}</div>` : `<div class="sk">${esc(T.snz_what)}</div><div class="srow">${whatRow}</div>${sub ? `<div class="srow">${sub}</div>` : ""}
       <div class="sk">${esc(T.snz_who)}</div><div class="srow">${whoRow}</div>`}
       <div class="sk">${esc(T.snz_len)}</div><div class="srow">${lenRow}</div>
       <div class="sgo"><button class="sp" id="snzGo">😴 ${esc(T.snz_go)}</button>${voice ? `<button class="sb" id="snzMine">${esc(T.snz_resume_mine)}</button>` : ""}</div>
       ${live.length ? `<div class="sk">${esc(T.snz_active)}</div><div class="slist">${rows}</div>
         <div class="sgo"><button class="sb" id="snzAll">${esc(T.snz_resume_all)}</button></div>` : ""}`, this._config);
+    if (html !== this._snzHtml) { el.innerHTML = html; this._snzHtml = html; } // 1.0.0: only when it changed
     el.querySelectorAll(".sc").forEach((b) => {
       b.onclick = () => {
         const g = b.dataset.g, v = b.dataset.v;
         if (g === "min") st.min = +v;
         else st[g] = v;
         if (g === "what") st.target = "";
-        this._renderSnz();
+        this._renderSnz(true);
       };
     });
     const sel = el.querySelector("#snzT");
     if (sel) sel.onchange = () => { st.target = sel.value; };
-    el.querySelector("#snzX").onclick = () => { this._snzOpen = false; this._renderSnz(); };
+    el.querySelector("#snzX").onclick = () => { this._snzOpen = false; this._renderSnz(true); };
     el.querySelector("#snzGo").onclick = async () => {
       const kind = +st.min > 0 ? "snooze" : "silence";
       await this._snzSpeak(this._snzText(kind, voice ? { ...st, mine: true } : st));
@@ -4895,7 +4951,7 @@ class SupernotifyControlCard extends SnCard {
 
   /** A link from another card (0.65.0): { snz: true } opens the pause panel. */
   _focus(d) {
-    if (d && d.snz && this._config.snooze_panel !== false) { this._snzOpen = true; this._renderSnz(); }
+    if (d && d.snz && this._config.snooze_panel !== false) { this._snzOpen = true; this._renderSnz(true); }
   }
 
   /** clear_snoozes, said out loud with snooze_announce (0.64.0: one copy for tile and panel). */
@@ -6017,6 +6073,12 @@ class SupernotifyBandsCard extends SnCard {
         this._dragging = false;
         this._setVolume(inp.dataset.e, inp.value);
       };
+      // 1.0.0: released on the same value there is no change event: the card stayed frozen
+      const stop = () => { if (this._dragging) { this._dragging = false; this._update(); } };
+      inp.addEventListener("pointerup", stop);
+      inp.addEventListener("pointercancel", stop);
+      inp.addEventListener("blur", stop);
+      inp.addEventListener("keyup", stop);
     });
   }
 }
@@ -6321,7 +6383,7 @@ class SupernotifyDeliveriesCard extends SnCard {
       label.addEventListener("click", (e) => e.stopPropagation());
       const input = label.querySelector("input");
       input.addEventListener("change", () => {
-        snToggle(this._hass, label.dataset.id, input.checked);
+        snToggleSafe(this._hass, label.dataset.id, input);
       });
     });
   }
@@ -6485,7 +6547,7 @@ class SupernotifyTransportsCard extends SnCard {
       label.addEventListener("click", (e) => e.stopPropagation());
       const input = label.querySelector("input");
       input.addEventListener("change", () => {
-        snToggle(this._hass, label.dataset.id, input.checked);
+        snToggleSafe(this._hass, label.dataset.id, input);
       });
     });
   }
@@ -6653,7 +6715,7 @@ class SupernotifyRecipientsCard extends SnCard {
       label.addEventListener("click", (e) => e.stopPropagation());
       const input = label.querySelector("input");
       input.addEventListener("change", () => {
-        snToggle(this._hass, label.dataset.id, input.checked);
+        snToggleSafe(this._hass, label.dataset.id, input);
       });
     });
     // 0.62.0: the person's devices (model, system, app version) on request
@@ -7075,7 +7137,7 @@ class SupernotifyScenariosCard extends SnCard {
       input.addEventListener("change", () => {
         // switch.* -> switch service; the manual binary_sensor -> state write,
         // which SuperNotify applies back to the scenario.
-        snToggle(this._hass, label.dataset.id, input.checked);
+        snToggleSafe(this._hass, label.dataset.id, input);
       });
     });
   }
@@ -7231,7 +7293,7 @@ class SupernotifySimulatorCard extends SnCard {
       apply_scenarios: sel, constrain_scenarios: sel.length ? sel : ["__simulator_none__"] };
     const ticket = (this._dryTicket = (this._dryTicket || 0) + 1);
     try {
-      const r = await this._hass.callWS({ type: "call_service", domain: "supernotify", service: "notify", service_data: data, return_response: true });
+      const r = await snWS(this._hass, { type: "call_service", domain: "supernotify", service: "notify", service_data: data, return_response: true }, 30000);
       if (ticket !== this._dryTicket) return;
       res.innerHTML = snIconify(`<div class="dryBox">${snDryHtml(this._hass, T, (r && r.response) || {}, false)}</div>`, this._config);
     } catch (e) {
@@ -7761,10 +7823,10 @@ class SupernotifyComposerCard extends SnCard {
     box.style.display = "";
     box.textContent = "…";
     try {
-      const res = await this._hass.callWS({
+      const res = await snWS(this._hass, {
         type: "call_service", domain: "supernotify", service: "notify",
         service_data: data, return_response: true,
-      });
+      }, 30000);
       if (dupeCheck && !sep) this._dryKey = { key: JSON.stringify(payload), at: Date.now() };
       this._renderDry((res && res.response) || {}, !dupeCheck);
     } catch (e) {
@@ -8245,7 +8307,13 @@ const snStatsDaily = {
         if (c.from < keep.getTime()) c.from = keep.getTime();
         this._save(c);
       } catch (e) {
-        if (this.ok === null) { this.ok = false; return null; }
+        if (this.ok === null) {
+          // 1.0.0: only an answer without days, or `daily` refused, says this SuperNotify does not
+          // know it; a timeout or a lost connection on the first call turned it off for good
+          const msg = String((e && (e.message || e.code)) || e);
+          if (msg === "no days" || (e && e.code === "invalid_format") || /verbosity|must be one of|invalid|not a valid|extra keys/i.test(msg)) this.ok = false;
+          return null;
+        }
         throw e;
       }
       const s0 = new Date(startMs);
@@ -8506,7 +8574,12 @@ class SupernotifyStatsCard extends SnCard {
     if (c.source === "archive") return true;
     if (c.source === "history") return false;
     const svc = this._hass && this._hass.services && this._hass.services.supernotify;
-    return !!(svc && svc.enquire_archive) && snSupernotifyAtLeast(this._hass, "2.12.1", c.update_entity) === true;
+    if (!(svc && svc.enquire_archive)) return false;
+    // 1.0.0: the action says itself whether it takes `verbosity` (no need for update.supernotify_update);
+    // the version is the fallback when the action's fields are not known
+    const f = svc.enquire_archive.fields;
+    if (f && typeof f === "object" && Object.keys(f).length) return !!f.verbosity;
+    return snSupernotifyAtLeast(this._hass, "2.12.1", c.update_entity) === true;
   }
 
   /** Archive rows as the events _compute counts; duplicates left out (nothing was sent). */
@@ -9339,7 +9412,8 @@ class SupernotifyArchiveCard extends SnCard {
     const sent = r.d || c.some((x) => typeof x === "number");
     // nothing went out and every channel was held back by a routine rule (a pause, nobody home,
     // the priority): that is not a problem, it is a quiet notification
-    if (!sent && !r.mi && c.length && c.every((x) => Array.isArray(x) && x[1] === "s" && SN_ARCHIVE_ROUTINE.has(x[2] || ""))) return "none";
+    // (a notification dropped as a duplicate keeps its warning, as in the detail's verdict)
+    if (!sent && !r.mi && r.o !== "dupe" && c.length && c.every((x) => Array.isArray(x) && x[1] === "s" && SN_ARCHIVE_ROUTINE.has(x[2] || ""))) return "none";
     if (snArchiveProblem(r)) return "warn";
     if (!sent) return "none";
     return "ok";
@@ -9731,10 +9805,10 @@ class SupernotifyArchiveCard extends SnCard {
     // 0.44.0: read before the detail rebuilds the index from the full document
     const wasLight = !!(this._row(id) || {}).light;
     // a sensor index without the detail service: nothing to wait for, draw now
-    if (!this._cache.has(id) && this._hass && !snArchiveNative(this._hass, this._config)) {
+    if (!snDetailCached(this._cache, id) && this._hass && !snArchiveNative(this._hass, this._config)) {
       const [dom, svc] = String(this._config.service || "").split(".");
       const ss = this._hass.services && this._hass.services[dom];
-      if (!ss || !ss[svc]) this._cache.set(id, { ok: false, error: "no_service" });
+      if (!ss || !ss[svc]) snDetailPut(this._cache, id, { ok: false, error: "no_service" });
     }
     if (this.shadowRoot) {
       this.shadowRoot.querySelectorAll("#list .it").forEach((n) => n.classList.toggle("sel", n.dataset.id === id));
@@ -9744,7 +9818,7 @@ class SupernotifyArchiveCard extends SnCard {
       this._loading = id;
       this._showDetail();
       const res = await this._fetch(id);
-      this._cache.set(id, res);
+      snDetailPut(this._cache, id, res);
       this._loading = null;
     }
     if (this._sel === id) this._showDetail();
@@ -9975,6 +10049,22 @@ const SN_ARCH_STRINGS = {
 
 /* 0.85.0: the why card's code is now the detail engine of supernotify-archive-card (mixed in
  * below); supernotify-why-card is an alias of the archive card. */
+/**
+ * 1.0.0: the detail cache of the archive / why cards. A transient error (timeout, lost
+ * connection) was kept for good and never asked again, and the Map had no limit: a cached
+ * error that is not final is dropped on the next look, and the oldest entries go past 60.
+ */
+function snDetailCached(cache, id) {
+  const r = cache.get(id);
+  if (r && !r.ok && !r.final && r.error !== "no_service") { cache.delete(id); return false; }
+  return cache.has(id);
+}
+function snDetailPut(cache, id, res) {
+  cache.delete(id);
+  cache.set(id, res);
+  while (cache.size > 60) cache.delete(cache.keys().next().value);
+}
+
 class SnWhyEngine extends SnCard {
   // visual editor (0.55.0): Home Assistant draws the form, see snForm()
   static getConfigForm() {
@@ -10181,10 +10271,10 @@ class SnWhyEngine extends SnCard {
   async _select(id) {
     this._sel = id;
     this._renderList();
-    if (!this._cache.has(id)) {
+    if (!snDetailCached(this._cache, id)) {
       this._loading = id;
       this._renderDetail();
-      this._cache.set(id, await this._fetch(id));
+      snDetailPut(this._cache, id, await this._fetch(id));
       this._loading = null;
     }
     if (this._sel === id) this._renderDetail();
@@ -10194,7 +10284,7 @@ class SnWhyEngine extends SnCard {
     if (snArchiveNative(this._hass, this._config)) {
       try {
         const doc = await snArchiveStore.doc(this._hass, id);
-        return doc ? { ok: true, n: snArchiveDetail(doc) } : { ok: false, error: this._T().gone };
+        return doc ? { ok: true, n: snArchiveDetail(doc) } : { ok: false, error: this._T().gone, final: true };
       } catch (e) {
         return { ok: false, error: (e && e.message) || String(e) };
       }
@@ -10352,14 +10442,12 @@ class SnWhyEngine extends SnCard {
     if (n.un && n.un.length) out.push(`<div class="pb warn"><div class="pbt">⚠ ${esc(T.un_title)}</div><div class="pbw">${esc(n.un.join(" · "))}</div></div>`);
 
     // sort the archived channels: sent, problems (failed / missed), routine skips
-    const SN_ROUTINE = new Set(["SNOOZE", "SNOOZED", "PRIORITY", "DELIVERY_CONDITION", "OCCUPANCY", "DELIVERY_DISABLED",
-      "SCENARIO", "TRANSPORT_DISABLED", "NO_SCENARIO", "DUPE"]);
     const sent = [], problems = [], skipped = [];
     for (const ch of n.dl || []) {
       if (ch.r === "ok") sent.push(ch);
       else if (ch.r === "err") problems.push(ch);
-      else if (ch.r === "skip" && !SN_ROUTINE.has(String(ch.why || "").toUpperCase())
-        && !(String(ch.why || "").toUpperCase() === "NO_TARGET" && !((n.ov || {})[ch.n]) && !(+n.mi > 0))) problems.push(ch);
+      else if (ch.r === "skip" && (!SN_ARCHIVE_ROUTINE_CODES.has(String(ch.why || "").toUpperCase())
+        || (String(ch.why || "").toUpperCase() === "NO_TARGET" && ((n.ov || {})[ch.n] || +n.mi > 0)))) problems.push(ch);
       else skipped.push(ch);
     }
     const seen = new Set((n.dl || []).map((ch) => ch.n));
@@ -10497,7 +10585,7 @@ SnWhyEngine.prototype._dupeOf = async function (n) {
   wire();
   // same run? compare the contexts (the original's detail is read once and kept)
   if (!(n.ctx && n.ctx.id)) return;
-  if (!this._cache.has(orig.id)) this._cache.set(orig.id, await this._fetch(orig.id));
+  if (!snDetailCached(this._cache, orig.id)) snDetailPut(this._cache, orig.id, await this._fetch(orig.id));
   const o = (this._cache.get(orig.id) || {}).n || {};
   if (!(o.ctx && o.ctx.id === n.ctx.id)) return;
   let who = "";
@@ -10757,7 +10845,7 @@ class SupernotifyToolsCard extends SnCard {
   async _call(service, data, withResponse = true) {
     const msg = { type: "call_service", domain: "supernotify", service, service_data: data || {} };
     if (withResponse) msg.return_response = true;
-    const r = await this._hass.callWS(msg);
+    const r = await snWS(this._hass, msg, 30000); // 1.0.0: with a timeout
     return withResponse ? (r && r.response) : r;
   }
 
@@ -13256,8 +13344,13 @@ const snAppl = {
       const hb = (mine ? mine.rows : []).concat(snApplBins(hour && hour[id], 3600000).map((b) => [b.t, b.mean, b.max]))
         .filter((r) => r[0] < fineFrom.getTime());
       try {
-        const c = cache || {};
-        c[id] = { from: from.getTime(), upto: fineFrom.getTime(), rows: hb };
+        // 1.0.0: read the blob again right before writing - the other appliances load in the
+        // same tick and each one wrote back the copy it read at the start (the last one won)
+        let c = null;
+        try { c = JSON.parse(window.localStorage.getItem(SN_APPL_KEY) || "null"); } catch (e) { c = null; }
+        if (!c || typeof c !== "object") c = {};
+        const r1 = (v) => (typeof v === "number" ? Math.round(v * 10) / 10 : v);
+        c[id] = { from: from.getTime(), upto: fineFrom.getTime(), rows: hb.map(([t, mean, max]) => [t, r1(mean), r1(max)]) };
         window.localStorage.setItem(SN_APPL_KEY, JSON.stringify(c));
       } catch (e) { /* full or private */ }
       const bins = hb.map(([t, mean, max]) => ({ t, dt: 3600000, mean, max })).concat(snApplBins(fine && fine[id], 300000));
