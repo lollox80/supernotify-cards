@@ -2,6 +2,7 @@
 // appliance_<entry_id> (anche _end): etichetta «🧺 Autonotify · <elettrodomestico>», filtro
 // Elettrodomestici, «Inviata da 🧺 Autonotify · ...» nel dettaglio. Il riepilogo non ha il tag:
 // solo le 20 recenti lette complete e quelle aperte.
+// 1.0.0 (fase 3): le righe dell'archivio hanno un solo listener sulla lista: .click() invece di .onclick().
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -98,7 +99,7 @@ ok(shown.join(",") === "n0000001,n0000003", `mostra solo le due di Autonotify ($
 ok(/ultime 20 lette per intero/.test(txt(R.getElementById("meta"))), `dice che guarda le ultime 20 (${txt(R.getElementById("meta"))})`);
 
 // ── 3. dettaglio: inviata da ─────────────────────────────────────────────
-rowOf("n0000001").onclick(); await wait(150);
+rowOf("n0000001").click(); await wait(150);
 const sbEl = R.getElementById("sentBy");
 const sb = txt(sbEl);
 ok(/Inviata da Autonotify · Lavatrice$/.test(sb) && sbEl.querySelector('ha-icon[icon="mdi:washing-machine"]'), `dettaglio: «📨 Inviata da 🧺 Autonotify · Lavatrice» (${sb})`);
@@ -106,7 +107,7 @@ ok(!ws.some((m) => m.type === "logbook/get_events" && m.context_id === "ctx1"), 
 
 // ── 4. una vecchia aperta diventa riconosciuta ─────────────────────────────
 R.querySelector('#chips .chip[data-k="all"]').onclick();
-rowOf("n0000022").onclick(); await wait(300);
+rowOf("n0000022").click(); await wait(300);
 ok(lab("n0000022") === "🧺 Autonotify · Lavatrice", "la 22, aperta, ora ha l'etichetta");
 ok(txt(R.querySelector('#chips .chip[data-k="appliance"]')) === "Elettrodomestici3", "e il filtro la conta");
 

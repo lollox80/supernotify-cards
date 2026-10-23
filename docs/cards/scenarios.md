@@ -3,8 +3,9 @@
 [← SuperNotify Cards](../../README.md) · [Common options](../configuration.md)
 
 Scenarios dashboard, auto-discovered: "active now" badge (live from
-`binary_sensor.supernotify_scenario_*` with `scenario_control: {refresh: true}`, polled from
-`enquire_active_scenarios` when refresh is off), a live on/off switch per scenario
+`binary_sensor.supernotify_scenario_*` with `scenario_control: {refresh: true}`, from
+`enquire_active_scenarios` when refresh is off - read every 30 s and after a change, once for every card
+on the page), a live on/off switch per scenario
 (`switch.supernotify_scenario_*`), per-delivery override tags (enabled/disabled),
 action groups and media tags. Optional `groups` reproduce categories.
 
@@ -22,6 +23,9 @@ groups:
 icons:            # optional: the icon of a scenario of your own (an emoji)
   dnd_globale: "🔕"
 ```
+
+`poll_seconds` (1.0.0) is accepted and ignored: the card no longer polls on its own, the active scenarios
+are shared by every card on the page.
 
 **Why it applies, and what it changes** (0.66.0): tap a scenario. The detail lists its conditions, each
 with its result (✔ / ✖, or *not checked* when an earlier one already decided), and for a state that does

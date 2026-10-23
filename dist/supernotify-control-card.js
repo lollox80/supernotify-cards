@@ -452,7 +452,7 @@ function snActiveScenarioIds(hass) {
       return !sw || sw.state !== "off";
     }).map((n) => `binary_sensor.supernotify_scenario_${n}`);
   }
-  const ids = Object.keys(hass.states).filter((e) => e.startsWith("binary_sensor.supernotify_scenario_"));
+  const ids = snScenarioSensorIds(hass); // 1.0.0 (perf): listed once per states object
   if (!ids.length) return null;
   const known = ids.filter((e) => !["unknown", "unavailable"].includes(hass.states[e].state));
   if (!known.length) return null; // scenario state not exposed yet
@@ -966,10 +966,30 @@ function snPausesOn(snoozes, entityId) {
 }
 /** person.* linked to the logged-in user, or null. */
 function snMyPerson(hass) {
-  const uid = hass && hass.user && hass.user.id;
-  if (!uid) return null;
-  return Object.keys(hass.states).find((e) => e.startsWith("person.") &&
-    (hass.states[e].attributes || {}).user_id === uid) || null;
+  return snPersonOfUser(hass, hass && hass.user && hass.user.id);
+}
+/**
+ * 1.0.0 (perf): person.* of a Home Assistant user, or null - the people listed once per states
+ * object for the page instead of a scan of every entity at each look.
+ */
+const snPeopleW = new WeakMap();
+function snPersonOfUser(hass, uid) {
+  if (!uid || !hass || !hass.states) return null;
+  const st = hass.states;
+  const raw = snRawStates(st);
+  let by = snPeopleW.get(raw);
+  if (!by) {
+    by = new Map();
+    for (const e of Object.keys(raw)) {
+      if (!e.startsWith("person.")) continue;
+      const u = (raw[e].attributes || {}).user_id;
+      if (u && !by.has(u)) by.set(u, e);
+    }
+    snPeopleW.set(raw, by);
+  }
+  const pid = by.get(uid) || null;
+  if (st !== raw) { void st[SN_SCAN]; if (pid) void st[pid]; } // a tracked card depends on them, as before
+  return pid;
 }
 /**
  * 0.74.0: delivery rows that count as "channels off". Once SuperNotify gives its switches the
@@ -1016,12 +1036,16 @@ function snNativeHealth(hass, snoozes, opts) {
     title: off.map((d) => snDeliveryAlias(hass, d.name) || d.name).join(", ") });
   const live = snLiveSnoozes(snoozes || []);
   if (live.length) {
-    const end = live.map((x) => x._end).filter(Boolean).sort((a, b) => b - a)[0];
-    const hm = end ? snSnzUntil(end, hass) : "";
-    out.push({ k: "pause", n: live.length, text: hm ? `${T.paused} ${T.until} ${hm}` : T.paused,
+    out.push({ k: "pause", n: live.length, text: snPauseText(hass, live, T),
       title: snSnoozeLabels(hass, live, snT({}, hass), 4) });
   }
   return out;
+}
+/** "Paused until 18:30" for live pauses (snLiveSnoozes), as in snNativeHealth. */
+function snPauseText(hass, live, T) {
+  const end = live.map((x) => x._end).filter(Boolean).sort((a, b) => b - a)[0];
+  const hm = end ? snSnzUntil(end, hass) : "";
+  return hm ? `${T.paused} ${T.until} ${hm}` : T.paused;
 }
 /** Pause for everyone (non-critical, supernotify.snooze: any user) or resume, as the control card does. */
 async function snNativePause(hass, minutes) {
@@ -1044,6 +1068,14 @@ const SN_NATIVE_CSS = `:host { display: block; }
     height: var(--feature-height, 42px); overflow: hidden; white-space: nowrap; }
   .txt b { color: var(--primary-text-color); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }`;
 
+// 1.0.0 (perf): SuperNotify's own entity ids, once per states object (every badge used to list them)
+const snSnIdsW = new WeakMap();
+function snSupernotifyIds(states) {
+  let ids = snSnIdsW.get(states);
+  if (!ids) { ids = Object.keys(states).filter((id) => id.includes(".supernotify")); snSnIdsW.set(states, ids); }
+  return ids;
+}
+
 /** Badge: SuperNotify's health in one pill, for any view. */
 class SupernotifyStatusBadge extends HTMLElement {
   setConfig(config) { this._config = { ...(config || {}) }; }
@@ -1059,7 +1091,7 @@ class SupernotifyStatusBadge extends HTMLElement {
     }
     if (prev && hass && prev.states && hass.states && prev.language === hass.language && this._snIds &&
         snCount(prev.states) === snCount(hass.states) && this._snIds.every((id) => prev.states[id] === hass.states[id])) return;
-    if (hass && hass.states) this._snIds = Object.keys(hass.states).filter((id) => id.includes(".supernotify"));
+    if (hass && hass.states) this._snIds = snSupernotifyIds(hass.states);
     this._draw();
   }
   connectedCallback() {
@@ -1119,12 +1151,18 @@ if (!window.customBadges.some((x) => x && x.type === "supernotify-status-badge")
 class SnFeature extends HTMLElement {
   static getStubConfig() { return { type: this.featureType }; }
   setConfig(config) { if (!config) throw new Error("Invalid configuration"); this._config = config; }
-  set hass(hass) { this._hass = hass; this._draw(); }
+  // 1.0.0 (perf): HA sets hass, context and stateObj together - one draw for the three
+  set hass(hass) { this._hass = hass; this._queueDraw(); }
   get hass() { return this._hass; }
-  set context(c) { this._context = c; this._draw(); }
+  set context(c) { this._context = c; this._queueDraw(); }
   get context() { return this._context; }
-  set stateObj(s) { this._stateObj = s; this._draw(); }
+  set stateObj(s) { this._stateObj = s; this._queueDraw(); }
   get stateObj() { return this._stateObj; }
+  _queueDraw() {
+    if (this._drawQ) return;
+    this._drawQ = true;
+    queueMicrotask(() => { this._drawQ = false; this._draw(); });
+  }
   _root() { if (!this.shadowRoot) this.attachShadow({ mode: "open" }); return this.shadowRoot; }
 }
 
@@ -1149,7 +1187,7 @@ class SupernotifyPauseFeature extends SnFeature {
     const live = snLiveSnoozes(this._snz || []);
     const lbl = (m) => (m % 60 === 0 ? `${m / 60} ${T.h}` : `${m} ${T.min}`);
     const html = live.length
-      ? `<button class="on" data-m="0">${snEsc(T.resume)} · ${snEsc(snNativeHealth(hass, this._snz).find((x) => x.k === "pause").text)}</button>`
+      ? `<button class="on" data-m="0">${snEsc(T.resume)} · ${snEsc(snPauseText(hass, live, T))}</button>`
       : mins.map((m) => `<button data-m="${+m}" aria-label="${snEsc(T.paused + " " + lbl(+m))}">${snEsc(lbl(+m))}</button>`).join("");
     if (html === this._html) return;
     this._html = html;
@@ -1699,6 +1737,30 @@ function snToggle(hass, entityId, on) {
  * on POST /api/states) the switch goes back where it was and says why in its
  * tooltip, instead of staying moved with an unhandled rejection.
  */
+/**
+ * 1.0.0 (perf): one click and one change listener on a list of rows (#rows), set once, instead of an
+ * onclick on every row and a listener on every switch after every redraw. `onRow(row, e)` for a tap on a
+ * row (not on its switch), `onSwitch(label, input)` when a switch is moved, `onOther(e)` first, true = handled.
+ */
+function snRowsDelegate(rows, onRow, onSwitch, onOther) {
+  rows._snRow = onRow; rows._snSw = onSwitch; rows._snOther = onOther;
+  if (rows._snDeleg) return;
+  rows._snDeleg = true;
+  rows.addEventListener("click", (e) => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest(".sw")) return;
+    if (rows._snOther && rows._snOther(e)) return;
+    const row = t.closest(".row");
+    if (row && rows.contains(row) && rows._snRow) rows._snRow(row, e);
+  });
+  rows.addEventListener("change", (e) => {
+    const input = e.target;
+    const label = input && input.closest && input.closest(".sw");
+    if (label && rows.contains(label) && rows._snSw) rows._snSw(label, input);
+  }, true); // capture: a change event that does not bubble still gets here
+}
+
 function snToggleSafe(hass, entityId, input) {
   const was = !input.checked;
   const box = input.closest(".sw") || input;
@@ -1946,7 +2008,7 @@ function snForm(kind) {
       bool("repairs", true), num("poll_seconds", 10, 600, 10)],
     deliveries: [txt("title"), bool("group", true), bool("hide_defaults", true)],
     transports: [], recipients: [], simulator: [bool("dry_run")], bands: [],
-    scenarios: [num("poll_seconds", 10, 600, 10)],
+    scenarios: [], // 1.0.0: poll_seconds is ignored (snActive keeps the active scenarios current)
     composer: [bool("dry_run"), bool("dry_run_dupe_check"), bool("show_off")],
     automations: [txt("manifest_url")],
     stats: [num("days", 2, 90), ent("update_entity", "update"), ent("cards_update_entity", "update"), bool("kpis", true), bool("versions", true)],
@@ -2071,7 +2133,7 @@ function snLiveScenarioNames(hass) {
   }
   snActive.states = raw;
   snActive.ids = null;
-  const ids = Object.keys(hass.states).filter((e) => e.startsWith("binary_sensor.supernotify_scenario_"));
+  const ids = snScenarioSensorIds(hass);
   snActive.ids = ids;
   const isLive = ids.some((e) => ["on", "off"].includes(hass.states[e].state) && !snIsManualScenario(hass, e));
   snActive.live = isLive;
@@ -2169,7 +2231,8 @@ function snEntityRows(hass, kind) {
     void st[SN_SCAN];
     for (const r of rows) void st[r.id];
   }
-  return rows.map((r) => ({ ...r }));
+  // 1.0.0 (perf): a new array (callers sort it), the same row objects - no caller writes to a row
+  return rows.slice();
 }
 
 /**
@@ -2563,8 +2626,8 @@ const snArchivePrio = {
           c.days = { all: { n: counts, rows } };
           c.one = true;
           c.sig = sig;
+          this._save(c); // 1.0.0 (perf): written only when the rows were read again
         }
-        this._save(c);
         this.counts = counts;
         this.days = days.length;
         this.ver += 1;
@@ -2811,7 +2874,8 @@ function snEnquire(hass, service, data) {
     SN_ENQ.set(key, hit);
     p.catch(() => { if (SN_ENQ.get(key) === hit) SN_ENQ.delete(key); });
   }
-  return hit.p.then((r) => (r == null ? r : JSON.parse(JSON.stringify(r))));
+  // every caller its own copy (some add to what they get); 1.0.0 (perf): structuredClone
+  return hit.p.then((r) => (r == null ? r : typeof structuredClone === "function" ? structuredClone(r) : JSON.parse(JSON.stringify(r))));
 }
 /**
  * Live updates (0.61.0): SuperNotify (>= 2.10.3) fires `supernotify_notification` once a
@@ -2839,6 +2903,13 @@ function snEnquireBust(delay) {
   snActive.t = 0; // a change made from a card: read the active scenarios again too
   const fire = () => { SN_ENQ.clear(); window.dispatchEvent(new CustomEvent("supernotify-refresh")); };
   if (delay) setTimeout(fire, delay); else fire();
+}
+
+/** 1.0.0 (perf): what identifies a list of archived notifications - ids and creation times. */
+function snArchiveSig(list) {
+  let s = "";
+  for (const d of list) s += `${d.id}|${d.created}\n`;
+  return s;
 }
 
 const snArchiveStore = {
@@ -2895,21 +2966,33 @@ const snArchiveStore = {
     const run = (this.lightRun || 0) + 1;
     this.lightRun = run;
     this.lightAt = Date.now();
+    let changed = !this.lightFetched;
     this.lightLoading = this._call(hass, data).then((resp) => {
       if (run !== this.lightRun) return;
       const got = (resp.notifications || []).filter(snIsObj).map(snArchiveLightRow);
       const seen = new Set(got.map((d) => d.id));
       const merged = got.concat(this.light.filter((d) => !seen.has(d.id)));
       merged.sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
-      this.light = merged.slice(0, this.lightLimit);
+      const next = merged.slice(0, this.lightLimit);
+      // 1.0.0 (perf): the same notifications as before (a read after another card's update) change nothing
+      if (changed || snArchiveSig(next) !== snArchiveSig(this.light)) { this.light = next; changed = true; }
       this.lightFetched = new Date();
     }).catch(() => { /* the next update asks again */ }).finally(() => {
       if (run !== this.lightRun) return;
       this.lightLoading = null;
-      this.index = null;
-      this.version += 1;
-      window.dispatchEvent(new CustomEvent("supernotify-archive"));
+      if (changed) { this.index = null; this._changed(); }
     });
+  },
+
+  /**
+   * 1.0.0 (perf): the store changed - one "supernotify-archive" for the readings that end together
+   * (the full and the light list answer in the same tick), not one each.
+   */
+  _changed() {
+    this.version += 1;
+    if (this._fireQ) return;
+    this._fireQ = true;
+    queueMicrotask(() => { this._fireQ = false; window.dispatchEvent(new CustomEvent("supernotify-archive")); });
   },
 
   async _call(hass, data) {
@@ -2939,14 +3022,17 @@ const snArchiveStore = {
     const run = (this.run || 0) + 1;
     this.run = run;
     this.loadingAt = Date.now();
+    let changed = !this.fetched;
+    const err0 = this.error;
     this.loading = this._call(hass, data).then((resp) => {
       if (run !== this.run) return; // a newer reading replaced this one
       const got = (resp.notifications || []).filter(snIsObj);
       const seen = new Set(got.map((d) => d.id));
       const merged = got.concat(this.docs.filter((d) => !seen.has(d.id)));
       merged.sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
-      this.docs = merged.slice(0, this.limit);
-      this.index = null;
+      const next = merged.slice(0, this.limit);
+      // 1.0.0 (perf): index and event only when the set of notifications changed
+      if (changed || snArchiveSig(next) !== snArchiveSig(this.docs)) { this.docs = next; changed = true; }
       this.error = null;
       this.fetched = new Date();
     }).catch((e) => {
@@ -2954,8 +3040,7 @@ const snArchiveStore = {
     }).finally(() => {
       if (run !== this.run) return;
       this.loading = null;
-      this.version += 1;
-      window.dispatchEvent(new CustomEvent("supernotify-archive"));
+      if (changed || this.error !== err0) { this.index = null; this._changed(); }
     });
   },
 
@@ -2984,8 +3069,12 @@ const snArchiveStore = {
     return { ...this.index, error: this.error && !this.docs.length ? this.error : null };
   },
 
-  /** The archived notification whose id starts with this, from the store or from the action. */
-  async doc(hass, id) {
+  /**
+   * The archived notification whose id starts with this, from the store or from the action.
+   * 1.0.0 (perf): `quiet` (the appliances card) - a document read from the action is not kept
+   * here, so the archive card's list is not rebuilt for reads it does not show.
+   */
+  async doc(hass, id, quiet) {
     const wanted = String(id || "").toLowerCase();
     const found = this.docs.find((d) => String(d.id || "").toLowerCase().startsWith(wanted))
       || [...this.extra.values()].find((d) => String(d.id || "").toLowerCase().startsWith(wanted));
@@ -2995,6 +3084,7 @@ const snArchiveStore = {
     try {
       const resp = await this._call(hass, { id: row ? row.id : wanted, verbosity: "standard" });
       if (!(snIsObj(resp) && resp.id)) return null;
+      if (quiet) return resp;
       this.extra.set(String(resp.id), resp);
       if (this.extra.size > 60) this.extra.delete(this.extra.keys().next().value);
       this.index = null;
@@ -3051,14 +3141,21 @@ function snTrackedHass(hass, tr) {
     has(t, k) { if (typeof k === "string") tr.keys.add(k); return k in t; },
     ownKeys(t) { tr.scanned = true; return Reflect.ownKeys(t); },
   });
+  // 1.0.0 (perf): one bound copy of each function per hass object, shared by every card
+  let bound = snBoundW.get(hass);
+  if (!bound) { bound = new Map(); snBoundW.set(hass, bound); }
   return new Proxy(hass, {
     get(t, k) {
       if (k === "states") return states;
       const v = t[k];
-      return typeof v === "function" ? v.bind(t) : v;
+      if (typeof v !== "function") return v;
+      let b = bound.get(k);
+      if (!b || b.f !== v) { b = { f: v, b: v.bind(t) }; bound.set(k, b); }
+      return b.b;
     },
   });
 }
+const snBoundW = new WeakMap();
 
 function snChanged(tr, hass) {
   const p = tr.snap;
@@ -4100,10 +4197,7 @@ class SupernotifyControlCard extends SnCard {
 
   /** person.* linked to the logged-in user, for "only me" pauses. */
   _myPerson() {
-    const uid = this._hass && this._hass.user && this._hass.user.id;
-    if (!uid) return null;
-    return Object.keys(this._hass.states).find((e) => e.startsWith("person.") &&
-      (this._hass.states[e].attributes || {}).user_id === uid) || null;
+    return snMyPerson(this._hass);
   }
 
   _collapseKey() {
@@ -4352,14 +4446,16 @@ class SupernotifyOverviewCard extends SnCard {
     const P = this._parts();
     const top = P.has("status") || P.has("numbers");
     try {
+      // 1.0.0 (perf): the active scenarios are snActive's (shared, kept current) - read here only when
+      // it has no answer yet, as a fallback for the first drawing
       const [act, last, snz, occ, rep] = await Promise.all([
-        P.has("scenarios") ? this._ws("enquire_active_scenarios") : {},
+        P.has("scenarios") && this._activeScenarios() === null ? this._ws("enquire_active_scenarios") : {},
         P.has("last") ? this._ws("enquire_last_notification") : {},
         top ? this._ws("enquire_snoozes") : {},
         P.has("occupancy") ? this._ws("enquire_occupancy").catch(() => ({})) : {},
         P.has("status") && this._config.repairs !== false ? snRepairsFetch(this._hass) : [],
       ]);
-      this._active = act.scenarios || [];
+      if (act.scenarios) this._active = act.scenarios;
       this._last = last && Object.keys(last).length ? last : null;
       this._snoozes = snz.snoozes || [];
       this._occ = snOccupancy(this._hass, occ);
@@ -4534,6 +4630,7 @@ class SupernotifyOverviewCard extends SnCard {
         ${snVer(this._config, "overview", p)}
       </ha-card>`, this && this._config);
     this._healthHtml = this._statsHtml = null; // fresh elements: draw them again
+    this._lastHtml = this._occHtml = this._scenHtml = this._scenHeadHtml = null;
     this._update();
   }
 
@@ -4721,7 +4818,7 @@ class SupernotifyOverviewCard extends SnCard {
     const T = snT(this._config, this._hass);
     const c = this._config;
     const head = this.shadowRoot.getElementById("lastH");
-    if (!this._last) { lastEl.textContent = "—"; if (head) head.textContent = T.last_notif; return; }
+    if (!this._last) { lastEl.textContent = "—"; this._lastHtml = null; if (head) head.textContent = T.last_notif; return; }
     const n = this._last;
     const title = snPlainMsg(snNotifTitle(n));
     const msg = snPlainMsg(n.message).slice(0, 600);
@@ -4740,11 +4837,15 @@ class SupernotifyOverviewCard extends SnCard {
     // Why: the archive card on this page, else the archive card of another view
     const whyHere = n.id && window.__snWhyCards;
     const why = n.id && (whyHere || snCardReach("archive")) ? `<button class="whyb" id="whyBtn">${esc(T.ln_why)} ›</button>` : "";
-    lastEl.innerHTML = snIconify(`${title ? `<div class="lt">${esc(snTitleShow(title))}</div>` : ""}
+    const html = snIconify(`${title ? `<div class="lt">${esc(snTitleShow(title))}</div>` : ""}
       <div class="lmm${title ? "" : " solo"}">${esc(msg || "—")}</div>
       ${meta ? `<div class="t">${meta}</div>` : ""}
       <div class="lf">${chips.join("")}</div>
       ${rep || why ? `<div class="lf lb">${rep}${why}</div>` : ""}`, this && this._config);
+    // 1.0.0 (perf): the same notification drawn the same way - nothing to rebuild
+    if (html === this._lastHtml && lastEl.firstElementChild) return;
+    this._lastHtml = html;
+    lastEl.innerHTML = html;
     const wb = lastEl.querySelector("#whyBtn");
     if (wb) wb.onclick = () => { if (!snWhyOpen(n.id)) snGo("archive", { id: n.id }); };
     const rb = lastEl.querySelector("#repBtn");
@@ -4764,10 +4865,14 @@ class SupernotifyOverviewCard extends SnCard {
     const p = this._palette();
     const T = snT(this._config, this._hass);
     const o = this._occ;
-    occEl.innerHTML = o ? snIconify(`<div style="display:flex;flex-wrap:wrap;align-items:flex-start">`
+    const html = o ? snIconify(`<div style="display:flex;flex-wrap:wrap;align-items:flex-start">`
       + `<span class="badge ${o.home.length ? "b-ok" : "b-off"}" style="padding:7px 12px;margin:0 6px 6px 0">${esc(T["occ_" + o.state] || o.state)}</span>`
       + o.home.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1">🏠 ${esc(n)}</span>`).join("")
       + o.away.map((n) => `<span class="chip${snCardReach("recipients") ? " go" : ""}" data-gor="1" style="color:${p.muted}">🚶 ${esc(n)}</span>`).join("") + `</div>`, this && this._config) : "—";
+    // 1.0.0 (perf): rebuilt only when it changed
+    if (html === this._occHtml && occEl.firstChild) return;
+    this._occHtml = html;
+    occEl.innerHTML = html;
     if (o && snCardReach("recipients")) occEl.querySelectorAll("[data-gor]").forEach((c) => { c.onclick = () => snGo("recipients", { persons: o.ids }); });
   }
 
@@ -4781,11 +4886,20 @@ class SupernotifyOverviewCard extends SnCard {
     const act = reactiveAct !== null ? reactiveAct : this._active;
     const head = this.shadowRoot.getElementById("scenH");
     const reach = snCardReach("scenarios");
-    if (head) head.innerHTML = `<span>${esc(T.act_scen)}${act && act.length ? ` · ${act.length}` : ""}</span><span class="sp"></span>`
+    const headHtml = `<span>${esc(T.act_scen)}${act && act.length ? ` · ${act.length}` : ""}</span><span class="sp"></span>`
       + (reach ? `<button class="lnk" id="allScen">${esc(T.ov_all_scen)} ›</button>` : "");
-    const all = head && head.querySelector("#allScen");
-    if (all) all.onclick = () => snGo("scenarios", {});
-    if (!act || !act.length) { el.innerHTML = `<span class="badge b-off">${T.none}</span>`; return; }
+    // 1.0.0 (perf): head and rows rebuilt only when they changed
+    if (head && headHtml !== this._scenHeadHtml) {
+      this._scenHeadHtml = headHtml;
+      head.innerHTML = headHtml;
+      const all = head.querySelector("#allScen");
+      if (all) all.onclick = () => snGo("scenarios", {});
+    }
+    if (!act || !act.length) {
+      const none = `<span class="badge b-off">${T.none}</span>`;
+      if (none !== this._scenHtml) { this._scenHtml = none; el.innerHTML = none; }
+      return;
+    }
     const muted = new Set(), off = new Set();
     const rows = act.map((s) => {
       const r = this._scenRow(s);
@@ -4799,7 +4913,10 @@ class SupernotifyOverviewCard extends SnCard {
     const bits = [];
     if (muted.size) bits.push(T.ov_eff_mute.replace("{x}", [...muted].join(", ")));
     if (off.size) bits.push(T.ov_eff_off.replace("{x}", [...off].join(", ")));
-    el.innerHTML = snIconify(`<div>${rows}</div><div class="effnow">${esc(T.ov_eff_now)}: <b>${esc(bits.length ? bits.join(" · ") : T.ov_eff_none)}</b></div>`, this && this._config);
+    const html = snIconify(`<div>${rows}</div><div class="effnow">${esc(T.ov_eff_now)}: <b>${esc(bits.length ? bits.join(" · ") : T.ov_eff_none)}</b></div>`, this && this._config);
+    if (html === this._scenHtml && el.firstChild) return;
+    this._scenHtml = html;
+    el.innerHTML = html;
     if (reach) el.querySelectorAll("[data-gos]").forEach((c) => { c.onclick = () => snGo("scenarios", { names: [c.dataset.gos] }); });
   }
 
@@ -5213,17 +5330,28 @@ class SupernotifyDeliveriesCard extends SnCard {
   // Active scenarios that switch this delivery off / on right now (scenario entity attribute
   // `delivery: {<name>: {enabled: …}}`, the same source as the why-card).
   _scenarioEffect(name) {
-    const off = [], on = [];
+    return this._scenarioEffects().get(name) || { off: [], on: [] };
+  }
+
+  /** 1.0.0 (perf): every delivery's {off, on} at once - the active scenarios looked at once, not once per row. */
+  _scenarioEffects() {
+    const out = new Map();
     // 0.92.0 (perf): the scenario sensors listed once per states object, not once per row
     for (const id of snScenarioSensorIds(this._hass)) {
       const m = id.match(/^binary_sensor\.supernotify_scenario_(.+)$/);
       if (!m || !snScenarioActive(this._hass, id)) continue;
       const sw = this._hass.states[`switch.supernotify_scenario_${m[1]}`];
       const dl = sw && sw.attributes && typeof sw.attributes.delivery === "object" ? sw.attributes.delivery : null;
-      if (!dl || dl[name] === undefined) continue;
-      (dl[name] && dl[name].enabled === false ? off : on).push(snScenarioName(this._hass, m[1]));
+      if (!dl) continue;
+      let label = null;
+      for (const name of Object.keys(dl)) {
+        if (dl[name] === undefined) continue;
+        if (!out.has(name)) out.set(name, { off: [], on: [] });
+        label = label || snScenarioName(this._hass, m[1]);
+        (dl[name] && dl[name].enabled === false ? out.get(name).off : out.get(name).on).push(label);
+      }
     }
-    return { off, on };
+    return out;
   }
 
   /** 0.66.0: a dry run through this channel only - SuperNotify says if it would send, to whom, or why not. */
@@ -5258,13 +5386,19 @@ class SupernotifyDeliveriesCard extends SnCard {
     const rows = this.shadowRoot.getElementById("rows");
     if (!dels.length) {
       rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_deliveries}</span>`, this && this._config);
+      this._rowsHtml = null;
       return;
     }
     const nOn = dels.filter((d) => d.on).length;
+    // 1.0.0 (perf): worked out once for all the rows - position, scenario effects, "fallback for"
+    const idxOf = new Map(dels.map((d, i) => [d, i]));
+    const fx = this._scenarioEffects();
+    const fbFor = new Map();
+    for (const o of dels) if (Array.isArray(o.a.fallback)) for (const n of o.a.fallback) { if (!fbFor.has(n)) fbFor.set(n, []); fbFor.get(n).push(o); }
     const head = `<div class="chd"><span class="cht">${esc(this._config.title || T.ch_title)}</span>`
       + `<span class="chn">${esc(T.ch_count.replace("{on}", nOn).replace("{tot}", dels.length))}</span></div>`;
     const rowHtml = (d) => {
-      const i = dels.indexOf(d);
+      const i = idxOf.get(d);
       const tr = d.a.transport || "";
       const em = SN_TRANSPORT_ICONS[tr] || "📤";
       const alias = snDeliveryAlias(this._hass, d.name) || "";
@@ -5274,16 +5408,16 @@ class SupernotifyDeliveriesCard extends SnCard {
       if (!d.on) { state = snOverridden(d.a) === false ? T.off_config : T.off_manual; }
       else if (d.a.transport_enabled === false) { state = `⛔ ${T.transport_off}`; cls = "crit"; }
       else {
-        const fx = this._scenarioEffect(d.name);
-        if (fx.off.length) { state = `${T.paused_by} ${fx.off.join(", ")}`; cls = "warn"; }
-        else if (fx.on.length && this._group(d) === "scen") { state = `${T.on_by} ${fx.on.join(", ")}`; cls = "ok"; }
+        const f = fx.get(d.name) || { off: [], on: [] };
+        if (f.off.length) { state = `${T.paused_by} ${f.off.join(", ")}`; cls = "warn"; }
+        else if (f.on.length && this._group(d) === "scen") { state = `${T.on_by} ${f.on.join(", ")}`; cls = "ok"; }
       }
       const tags = [];
       if (snOverridden(d.a) && d.on) tags.push(snHandTag(d.a, T)); // 0.75.0: switched on by hand
       // 0.77.0: per-delivery fallback (SuperNotify `fallback:` list on the switch)
       const fbName = (n) => snDeliveryAlias(this._hass, n) || n;
       if (Array.isArray(d.a.fallback) && d.a.fallback.length) tags.push(`🛟 ${T.fb_list} ${d.a.fallback.map(fbName).join(", ")}`);
-      const fbOf = dels.filter((o) => Array.isArray(o.a.fallback) && o.a.fallback.includes(d.name)).map((o) => fbName(o.name));
+      const fbOf = (fbFor.get(d.name) || []).map((o) => fbName(o.name));
       if (fbOf.length) tags.push(`🛟 ${T.fb_for} ${fbOf.join(", ")}`);
       if (d.a.action) tags.push(`⚙️ ${d.a.action}`);
       const tgt = d.a.target;
@@ -5312,7 +5446,7 @@ class SupernotifyDeliveriesCard extends SnCard {
         [T.det_debug, d.a.debug ? true : undefined],
       ], T, this._config, this._hass) + (snDryAvailable(this._hass, this._config)
         ? `<button class="dprobe" data-n="${esc(d.name)}">▶ ${esc(T.dl_probe)}</button>${this._probe && this._probe[d.name] ? `<div class="dryBox dres">${this._probe[d.name]}</div>` : ""}` : "") : "";
-      return `<div class="row${d.on ? "" : " dim"}" data-i="${i}" aria-expanded="${open ? "true" : "false"}">
+      return `<div class="row${d.on ? "" : " dim"}" data-i="${i}" aria-expanded="${open ? "true" : "false"}" data-sn-a11y="row" tabindex="0" role="button">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(alias || d.name)}</b>
           <div class="tr">${meta}</div>
@@ -5336,28 +5470,25 @@ class SupernotifyDeliveriesCard extends SnCard {
       }).join("");
     }
     // 0.65.0: "undo the changes made by hand" lives in the tools card (all or one kind)
-    rows.innerHTML = snIconify(head + body, this && this._config);
-    // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
-    rows.querySelectorAll(".row").forEach((node) => {
-      node.onclick = (e) => {
-        if (e.target.closest(".sw")) return;
-        const id = dels[+node.dataset.i].id;
-        if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
-        const pb = e.target.closest(".dprobe");
-        if (pb) { this._runProbe(pb.dataset.n); return; }
-        if (e.target.closest(".det") || e.target.closest(".dres")) return;
-        this._open = this._open || new Set();
-        if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
-        this._update();
-      };
-    });
-    rows.querySelectorAll(".sw").forEach((label) => {
-      label.addEventListener("click", (e) => e.stopPropagation());
-      const input = label.querySelector("input");
-      input.addEventListener("change", () => {
-        snToggleSafe(this._hass, label.dataset.id, input);
-      });
-    });
+    // 1.0.0 (perf): rebuilt only when it changed; one listener on #rows for every row and switch
+    this._dels = dels;
+    const html = snIconify(head + body, this && this._config);
+    if (html === this._rowsHtml && rows.firstChild) return;
+    this._rowsHtml = html;
+    rows.innerHTML = html;
+    snRowsDelegate(rows, (node, e) => {
+      // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
+      const d = this._dels[+node.dataset.i];
+      if (!d) return;
+      const id = d.id;
+      if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
+      const pb = e.target.closest(".dprobe");
+      if (pb) { this._runProbe(pb.dataset.n); return; }
+      if (e.target.closest(".det") || e.target.closest(".dres")) return;
+      this._open = this._open || new Set();
+      if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
+      this._update();
+    }, (label, input) => { this._rowsHtml = null; snToggleSafe(this._hass, label.dataset.id, input); });
   }
 }
 
@@ -5458,9 +5589,16 @@ class SupernotifyTransportsCard extends SnCard {
     const rows = this.shadowRoot.getElementById("rows");
     if (!trs.length) {
       rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_transports}</span>`, this && this._config);
+      this._rowsHtml = null;
       return;
     }
-    rows.innerHTML = snIconify(trs.map((t, i) => {
+    // 1.0.0 (perf): channels per transport counted once, not once per row
+    const usedBy = new Map();
+    for (const d of snEntityRows(this._hass, "delivery")) {
+      const tr = d.a && d.a.transport;
+      if (tr) usedBy.set(tr, (usedBy.get(tr) || 0) + 1);
+    }
+    const html = snIconify(trs.map((t, i) => {
       const em = SN_TRANSPORT_ICONS[t.name] || "🔌";
       const tags = [];
       if (snHandTag(t.a, T, true)) tags.push(snHandTag(t.a, T, true)); // 0.75.0
@@ -5469,7 +5607,7 @@ class SupernotifyTransportsCard extends SnCard {
       let alias = snCleanName(t.a.friendly_name, t.name);
       if (/Transport Adaptor$/i.test(alias)) alias = "";
       const label = alias || SN_TRANSPORT_LABELS[t.name] || t.name;
-      const used = snEntityRows(this._hass, "delivery").filter((d) => d.a && d.a.transport === t.name).length;
+      const used = usedBy.get(t.name) || 0;
       const use = used ? `${T.tr_used} ${snPl(T, "channels", used)}` : T.tr_unused;
       const open = this._open && this._open.has(t.id);
       const dd = t.a.delivery_defaults || {};
@@ -5487,7 +5625,7 @@ class SupernotifyTransportsCard extends SnCard {
         ...Object.entries(dd.options || {}).map(([k, v]) => [k, v, true]),
         [T.det_data, dd.data && Object.keys(dd.data).length ? dd.data : undefined],
       ], T, this._config, this._hass) : "";
-      return `<div class="row" data-i="${i}" aria-expanded="${open ? "true" : "false"}">
+      return `<div class="row" data-i="${i}" aria-expanded="${open ? "true" : "false"}" data-sn-a11y="row" tabindex="0" role="button">
         <span class="em">${em}</span>
         <div class="mid"><b>${esc(label)}</b>
           <div class="sub">${[snTech(t.name, label), esc(use)].filter(Boolean).join(" · ")}</div>
@@ -5500,25 +5638,22 @@ class SupernotifyTransportsCard extends SnCard {
         </label>
       </div>`;
     }).join(""), this && this._config);
-    // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
-    rows.querySelectorAll(".row").forEach((node) => {
-      node.onclick = (e) => {
-        if (e.target.closest(".sw")) return;
-        const id = trs[+node.dataset.i].id;
-        if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
-        if (e.target.closest(".det")) return;
-        this._open = this._open || new Set();
-        if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
-        this._update();
-      };
-    });
-    rows.querySelectorAll(".sw").forEach((label) => {
-      label.addEventListener("click", (e) => e.stopPropagation());
-      const input = label.querySelector("input");
-      input.addEventListener("change", () => {
-        snToggleSafe(this._hass, label.dataset.id, input);
-      });
-    });
+    // 1.0.0 (perf): rebuilt only when it changed; one listener on #rows
+    this._trs = trs;
+    if (html === this._rowsHtml && rows.firstChild) return;
+    this._rowsHtml = html;
+    rows.innerHTML = html;
+    snRowsDelegate(rows, (node, e) => {
+      // 0.63.0: a tap opens the detail; "All attributes" opens HA's dialog
+      const t = this._trs[+node.dataset.i];
+      if (!t) return;
+      const id = t.id;
+      if (e.target.closest(".dmore")) { this._moreInfo(id); return; }
+      if (e.target.closest(".det")) return;
+      this._open = this._open || new Set();
+      if (this._open.has(id)) this._open.delete(id); else this._open.add(id);
+      this._update();
+    }, (label, input) => { this._rowsHtml = null; snToggleSafe(this._hass, label.dataset.id, input); });
   }
 }
 
@@ -5630,9 +5765,12 @@ class SupernotifyRecipientsCard extends SnCard {
     const rows = this.shadowRoot.getElementById("rows");
     if (!recs.length) {
       rows.innerHTML = snIconify(`<span class="badge b-off">${T.no_recipients}</span>`, this && this._config);
+      this._rowsHtml = null;
       return;
     }
-    rows.innerHTML = snIconify(recs.map((r, i) => {
+    // 1.0.0 (perf): the archive index read once for every row (it was asked once per recipient)
+    this._lastIdx = null;
+    const html = snIconify(recs.map((r, i) => {
       const personId = r.a.entity_id;
       const pState = personId ? (this._hass.states[personId] || {}).state : undefined;
       const home = pState === "home";
@@ -5648,10 +5786,11 @@ class SupernotifyRecipientsCard extends SnCard {
       if (hand) tags.unshift(hand);
       const alias = snCleanName(r.a.friendly_name, r.name);
       const last = this._lastNotified(r.name);
+      const hasNotify = !!this._hass.states[`notify.recipient_${r.name}`];
       const lastHtml = last
         ? `<div class="last" data-why="${esc(last.id || "")}" data-ent="${esc(last.entity)}">🔔 ${esc(T.last_notified)}: <b>${esc(snAgo(last.when, T))}</b>${last.title ? ` · ${esc(last.title)}` : ""}</div>`
-        : (this._hass.states[`notify.recipient_${r.name}`] ? `<div class="last none">🔕 ${esc(T.never_notified)}</div>` : "");
-      return `<div class="row" data-i="${i}" data-person="${esc(r.a.entity_id || r.a.person || "")}">
+        : (hasNotify ? `<div class="last none">🔕 ${esc(T.never_notified)}</div>` : "");
+      return `<div class="row" data-sn-a11y="row" tabindex="0" role="button" data-i="${i}" data-person="${esc(r.a.entity_id || r.a.person || "")}">
         <span class="em">👤</span>
         <div class="mid"><b>${esc(alias || r.name)}</b>
           <span class="sub">${esc(personId || "")}${pState !== undefined ? ` · <span style="white-space:nowrap">${home ? "🏠 " + T.home : "🚗 " + T.away}</span>` : ""}</span>
@@ -5662,7 +5801,7 @@ class SupernotifyRecipientsCard extends SnCard {
             return `<div class="dv"><b>${esc(d.device_name || d.mobile_app_id || "?")}</b><span>${esc([model, os, d.app_version ? "app " + d.app_version : ""].filter(Boolean).join(" · "))}</span></div>`;
           }).join("")}</div>` : ""}
           ${lastHtml}
-          ${this._hass.states[`notify.recipient_${r.name}`] ? `<button class="tst${this._armed === r.name ? " arm" : ""}" data-tst="${esc(r.name)}">${this._armed === r.name ? "✉️ " + esc(T.rc_test_confirm) : "✉️ " + esc(T.rc_test)}</button>` : ""}
+          ${hasNotify ? `<button class="tst${this._armed === r.name ? " arm" : ""}" data-tst="${esc(r.name)}">${this._armed === r.name ? "✉️ " + esc(T.rc_test_confirm) : "✉️ " + esc(T.rc_test)}</button>` : ""}
         </div>
         <span class="gear" title="${esc(T.details)}" aria-label="${esc(T.details)}">⚙️</span>
         <label class="sw" data-id="${esc(r.id)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
@@ -5671,32 +5810,31 @@ class SupernotifyRecipientsCard extends SnCard {
         </label>
       </div>`;
     }).join(""), this && this._config);
-    rows.querySelectorAll(".row").forEach((node) => {
-      node.onclick = (e) => {
-        if (e.target.closest(".sw") || e.target.closest(".devb") || e.target.closest(".tst")) return;
-        this._moreInfo(recs[+node.dataset.i].id);
-      };
-    });
-    rows.querySelectorAll(".sw").forEach((label) => {
-      label.addEventListener("click", (e) => e.stopPropagation());
-      const input = label.querySelector("input");
-      input.addEventListener("change", () => {
-        snToggleSafe(this._hass, label.dataset.id, input);
-      });
-    });
-    // 0.62.0: the person's devices (model, system, app version) on request
-    rows.querySelectorAll(".devb").forEach((b) => {
-      b.onclick = (e) => {
+    // 1.0.0 (perf): rebuilt only when it changed (the "sent" mark and an error line are part of what is shown);
+    // one listener on #rows for the rows, switches, devices, tests and "last notified"
+    this._recs = recs;
+    const key = `${html}|${this._sent || ""}`;
+    if (key === this._rowsHtml && !this._sentErr && rows.firstChild) return;
+    this._rowsHtml = key;
+    rows.innerHTML = html;
+    snRowsDelegate(rows, (node, e) => {
+      if (e.target.closest(".devb") || e.target.closest(".tst") || e.target.closest(".last[data-ent]")) return;
+      const r = this._recs[+node.dataset.i];
+      if (r) this._moreInfo(r.id);
+    }, (label, input) => { this._rowsHtml = null; snToggleSafe(this._hass, label.dataset.id, input); }, (e) => {
+      // 0.62.0: the person's devices (model, system, app version) on request
+      const dv = e.target.closest(".devb");
+      if (dv) {
         e.stopPropagation();
         this._openDev = this._openDev || new Set();
-        const n = b.dataset.dev;
+        const n = dv.dataset.dev;
         if (this._openDev.has(n)) this._openDev.delete(n); else this._openDev.add(n);
         this._update();
-      };
-    });
-    // 0.62.0: test message through the whole pipeline (scenarios, snoozes, dupe check), two taps
-    rows.querySelectorAll(".tst").forEach((b) => {
-      b.onclick = (e) => {
+        return true;
+      }
+      // 0.62.0: test message through the whole pipeline (scenarios, snoozes, dupe check), two taps
+      const b = e.target.closest(".tst");
+      if (b) {
         e.stopPropagation();
         const n = b.dataset.tst;
         if (this._armed !== n) {
@@ -5704,7 +5842,7 @@ class SupernotifyRecipientsCard extends SnCard {
           clearTimeout(this._armT);
           this._armT = setTimeout(() => { this._armed = null; this._update(); }, 4000);
           this._update();
-          return;
+          return true;
         }
         this._armed = null;
         clearTimeout(this._armT);
@@ -5713,22 +5851,33 @@ class SupernotifyRecipientsCard extends SnCard {
         this._hass.callService("notify", "send_message", {
           entity_id: `notify.recipient_${n}`, title: T2.rc_test_title,
           message: `${T2.rc_test_msg} ${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`,
-        }).then(() => { this._sent = n; this._update(); setTimeout(() => { this._sent = null; this._update(); }, 4000); })
-          .catch((err) => { this._sentErr = `${n}: ${(err && err.message) || err}`; this._update(); });
+        }).then(() => {
+          this._sent = n; this._update();
+          clearTimeout(this._sentT);
+          this._sentT = setTimeout(() => { this._sent = null; this._update(); }, 4000);
+        }).catch((err) => { this._sentErr = `${n}: ${(err && err.message) || err}`; this._update(); });
         snEnquireBust(1500);
-      };
+        return true;
+      }
+      const ln = e.target.closest(".last[data-ent]");
+      if (ln) {
+        e.stopPropagation();
+        if (!snWhyOpen(ln.dataset.why)) this._moreInfo(ln.dataset.ent);
+        return true;
+      }
+      return false;
     });
     if (this._sent || this._sentErr) {
       const tb = this._sent && rows.querySelector(`.tst[data-tst="${this._sent}"]`);
       if (tb) tb.textContent = "✔ " + T.rc_test_sent;
-      if (this._sentErr) { rows.insertAdjacentHTML("afterbegin", `<div class="tag warn">${esc(this._sentErr)}</div>`); this._sentErr = null; }
+      if (this._sentErr) { rows.insertAdjacentHTML("afterbegin", `<div class="tag warn">${esc(this._sentErr)}</div>`); this._sentErr = null; this._rowsHtml = null; }
     }
-    rows.querySelectorAll(".last[data-ent]").forEach((node) => {
-      node.onclick = (e) => {
-        e.stopPropagation();
-        if (!snWhyOpen(node.dataset.why)) this._moreInfo(node.dataset.ent);
-      };
-    });
+  }
+
+  // 1.0.0: no redraw of a card that left the page (the two-tap test button, the "sent" mark)
+  disconnectedCallback() {
+    clearTimeout(this._armT); this._armed = null;
+    clearTimeout(this._sentT); this._sent = null;
   }
 
   /**
@@ -5743,9 +5892,13 @@ class SupernotifyRecipientsCard extends SnCard {
     const when = st && st.state ? new Date(st.state) : null;
     if (!when || isNaN(when.getTime())) return null;
     // 0.86.0: title and time are all it needs - the light list, the newest few in full
-    snArchiveStore.ensure(this._hass, SN_ARCHIVE_FULL_RECENT, this._config.trigger_entity);
-    snArchiveStore.ensureLight(this._hass, SN_ARCHIVE_LIGHT, this._config.trigger_entity);
-    const items = snArchiveStore.getIndex().items || [];
+    // 1.0.0 (perf): asked once per redraw for all the rows (_update clears _lastIdx)
+    if (!this._lastIdx) {
+      snArchiveStore.ensure(this._hass, SN_ARCHIVE_FULL_RECENT, this._config.trigger_entity);
+      snArchiveStore.ensureLight(this._hass, SN_ARCHIVE_LIGHT, this._config.trigger_entity);
+      this._lastIdx = snArchiveStore.getIndex().items || [];
+    }
+    const items = this._lastIdx;
     const ts = when.getTime() / 1000;
     let best = null;
     for (const it of items) {
@@ -5806,13 +5959,13 @@ class SupernotifyScenariosCard extends SnCard {
   }
 
   setConfig(config) {
-    this._config = { poll_seconds: 60, style: "supernotify", groups: null, ...(config || {}) };
+    this._config = { style: "supernotify", groups: null, ...(config || {}) };
     this._rendered = false;
   }
 
   _onHass(hass, fresh, changed) {
     super._onHass(hass, fresh, changed);
-    // connectedCallback may have run before hass: first data now, not at the first poll
+    // connectedCallback may have run before hass: first data now
     if (!this._booted) { this._booted = true; this._refresh(); }
   }
 
@@ -5820,25 +5973,27 @@ class SupernotifyScenariosCard extends SnCard {
     return 10;
   }
 
+  // 1.0.0 (perf): no poll of its own - the active scenarios come from snActive (shared by every card,
+  // read every 30 s and after a change; a change of the list redraws the card through snChanged).
+  // `poll_seconds` is still accepted and ignored.
   connectedCallback() {
-    const s = (this._config && this._config.poll_seconds) || 60;
-    this._pollTimer = setInterval(() => this._refresh(), s * 1000);
     this._refresh();
     this._onRefresh = this._onRefresh || (() => this._refresh());
     window.addEventListener("supernotify-refresh", this._onRefresh);
   }
 
   disconnectedCallback() {
-    clearInterval(this._pollTimer);
     if (this._onRefresh) window.removeEventListener("supernotify-refresh", this._onRefresh);
   }
 
-  async _refresh() {
+  _refresh() {
     if (!this._hass) return;
-    try {
-      const r = await snEnquire(this._hass, "enquire_active_scenarios");
-      this._active = (r && r.response && r.response.scenarios) || [];
-    } catch (e) { /* retry on next poll */ }
+    snActiveEnsure(this._hass);
+    // before snActive's first answer: drawn again when it comes (the same shared request, no second call)
+    const svc = this._hass.services && this._hass.services.supernotify;
+    if (!snActive.names && snActive.busy && !(svc && !svc.enquire_active_scenarios)) {
+      snEnquire(this._hass, "enquire_active_scenarios").catch(() => {}).then(() => { if (this._rendered) this._update(); });
+    }
     this._loadTrace();
     if (this._rendered) this._update();
   }
@@ -5849,7 +6004,10 @@ class SupernotifyScenariosCard extends SnCard {
     // conditions - the manual on/off state (bsId + manual).
     const byName = new Map();
     if (!this._hass) return [];
-    for (const id of Object.keys(this._hass.states)) {
+    // 1.0.0 (perf): the scenario sensors and switches listed once per states object (snScenarioSensorIds,
+    // snEntityRows), not a scan of every entity of the house (the rows are sorted when drawn)
+    const ids = snScenarioSensorIds(this._hass).concat(snEntityRows(this._hass, "scenario").map((r) => r.id));
+    for (const id of ids) {
       const m = id.match(/^(switch|binary_sensor)\.supernotify_scenario_(.+)$/);
       if (!m) continue;
       const s = this._hass.states[id];
@@ -5897,10 +6055,17 @@ class SupernotifyScenariosCard extends SnCard {
     try {
       const act = [...(snActive.names || [])];
       const msg = { message: T.probe_msg };
-      const base = await snDryRun(this._hass, msg);
-      const other = isAct
-        ? await snDryRun(this._hass, { ...msg, constrain_scenarios: act.filter((n) => n !== name).length ? act.filter((n) => n !== name) : ["__none__"] })
-        : await snDryRun(this._hass, { ...msg, apply_scenarios: [name] });
+      // 1.0.0 (perf): the two dry runs together; the one without changes kept 30 s while the active scenarios stay
+      const bc = this._diffBase;
+      const baseP = bc && bc.v === snActive.v && bc.msg === msg.message && Date.now() - bc.at < 30000 ? bc.p : snDryRun(this._hass, msg);
+      if (baseP !== (bc && bc.p)) {
+        const ent = { v: snActive.v, msg: msg.message, at: Date.now(), p: baseP };
+        this._diffBase = ent;
+        baseP.catch(() => { if (this._diffBase === ent) this._diffBase = null; });
+      }
+      const [base, other] = await Promise.all([baseP, isAct
+        ? snDryRun(this._hass, { ...msg, constrain_scenarios: act.filter((n) => n !== name).length ? act.filter((n) => n !== name) : ["__none__"] })
+        : snDryRun(this._hass, { ...msg, apply_scenarios: [name] })]);
       const a = snDrySending(base), b = snDrySending(other);
       const add = [...b].filter((x) => !a.has(x)), rem = [...a].filter((x) => !b.has(x));
       const nm = (x) => snEsc(snDeliveryAlias(this._hass, x) || x);
@@ -5995,7 +6160,8 @@ class SupernotifyScenariosCard extends SnCard {
 
   _rowHtml(s, i, active) {
     const esc = snEsc;
-    const T = snT(this._config, this._hass);
+    // 1.0.0 (perf): strings and palette from _update (once per drawing, not per row)
+    const T = this._rT || snT(this._config, this._hass);
     const isAct = active.includes(s.name);
     const em = snScenarioIcon(this._config, s.name);
     const tags = [];
@@ -6012,9 +6178,10 @@ class SupernotifyScenariosCard extends SnCard {
     if (ags.length) tags.push(`<span class="tag">🔘 ${esc(ags.join(", "))}</span>`);
     if (s.a.media) tags.push(`<span class="tag">📷 ${T.media}</span>`);
     if (s.manual) tags.unshift(`<span class="tag">✋ ${T.manual}</span>`);
-    if (snHandTag(s.a, T, true)) tags.unshift(snHandTag(s.a, T, true)); // 0.75.0
+    const hand = snHandTag(s.a, T, true);
+    if (hand) tags.unshift(hand); // 0.75.0
     const alias = snCleanName(s.a.friendly_name, s.name);
-    const p = this._palette();
+    const p = this._rP || this._palette();
     // the scenario switch; a read-only badge if the switch is missing.
     const ctl = s.swId
       ? `<label class="sw" data-id="${esc(s.swId)}" style="--sn-sw-line:${p.line};--sn-sw-on:${p.brand}">
@@ -6043,6 +6210,12 @@ class SupernotifyScenariosCard extends SnCard {
 
   _update() {
     if (!this.shadowRoot) return;
+    this._rT = snT(this._config, this._hass);
+    this._rP = this._palette();
+    try { this._update0(); } finally { this._rT = this._rP = null; }
+  }
+
+  _update0() {
     const all = this._scenarios();
     const reactive = this._reactiveActive(all);
     const active = reactive !== null ? reactive : (this._active || []);
@@ -6169,11 +6342,16 @@ class SupernotifySimulatorCard extends SnCard {
 
   async _refresh() {
     if (!this._hass) return;
+    // 1.0.0 (perf): asked once at a time - _render and the first hass both asked at start
+    if (this._refBusy) return;
+    this._refBusy = true;
     try {
+      // the dry run needs only the scenario names (by_scenario); the baseline (implicit) feeds the estimate alone
+      const dry = this._dryMode();
       const [act, byScen, impl] = await Promise.all([
-        this._ws("enquire_active_scenarios"),
+        this._sel === null ? this._ws("enquire_active_scenarios") : {},
         this._ws("enquire_deliveries_by_scenario"),
-        this._ws("enquire_implicit_deliveries"),
+        dry ? {} : this._ws("enquire_implicit_deliveries"),
       ]);
       this._byScen = byScen || {};
       this._implicit = [];
@@ -6183,6 +6361,12 @@ class SupernotifySimulatorCard extends SnCard {
       if (this._sel === null) this._sel = new Set(act.scenarios || []);
       this._simulate();
     } catch (e) { /* supernotify may still be loading */ }
+    finally { this._refBusy = false; }
+  }
+
+  // 1.0.0: a dry run scheduled while the card was on the page is not sent once it has left
+  disconnectedCallback() {
+    clearTimeout(this._dryT);
   }
 
   _render() {
@@ -6415,6 +6599,9 @@ class SupernotifyComposerCard extends SnCard {
     const p = this._palette();
     const T = snT(this._config, this._hass);
     const esc = snEsc;
+    // 1.0.0 (perf): the channels and the scenarios listed once for the whole drawing
+    const dlv = this._deliveries();
+    const scenN = this._scenNames();
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; container-type: inline-size; }
@@ -6481,7 +6668,7 @@ class SupernotifyComposerCard extends SnCard {
               <option value="critical">${T.prio_critical}</option>
             </select>
             <label>${T.channels_lbl}</label>
-            <div id="chips">${this._deliveries().map((d) => `<span class="chip" data-d="${esc(d.name)}" title="${esc(d.name)}">${esc(snDeliveryAlias(this._hass, d.name) || d.name)}</span>`).join("")}</div>
+            <div id="chips">${dlv.map((d) => `<span class="chip" data-d="${esc(d.name)}" title="${esc(d.name)}">${esc(snDeliveryAlias(this._hass, d.name) || d.name)}</span>`).join("")}</div>
             <label>${T.target_lbl}</label>
             <div id="targetSel"></div>
             <input type="text" id="customTarget" placeholder="${T.custom_target_ph}" style="margin-top:6px">
@@ -6492,8 +6679,8 @@ class SupernotifyComposerCard extends SnCard {
             <details class="adv" id="adv"><summary>${T.adv_title}</summary>
               <label>${T.adv_spoken}</label>
               <textarea id="spk" rows="2" placeholder="${T.adv_spoken_ph}"></textarea>
-              ${this._scenNames().length ? [["apply_scenarios", T.adv_apply], ["require_scenarios", T.adv_require], ["constrain_scenarios", T.adv_constrain]].map(([k, l]) =>
-                `<label>${l}</label><div class="chips achips" data-k="${k}">${this._scenNames().map((n) =>
+              ${scenN.length ? [["apply_scenarios", T.adv_apply], ["require_scenarios", T.adv_require], ["constrain_scenarios", T.adv_constrain]].map(([k, l]) =>
+                `<label>${l}</label><div class="chips achips" data-k="${k}">${scenN.map((n) =>
                   `<button class="chip" data-s="${esc(n)}">${esc(snScenarioName(this._hass, n))}</button>`).join("")}</div>`).join("") : ""}
               <label>${T.adv_html}</label>
               <textarea id="mhtml" rows="2" placeholder="&lt;b&gt;…&lt;/b&gt;"></textarea>
@@ -6561,7 +6748,7 @@ class SupernotifyComposerCard extends SnCard {
     if (actAdd) actAdd.onclick = () => addRow("acts", `<div class="actr"><input type="text" class="aid" placeholder="${escA(T.adv_act_id)}">`
       + `<input type="text" class="atl" placeholder="${escA(T.adv_act_title)}"><button type="button" class="rmx" aria-label="✕">✕</button></div>`);
     const dcAdd = sr.getElementById("dcAdd");
-    if (dcAdd) dcAdd.onclick = () => addRow("dcs", `<div class="dcr"><select class="dcn">${this._deliveries().map((d) =>
+    if (dcAdd) dcAdd.onclick = () => addRow("dcs", `<div class="dcr"><select class="dcn">${dlv.map((d) =>
       `<option value="${escA(d.name)}">${escA(snDeliveryAlias(this._hass, d.name) || d.name)}</option>`).join("")}</select>`
       + `<textarea class="dcv" rows="2" placeholder="${escA(T.adv_dc_ph)}"></textarea><button type="button" class="rmx" aria-label="✕">✕</button></div>`);
     sr.querySelectorAll(".achips .chip").forEach((b) => {
@@ -6574,7 +6761,7 @@ class SupernotifyComposerCard extends SnCard {
       };
     });
     this._deliveryTransport = {};
-    this._deliveries().forEach((d) => { this._deliveryTransport[d.name] = d.transport; });
+    dlv.forEach((d) => { this._deliveryTransport[d.name] = d.transport; });
     sr.querySelectorAll("#chips .chip").forEach((node) => {
       node.onclick = () => {
         const d = node.dataset.d;
@@ -7110,8 +7297,22 @@ const snStatsDaily = {
     return days.filter(snIsObj);
   },
 
+  // 1.0.0 (perf): the last answer, used again for 60 s while sensor.supernotify_notifications does not
+  // change - the overview, the archive's priority counts and the stats card each asked on their own
+  memo: null,
+
+  _days(c, startMs) {
+    const s0 = new Date(startMs);
+    const startKey = `${s0.getFullYear()}-${String(s0.getMonth() + 1).padStart(2, "0")}-${String(s0.getDate()).padStart(2, "0")}`;
+    return Object.keys(c.days).filter((k) => k >= startKey).sort().map((k) => c.days[k]);
+  },
+
   get(hass, startMs) {
     if (this.busy) return this.busy;
+    const trig = hass && hass.states && hass.states["sensor.supernotify_notifications"];
+    const stamp = trig ? trig.last_updated : "";
+    const m = this.memo;
+    if (m && m.stamp === stamp && Date.now() - m.at < 60000 && m.c.from && m.c.from <= startMs) return Promise.resolve(this._days(m.c, startMs));
     this.busy = (async () => {
       const c = this._load();
       // a finished day does not change: once the window is covered, read again only from the
@@ -7130,9 +7331,8 @@ const snStatsDaily = {
       for (const k of Object.keys(c.days)) if (k < keepKey) delete c.days[k];
       if (c.from < keep.getTime()) c.from = keep.getTime();
       this._save(c);
-      const s0 = new Date(startMs);
-      const startKey = `${s0.getFullYear()}-${String(s0.getMonth() + 1).padStart(2, "0")}-${String(s0.getDate()).padStart(2, "0")}`;
-      return Object.keys(c.days).filter((k) => k >= startKey).sort().map((k) => c.days[k]);
+      this.memo = { at: Date.now(), stamp, c };
+      return this._days(c, startMs);
     })().finally(() => { this.busy = null; });
     return this.busy;
   },
@@ -7795,10 +7995,16 @@ class SupernotifyArchiveCard extends SnCard {
   }
 
   connectedCallback() {
+    // 1.0.0 (perf): events that come together (store, priority counts) redraw the list once
     this._onArchive = () => {
-      if (!this._rendered) return;
-      this._storeVer = snArchiveStore.version;
-      this._renderList();
+      if (!this._rendered || this._listQ) return;
+      this._listQ = true;
+      queueMicrotask(() => {
+        this._listQ = false;
+        if (!this._rendered || !this.isConnected) return;
+        this._storeVer = snArchiveStore.version;
+        this._renderList();
+      });
     };
     window.addEventListener("supernotify-archive", this._onArchive);
     this._onArchive();   // catch up with a fetch that finished before the card was in the page
@@ -7995,8 +8201,29 @@ class SupernotifyArchiveCard extends SnCard {
   _row(id) {
     if (!id) return null;
     const idx = this._index();
-    const items = [...((idx && idx.items) || []), ...((this._pIdx && this._pIdx.idx.items) || [])];
-    return items.find((r) => r.id === id) || items.find((r) => String(r.fid || "").startsWith(id) || String(id).startsWith(r.id)) || null;
+    // 1.0.0 (perf): the two lists looked at in turn, not copied into a new array at each call
+    const lists = [(idx && idx.items) || [], (this._pIdx && this._pIdx.idx.items) || []];
+    for (const l of lists) { const r = l.find((x) => x.id === id); if (r) return r; }
+    for (const l of lists) {
+      const r = l.find((x) => String(x.fid || "").startsWith(id) || String(id).startsWith(x.id));
+      if (r) return r;
+    }
+    return null;
+  }
+
+  /** 1.0.0 (perf): Intl formatters kept per language and 12/24 h (one per row was made before). */
+  _fmt(kind) {
+    const loc = this._loc();
+    const h12 = snH12(this._hass);
+    const key = `${kind}|${loc}|${h12}`;
+    const c = this._fmtC || (this._fmtC = new Map());
+    let f = c.get(key);
+    if (!f) {
+      const opt = kind === "hm" ? { hour: "2-digit", minute: "2-digit", hour12: h12 } : { weekday: "long", day: "numeric", month: "long" };
+      try { f = new Intl.DateTimeFormat(loc, opt); } catch (e) { f = new Intl.DateTimeFormat(undefined, opt); }
+      c.set(key, f);
+    }
+    return f;
   }
 
   /** Canali di una riga, nel formato dell'indice, espansi in oggetti leggibili. */
@@ -8016,11 +8243,18 @@ class SupernotifyArchiveCard extends SnCard {
     const diff = Math.round((today - day) / 86400000);
     if (diff === 0) return T.today;
     if (diff === 1) return T.yesterday;
-    return day.toLocaleDateString(this._loc(), { weekday: "long", day: "numeric", month: "long" });
+    return this._fmt("day").format(day);
   }
 
   /** ok | err | warn | none: how a notification went, from its index row. */
   _status(r) {
+    // 1.0.0 (perf): worked out once per row while the list is drawn (_renderList)
+    const m = this._stMap;
+    if (m) { let v = m.get(r); if (v === undefined) { v = this._status0(r); m.set(r, v); } return v; }
+    return this._status0(r);
+  }
+
+  _status0(r) {
     const c = r.c || [];
     if (r.f || c.some((x) => Array.isArray(x) && x[1] === "e")) return "err";
     const sent = r.d || c.some((x) => typeof x === "number");
@@ -8249,6 +8483,11 @@ class SupernotifyArchiveCard extends SnCard {
   }
 
   _renderList() {
+    this._stMap = new Map();
+    try { this._renderList0(); } finally { this._stMap = null; }
+  }
+
+  _renderList0() {
     const el = this.shadowRoot && this.shadowRoot.getElementById("list");
     if (!el) return;
     const esc = snEsc;
@@ -8323,7 +8562,8 @@ class SupernotifyArchiveCard extends SnCard {
       }
       return true;
     });
-    const gen = idx.generated ? new Date(idx.generated).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) }) : "";
+    const hmF = this._fmt("hm");
+    const gen = idx.generated ? hmF.format(new Date(idx.generated)) : "";
     const T = this._TA();
     meta.innerHTML = snIconify(prioF && wide
       ? esc(ta("prio_scope").replace("{d}", snArchivePrio.days || SN_PRIO_DAYS))
@@ -8345,7 +8585,7 @@ class SupernotifyArchiveCard extends SnCard {
       if (this._groups && g && g.key === key) g.items.push(r);
       else groups.push({ key, items: [r] });
     }
-    const hm = (t) => new Date(t * 1000).toLocaleTimeString(this._loc(), { hour: "2-digit", minute: "2-digit", hour12: snH12(this._hass) });
+    const hm = (t) => hmF.format(new Date(t * 1000));
     const icon = (st) => st === "ok"
       ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L19 7"/></svg>`
       : st === "none"
@@ -8361,7 +8601,8 @@ class SupernotifyArchiveCard extends SnCard {
       const wh = (r.w ? ` · <span class="tg wh">\u{1F92B} ${esc(T.wh)}</span>` : "")
         + (r.apl ? ` · <span class="tg apl">${esc(snAppliances.label(r.apl))}</span>` : "");
       const span = n > 1 ? `${hm(g.items[n - 1].t)} – ${hm(r.t)} · ` : "";
-      return `<div class="it row${sub ? " sub" : ""}${st === "none" ? " quiet" : ""}${this._sel === r.id ? " sel" : ""}" data-id="${esc(r.id)}" title="${esc(stTip[st])}">
+      // 1.0.0: the attributes snA11yScan gave a row with its own onclick (the list now has one listener)
+      return `<div class="it row${sub ? " sub" : ""}${st === "none" ? " quiet" : ""}${this._sel === r.id ? " sel" : ""}" data-id="${esc(r.id)}" title="${esc(stTip[st])}" data-sn-a11y="row" tabindex="0" role="button">
         <span class="ic ${st}">${icon(st)}</span>
         <div class="bd"><div class="l1"><span class="ti">${esc(snTitleShow(r.ti || r.m || "—"))}</span>${many}${prio}</div>
           <div class="l2">${sub ? "" : span}${this._sub(r, lidx)}${wh}</div></div>
@@ -8377,17 +8618,22 @@ class SupernotifyArchiveCard extends SnCard {
       if (g.items.length > 1 && this._openGroups.has(r.id)) g.items.slice(1).forEach((x) => parts.push(line(x, null, true)));
     }
     el.innerHTML = snIconify(parts.join(""), this._config);
-    el.querySelectorAll(".it").forEach((node) => {
-      node.onclick = () => this._select(node.dataset.id, true);
-    });
-    el.querySelectorAll(".rep").forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const id = b.dataset.g;
-        if (this._openGroups.has(id)) this._openGroups.delete(id); else this._openGroups.add(id);
-        this._renderList();
-      };
-    });
+    // 1.0.0 (perf): one listener on the list for every row and ×N button, set once
+    if (!el._snDeleg) {
+      el._snDeleg = true;
+      el.addEventListener("click", (e) => {
+        const b = e.target.closest && e.target.closest(".rep");
+        if (b && el.contains(b)) {
+          e.stopPropagation();
+          const id = b.dataset.g;
+          if (this._openGroups.has(id)) this._openGroups.delete(id); else this._openGroups.add(id);
+          this._renderList();
+          return;
+        }
+        const node = e.target.closest && e.target.closest(".it");
+        if (node && el.contains(node)) this._select(node.dataset.id, true);
+      });
+    }
     // open the latest notification by itself, once, so the detail is never an empty box
     if (!this._sel && !this._autoDone && this._config.auto_select !== false) {
       this._autoDone = true;
@@ -8932,7 +9178,7 @@ const SnWhyDetail = {
         if (hit) res = { kind: hit.entity_id.split(".")[0], id: hit.entity_id, name: hit.name || hit.entity_id };
       } catch (e) { /* logbook not available to this user: fall back below */ }
       if (!res && n.ctx.user_id) {
-        const pid = Object.keys(this._hass.states).find((e) => e.startsWith("person.") && (this._hass.states[e].attributes || {}).user_id === n.ctx.user_id);
+        const pid = snPersonOfUser(this._hass, n.ctx.user_id);
         if (pid) res = { kind: "person", id: pid, name: (this._hass.states[pid].attributes || {}).friendly_name || pid };
       }
       this._sentCache.set(n.id, res);
@@ -9351,14 +9597,17 @@ class SupernotifyAppliancesCard extends SnCard {
     window.addEventListener("supernotify-appliances", this._onData);
     this._onArchive = this._onArchive || (() => { if (this._hass) snAppl.refreshEvents(this._hass); });
     window.addEventListener("supernotify-archive", this._onArchive);
-    this._tick = setInterval(() => { if (this._rendered) this._update(); }, 60000);
+    // 1.0.0 (perf): off screen the minute tick draws nothing - the card is brought up to date when it comes back
+    this._tick = setInterval(() => { if (this._rendered && !this._offscreen) this._update(); }, 60000);
     this._readFocus();
     // the drawings move only while the card is on screen
     if (!this._io && typeof IntersectionObserver === "function") {
       this._io = new IntersectionObserver((es) => {
+        const was = this._offscreen;
         this._offscreen = !es[es.length - 1].isIntersecting;
         const card = this.shadowRoot && this.shadowRoot.querySelector("ha-card");
         if (card) card.classList.toggle("offs", this._offscreen);
+        if (was && !this._offscreen && this._rendered) this._update();
       });
       this._io.observe(this);
     }
@@ -9369,6 +9618,18 @@ class SupernotifyAppliancesCard extends SnCard {
     window.removeEventListener("supernotify-archive", this._onArchive);
     clearInterval(this._tick);
     if (this._io) { this._io.disconnect(); this._io = null; }
+    // 1.0.0: no redraw of a card that left the page (the flash, a two-tap button, a result line)
+    clearTimeout(this._flashT); this._flashT = null;
+    clearTimeout(this._armT); this._armed = null;
+    for (const t of this._msgT || []) clearTimeout(t);
+    this._msgT = null;
+  }
+
+  /** 1.0.0: a result line goes after 6 s - a timer the card cancels when it leaves the page. */
+  _msgLater(id) {
+    const set = this._msgT || (this._msgT = new Set());
+    const t = setTimeout(() => { set.delete(t); delete this._msg[id]; this._update(); }, 6000);
+    set.add(t);
   }
 
   _T() {
@@ -9462,16 +9723,19 @@ class SupernotifyAppliancesCard extends SnCard {
     const html = snIconify(parts.join(""), this._config);
     this._shown = items;
     if (html !== this._bodyLast || !body.querySelector(".ap, .row")) {
+      // 1.0.0 (perf): only the power readings changed - those texts, not the whole list
+      if (!(this._bodyLast && body.querySelector(".ap, .row") && snApplPwPatch(body, this._bodyLast, html))) {
+        body.innerHTML = html;
+        this._mountArt(body, items);
+        this._bind(body, items);
+      }
       this._bodyLast = html;
-      body.innerHTML = html;
-      this._mountArt(body, items);
-      this._bind(body, items);
     }
     this._artSync(body, items);
     if (flash && !this._flashT) {
       this._flashT = setTimeout(() => { this._flashT = null; this._focusAt = 0; this._update(); }, Math.max(0, 5000 - (Date.now() - this._focusAt)));
     }
-    this._renderPanel();
+    this._renderPanel(items);
   }
 
   _renderNew() {
@@ -9659,7 +9923,7 @@ class SupernotifyAppliancesCard extends SnCard {
           <span class="st ${cls}"><span class="dot ${cls}"></span>${esc(word)}</span>
           <button class="more" data-more="${esc(ap.id)}" aria-haspopup="menu" aria-expanded="${this._menu === ap.id}" title="${esc(T.more)}">⋮</button>${menu}</div>
         ${run}
-        <div class="sum">${Number.isFinite(this._powerNow(ap)) ? `<span class="pw" title="${esc(T.power_now)}">⚡ ${esc(this._fmtW(this._powerNow(ap)))}</span> · ` : ""}${esc(this._summary(ap, s))}</div>
+        <div class="sum">${Number.isFinite(this._powerNow(ap)) ? `<span class="pw" title="${esc(T.power_now)}" data-pw>⚡ ${esc(this._fmtW(this._powerNow(ap)))}</span> · ` : ""}${esc(this._summary(ap, s))}</div>
         ${notes ? `<div class="note">🔔 ${esc(notes)}</div>` : ""}
         ${extra.join("")}
         <div class="acts">${pri ? `<button class="pb" data-act="${pri.act}" data-id="${esc(ap.id)}"${this._busy[ap.id] ? " disabled" : ""}>${esc(pri.label)}</button>` : ""}
@@ -9755,7 +10019,7 @@ class SupernotifyAppliancesCard extends SnCard {
       <div class="rb"><b>${esc(ap.name)}</b><span class="rs"><span class="dot ${cls}"></span>${esc(word)} · ${esc(sub)}</span>
         ${snApplMaints(this._hass, ap).filter((m) => m && m.near).map((m) => `<span class="rm${m.due ? " bad" : ""}">🔧 ${esc(`${m.name} · ${snApplMaintWhen(T, m)}`)}</span>`).join("")}
         ${msg ? `<span class="res ${msg.ok ? "ok" : "err"}">${esc(msg.text)}</span>` : ""}</div>
-      ${Number.isFinite(w) ? `<span class="pw rp" title="${esc(T.power_now)}">${esc(this._fmtW(w))}</span>` : ""}
+      ${Number.isFinite(w) ? `<span class="pw rp" title="${esc(T.power_now)}" data-pw>${esc(this._fmtW(w))}</span>` : ""}
       <span class="arr" aria-hidden="true">›</span></div>`;
   }
 
@@ -9877,7 +10141,7 @@ class SupernotifyAppliancesCard extends SnCard {
       this._busy[ap.id] = false;
     }
     this._msg[ap.id] = { ok, text };
-    setTimeout(() => { delete this._msg[ap.id]; this._update(); }, 6000);
+    this._msgLater(ap.id);
     this._update();
   }
 
@@ -9923,7 +10187,7 @@ class SupernotifyAppliancesCard extends SnCard {
       text = `${T.err}: ${(e && (e.message || e.code)) || e}`;
     }
     this._msg[ap.id] = { ok, text };
-    setTimeout(() => { delete this._msg[ap.id]; this._update(); }, 6000);
+    this._msgLater(ap.id);
     this._update();
   }
 
@@ -9991,14 +10255,19 @@ class SupernotifyAppliancesCard extends SnCard {
     if (back && back.focus) back.focus();
   }
 
-  _renderPanel() {
+  /** `items`: the appliances with the state _update just worked out (1.0.0, not worked out again here). */
+  _renderPanel(items) {
     const ov = this.shadowRoot && this.shadowRoot.getElementById("ov");
     if (!ov) return;
-    const ap = this._panel && snAppl.appliances(this._hass, this._config).find((a) => a.id === this._panel);
-    if (!ap) { ov.innerHTML = ""; ov.className = ""; this._panelLast = null; return; }
+    const x = this._panel && items && items.find((i) => i.ap.id === this._panel);
+    const ap = x ? x.ap : this._panel && snAppl.appliances(this._hass, this._config).find((a) => a.id === this._panel);
+    if (!ap) { if (ov.innerHTML !== "") ov.innerHTML = ""; ov.className = ""; this._panelLast = null; return; }
+    const s = x ? x.s : snApplState(this._hass, ap, Date.now(), snAppl.cyclesOf(ap));
     // the power changes every few seconds: redraw only what changed, and keep the scroll and the focus
-    const html = snIconify(this._panelHtml(ap), this._config);
+    const html = snIconify(this._panelHtml(ap, false, s), this._config);
     if (html === this._panelLast && ov.querySelector(".sheet")) return;
+    // 1.0.0 (perf): only the power reading changed - its text, not the whole sheet (the drawing keeps moving)
+    if (this._panelLast && ov.querySelector(".sheet") && snApplPwPatch(ov, this._panelLast, html)) { this._panelLast = html; return; }
     this._panelLast = html;
     const old = ov.querySelector(".sheet");
     const keep = old && old.scrollTop;
@@ -10016,13 +10285,13 @@ class SupernotifyAppliancesCard extends SnCard {
     ov.onkeydown = (e) => { if (e.key === "Escape") this._closePanel(); };
     const close = ov.querySelector(".x");
     if (close) close.onclick = () => this._closePanel();
-    this._bindPanel(ov, ap, () => this._renderPanel());
+    this._bindPanel(ov, ap, () => this._renderPanel(), s);
     if (this._panelFocus && close) { this._panelFocus = false; close.focus(); }
     else if (focusSel) { const f = ov.querySelector(focusSel); if (f) f.focus(); }
   }
 
-  /** What the panel's buttons do, in the dialog or (one device) in the card itself. */
-  _bindPanel(root, ap, redraw) {
+  /** What the panel's buttons do, in the dialog or (one device) in the card itself. `s`: the state drawn. */
+  _bindPanel(root, ap, redraw, s0) {
 
     const notifs = root.querySelector("#pNotifs");
     if (notifs) notifs.onclick = () => {
@@ -10078,7 +10347,7 @@ class SupernotifyAppliancesCard extends SnCard {
     });
     const dev = root.querySelector("#pDevice");
     if (dev) dev.onclick = (e) => { e.preventDefault(); snNavigate(`/config/devices/device/${ap.device_id}`); };
-    if (root.querySelector(".pv-art")) this._artSync(root, [{ ap, s: snApplState(this._hass, ap, Date.now(), snAppl.cyclesOf(ap)) }]);
+    if (root.querySelector(".pv-art")) this._artSync(root, [{ ap, s: s0 || snApplState(this._hass, ap, Date.now(), snAppl.cyclesOf(ap)) }]);
     const set = root.querySelector("#pSettings");
     if (set) set.onclick = () => snNavigate(ap.manual ? `/config/devices/device/${ap.device_id}` : snApplSettingsUrl(ap));
   }
@@ -10093,27 +10362,28 @@ class SupernotifyAppliancesCard extends SnCard {
       return;
     }
     if (this._oneId !== x.ap.id) { this._oneId = x.ap.id; snAppl.loadStats(this._hass, x.ap, true); }
-    const html = snIconify(this._panelHtml(x.ap, true), this._config);
+    const html = snIconify(this._panelHtml(x.ap, true, x.s), this._config);
     const card = this.shadowRoot.querySelector("ha-card");
-    const band = this._status(x.ap, snApplState(this._hass, x.ap, Date.now(), snAppl.cyclesOf(x.ap)))[0];
+    const band = this._status(x.ap, x.s)[0];
     if (card && card.dataset.st !== band) card.dataset.st = band;
-    if (html !== this._bodyLast) {
+    if (html !== this._bodyLast && !(this._bodyLast && body.querySelector(".one") && snApplPwPatch(body, this._bodyLast, html))) {
       this._bodyLast = html;
       const oldFs = body.querySelector(".fsov");
       const keepFs = oldFs && oldFs.scrollTop;
       body.innerHTML = html;
       const fs = body.querySelector(".fsov");
       if (keepFs && fs) fs.scrollTop = keepFs;
-      this._bindPanel(body, x.ap, () => { this._bodyLast = null; this._update(); });
+      this._bindPanel(body, x.ap, () => { this._bodyLast = null; this._update(); }, x.s);
     }
+    this._bodyLast = html;
     this._artSync(body, [x]);
   }
 
-  _panelHtml(ap, inline) {
+  _panelHtml(ap, inline, s0) {
     const T = this._T();
     const esc = snEsc;
     const cy = snAppl.cyclesOf(ap);
-    const s = snApplState(this._hass, ap, Date.now(), cy);
+    const s = s0 || snApplState(this._hass, ap, Date.now(), cy);
     const [cls, word] = this._status(ap, s);
     const w = this._powerNow(ap);
     const kind = this._config.illustrations !== false && snApplArtKind(ap, this._config);
@@ -10166,7 +10436,7 @@ class SupernotifyAppliancesCard extends SnCard {
       ap.device_id ? chip(`id="pDevice" class="ic" title="${esc(T.open_device)}" aria-label="${esc(T.chip_device)}"`, "", false, "mdi:devices") : "",
     ].filter(Boolean);
     const head = `<div class="ph"><div class="hwrap">${art}</div><div class="pht"><b id="pTitle">${esc(ap.name)}</b>
-        <span class="st ${cls}"><span class="dot ${cls}"></span>${esc(word)}</span>${quick ? `<span class="pq">${esc(quick)}</span>` : ""}
+        <span class="st ${cls}"><span class="dot ${cls}"></span>${esc(word)}</span>${quick ? `<span class="pq" data-pw>${esc(quick)}</span>` : ""}
         ${this._heroHtml(ap, s, cy)}</div>${side.length ? `<div class="pside">${side.join("")}</div>` : ""}</div>`;
     const msg = this._msg[ap.id];
     const now = (acts.length || menu ? `<div class="pchips">${acts.join("")}${menu}</div>` : "") + (msg ? `<div class="res ${msg.ok ? "ok" : "err"}">${esc(msg.text)}</div>` : "");
@@ -10349,7 +10619,7 @@ class SupernotifyAppliancesCard extends SnCard {
     const notes = this._notesLine(s);
     if (notes) fact(T.reminders_h, esc(notes), "", null, null, "mdi:bell-outline");
     if (s.errorText && s.status !== "error") fact(T.error_h, esc(s.errorText), "bad", null, null, "mdi:alert-circle-outline");
-    for (const e of snApplDeviceEntities(this._hass, ap.device_id)) {
+    for (const e of ap.ents || snApplDeviceEntities(this._hass, ap.device_id)) {
       const st = this._hass.states[e.entity_id];
       if (!st || ["unknown", "unavailable"].includes(st.state)) continue;
       const k = e.translation_key || "";
@@ -10649,6 +10919,8 @@ function snApplResolve(hass, entry, over) {
   ap.program = o.program || tk(SN_APPL_PROG_KEYS);
   ap.phase = o.phase || tk(SN_APPL_PHASE_KEYS);
   if (!ap.power && o.power_entity) ap.power = o.power_entity;
+  // 1.0.0 (perf): the device's entities, kept (the list is cached until hass.entities changes)
+  ap.ents = pEnts;
   // the vacuum and the device kinds: a power sensor of their own only when given
   ap.icon = o.icon || SN_APPL_ICONS[ap.type] || (ap.kind === "vacuum" ? "mdi:robot-vacuum" : "mdi:power-plug-outline");
   return ap;
@@ -10753,7 +11025,7 @@ function snApplState(hass, ap, now, cy) {
     if (vs === "paused") s.paused = true;
     if (vs === "returning") s.returning = true;
     const a = (v && v.attributes) || {};
-    const ents = snApplDeviceEntities(hass, ap.device_id);
+    const ents = ap.ents || snApplDeviceEntities(hass, ap.device_id);
     const errE = ents.find((e) => e.translation_key === "error");
     const errS = errE && raw(errE.entity_id);
     const code = errS ? String(errS.state) : "";
@@ -11366,6 +11638,7 @@ const snAppl = {
   reminded: new Set(), // "entry|t" "Remind me later" pressed on a card, until the next reminder
   stats: new Map(), // power entity -> { bins, done, current, types, loading, error, at }
   _list: null, _listKey: null,
+  _lists: new Map(), // 1.0.0 (perf): config key -> { list, key } - two cards with different configs no longer evict each other
 
   ensure(hass) {
     if (!hass || !hass.callWS) return;
@@ -11380,6 +11653,7 @@ const snAppl = {
         snAppliances.names = Object.fromEntries((entries || []).filter((e) => e && e.entry_id).map((e) => [e.entry_id, e.title || ""]));
         this.flows = (flows || []).filter((f) => f && f.handler === "appliance_autonotify").length;
         this._list = null;
+        this._lists.clear();
       }).finally(() => {
         this.busy = false;
         this.at = Date.now();
@@ -11395,12 +11669,16 @@ const snAppl = {
     const over = (config && config.appliances) || {};
     const hide = new Set(((config && config.hide) || []).map(String));
     const manual = ((config && config.devices) || []).filter((d) => d && d.name);
-    const key = [this.entries, hass.entities, hass.devices, JSON.stringify(over), [...hide].join(","), JSON.stringify(manual)];
-    if (this._list && this._listKey && key.every((k, i) => k === this._listKey[i])) return this._list;
+    const ck = JSON.stringify(over) + "|" + [...hide].join(",") + "|" + JSON.stringify(manual);
+    const key = [this.entries, hass.entities, hass.devices];
+    if (this._listKey === null) this._lists.clear(); // `_listKey = null` forgets every list (as before: the one list)
+    const hit = this._lists.get(ck);
+    if (hit && key.every((k, i) => k === hit.key[i])) { this._list = hit.list; this._listKey = hit.key; return hit.list; }
     this._list = this.entries.filter((e) => !hide.has(e.entry_id) && !hide.has(e.title))
       .map((e) => snApplResolve(hass, e, over[e.entry_id] || over[e.title]))
       .concat(manual.map((d) => Object.assign(snApplResolve(hass, { entry_id: `manual_${snApplSlug(d.name)}`, title: d.name }, d), { manual: true })));
     this._listKey = key;
+    this._lists.set(ck, { list: this._list, key });
     for (const ap of this._list) if (ap.power || ap.vacuum || ap.cycle) this.loadStats(hass, ap);
     return this._list;
   },
@@ -11421,13 +11699,21 @@ const snAppl = {
     snApplFire();
   },
 
-  /** Read the last two days of summaries (then only the newest), and in full what decides each state. */
+  /**
+   * Read the last two days of summaries (then only the newest), and in full what decides each state.
+   * 1.0.0 (perf): read again only when sensor.supernotify_notifications changed or a live event came
+   * (snArchiveStore.pokes) - not every 30 s - and at the latest every 10 minutes.
+   */
   refreshEvents(hass, force) {
     if (!this.entries || !this.entries.length || this.rowsBusy) return;
     const svc = hass.services && hass.services.supernotify && hass.services.supernotify.enquire_archive;
     if (!svc) return;
-    if (!force && Date.now() - this.rowsAt < 30000) return;
+    const cnt = snApplRaw(hass, "sensor.supernotify_notifications");
+    const stamp = `${cnt ? cnt.last_updated : ""}|${snArchiveStore.pokes}`;
+    if (!force && this.rowsAt && (stamp === this.rowsStamp ? Date.now() - this.rowsAt < 600000 : Date.now() - this.rowsAt < 2000)) return;
+    this.rowsStamp = stamp;
     this.rowsBusy = true;
+    const before = this._evSig();
     const from = this.rowsAt ? new Date(this.rowsAt - 600000) : new Date(Date.now() - 48 * 3600000);
     snWS(hass, { type: "call_service", domain: "supernotify", service: "enquire_archive",
       service_data: { verbosity: "summary", after: from.toISOString(), limit: 500 }, return_response: true })
@@ -11442,16 +11728,27 @@ const snAppl = {
         return this._classify(hass);
       })
       .catch(() => { this.rowsAt = Date.now(); })
-      .finally(() => { this.rowsBusy = false; snApplFire(); });
+      .finally(() => { this.rowsBusy = false; if (this._evSig() !== before) snApplFire(); });
+  },
+
+  /** 1.0.0 (perf): what the cards draw from the archive - the events of each appliance. */
+  _evSig() {
+    let sig = "";
+    for (const [id, ev] of this.events) sig += `${id}:${ev.more ? 1 : 0}:${ev.map((e) => `${e.kind}@${e.t}`).join(",")};`;
+    return sig;
   },
 
   /** Per appliance, read in full the newest rows until its state is known (at most 16). */
   async _classify(hass) {
     // the newest rows no appliance's name is in: read once (kept), their tag says the appliance
     const names = this.entries.map((e) => e.title.toLowerCase());
+    // 1.0.0 (perf): the classified documents of the two days read only - older ones are never looked at again
+    const keep = new Set(this.rows.map((r) => r.id));
+    for (const id of this.docs.keys()) if (!keep.has(id)) this.docs.delete(id);
+    // 1.0.0 (perf): read without touching the archive card's store (its list is not rebuilt for them)
     for (const n of this.rows.filter((r) => !snApplRowEntry(r, this.entries, names)).slice(0, SN_APPL_UNNAMED)) {
       if (this.docs.has(n.id)) continue;
-      const doc = await snArchiveStore.doc(hass, n.id).catch(() => null);
+      const doc = await snArchiveStore.doc(hass, n.id, true).catch(() => null);
       if (doc) this.docs.set(n.id, snApplClassify(doc, null));
     }
     for (const e of this.entries) {
@@ -11463,7 +11760,7 @@ const snAppl = {
         read++;
         let c = this.docs.get(n.id);
         if (!c) {
-          const doc = await snArchiveStore.doc(hass, n.id).catch(() => null);
+          const doc = await snArchiveStore.doc(hass, n.id, true).catch(() => null);
           if (!doc) continue;
           c = snApplClassify(doc, e.entry_id);
           this.docs.set(n.id, c);
@@ -11492,10 +11789,12 @@ const snAppl = {
     const id = ap.power;
     if (!id || !hass.callWS) return;
     const have = this.stats.get(id);
-    if (have && (have.loading || (!force && Date.now() - have.at < (have.error ? SN_APPL_RETRY : 600000)))) return;
+    // 1.0.0 (perf): `inflight` - a second call while a read is on its way (two cards, a refresh) asks nothing
+    if (have && (have.loading || have.inflight || (!force && Date.now() - have.at < (have.error ? SN_APPL_RETRY : 600000)))) return;
     if (have && force && !have.error && Date.now() - have.at < 60000) return;
     const entry = have || { bins: [], done: [], types: {}, loading: true, at: 0 };
     entry.loading = !have || !have.bins.length;
+    entry.inflight = true;
     this.stats.set(id, entry);
     const now = Date.now();
     const fineFrom = new Date(now - SN_APPL_FINE_DAYS * 86400000); fineFrom.setMinutes(0, 0, 0);
@@ -11508,7 +11807,12 @@ const snAppl = {
     try { cache = JSON.parse(window.localStorage.getItem(SN_APPL_KEY) || "null"); } catch (e) { cache = null; }
     const mine = cache && cache[id] && cache[id].from === from.getTime() ? cache[id] : null;
     const hourFrom = mine ? new Date(mine.upto) : from;
-    const reads = [snWS(hass, { type: "recorder/statistics_during_period", start_time: fineFrom.toISOString(),
+    // 1.0.0 (perf): the 5-minute rows already read are kept - only the last hour is read again (a late
+    // statistic is corrected), the whole window on the first reading or after an error
+    const fine0 = entry.fine && !entry.error ? entry.fine.filter((b) => b.t >= fineFrom.getTime()) : null;
+    const last = fine0 && fine0.length ? fine0[fine0.length - 1].t : null;
+    const fineRead = last != null ? new Date(Math.max(fineFrom.getTime(), last - 3600000)) : fineFrom;
+    const reads = [snWS(hass, { type: "recorder/statistics_during_period", start_time: fineRead.toISOString(),
       end_time: new Date(now).toISOString(), statistic_ids: [id], period: "5minute", types: ["mean", "max"] }, SN_APPL_READ_MS)];
     if (hourFrom < fineFrom) {
       reads.push(snWS(hass, { type: "recorder/statistics_during_period", start_time: hourFrom.toISOString(),
@@ -11527,7 +11831,11 @@ const snAppl = {
         c[id] = { from: from.getTime(), upto: fineFrom.getTime(), rows: hb.map(([t, mean, max]) => [t, r1(mean), r1(max)]) };
         window.localStorage.setItem(SN_APPL_KEY, JSON.stringify(c));
       } catch (e) { /* full or private */ }
-      const bins = hb.map(([t, mean, max]) => ({ t, dt: 3600000, mean, max })).concat(snApplBins(fine && fine[id], 300000));
+      const got = snApplBins(fine && fine[id], 300000);
+      const fineAll = (fine0 || []).filter((b) => b.t < fineRead.getTime()).concat(got);
+      fineAll.sort((a, b) => a.t - b.t);
+      entry.fine = fineAll;
+      const bins = hb.map(([t, mean, max]) => ({ t, dt: 3600000, mean, max })).concat(fineAll);
       bins.sort((a, b) => a.t - b.t);
       const all = snApplCycles(bins, ap.threshold, ap.grace, ap.minDur);
       // the cycle still going: its last bin is in the last grace period
@@ -11546,7 +11854,7 @@ const snAppl = {
       else Object.assign(entry, { loading: false, fails, error: (e && e.message) || String(e), at: Date.now() });
       clearTimeout(entry.retryT);
       entry.retryT = setTimeout(() => this.loadStats(hass, ap), Math.min(600000, SN_APPL_RETRY * 2 ** (fails - 1)));
-    }).finally(() => snApplFire());
+    }).finally(() => { entry.inflight = false; snApplFire(); });
   },
 
   /**
@@ -11557,10 +11865,11 @@ const snAppl = {
     const id = ap.vacuum || ap.cycle;
     if (!id || !hass.callWS) return;
     const have = this.stats.get(id);
-    if (have && (have.loading || (!force && Date.now() - have.at < (have.error ? SN_APPL_RETRY : 600000)))) return;
+    if (have && (have.loading || have.inflight || (!force && Date.now() - have.at < (have.error ? SN_APPL_RETRY : 600000)))) return;
     if (have && force && !have.error && Date.now() - have.at < 60000) return;
     const entry = have || { done: [], types: {}, loading: true, at: 0 };
     entry.loading = !have;
+    entry.inflight = true;
     this.stats.set(id, entry);
     const now = Date.now();
     const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
@@ -11569,13 +11878,33 @@ const snAppl = {
     const from = new Date(Math.min(y0.getTime(), w0.getTime()));
     const vs = ap.vstats || {};
     const totals = [vs.count, vs.time, vs.area].filter(Boolean);
-    const reads = [snWS(hass, { type: "history/history_during_period", start_time: new Date(now - SN_APPL_VAC_DAYS * 86400000).toISOString(),
-      end_time: new Date(now).toISOString(), entity_ids: [id, vs.last_area, vs.weight, vs.name].filter(Boolean), minimal_response: true,
+    const ids = [id, vs.last_area, vs.weight, vs.name].filter(Boolean);
+    const cut = now - SN_APPL_VAC_DAYS * 86400000;
+    // 1.0.0 (perf): the 30 days of history already read are kept - only from an hour before the last
+    // reading on; the whole window the first time, after an error or when the entities changed
+    const h0 = entry.hist && !entry.error && entry.histIds === ids.join(",") ? entry.hist : null;
+    const histRead = h0 ? Math.max(cut, entry.histAt - 3600000) : cut;
+    const reads = [snWS(hass, { type: "history/history_during_period", start_time: new Date(histRead).toISOString(),
+      end_time: new Date(now).toISOString(), entity_ids: ids, minimal_response: true,
       no_attributes: true, significant_changes_only: false }, SN_APPL_READ_MS),
     totals.length ? snWS(hass, { type: "recorder/statistics_during_period", start_time: from.toISOString(), end_time: new Date(now).toISOString(),
       statistic_ids: totals, period: "day", types: ["change"] }, SN_APPL_READ_MS) : Promise.resolve(null)];
     Promise.all(reads).then(([hist, stats]) => {
-      const pts = (k) => (k && hist && hist[k] || []).map((x) => ({ t: (x.lu != null ? x.lu : x.lc) * 1000, s: x.s })).filter((x) => Number.isFinite(x.t));
+      const merged = {};
+      for (const k of ids) {
+        const got = (hist && hist[k] || []).map((x) => ({ t: (x.lu != null ? x.lu : x.lc) * 1000, s: x.s })).filter((x) => Number.isFinite(x.t));
+        // the history read again replaces what was read from that time on; what fell out of the 30 days
+        // goes, its last state kept as the state at the start of the window (as a full reading has it)
+        let old = h0 ? (h0[k] || []).filter((x) => x.t < histRead) : [];
+        const before = old.filter((x) => x.t < cut);
+        old = old.filter((x) => x.t >= cut);
+        if (before.length && !(old.length && old[0].t === cut)) old.unshift({ t: cut, s: before[before.length - 1].s });
+        merged[k] = old.concat(got);
+      }
+      entry.hist = merged;
+      entry.histIds = ids.join(",");
+      entry.histAt = now;
+      const pts = (k) => (k && merged[k]) || [];
       const { done, current } = snApplRunCycles(pts(id), { area: pts(vs.last_area), weight: pts(vs.weight), name: pts(vs.name) },
         ap.vacuum ? SN_APPL_RUN_VAC : SN_APPL_RUN_DEV);
       const first = pts(id)[0];
@@ -11591,7 +11920,7 @@ const snAppl = {
       else Object.assign(entry, { loading: false, fails, error: (e && e.message) || String(e), at: Date.now() });
       clearTimeout(entry.retryT);
       entry.retryT = setTimeout(() => this.loadStats(hass, ap), Math.min(600000, SN_APPL_RETRY * 2 ** (fails - 1)));
-    }).finally(() => snApplFire());
+    }).finally(() => { entry.inflight = false; snApplFire(); });
   },
 };
 
@@ -11702,6 +12031,22 @@ function snApplClassify(doc, entryId) {
   if (m[2]) kind = clear ? "emptied" : "end";
   else kind = clear ? "clear" : x.live_update ? "live" : "other";
   return { entry: m[1], t, kind };
+}
+
+/**
+ * 1.0.0 (perf): `prev` and `next` are the HTML of a part of the appliances card. When they differ only in
+ * the text of the [data-pw] spans (the power, the plug, the battery: they change every few seconds) those
+ * spans get their new text and true is returned; otherwise nothing is touched and false (rebuild it all).
+ */
+const SN_APPL_PW_RE = /(<span [^>]*data-pw[^>]*>)([\s\S]*?)(<\/span>)/g;
+function snApplPwPatch(root, prev, next) {
+  const strip = (h) => h.replace(SN_APPL_PW_RE, "$1$3");
+  if (strip(prev) !== strip(next)) return false;
+  const texts = [...next.matchAll(SN_APPL_PW_RE)].map((m) => m[2]);
+  const els = root.querySelectorAll("[data-pw]");
+  if (els.length !== texts.length) return false;
+  els.forEach((el, i) => { if (el.innerHTML !== texts[i]) el.innerHTML = texts[i]; });
+  return true;
 }
 
 function snApplFire() {

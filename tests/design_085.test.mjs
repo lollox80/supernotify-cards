@@ -1,5 +1,6 @@
 // v0.85.0: archivio e "perché" in UNA card - lista a sinistra, dettaglio a destra;
 // supernotify-why-card resta come alias.
+// 1.0.0 (fase 3): le righe dell'archivio hanno un solo listener sulla lista: .click() invece di .onclick().
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -76,7 +77,7 @@ ok(!camRow.querySelector(".bdg.pr"), "priorità media: niente badge");
 ok(rows[2].querySelector(".ic.none") && rows[2].classList.contains("quiet") && /nessun canale/.test(rows[2].textContent), "nessun canale: grigio, col motivo");
 
 // ── 2. ×N si apre ───────────────────────────────────────────────────────
-camRow.querySelector(".rep").onclick({ stopPropagation() {} });
+camRow.querySelector(".rep").click();
 ok(R.querySelectorAll("#list .it.sub").length === 2, "×3 aperto: le altre due sotto");
 R.querySelector("#grp").onclick();
 ok(R.querySelectorAll("#list .it").length === 5, "Raggruppa spento: cinque righe");

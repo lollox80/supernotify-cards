@@ -1,6 +1,7 @@
 // CHANGELOG
 // 2026-10-05 v0.78.0: scenari - volume e opzioni sui chip dei canali (template calcolati), condizioni
 //   sempre visibili, avviso quando un altro scenario attivo spegne il canale; overview - effetti sui chip.
+// 1.0.0 (fase 3): dopo aver aggiunto uno scenario, un nuovo oggetto states come fa HA.
 import { JSDOM } from "jsdom";
 import fs from "fs";
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true, url: "http://ha.local/" });
@@ -84,6 +85,7 @@ TRACE[1].push({ name: "ufficio", conditions: [{ condition: "or", conditions: [
   { condition: "state", entity_id: ["binary_sensor.casa_vuota"], state: "off" }] }], trace: { trace: TR("condition/conditions/condition/0", false) } });
 TRACE[1][0].conditions.push({ condition: "time", after: "input_datetime.start_wd" });
 hass.states["input_datetime.start_wd"] = S("08:00:00", { friendly_name: "Inizio feriali" });
+hass.states = { ...hass.states }; // 1.0.0 (fase 3): come HA, un oggetto states nuovo (le liste sono in cache per oggetto)
 const ov = mount("supernotify-overview-card");
 await wait(150); ov.hass = { ...hass }; await wait(100);
 const t = ov.shadowRoot.getElementById("scen").innerHTML;

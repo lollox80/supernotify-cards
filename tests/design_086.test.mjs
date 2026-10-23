@@ -1,5 +1,6 @@
 // v0.86.0: archivio leggero - elenco in verbosity summary, le ultime 20 complete, il resto al tocco;
 // filtri Critiche / Alte su tutto l'archivio; panoramica "falliti oggi" da verbosity daily.
+// 1.0.0 (fase 3): .click() sulle righe (listener unico sulla lista); la panoramica riusa i totali daily già letti.
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -132,12 +133,12 @@ ok(crit.length === 3 && crit.includes("Acqua sotto il lavello") && crit.includes
 ok(/tutto l'archivio/.test(R.getElementById("meta").textContent), "dice che cerca in tutto l'archivio");
 
 // ── 3. una vecchia si apre al tocco, completa ───────────────────────────
-rows().find((r) => /Acqua/.test(r.textContent)).onclick();
+rows().find((r) => /Acqua/.test(r.textContent)).click();
 await wait(120);
 ok(calls.some((c) => c.id === "c2000000-x" && c.verbosity === "standard"), "letta per id, completa");
 ok(/Arrivata su 1 canale/.test(R.querySelector("#det .vd").textContent), "dettaglio con il verdetto");
 R.querySelector('#chips .chip[data-k="all"]').onclick();
-rowOf("t0000025").onclick(); await wait(150);
+rowOf("t0000025").click(); await wait(150);
 ok(R.getElementById("pzh").querySelectorAll(".pzb[data-min]").length === 4, "riga leggera aperta: c'è la pausa (entità dal documento completo)");
 ok(!a._index().items.find((x) => x.id === "t0000025").light, "dopo l'apertura la riga è disegnata dal documento completo");
 
@@ -145,7 +146,9 @@ ok(!a._index().items.find((x) => x.id === "t0000025").light, "dopo l'apertura la
 const o = mount("supernotify-overview-card", {});
 await wait(30); o._failures(); await wait(80);
 const fo = o._failures();
-ok(fo.n === 1 && fo.today && calls.some((c) => c.verbosity === "daily" && c.after && new Date(c.after).getTime() === d0.getTime()), `panoramica: 1 fallito oggi, da daily di oggi (${fo.n})`);
+// 1.0.0 (fase 3): i totali giornalieri appena letti per i filtri Critiche / Alte sono riusati (snStatsDaily.memo):
+// nessuna seconda chiamata "da oggi", basta che vengano da verbosity daily
+ok(fo.n === 1 && fo.today && calls.some((c) => c.verbosity === "daily" && c.after), `panoramica: 1 fallito oggi, da daily (${fo.n})`);
 
 // 1.0.0 (phase 5): "SuperNotify senza summary" (before 2.12.1) is gone - the light list always
 

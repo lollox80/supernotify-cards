@@ -74,6 +74,38 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   instead of never; cards removed from the dashboard are no longer kept in memory; technical names are fully
   escaped.
 
+### Performance
+- **appliances** (0.2.23): a change of a plug's power rewrites the power figures only, in the list and in the open
+  panel, instead of rebuilding them (drawings keep moving): 10.2 → 2.5 ms per update with the list, 20.4 → 3.7 ms
+  with a panel open (bench, 3 appliances). The statistics of the last 10 days are read again from an hour before
+  the last reading (17,352 → 39 rows for 3 plugs), the 30 days of a robot's or device's history the same way, and
+  two reads of the same plug at once become one. The notifications of the appliances are read again when
+  SuperNotify sends one, not every 30 s; the documents read for them no longer rebuild the archive card's list.
+  Two appliances cards with different options keep a list each. The minute tick draws nothing while the card is
+  off screen, and no timer redraws a card that left the page.
+- **archive** (0.45.2): a read of the archive that brings nothing new no longer redraws the list, and readings that
+  end together redraw it once: per new notification 175 → 55 ms, 2 → 1 list redraws. The status of a row is worked
+  out once per drawing (it was up to six times), the time formats are made once, and the list has one listener for
+  all its rows. First drawing of 150 rows 93 → 44 ms.
+- **scenarios** (0.33.0): no poll of its own - the active scenarios are shared by every card (one interval less
+  per scenarios card on the page); `poll_seconds` is accepted and ignored. The rows come from the scenario
+  entities alone, not a scan of every entity of the house.
+- **deliveries** (0.33.2), **transports** (0.27.2), **recipients** (0.31.1), **overview** (0.40.1): a list that did
+  not change is not rebuilt, and one listener serves all the rows and switches; the scenario effects, the "fallback
+  for" tags and the channels per transport are worked out once per drawing. An update that concerns them:
+  deliveries 3.2 → 0.9 ms, transports 2.8 → 0.8 ms, overview 5.7 → 2.9 ms.
+- **overview**, **simulator** (0.18.0), **stats**, **archive**: the daily totals are read once a minute at most while
+  nothing new is sent (overview, archive priority filters and stats card asked each on their own); the overview
+  no longer asks for the active scenarios it already has; the simulator reads its data once at start and, in
+  dry-run mode, not the default channels it does not use.
+- **composer** (0.25.1), **control** (0.39.2), tile features, status badge: lists worked out once per drawing;
+  the pause feature no longer works out the whole health for its text; a feature given hass, context and entity
+  together draws once.
+- Shared: the rows of the switches are no longer copied for every card, the people and the scenario sensors are
+  listed once per update for the page, answers are copied with `structuredClone`. A page with every card mounts in
+  279 ms instead of 368 ms, the card picker in 210 ms instead of 274 ms (bench, 3,045 entities). `npm run bench`
+  runs the benchmark, now with an archive and an appliances scenario.
+
 ### Changed
 - **Lighter bundle**: about 11% smaller (1,135,135 → 1,008,538 bytes; gzip -9 321,747 → 284,632) with no change
   in behaviour: code that nothing called any more, translations that nothing read, CSS for markup that is gone and a

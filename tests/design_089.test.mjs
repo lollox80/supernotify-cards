@@ -1,6 +1,7 @@
 // v0.89.0: allineamento a SuperNotify 2.13-2.15 - esito dell'ultimo invio per canale (card canali,
 // banda di stato, badge), Critiche/Alte con una sola chiamata `priority`, scenari attivi dai
 // binary_sensor quando scenario_control.refresh e' acceso.
+// 1.0.0 (fase 3): righe dei canali con un solo listener su #rows: .click() invece di .onclick().
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -92,7 +93,7 @@ const tg = row("Telegram Lorenzo");
 ok(tg && tg.querySelector(".st.ls.crit") && /fallita 1 h fa/.test(txt(tg)), "Telegram: ✖ fallita, in rosso");
 ok(/⏭ saltata/.test(txt(row("Annuncio vocale Alexa"))), "Alexa: saltata");
 ok(!/inviata|fallita|saltata/.test(txt(row("email"))), "email senza esito: nessuna scritta");
-tg.onclick({ target: tg }); await wait(30);
+tg.click(); await wait(30);
 ok(/Ultimo invio/.test(txt(row("Telegram Lorenzo"))) && dl.shadowRoot.querySelectorAll('.row[aria-expanded="true"]').length === 1, "nel dettaglio: «Ultimo invio»");
 
 // ── 3. banda di stato e badge ───────────────────────────────────────────
