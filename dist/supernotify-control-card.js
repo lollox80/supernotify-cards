@@ -26,9 +26,9 @@ const SN_CARD_VERSIONS = {
   deliveries: "0.33.2",
   transports: "0.27.2",
   recipients: "0.31.1",
-  scenarios: "0.33.0",
+  scenarios: "0.33.1",
   simulator: "0.18.0",
-  composer: "0.25.1",
+  composer: "0.25.2",
   automations: "0.21.5",
   stats: "0.33.2",
   archive: "0.45.2",
@@ -981,6 +981,7 @@ function snSenderEvents(hass, doc) {
   const ctx = (doc && snIsObj(doc.original_context)) ? doc.original_context : {};
   if (!hass || !hass.callWS || !ctx.id) return Promise.resolve([]);
   if (SN_SENDERS.has(doc.id)) return SN_SENDERS.get(doc.id);
+  while (SN_SENDERS.size >= 60) SN_SENDERS.delete(SN_SENDERS.keys().next().value); // 1.0.0: bounded, like the details
   const t = Date.parse(doc.created || "") || Date.now();
   const p = hass.callWS({ type: "logbook/get_events", start_time: new Date(t - 120000).toISOString(),
     end_time: new Date(t + 5000).toISOString(), context_id: ctx.id })
@@ -5938,6 +5939,9 @@ class SupernotifyScenariosCard extends SnCard {
     super._onHass(hass, fresh, changed);
     // connectedCallback may have run before hass: first data now
     if (!this._booted) { this._booted = true; this._refresh(); }
+    // 1.0.0: without the old poll the condition lines must still follow the clock - the shared trace is read
+    // again at most every 30 s (snTraceEnsure), and snChanged brings a redraw at least once a minute
+    else if (changed) this._loadTrace();
   }
 
   getCardSize() {
@@ -6702,7 +6706,7 @@ class SupernotifyComposerCard extends SnCard {
     if (actAdd) actAdd.onclick = () => addRow("acts", `<div class="actr"><input type="text" class="aid" placeholder="${escA(T.adv_act_id)}">`
       + `<input type="text" class="atl" placeholder="${escA(T.adv_act_title)}"><button type="button" class="rmx" aria-label="✕">✕</button></div>`);
     const dcAdd = sr.getElementById("dcAdd");
-    if (dcAdd) dcAdd.onclick = () => addRow("dcs", `<div class="dcr"><select class="dcn">${dlv.map((d) =>
+    if (dcAdd) dcAdd.onclick = () => addRow("dcs", `<div class="dcr"><select class="dcn">${this._deliveries().map((d) =>
       `<option value="${escA(d.name)}">${escA(snDeliveryAlias(this._hass, d.name) || d.name)}</option>`).join("")}</select>`
       + `<textarea class="dcv" rows="2" placeholder="${escA(T.adv_dc_ph)}"></textarea><button type="button" class="rmx" aria-label="✕">✕</button></div>`);
     sr.querySelectorAll(".achips .chip").forEach((b) => {

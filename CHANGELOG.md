@@ -28,11 +28,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **overview** (0.40.1): the "three / five numbers" of before SuperNotify 2.12.1 (sent since startup or
   today, failures from `sensor.supernotify_failures`, ...). `stats: full` and `sent_today_entity` are
   ignored: the four numbers from the archive (today, delivered, channels, silence) always.
-- **composer** (0.25.1): the version checks on `update.supernotify_update` - "Try without sending" shows
+- **composer** (0.25.2): the version checks on `update.supernotify_update` - "Try without sending" shows
   whenever SuperNotify is running (`dry_run: false` still hides it), a notification without text is no
   longer refused, and the dry run checks duplicates by default (`dry_run_dupe_check: false` skips it).
   `update_entity` is no longer used by this card.
-- **simulator** (0.18.0), **deliveries** (0.33.2), **scenarios** (0.33.0): the version checks for the dry
+- **simulator** (0.18.0), **deliveries** (0.33.2), **scenarios** (0.33.1): the version checks for the dry
   run; `dry_run: false` still keeps the simulator's own estimate.
 - **deliveries**, **transports**, **recipients**, **scenarios**: the `binary_sensor.supernotify_*` of
   before the switches (SuperNotify 2.7 / PR #207): rows, names and toggles come from the
@@ -46,7 +46,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The bundle is about 6% smaller again (1,008,867 → 952,625 bytes; gzip -9 284,758 → 267,934).
 
 ### Fixed
-- **deliveries** (0.33.2), **transports** (0.27.2), **recipients** (0.31.1), **scenarios** (0.33.0): a switch
+- **deliveries** (0.33.2), **transports** (0.27.2), **recipients** (0.31.1), **scenarios** (0.33.1): a switch
   that Home Assistant refuses (a user who is not an administrator gets "401 Unauthorized") goes back where it
   was and says why when you hover it, instead of staying moved as if it had worked.
 - **control** (0.39.2): the pause panel and the "held back during the pause" list are no longer redrawn on every
@@ -68,7 +68,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   notification); only an answer without days, or `daily` refused, does.
 - **stats** (0.33.2): the totals come from the archive whenever SuperNotify's `enquire_archive` action takes
   `verbosity`, also without the `update.supernotify_update` entity (the slow history path was used).
-- **tools** (0.2.3), **simulator** (0.18.0), **composer** (0.25.1): the actions, the simulator's and the
+- **tools** (0.2.3), **simulator** (0.18.0), **composer** (0.25.2): the actions, the simulator's and the
   composer's dry run give up after 30 s instead of waiting forever.
 - Links to a card on another view: a failed read of the dashboard configuration is tried again after a minute
   instead of never; cards removed from the dashboard are no longer kept in memory; technical names are fully
@@ -87,7 +87,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   end together redraw it once: per new notification 175 → 55 ms, 2 → 1 list redraws. The status of a row is worked
   out once per drawing (it was up to six times), the time formats are made once, and the list has one listener for
   all its rows. First drawing of 150 rows 93 → 44 ms.
-- **scenarios** (0.33.0): no poll of its own - the active scenarios are shared by every card (one interval less
+- **scenarios** (0.33.1): no poll of its own - the active scenarios are shared by every card (one interval less
   per scenarios card on the page); `poll_seconds` is accepted and ignored. The rows come from the scenario
   entities alone, not a scan of every entity of the house.
 - **deliveries** (0.33.2), **transports** (0.27.2), **recipients** (0.31.1), **overview** (0.40.1): a list that did
@@ -98,7 +98,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   nothing new is sent (overview, archive priority filters and stats card asked each on their own); the overview
   no longer asks for the active scenarios it already has; the simulator reads its data once at start and, in
   dry-run mode, not the default channels it does not use.
-- **composer** (0.25.1), **control** (0.39.2), tile features, status badge: lists worked out once per drawing;
+- **composer** (0.25.2), **control** (0.39.2), tile features, status badge: lists worked out once per drawing;
   the pause feature no longer works out the whole health for its text; a feature given hass, context and entity
   together draws once.
 - Shared: the rows of the switches are no longer copied for every card, the people and the scenario sensors are
@@ -114,11 +114,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   one inside the appliances card) is gone.
 - **archive** (0.45.2): `supernotify-why-card`, the old name kept as an alias, now shows the archive card's version
   in its footer and the archive card's visual editor.
-- **scenarios** (0.33.0), **simulator** (0.18.0): the built-in icons no longer include a few scenario names of one
+- **scenarios** (0.33.1), **simulator** (0.18.0): the built-in icons no longer include a few scenario names of one
   particular installation (`notifiche_vocali_solo_ufficio`, `notifiche_vocali_off`, `cn_dnd_orario`, `dnd_globale`,
   `presenza_ingresso`). New option `icons` sets the icon of any scenario: `icons: {my_scenario: "🔔"}`; without it
   a scenario that is not in the built-in list shows 🎬.
-- **simulator** (0.18.0), **composer** (0.25.1), **deliveries** (0.33.2): why a channel would not send (dry run,
+- **simulator** (0.18.0), **composer** (0.25.2), **deliveries** (0.33.2): why a channel would not send (dry run,
   "Try this channel", the last send of a channel) now uses the same words as the archive's detail, in every language -
   for example "its transport is off" instead of "transport off", "no action to call" instead of "no action",
   and, in the languages other than English and Italian, "duplicate of a recent notification" instead of "duplicate".
