@@ -27,13 +27,14 @@ const proto = (tag) => customElements.get(tag).prototype;
 
 // ── BUG-1: a toggle refused (401 for a non admin) puts the switch back ─────────
 {
-  const states = { "binary_sensor.supernotify_delivery_mobile_push": { state: "on",
+  // 1.0.0 (phase 5): SuperNotify 2.13 - the delivery is a switch, so the refusal comes from the switch service
+  const states = { "switch.supernotify_delivery_mobile_push": { state: "on",
     attributes: { name: "mobile_push", transport: "mobile_push", enabled: true, inclusion: ["default"] } } };
   const el = document.createElement("supernotify-deliveries-card");
   el.setConfig({});
   document.body.appendChild(el);
   el.hass = { language: "it", themes: { darkMode: false }, states, user: { id: "u", is_admin: false },
-    callApi: async () => { throw new Error("401: Unauthorized"); }, callService: async () => {}, callWS: async () => ({}) };
+    callApi: async () => ({}), callService: async () => { throw new Error("401: Unauthorized"); }, callWS: async () => ({}) };
   const label = el.shadowRoot.querySelector(".sw[data-id]");
   const input = label && label.querySelector("input");
   ok(input && input.checked, "deliveries: switch acceso all'inizio");
@@ -183,23 +184,19 @@ const ctlHass = (extra = {}) => ({
 }
 
 // ── BUG-6: daily statistics, a transient error on the first call ──────────────
+// 1.0.0 (phase 5): SuperNotify 2.13 always has `verbosity: daily`, so nothing turns it off any more
+// (`ok` is gone): a failed call is an error for that reading only, the next one reads again.
 {
   const D = api.snStatsDaily;
   window.localStorage.removeItem("supernotify-stats-daily");
   let n = 0;
   const hass = { callWS: async () => { if (++n === 1) throw new Error("Connection lost"); return { response: { days: [{ date: "2026-10-22", count: 3 }] } }; } };
   const start = Date.now() - 3 * 86400000;
-  const a = await D.get(hass, start);
-  ok(a === null && D.ok === null, `BUG-6: disconnessione alla prima chiamata -> ok resta null (${D.ok})`);
+  let err = null;
+  try { await D.get(hass, start); } catch (e) { err = e; }
+  ok(err && /Connection lost/.test(err.message) && !("ok" in D), "BUG-6: disconnessione alla prima chiamata -> errore di quella lettura, nessuno stato 'senza daily'");
   const b = await D.get(hass, start);
-  ok(Array.isArray(b) && D.ok === true, "BUG-6: la chiamata dopo usa daily");
-  D.ok = null;
-  const h2 = { callWS: async () => { throw new Error("value must be one of ['summary', 'standard', 'full']"); } };
-  await D.get(h2, start);
-  ok(D.ok === false, "BUG-6: verbosity rifiutata -> ok false");
-  D.ok = null;
-  await D.get({ callWS: async () => ({ response: {} }) }, start);
-  ok(D.ok === false, "BUG-6: risposta senza days -> ok false");
+  ok(Array.isArray(b) && b.length === 1, "BUG-6: la chiamata dopo usa daily");
 }
 
 // ── BUG-8 / BUG-9: calls with a timeout ───────────────────────────────────────
@@ -259,12 +256,8 @@ const ctlHass = (extra = {}) => ({
 }
 
 // ── EXTRA: stats from the archive without update.supernotify_update ───────────
-{
-  const P = proto("supernotify-stats-card");
-  const h = (fields) => ({ states: {}, services: { supernotify: { enquire_archive: { fields } } } });
-  ok(P._fromArchive.call({ _config: {}, _hass: h({ verbosity: {}, id: {} }) }) === true, "EXTRA: verbosity tra i campi dell'azione -> archivio");
-  ok(P._fromArchive.call({ _config: {}, _hass: h({ id: {} }) }) === false, "EXTRA: azione senza verbosity -> cronologia");
-}
+// 1.0.0 (phase 5): the history path is gone, the stats card always reads the archive (no _fromArchive)
+ok(!proto("supernotify-stats-card")._fromArchive, "EXTRA: la card statistiche legge sempre l'archivio");
 
 // ── BUG-14: a channel skipped as DUPE is routine in the list as in the detail ──
 {

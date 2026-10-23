@@ -21,9 +21,10 @@ const S = (state, attributes = {}) => ({ state, attributes, last_changed: "2026-
 
 let snoozes = [];
 const calls = [];
-const mk = ({ states, snooze = true, admin = true, daily = null }) => ({
+// 1.0.0 (phase 5): SuperNotify 2.13 - snooze / silence / unsnooze (no `command` field) and verbosity daily
+const mk = ({ states, admin = true, daily = null }) => ({
   language: "it", themes: { darkMode: false }, entities: {}, states,
-  services: { supernotify: { enquire_archive: {}, clear_snoozes: {}, ...(snooze ? { snooze: {} } : {}) } },
+  services: { supernotify: { enquire_archive: {}, clear_snoozes: {}, snooze: {}, silence: {}, unsnooze: {} } },
   user: { id: "u1", is_admin: admin },
   callService: async (d, s, data) => { calls.push(["svc", `${d}.${s}`, data]); },
   callApi: async (m, p, d) => { calls.push(["api", p, d]); },
@@ -67,11 +68,8 @@ ok(!/canale spento/.test(o.shadowRoot.textContent), "overview: spento da YAML no
 calls.length = 0;
 await G.snNativePause(mk({ states: base, admin: false }), 60);
 const sc = calls.find((c) => c[1] === "snooze");
-ok(sc && sc[2].command === "snooze" && sc[2].scope === "noncritical" && sc[2].minutes === 60 && sc[2].reason === "Dashboard", "feature: supernotify.snooze noncritical 60");
+ok(sc && !("command" in sc[2]) && sc[2].scope === "noncritical" && sc[2].minutes === 60 && sc[2].reason === "Dashboard", "feature: supernotify.snooze noncritical 60");
 ok(!calls.some((c) => c[1] === "conversation/process" || c[0] === "api"), "feature: niente comandi vocali né evento");
-calls.length = 0;
-await G.snNativePause(mk({ states: base, admin: false, snooze: false }), 30);
-ok(calls.some((c) => c[1] === "conversation/process"), "feature senza azione: comandi vocali come prima");
 
 // (3) pannello pause del control, utente non admin
 const ctl = document.createElement("supernotify-control-card");
@@ -88,7 +86,7 @@ sr.querySelector('.sc[data-g="min"][data-v="120"]').click();
 calls.length = 0;
 sr.querySelector("#snzGo").click(); await wait(30);
 const p1 = (calls.find((c) => c[1] === "snooze") || [])[2] || {};
-ok(p1.command === "snooze" && p1.scope === "delivery" && p1.name && p1.person === "person.lorenzo" && p1.minutes === 120,
+ok(!("command" in p1) && p1.scope === "delivery" && p1.name && p1.person === "person.lorenzo" && p1.minutes === 120,
   `pannello: snooze delivery per me 120 min (${JSON.stringify(p1)})`);
 // silenzio fino a nuovo ordine
 sr.querySelector('.sc[data-g="what"][data-v="EVERYTHING"]').click();
@@ -96,8 +94,8 @@ sr.querySelector('.sc[data-g="who"][data-v="EVERYONE"]').click();
 sr.querySelector('.sc[data-g="min"][data-v="0"]').click();
 calls.length = 0;
 sr.querySelector("#snzGo").click(); await wait(30);
-const p2 = (calls.find((c) => c[1] === "snooze") || [])[2] || {};
-ok(p2.command === "silence" && p2.scope === "everything" && !("minutes" in p2) && !("name" in p2), `pannello: silence everything (${JSON.stringify(p2)})`);
+const p2 = (calls.find((c) => c[1] === "silence") || [])[2] || {};
+ok(!("command" in p2) && p2.scope === "everything" && !("minutes" in p2) && !("name" in p2), `pannello: silence everything (${JSON.stringify(p2)})`);
 // riprendi una pausa in corso
 ctl._snoozes = [{ target_type: "DELIVERY", target: "alexa_announce", recipient_type: "USER", recipient: "person.lorenzo",
   snooze_until: new Date(Date.now() + 3600000).toISOString(), snoozed_at: new Date().toISOString() }];
@@ -106,8 +104,8 @@ calls.length = 0;
 const rb = sr.querySelector(".sb[data-r]");
 ok(!!rb, "pausa in corso: pulsante Riprendi anche per chi non è admin");
 rb && rb.click(); await wait(30);
-const p3 = (calls.find((c) => c[1] === "snooze") || [])[2] || {};
-ok(p3.command === "resume" && p3.scope === "delivery" && p3.name === "alexa_announce" && p3.person === "person.lorenzo" && !p3.reason,
+const p3 = (calls.find((c) => c[1] === "unsnooze") || [])[2] || {};
+ok(!("command" in p3) && p3.scope === "delivery" && p3.name === "alexa_announce" && p3.person === "person.lorenzo" && !p3.reason,
   `Riprendi: resume con lo stesso ambito (${JSON.stringify(p3)})`);
 // snooze_via: event lo forza
 const ctl2 = document.createElement("supernotify-control-card");
@@ -174,19 +172,19 @@ for (let i = 3; i >= 0; i--) {
 dom.window.localStorage.clear();
 calls.length = 0;
 const st = document.createElement("supernotify-stats-card");
-st.setConfig({ days: 7, source: "archive" }); document.body.appendChild(st);
+st.setConfig({ days: 7, source: "archive" }); document.body.appendChild(st); // `source` is ignored since 1.0.0
 st.hass = mk({ states: base, daily });
 await wait(150);
 const D = st._data || {};
 const archCalls = calls.filter((c) => c[1] === "enquire_archive");
 // 1.0.0: `_data.daily` (read by nothing in the card) is gone: one call with verbosity daily is the proof
-ok(D.archive && archCalls.length === 1 && archCalls[0][2].verbosity === "daily", `stats: una chiamata daily (${archCalls.length})`);
+ok(archCalls.length === 1 && archCalls[0][2].verbosity === "daily", `stats: una chiamata daily (${archCalls.length})`);
 ok(D.perHour[9] === 16 && D.perHour[21] === 24, `stats: ore (${D.perHour[9]}, ${D.perHour[21]})`);
 ok(D.perDay.slice(-4).every((x) => x.n === 9), `stats: giorni senza doppioni (${D.perDay.slice(-4).map((x) => x.n)})`);
 ok(D.prioCount.medium === 28 && D.prioCount.low === 12, "stats: priorità");
 ok(D.periodCount.morning === 16 && D.periodCount.evening === 24 && !D.periodCount.multi_home, "stats: fasce (solo scenari-fascia)");
 const ch = Object.fromEntries(D.channels.map((x) => [x.name, x]));
-ok(ch.mobile_push.ok === 36 && ch.alexa_announce.ko === 4 && D.chanKnown === 36 && D.chanUnknown === 0, "stats: canali");
+ok(ch.mobile_push.ok === 36 && ch.alexa_announce.ko === 4, "stats: canali");
 ok(D.spineCount === 40, `stats: totale notifiche (${D.spineCount})`);
 
 if (fail) { console.log(`FAIL ${fail}`); process.exit(1); }

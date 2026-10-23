@@ -1,4 +1,5 @@
 // stats-card 0.21.0: scelta 7/14/30 giorni nell'intestazione, ricordata nel browser.
+// 1.0.0 (phase 5): the window is read from the archive's daily totals (SuperNotify 2.13), not the helpers' history.
 import { JSDOM } from "jsdom";
 import fs from "fs";
 import assert from "assert";
@@ -14,11 +15,9 @@ const day = 86400000;
 const hass = {
   language: "it", themes: { darkMode: false }, states: {},
   callWS: async (msg) => {
-    if (msg.type === "history/history_during_period") {
-      starts.push(msg.start_time);
-      // cronologia solo negli ultimi 3 giorni
-      const rows = [0, 1, 2].map((i) => ({ s: new Date(Date.now() - i * day).toISOString(), lu: (Date.now() - i * day) / 1000 }));
-      return { "input_datetime.supernotify_last_time": rows };
+    if (msg.service === "enquire_archive" && (msg.service_data || {}).verbosity === "daily") {
+      starts.push(msg.service_data.after);
+      return { response: { days: [] } };
     }
     return {};
   },
@@ -34,7 +33,7 @@ assert.deepStrictEqual(btns().map((b) => b.textContent), ["7 gg", "14 gg", "30 g
 assert.ok(btns()[1].classList.contains("on"), "default 14");
 const span = (iso) => Math.round((Date.now() - new Date(iso).getTime()) / day);
 assert.ok(span(starts[0]) >= 14 && span(starts[0]) <= 15);
-assert.ok(c.shadowRoot.getElementById("win").textContent.includes("ultimi 3 giorni"), "nota cronologia corta");
+assert.ok(c.shadowRoot.getElementById("win").textContent.includes("archivio di SuperNotify"), "dice da dove vengono i numeri");
 
 btns()[2].click();
 await flush();

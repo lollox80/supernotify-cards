@@ -20,7 +20,7 @@ const states = {
   "switch.supernotify_scenario_ospiti": st("on", { name: "ospiti", friendly_name: "SuperNotify Scenario Voce spenta (ospiti)", delivery: { mobile_push: { enabled: false } } }),
   "binary_sensor.supernotify_scenario_ospiti": st("on"),
   "switch.supernotify_recipient_lorenzo": st("on", { entity_id: "person.lorenzo", mobile_devices: [{}], friendly_name: "SuperNotify Recipient Lorenzo abilitato" }),
-  "sensor.supernotify_failures": st("1"),
+  "sensor.supernotify_failures": st("0"),
 };
 for (const [b, t] of [["early_morning", "06:00"], ["morning", "07:30"], ["evening", "19:00"], ["late_night", "00:30"]]) {
   states["input_datetime.s_" + b] = st(t + ":00");
@@ -34,6 +34,8 @@ const mk = async (tag, cfg, lang = "it") => {
       if (m.service === "enquire_deliveries_by_scenario") return { response: { ospiti: { enabled: [], disabled: ["mobile_push"] } } };
       if (m.service === "enquire_implicit_deliveries") return { response: { default: ["mobile_push"] } };
       if (m.service === "enquire_active_scenarios") return { response: { scenarios: ["ospiti"] } };
+      // 1.0.0 (phase 5): the failures come from the archive's daily totals (SuperNotify 2.13), not the sensor
+      if (m.service === "enquire_archive") return { response: { days: [{ date: new Date().toLocaleDateString("sv"), count: 2, deliveries: { mobile_push: { failed: 1 } } }] } };
       return { response: {} };
     } };
   await tick(); return el.shadowRoot;

@@ -49,7 +49,8 @@ ok((SRC.match(/hour12: snH12\(this\._hass\)/g) || []).length >= 5, "archivio e p
 ok(/h % 6 === 0/.test(SRC) && /\.bars text \{ font-size: 10\.5px/.test(SRC) && /opt\.half && cw > 640/.test(SRC), "statistiche: grafici a metà larghezza disegnati alla loro misura");
 ok(/snBandName\(T, String\(k\)/.test(SRC), "statistiche: fasce del giorno col nome");
 ok(/\.map\(\(x\) => `<div>\$\{x\}<\/div>`\)/.test(SRC), "perché: passo 4 in pila");
-ok(/snScenarioName\(this\._hass, idx\.scen\[s\]\)/.test(SRC), "archivio: scenari col nome");
+// 1.0.0: the index-only detail (sensor bridge) is gone; the detail names scenarios through _scenarioLabel
+ok(/_scenarioLabel\(name\) \{\n    return snScenarioName\(this\._hass, name\);/.test(SRC), "archivio: scenari col nome");
 ok(/minmax\(0, min\(15em, 42%\)\)/.test(SRC), "simulatore: motivo vicino al nome");
 
 if (fail) { console.log(`\n${fail} FALLITI`); process.exit(1); }

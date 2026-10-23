@@ -38,22 +38,23 @@ ok((SRC.match(/\n  _palette\(\) \{\n    return snPalette\(/g) || []).length === 
 
 // ── 2. stati di prova ───────────────────────────────────────────────────────
 const T0 = Math.floor(Date.now() / 1000) - 600;
-const IDX = { count: 1, chan: ["mobile_push", "email"], scen: [],
-  items: [{ id: "aaaa1111", t: T0, ti: "Porta", o: "partial_delivery", d: 1, s: 1, c: [0, [1, "s", "nessun target"]] }] };
-const DET = JSON.stringify({ ok: true, n: { id: "aaaa1111-x", t: T0, ti: "Porta", p: "high", o: "partial_delivery",
-  dl: [{ n: "mobile_push", r: "ok", calls: 1 }, { n: "email", r: "skip", why: "NO_TARGET", tr: "always" }] } });
+// 1.0.0: the archive comes from enquire_archive (the sensor + shell_command bridge is gone)
+const DOC = { id: "aaaa1111-x", created: new Date(T0 * 1000).toISOString(), message: "Porta", priority: "high",
+  outcome: "partial_delivery", delivered: 1, skipped: 1,
+  deliveries: { mobile_push: { success: [{}] }, email: { skipped: { skip_reason: "NO_TARGET" } } } };
 const del = (name, fn, transport) => ({ state: "on", attributes: { name, enabled: true, transport, inclusion: ["default"], transport_enabled: true,
   friendly_name: `SuperNotify Delivery ${fn} abilitata` } });
 const hass = {
   language: "it", themes: { darkMode: false }, entities: {}, user: { is_admin: true },
-  services: { supernotify: { notify: {} }, shell_command: { sn_archive_detail: {} } },
+  services: { supernotify: { notify: {}, enquire_archive: {} } },
   states: {
     "switch.supernotify_delivery_mobile_push": del("mobile_push", "Notifica sul telefono", "mobile_push"),
     "switch.supernotify_delivery_email": del("email", "Email", "email"),
-    "sensor.supernotify_archivio": { state: "1", attributes: IDX, last_updated: "x" },
+    "sensor.supernotify_notifications": { state: "1", attributes: {}, last_updated: "x" },
   },
   callService: async () => {}, callApi: async () => ({}),
-  callWS: async (m) => (m.domain === "shell_command" ? { response: { stdout: DET, stderr: "", returncode: 0 } } : { response: {} }),
+  callWS: async (m) => (m.service === "enquire_archive"
+    ? { response: (m.service_data || {}).id ? DOC : { notifications: (m.service_data || {}).verbosity ? [] : [DOC] } } : { response: {} }),
 };
 const mount = (tag, cfg = {}) => { const c = document.createElement(tag); c.setConfig(cfg); document.body.appendChild(c); c.hass = hass; return c; };
 
@@ -69,13 +70,14 @@ const cc = mount("supernotify-composer-card");
 const chip = cc.shadowRoot.querySelector('#chips .chip[data-d="mobile_push"]');
 ok(chip && chip.textContent === "Notifica sul telefono" && chip.title === "mobile_push", "composer: chip con alias, tecnico nel tooltip");
 
-const ac = mount("supernotify-archive-card", { source: "sensor", entity: "sensor.supernotify_archivio" });
+const ac = mount("supernotify-archive-card", { priority_filters: false });
+await flush(); ac.hass = { ...hass };
 await flush();
 // 0.85.0: the list says where it went, with the alias
 const l2 = ac.shadowRoot.querySelector(".it .l2");
 ok(l2 && /Notifica sul telefono/.test(l2.textContent) && !/mobile_push/.test(l2.textContent), "archive: riga con alias");
 
-const wc = mount("supernotify-why-card", { source: "sensor", entity: "sensor.supernotify_archivio" });
+const wc = mount("supernotify-why-card", { priority_filters: false });
 await flush(); await flush();
 const nm = [...wc.shadowRoot.querySelectorAll(".ch .nm")].map((n) => n.textContent);
 ok(nm.includes("Notifica sul telefono"), `why: nome leggibile (${nm.join(", ")})`);

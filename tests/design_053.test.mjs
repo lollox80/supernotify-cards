@@ -14,6 +14,8 @@ let fail = 0;
 const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const tick = () => new Promise((r) => setTimeout(r, 40));
 const T0 = Math.floor(Date.now() / 1000) - 600;
+// 1.0.0: the sensor index and shell_command detail are gone; this test is about how the why engine
+// draws a detail, so the card is handed the index and the detail (snArchiveDetail's format) directly
 const IDX = { count: 1, chan: ["mobile_push"], scen: ["home"], items: [{ id: "aaaa1111", t: T0, ti: "Porta", o: "partial_delivery", d: 1, s: 2, mi: 1, c: [0] }] };
 const DET = JSON.stringify({ ok: true, n: { id: "aaaa1111-x", t: T0, ti: "Porta d'ingresso", m: "Qualcuno è alla porta", p: "high", o: "partial_delivery", mi: 1,
   sc: { on: ["home"], sel: ["home"] }, occ: { home: ["person.lorenzo"], away: ["person.jessica"] },
@@ -25,7 +27,7 @@ const DET = JSON.stringify({ ok: true, n: { id: "aaaa1111-x", t: T0, ti: "Porta 
   ] } });
 const del = (name, fn) => ({ state: "on", attributes: { name, enabled: true, transport: "x", inclusion: ["default"], friendly_name: `SuperNotify Delivery ${fn} abilitata` } });
 const hass = {
-  language: "it", themes: { darkMode: false }, entities: {}, services: { shell_command: { sn_archive_detail: {} } },
+  language: "it", themes: { darkMode: false }, entities: {}, services: { supernotify: { enquire_archive: {} } },
   states: {
     "switch.supernotify_delivery_mobile_push": del("mobile_push", "Notifica sul telefono"),
     "switch.supernotify_delivery_email": del("email", "Email"),
@@ -35,14 +37,15 @@ const hass = {
     "switch.supernotify_scenario_home": { state: "on", attributes: { name: "home", friendly_name: "SuperNotify Scenario Qualcuno in casa" } },
     "person.lorenzo": { state: "home", attributes: { friendly_name: "Lorenzo" } },
     "person.jessica": { state: "not_home", attributes: { friendly_name: "Jessica" } },
-    "sensor.supernotify_archivio": { state: "1", attributes: IDX, last_updated: "x" },
   },
   callService: async () => {}, callApi: async () => ({}),
-  callWS: async (m) => (m.domain === "shell_command" ? { response: { stdout: DET, stderr: "", returncode: 0 } } : { response: {} }),
+  callWS: async () => ({ response: {} }),
 };
 const mk = async (cfg) => {
   const w = document.createElement("supernotify-why-card");
-  w.setConfig({ source: "sensor", entity: "sensor.supernotify_archivio", ...cfg }); document.body.appendChild(w); w.hass = hass;
+  w.setConfig({ priority_filters: false, ...cfg });
+  w._index = () => IDX; w._fetch = async () => JSON.parse(DET);
+  document.body.appendChild(w); w.hass = hass;
   await tick(); await w._select("aaaa1111"); await tick();
   return w.shadowRoot.getElementById("det");
 };

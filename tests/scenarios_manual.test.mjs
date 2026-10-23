@@ -20,12 +20,14 @@ const hass = {
     "binary_sensor.supernotify_scenario_morning": { state: "on", attributes: { ...attrs("morning"), friendly_name: "SuperNotify Condizione scenario Morning" } },
     "switch.supernotify_scenario_ospiti": { state: "on", attributes: { ...attrs("ospiti"), friendly_name: "SuperNotify Scenario Ospiti in casa" } },
     "binary_sensor.supernotify_scenario_ospiti": { state: "off", attributes: { ...attrs("ospiti"), friendly_name: "SuperNotify Scenario manuale Ospiti in casa" } },
-    // manuale riconosciuto SOLO dal friendly_name (registro senza translation_key)
+    // 1.0.0 (phase 5): manual recognised by the registry's translation_key only (always there on 2.13 /
+    // HA 2026.2); the friendly_name fallback of before PR #207 is gone
     "binary_sensor.supernotify_scenario_test": { state: "on", attributes: { ...attrs("test"), friendly_name: "SuperNotify Scenario Manual Test" } },
   },
   entities: {
     "binary_sensor.supernotify_scenario_morning": { translation_key: "scenario" },
     "binary_sensor.supernotify_scenario_ospiti": { translation_key: "scenario_manual" },
+    "binary_sensor.supernotify_scenario_test": { translation_key: "scenario_manual" },
   },
   callWS: async () => ({ response: { scenarios: [] } }),
   callService: (d, s, data) => { calls.push(["svc", d, s, data.entity_id]); return Promise.resolve(); },
@@ -55,7 +57,7 @@ assert.ok(!mor.querySelector('ha-icon[icon="mdi:hand-back-right-outline"]'));
 assert.ok(mor.textContent.includes("attivo ora"));
 
 const tst = byName("Test");
-assert.ok(tst.textContent.includes(" manuale") && tst.querySelector('ha-icon[icon="mdi:hand-back-right-outline"]'), "fallback friendly_name");
+assert.ok(tst.textContent.includes(" manuale") && tst.querySelector('ha-icon[icon="mdi:hand-back-right-outline"]'), "manuale dal registro (translation_key)");
 assert.strictEqual(tst.querySelector(".mid b").textContent, "Test");
 
 // applica ora -> scrittura stato del binary_sensor manuale
@@ -69,7 +71,9 @@ assert.deepStrictEqual(calls, [
 ]);
 
 // manuale acceso + abilitato -> attivo ora
-hass.states["binary_sensor.supernotify_scenario_ospiti"].state = "on";
+// 1.0.0 (phase 5): a new states object, as Home Assistant hands over on every change (the live
+// scenario sensors are read once per states object; the version check that skipped them is gone)
+hass.states = { ...hass.states, "binary_sensor.supernotify_scenario_ospiti": { ...hass.states["binary_sensor.supernotify_scenario_ospiti"], state: "on" } };
 card.hass = { ...hass };
 assert.ok([...root.querySelectorAll(".row")].find((r) => r.textContent.includes("Ospiti")).textContent.includes("attivo ora"));
 console.log("scenarios_manual: OK");

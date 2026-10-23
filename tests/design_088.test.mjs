@@ -87,7 +87,9 @@ ok(/^Canali2 \/ 3 accesi1 spento/.test(st[2]), "Canali accesi e spenti");
 ok(/^Silenzio1 pausa attivaNon disturbare: attivo/.test(st[3]), "Silenzio: pause e non disturbare");
 const t0 = new Date(); t0.setHours(0, 0, 0, 0);
 const dl0 = calls.filter((c) => c.verbosity === "daily");
-ok(dl0.length === 2 && new Date(dl0[0].after).getTime() === t0.getTime(), "prima volta: oggi, poi i 30 giorni (0.88.1)");
+// 1.0.0 (phase 5): SuperNotify 2.13 always has daily - the 30 days straight away, no "today first" probe
+const t30 = new Date(t0); t30.setDate(t30.getDate() - 30);
+ok(dl0.length === 1 && new Date(dl0[0].after).getTime() === t30.getTime(), "prima volta: i 30 giorni in una chiamata");
 calls.length = 0; top._ftAt = 0; top._ftStamp = "x"; top._failures(); await wait(60);
 const dl1 = calls.filter((c) => c.verbosity === "daily");
 ok(dl1.length === 1 && new Date(dl1[0].after).getTime() === t0.getTime(), "poi solo oggi: i giorni finiti restano nel browser");

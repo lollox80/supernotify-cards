@@ -69,9 +69,7 @@ nothing to set up. `hide: [appliances]` or a `views:` list without `appliances` 
 
 ### View tabs
 
-By default every tab shows an mdi icon **and** the view name (`tabs: icons`). Showing both needs
-Home Assistant 2026.2 or later; on older versions the tabs show the name only, so a tab is never
-an unlabelled icon. `tabs: emoji` puts an emoji before the name instead (🔔 Home, 🗂️ Archive, 🧺 Appliances, ✉️ Send,
+By default every tab shows an mdi icon **and** the view name (`tabs: icons`). `tabs: emoji` puts an emoji before the name instead (🔔 Home, 🗂️ Archive, 🧺 Appliances, ✉️ Send,
 ⚙️ Setup, 📊 Stats, 🧰 Tools), `tabs: text` shows the name alone.
 
 In a dashboard of your own (or after **Take control**) the same is one line per view:

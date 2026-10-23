@@ -21,12 +21,11 @@ const IDX = { count: 3, chan: ["mobile_push"], scen: [], items: [
   { id: "a3", t: Math.floor(Date.now() / 1000) - 180, ti: "Porta", p: "high", d: 1, c: [0] }] };
 const hass = {
   language: "it", themes: { darkMode: false }, entities: {}, user: { is_admin: true },
-  services: { supernotify: {} },
+  services: { supernotify: { enquire_archive: {} } },
   states: {
     "switch.supernotify_delivery_email": del("email", "Email", "email"),
     "switch.supernotify_delivery_mobile_push": del("mobile_push", "Telefono", "mobile_push"),
     "switch.supernotify_delivery_alexa_announce": del("alexa_announce", "Annuncio Alexa", "alexa_media_player"),
-    "sensor.supernotify_archivio": { state: "3", attributes: IDX, last_updated: "x" },
   },
   callService: async () => {}, callApi: async () => ({}), callWS: async () => ({ response: {} }),
 };
@@ -50,14 +49,17 @@ ok(/\.kpi \{ border: 0; border-radius: 10px; padding: 12px 14px; background: #ee
 // B5: labels wrap
 ok(!/\.stat \.k \{[^}]*nowrap/.test(SRC) && !/\.kpi \.k \{[^}]*nowrap/.test(SRC), "etichette dei riquadri vanno a capo");
 // A4 + B1: archive
-const ac = mount("supernotify-archive-card", { source: "sensor", entity: "sensor.supernotify_archivio" });
+// 1.0.0: no sensor index any more - the card is handed the index snArchiveStore builds
+const ac = document.createElement("supernotify-archive-card");
+ac.setConfig({ priority_filters: false }); ac._index = () => ({ ...IDX, generated: new Date().toISOString() });
+document.body.appendChild(ac); ac.hass = hass;
 await flush();
 const pr = [...ac.shadowRoot.querySelectorAll(".bdg.pr")].map((n) => n.className);
 ok(pr.includes("bdg pr critical") && pr.includes("bdg pr low") && pr.includes("bdg pr high"), `archivio: classe per priorità (${pr})`);
 const acss = ac.shadowRoot.innerHTML;
 ok(/\.bdg\.pr\.critical \{ color: #c62828/.test(acss), "archivio: critica in rosso");
 const meta = ac.shadowRoot.textContent;
-ok(!/\?/.test(meta.match(/3 [^\n]*archivio/) ? meta.match(/3 [^\n]*archivio/)[0] : "?") && /3 nell'archivio/.test(meta), "archivio: «3 nell'archivio», niente «di ?»");
+ok(/3 notifiche più recenti/.test(meta) && !/di \?/.test(meta), "archivio: «3 notifiche più recenti», niente «di ?»");
 // B2
 ok(/snPl\(T, "calls", ch\.calls\)/.test(SRC) && /calls_1: "chiamata"/.test(SRC), "perché: «1 chiamata»");
 // B6

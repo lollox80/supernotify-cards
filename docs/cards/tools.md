@@ -24,10 +24,6 @@ scenarios, active scenarios, channels by scenario, default channels,
 recipients, who is home, pauses, last notification). The answer opens as a
 collapsible tree with **Copy JSON**.
 
-On SuperNotify 2.12.0 *Configuration* fails when a channel has a template
-condition ([#241](https://github.com/rhizomatics/supernotify/issues/241));
-the card says so instead of showing a bare error.
-
 The actions need an admin user, like the matching actions in HA.
 
 ```yaml

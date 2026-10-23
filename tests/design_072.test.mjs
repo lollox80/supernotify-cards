@@ -14,8 +14,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const S = (state = "on", attributes = {}) => ({ state, attributes, last_changed: "2026-10-04T10:00:00Z" });
 let snoozes = [];
 const calls = [];
+// 1.0.0 (phase 5): SuperNotify 2.13 - supernotify.snooze is there, for any user
 const mk = (states, isAdmin = true) => ({
   language: "it", states, user: { id: "u", is_admin: isAdmin },
+  services: { supernotify: { snooze: {}, silence: {}, unsnooze: {}, enquire_snoozes: {} } },
   callApi: async (m, p, d) => { calls.push(["api", p, d]); },
   callService: async (d, s, data) => { calls.push(["svc", `${d}.${s}`, data]); },
   callWS: async (m) => {
@@ -91,15 +93,15 @@ await wait(30);
 const bt = [...p.shadowRoot.querySelectorAll("button")];
 ok(bt.map((b) => b.textContent).join("|") === "30 min|1 h|2 h", `pulsanti di pausa (${bt.map((b) => b.textContent).join("|")})`);
 bt[1].click(); await wait(20);
-ok(calls.some((c) => c[0] === "api" && c[2] && c[2].action === "SUPERNOTIFY_SNOOZE_EVERYONE_NONCRITICAL_60"), "admin: evento SUPERNOTIFY_SNOOZE_..._60");
-// non admin: comandi vocali
+ok(calls.some((c) => c[0] === "ws" && c[2] === "snooze") && !calls.some((c) => c[0] === "api"), "admin: supernotify.snooze, niente evento");
+// non admin: sempre supernotify.snooze (prima: comandi vocali)
 calls.length = 0;
 const p2 = document.createElement("supernotify-pause");
 p2.setConfig({ type: "custom:supernotify-pause", minutes: [15] }); document.body.appendChild(p2);
-p2.stateObj = { entity_id: "sensor.supernotify_notifications" }; p2.hass = mk(healthy, false);
+p2.context = { entity_id: "sensor.supernotify_notifications" }; p2.hass = mk(healthy, false); // HA 2026.2 always sets context
 await wait(30);
 p2.shadowRoot.querySelector("button").click(); await wait(20);
-ok(calls.some((c) => c[1] === "conversation/process" && /15 minuti/.test(c[2])), "non admin: conversation/process");
+ok(calls.some((c) => c[0] === "ws" && c[2] === "snooze") && !calls.some((c) => c[1] === "conversation/process"), "non admin: supernotify.snooze, niente comandi vocali");
 // in pausa: Riprendi
 snoozes = [{ target_type: "NONCRITICAL", recipient_type: "EVERYONE", snooze_until: new Date(Date.now() + 1800000).toISOString() }];
 const p3 = document.createElement("supernotify-pause");

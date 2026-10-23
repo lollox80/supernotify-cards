@@ -5,6 +5,46 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [1.0.0] - 2026-10-23
 
+> **Breaking: requires SuperNotify 2.13+ and Home Assistant 2026.2+.** The code that kept the cards
+> working on older versions is removed. On an older SuperNotify or Home Assistant, stay on 0.92.0 until
+> you update. Options of the removed paths are ignored (a dashboard that still has them keeps loading).
+
+### Removed
+- **archive** (0.45.2), **why**, **recipients** (0.31.1): the bridge of before SuperNotify 2.10 - the
+  `sensor.supernotify_archivio` command_line sensor, `shell_command.sn_archive_detail` and
+  `tools/sn_archive_index.py`. The options `source: sensor`, `entity`, `service` (archive / why) and
+  `archive_entity` (recipients) are ignored: everything comes from `supernotify.enquire_archive`.
+  **If you used them:** remove the sensor, its refresh automation, the shell command and the script from
+  your configuration.
+- **archive** (0.45.2): the list of full documents used when SuperNotify had no `verbosity: summary`
+  (before 2.12.1); the list is always the light one.
+- **stats** (0.33.2): the statistics from the "last notification" helpers and the day-by-day reading of
+  the archive. The options `source`, `daily`, `time_entity`, `priority_entity`, `channels_entity`,
+  `period_entity`, `sent_today_entity` and `count_entity` are ignored: the figures always come from
+  `enquire_archive` `verbosity: daily`, in one call. **If you used them:** remove the
+  `input_datetime.supernotify_last_time` / `input_text.supernotify_last_*` helpers, the two automations
+  that wrote them and the `supernotify_inviate_oggi` utility meter. The rows the card kept in the browser
+  for the day-by-day reading (`supernotify-stats-archive`, up to a few hundred KB) are deleted on first load.
+- **overview** (0.40.1): the "three / five numbers" of before SuperNotify 2.12.1 (sent since startup or
+  today, failures from `sensor.supernotify_failures`, ...). `stats: full` and `sent_today_entity` are
+  ignored: the four numbers from the archive (today, delivered, channels, silence) always.
+- **composer** (0.25.1): the version checks on `update.supernotify_update` - "Try without sending" shows
+  whenever SuperNotify is running (`dry_run: false` still hides it), a notification without text is no
+  longer refused, and the dry run checks duplicates by default (`dry_run_dupe_check: false` skips it).
+  `update_entity` is no longer used by this card.
+- **simulator** (0.18.0), **deliveries** (0.33.2), **scenarios** (0.33.0): the version checks for the dry
+  run; `dry_run: false` still keeps the simulator's own estimate.
+- **deliveries**, **transports**, **recipients**, **scenarios**: the `binary_sensor.supernotify_*` of
+  before the switches (SuperNotify 2.7 / PR #207): rows, names and toggles come from the
+  `switch.supernotify_*` entities only. A manual scenario is recognised by its entity registry entry, no
+  longer by its translated name.
+- **control** (0.39.2), tile features: the pause fallbacks of before `supernotify.snooze` - the push
+  button event for admins and the voice commands for everyone else; `snooze_via: event | voice` and
+  `snooze_action` still choose them on purpose.
+- **tools** (0.2.3): the note about SuperNotify 2.12.0 failing to return its configuration (#241, fixed in 2.13).
+- Dashboard strategy: the Home Assistant version check for tabs with icon and name (2026.2 has it).
+- The bundle is about 6% smaller again (1,008,867 → 952,625 bytes; gzip -9 284,758 → 267,934).
+
 ### Fixed
 - **deliveries** (0.33.2), **transports** (0.27.2), **recipients** (0.31.1), **scenarios** (0.33.0): a switch
   that Home Assistant refuses (a user who is not an administrator gets "401 Unauthorized") goes back where it

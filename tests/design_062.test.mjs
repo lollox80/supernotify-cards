@@ -64,7 +64,8 @@ ok(ro && ro.service_data.kind === "delivery" && /canali: tts/.test($(tc, "r_rese
 tc.shadowRoot.querySelector('.q[data-q="enquire_occupancy"]').click(); await wait(10);
 ok(/Chi è in casa/.test($(tc, "out").textContent) && /person\.lorenzo/.test($(tc, "out").textContent), "interrogazione mostrata come albero");
 tc.shadowRoot.querySelector('.q[data-q="enquire_configuration"]').click(); await wait(10);
-ok(/#241/.test($(tc, "out").textContent), "configurazione: errore spiegato (bug #241)");
+// 1.0.0 (phase 5): bug #241 is fixed in SuperNotify 2.13 (enquire_configuration is JSON-safe): the error is shown as is
+ok(/✖/.test($(tc, "out").textContent) && !/#241/.test($(tc, "out").textContent), "configurazione: errore mostrato, senza la nota sul bug #241 della 2.12.0");
 
 // ── (3) recipients ──
 const rc = mount("supernotify-recipients-card");

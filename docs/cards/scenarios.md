@@ -3,9 +3,9 @@
 [← SuperNotify Cards](../../README.md) · [Common options](../configuration.md)
 
 Scenarios dashboard, auto-discovered: "active now" badge (live from
-`binary_sensor.supernotify_scenario_*`, polled from `enquire_active_scenarios`
-on older versions), a live on/off switch per scenario (SuperNotify ≥ 2.7.0,
-`switch.supernotify_scenario_*`), per-delivery override tags (enabled/disabled),
+`binary_sensor.supernotify_scenario_*` with `scenario_control: {refresh: true}`, polled from
+`enquire_active_scenarios` when refresh is off), a live on/off switch per scenario
+(`switch.supernotify_scenario_*`), per-delivery override tags (enabled/disabled),
 action groups and media tags. Optional `groups` reproduce categories.
 
 <img src="../images/scenarios.png" alt="supernotify-scenarios-card" width="420">
@@ -27,7 +27,7 @@ icons:            # optional: the icon of a scenario of your own (an emoji)
 with its result (✔ / ✖, or *not checked* when an earlier one already decided), and for a state that does
 not match the state it has now - from `enquire_active_scenarios` with `trace: true`. **What changes if it
 applies** (or **without it**, for an active one) runs two dry runs, without and with the scenario, and lists
-the channels that would be added or dropped for a medium notification now (SuperNotify 2.12+).
+the channels that would be added or dropped for a medium notification now.
 **All attributes ›** opens Home Assistant's dialog.
 
 **What it does and why, at a glance** (0.78.0): every row shows, without a tap,

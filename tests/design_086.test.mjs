@@ -147,19 +147,7 @@ await wait(30); o._failures(); await wait(80);
 const fo = o._failures();
 ok(fo.n === 1 && fo.today && calls.some((c) => c.verbosity === "daily" && c.after && new Date(c.after).getTime() === d0.getTime()), `panoramica: 1 fallito oggi, da daily di oggi (${fo.n})`);
 
-// ── 5. SuperNotify senza summary: come prima ────────────────────────────
-// fresh bundle, as on a page of an older installation
-const dom2 = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-global.window = dom2.window; global.document = dom2.window.document; global.CustomEvent = dom2.window.CustomEvent;
-global.HTMLElement = dom2.window.HTMLElement; global.customElements = dom2.window.customElements;
-dom2.window.HTMLElement.prototype.scrollIntoView = function () {};
-dom2.window.customCards = [];
-new dom2.window.Function(SRC)();
-summaryOk = false; calls.length = 0;
-const b = document.createElement("supernotify-archive-card"); b.setConfig({ limit: 40 }); document.body.appendChild(b);
-b.hass = { ...hass }; await wait(150); b.hass = { ...hass, states: { ...hass.states } }; await wait(200);
-ok(calls.some((c) => !c.verbosity && c.limit === 40), `senza summary: 40 complete come prima (${JSON.stringify(calls.filter((c) => !c.after))})`);
-ok(b.shadowRoot.querySelectorAll("#list .it").length > 0, "e l'elenco c'è");
+// 1.0.0 (phase 5): "SuperNotify senza summary" (before 2.12.1) is gone - the light list always
 
 if (fail) { console.log(`\nFAIL ${fail}`); process.exit(1); }
 console.log("\nall ok");
