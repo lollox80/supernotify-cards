@@ -10,6 +10,10 @@
 // 2026-10-21 - appliances 0.2.19: a dehumidifier added by hand (devices:, info:), maintenance on the
 //   washing machine, the robot's consumables and buttons of its own (Commands); shots of the Overview
 //   tab, of the full-screen chart and of the robot's panel.
+// 2026-10-23 - 1.0.0: the demo is a SuperNotify 2.13 installation (HA 2026.2+): the archive answers
+//   supernotify.enquire_archive (daily / summary / standard / by id) from archived notifications, the
+//   real supernotify services are declared; no sensor.supernotify_archive, shell_command bridge,
+//   sensor.supernotify_sent_today or stats helpers any more (1.0.0 reads none of them).
 //
 // Renders each card with invented data (English UI, no real names or addresses) in headless
 // Chromium at 2x and writes docs/images/*.png. <ha-icon> is stubbed with the real Material
@@ -82,9 +86,8 @@ const S = {
   "switch.supernotify_recipient_robin": st("off", { entity_id: "person.robin", mobile_devices: [{}], friendly_name: "SuperNotify Recipient Robin enabled" }),
   "notify.recipient_alex": st(iso(NOW - 4 * MIN)), "notify.recipient_sam": st(iso(NOW - 4 * MIN)), "notify.recipient_robin": st(iso(NOW - 2 * D)),
   "sensor.supernotify_notifications": st("1294"), "sensor.supernotify_failures": st("2"),
-  "sensor.supernotify_sent_today": st("42", { last_period: 57 }),
-  "update.supernotify_update": st("off", { installed_version: "v2.12.0", latest_version: "v2.12.0", entity_picture: "" }),
-  "update.supernotify_cards_update": st("off", { installed_version: "v0.55.0", latest_version: "v0.55.0", entity_picture: "" }),
+  "update.supernotify_update": st("off", { installed_version: "v2.13.0", latest_version: "v2.13.0", entity_picture: "" }),
+  "update.supernotify_cards_update": st("off", { installed_version: "v1.0.0", latest_version: "v1.0.0", entity_picture: "" }),
   "input_boolean.notifier_dnd": st("off", { friendly_name: "Do not disturb" }),
   "input_boolean.notifier_speech_notifications": st("on", { friendly_name: "Voice" }),
   "input_boolean.notifier_phone_notifications": st("on", { friendly_name: "Push" }),
@@ -92,7 +95,6 @@ const S = {
   "input_boolean.babysitter": st("off", { friendly_name: "Babysitter" }), "input_boolean.holiday": st("off", { friendly_name: "Holiday" }),
   "camera.front_door": st("idle", { friendly_name: "Front door" }), "camera.garden": st("idle", { friendly_name: "Garden" }),
   "media_player.kitchen_echo": st("idle", { friendly_name: "Kitchen Echo" }),
-  "input_datetime.supernotify_last_time": st(iso(NOW - 4 * MIN)),
 };
 const scen = (name, fn, on, delivery, extra = {}) => {
   S["switch.supernotify_scenario_" + name] = st("on", { name, friendly_name: "SuperNotify Scenario " + fn + " enabled", delivery, ...extra });
@@ -114,27 +116,112 @@ for (let i = 0; i < 9; i++) {
   S["automation.notify_" + i] = st(i === 4 ? "off" : "on", { friendly_name: "Notify " + i, last_triggered: iso(NOW - (i + 1) * 3 * H) });
 }
 
-// archive: compact index (sensor bridge) + detail
-const T0 = Math.floor(NOW / 1000);
-const IDX = { count: 6, total: 214, chan: ["mobile_push", "alexa_announce", "email", "tts", "telegram_family", "sms_fallback"], scen: ["people_home", "morning"],
-  items: [
-    { id: "aaaa1111", t: T0 - 240, ti: "Someone is at the front door", m: "Front door camera", p: "high", o: "partial_delivery", d: 2, s: 2, mi: 1,
-      c: [0, 1, [2, "s", "nessun target"], [3, "s", "pausa"]], sc: [0, 1] },
-    { id: "bbbb2222", t: T0 - 1100, ti: "The washing machine has finished", o: "success", d: 1, s: 1, c: [0, [1, "s", "scenario"]], sc: [0] },
-    { id: "cccc3333", t: T0 - 6200, ti: "Garage door open for 10 minutes", p: "critical", o: "failed", f: 1, c: [[0, "e", ""]] },
-    { id: "dddd4444", t: T0 - 9800, ti: "Good morning! 14°C and sunny", p: "low", o: "success", d: 1, c: [3], w: 1, sp: "Good morning" },
-    { id: "eeee5555", t: T0 - D / 1000 - 3000, ti: "Water leak under the kitchen sink", p: "critical", o: "success", d: 3, c: [0, 1, 5] },
-    { id: "ffff6666", t: T0 - D / 1000 - 9000, ti: "Parcel delivered", o: "success", d: 1, c: [4] },
-  ] };
-S["sensor.supernotify_archive"] = st("6", IDX, { last_updated: iso(NOW) });
-const DET = { ok: true, n: { id: "aaaa1111-0000", t: T0 - 240, ti: "Someone is at the front door", m: "Front door camera", p: "high", o: "partial_delivery", mi: 1, v: "2.12.0",
-  sc: { on: ["people_home", "morning"], sel: ["people_home", "morning"] }, occ: { home: ["person.alex", "person.sam"], away: ["person.robin"] },
-  dl: [
-    { n: "mobile_push", r: "ok", calls: 2, tg: { mobile_app_id: ["mobile_app_alex_phone", "mobile_app_sam_phone"] } },
-    { n: "alexa_announce", r: "ok", calls: 1, tg: { entity_id: ["media_player.kitchen_echo", "media_player.living_room_echo"] } },
-    { n: "email", r: "skip", why: "NO_TARGET", tr: "always" },
-    { n: "tts", r: "skip", why: "SNOOZED" },
-  ] } };
+// archive: the notifications as SuperNotify 2.13 archives them (enquire_archive reads these)
+const ANAME = { "person.alex": "Alex", "person.sam": "Sam", "person.robin": "Robin" };
+const ok = (target, calls, extra = {}) => [{ target, calls: Array.from({ length: calls }, () => ({})), failedcalls: [], ...extra }];
+const skip = (reason, extra = {}) => ({ skipped: { suppression_reason: reason, ...extra } });
+const OCC = { home: [{ person: "person.alex" }, { person: "person.sam" }], not_home: [{ person: "person.robin" }] };
+const adoc = (id, ago, title, message, priority, outcome, deliveries, extra = {}) => {
+  const vals = Object.values(deliveries);
+  const n = (k) => vals.filter((d) => d[k] && (Array.isArray(d[k]) ? d[k].length : true)).length;
+  const sc = extra.scenarios || [];
+  delete extra.scenarios;
+  return { id, outcome, created: iso(NOW - ago * 1000), message, priority, stats: { total_duration_ms: 180.4 },
+    delivered: n("success"), failed: n("error"), suppressed: 0, skipped: n("skipped"), missed: 0, dupe: false,
+    delivery_selection: "implicit", delivery_overrides: {}, applied_scenario_names: [], constrain_scenario_names: [], required_scenario_names: [],
+    enabled_scenarios: sc, selected_scenario_names: sc, unassigned_targets: {}, deliveries,
+    condition_variables: { notification_title: title }, occupancy: OCC, version: "2.13.0", ...extra };
+};
+const ARCHIVE = [
+  adoc("aaaa1111-0000", 240, "Someone is at the front door", "Front door camera", "high", "partial_delivery", {
+    mobile_push: { success: ok({ mobile_app_id: ["mobile_app_alex_phone", "mobile_app_sam_phone"] }, 2) },
+    alexa_announce: { success: ok({ entity_id: ["media_player.kitchen_echo", "media_player.living_room_echo"] }, 1) },
+    email: skip("NO_TARGET", { target_required: "always" }),
+    tts: skip("SNOOZED") }, { missed: 1, scenarios: ["people_home", "morning"] }),
+  adoc("bbbb2222-0000", 1100, "The washing machine has finished", "The washing machine has finished", "medium", "success", {
+    mobile_push: { success: ok({ mobile_app_id: ["mobile_app_alex_phone"] }, 1) },
+    alexa_announce: skip("SCENARIO") }, { scenarios: ["people_home"] }),
+  adoc("cccc3333-0000", 6200, "Garage door open for 10 minutes", "Garage door open for 10 minutes", "critical", "failed", {
+    mobile_push: { error: [{ target: { mobile_app_id: ["mobile_app_alex_phone"] }, calls: [], failedcalls: [{ exception: "Push service unreachable" }] }] } }),
+  adoc("dddd4444-0000", 9800, "Good morning! 14°C and sunny", "Good morning! 14°C and sunny", "low", "success", {
+    tts: { success: ok({ entity_id: ["media_player.kitchen"] }, 1, { spoken_message: "Good morning, it is fourteen degrees and sunny outside",
+      data: { message_template: "<amazon:effect name=\"whispered\">{{ message }}</amazon:effect>" } }) } }),
+  adoc("eeee5555-0000", D / 1000 + 3000, "Water leak under the kitchen sink", "Water leak under the kitchen sink", "critical", "success", {
+    mobile_push: { success: ok({ mobile_app_id: ["mobile_app_alex_phone", "mobile_app_sam_phone"] }, 2) },
+    alexa_announce: { success: ok({ entity_id: ["media_player.kitchen_echo"] }, 1) },
+    sms_fallback: { success: ok({ phone_number: ["+15550100"] }, 1) } }),
+  adoc("ffff6666-0000", D / 1000 + 9000, "Parcel delivered", "Parcel delivered", "medium", "success", {
+    telegram_family: { success: ok({ telegram: ["family"] }, 1) } }),
+];
+// verbosity summary, as archive.summarize_notification writes it
+const asum = (c) => {
+  const deliveries = {};
+  for (const [name, o] of Object.entries(c.deliveries || {})) {
+    if (o.skipped) { deliveries[name] = { skipped: o.skipped.suppression_reason }; continue; }
+    const s = {};
+    for (const k of ["success", "suppressed", "error"]) if ((o[k] || []).length) s[k] = o[k].length;
+    const errs = (o.error || []).flatMap((e) => (e.failedcalls || []).map((x) => x.exception).filter(Boolean));
+    if (errs.length) s.errors = errs;
+    deliveries[name] = s;
+  }
+  const occ = {};
+  for (const [k, ppl] of Object.entries(c.occupancy || {})) occ[k] = ppl.map((p) => ANAME[p.person] || p.person).sort();
+  return { id: c.id, created: c.created, outcome: c.outcome, message: c.message, title: (c.condition_variables || {}).notification_title,
+    priority: c.priority, scenarios: c.enabled_scenarios || [], occupancy: occ, deliveries, delivery_provenance: c.delivery_provenance || {} };
+};
+
+// stats: 15 days of the archive, counted per local day as enquire_archive verbosity daily does
+const dk = (t) => { const d = new Date(t); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+const DAYS = [];
+let seed = 7; const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
+for (let d = 14; d >= 0; d--) {
+  const day0 = new Date(NOW - d * D); day0.setHours(0, 0, 0, 0);
+  const wd = (day0.getDay() + 6) % 7;
+  const n = d === 0 ? 42 : Math.round((wd >= 5 ? 58 : 44) + rnd() * 18 - 9);
+  const day = { date: dk(day0.getTime()), count: 0, outcome: {}, priority: {}, hour: Array(24).fill(0), deliveries: {}, scenarios: {} };
+  for (let i = 0; i < n; i++) {
+    const hr0 = [6, 7, 7, 8, 8, 9, 12, 13, 13, 17, 18, 18, 19, 19, 20, 21, 22, 23][Math.floor(rnd() * 18)];
+    // today: spread over the hours gone so far, so today has its 42
+    const t = d === 0 ? day0.getTime() + Math.floor((NOW - day0.getTime()) * rnd()) : day0.getTime() + hr0 * H + Math.floor(rnd() * 59) * MIN;
+    const hr = new Date(t).getHours();
+    const r = rnd();
+    const prio = r < 0.05 ? "critical" : r < 0.22 ? "high" : r < 0.8 ? "medium" : "low";
+    const fail = d !== 0 && rnd() < 0.03;
+    const ch = fail ? ["mobile_push", "telegram_family"] : rnd() < 0.5 ? ["mobile_push", "alexa_announce"] : rnd() < 0.7 ? ["mobile_push"] : ["mobile_push", "persistent", "tts"];
+    day.count += 1; day.hour[hr] += 1;
+    bump(day.priority, prio);
+    bump(day.outcome, fail ? "partial_delivery" : "success");
+    for (const c of ch) {
+      const cnt = day.deliveries[c] || (day.deliveries[c] = { success: 0, failed: 0 });
+      if (fail && c === "telegram_family") cnt.failed += 1; else cnt.success += 1;
+    }
+    bump(day.scenarios, "people_home");
+    if (hr >= 6 && hr < 12) bump(day.scenarios, "morning");
+  }
+  if (d === 0) { // today: the 2 Telegram failures the overview shows
+    day.outcome.success -= 2; bump(day.outcome, "partial_delivery", 2);
+    day.deliveries.telegram_family = { success: 1, failed: 2 };
+  }
+  DAYS.push(day);
+}
+// enquire_archive as SuperNotify 2.13 answers it (actions.supplemental_action_enquire_archive)
+const enquireArchive = (sd) => {
+  const verbosity = sd.verbosity || (sd.id ? "full" : "standard");
+  const at = (c) => verbosity === "summary" ? asum(c) : c;
+  if (sd.id) {
+    const c = ARCHIVE.find((x) => x.id === sd.id);
+    if (!c) { const e = new Error("Archive entry " + sd.id + " not found"); e.code = "service_validation_error"; throw e; }
+    return at(c);
+  }
+  const after = sd.after ? Date.parse(sd.after) : -Infinity, before = sd.before ? Date.parse(sd.before) : Infinity;
+  if (verbosity === "daily") {
+    const days = DAYS.filter((x) => Date.parse(x.date + "T23:59:59.999") >= after && Date.parse(x.date + "T00:00:00") < before);
+    return { days, count: days.reduce((a, x) => a + x.count, 0) };
+  }
+  const list = ARCHIVE.filter((c) => { const t = Date.parse(c.created); return t >= after && t < before; }).slice(0, sd.limit || 20);
+  return { notifications: list.map(at), count: list.length };
+};
 
 const LAST = { id: "aaaa1111-0000", title: "Someone is at the front door", message: "Front door camera", priority: "high", created: iso(NOW - 4 * MIN), missed: 1,
   deliveries: { mobile_push: { success: [1, 2] }, alexa_announce: { success: [1] }, email: {}, tts: {} } };
@@ -147,32 +234,6 @@ const DRY = { id: "01DRY", outcome: "partial_delivery", created: iso(NOW), messa
     mobile_push: { success: [{ target: { mobile_app_id: ["mobile_app_alex_phone", "mobile_app_sam_phone"] } }] },
     email: { skipped: { suppression_reason: "NO_TARGET", target_required: "always" } },
     tts: { skipped: { suppression_reason: "SNOOZED" } } } };
-
-// stats: 14 days of history for the helper entities
-const hist = { "input_datetime.supernotify_last_time": [], "input_text.supernotify_last_priority": [],
-  "input_text.supernotify_last_channels": [], "input_text.supernotify_last_day_period": [] };
-const stats = [];
-let seed = 7; const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
-for (let d = 14; d >= 0; d--) {
-  const day0 = new Date(NOW - d * D); day0.setHours(0, 0, 0, 0);
-  const wd = (day0.getDay() + 6) % 7;
-  const n = d === 0 ? 42 : Math.round((wd >= 5 ? 58 : 44) + rnd() * 18 - 9);
-  stats.push({ start: day0.getTime(), change: n });
-  for (let i = 0; i < n; i++) {
-    const hr = [6, 7, 7, 8, 8, 9, 12, 13, 13, 17, 18, 18, 19, 19, 20, 21, 22, 23][Math.floor(rnd() * 18)];
-    const t = day0.getTime() + hr * H + Math.floor(rnd() * 59) * MIN;
-    if (t > NOW) continue;
-    const r = rnd();
-    const prio = r < 0.05 ? "critical" : r < 0.22 ? "high" : r < 0.8 ? "medium" : "low";
-    const ch = rnd() < 0.03 ? "mobile_push, ✖telegram_family" : rnd() < 0.5 ? "mobile_push, alexa_announce" : rnd() < 0.7 ? "mobile_push" : "mobile_push, persistent, tts";
-    const per = hr < 7 ? "early morning" : hr < 13 ? "morning" : hr < 19 ? "afternoon" : hr < 22 ? "evening" : "night";
-    hist["input_datetime.supernotify_last_time"].push({ s: iso(t), lu: t / 1000 });
-    hist["input_text.supernotify_last_priority"].push({ s: prio, lu: t / 1000 - 0.5 });
-    hist["input_text.supernotify_last_day_period"].push({ s: per, lu: t / 1000 - 0.5 });
-    hist["input_text.supernotify_last_channels"].push({ s: ch, lu: t / 1000 + 1 });
-  }
-}
-for (const k of Object.keys(hist)) hist[k].sort((a, b) => a.lu - b.lu);
 
 const MANIFEST = { generated: iso(NOW - 2 * H), automations: [
   { e: "automation.notify_0", n: "Doorbell pressed", c: "Doors", s: "Camera snapshot to phones, Alexa chime" },
@@ -189,15 +250,16 @@ window.fetch = async (u, o) => String(u).includes("automations.json")
   ? new Response(JSON.stringify(MANIFEST), { status: 200, headers: { "Content-Type": "application/json" } }) : _f(u, o);
 
 const ENTS = { "binary_sensor.supernotify_scenario_guests": { platform: "supernotify", translation_key: "scenario_manual" } };
-const SVCS = { supernotify: { notify: { response: { optional: true } } }, shell_command: { sn_archive_detail: {} }, switch: {}, button: {} };
+// 1.0.0: the actions of SuperNotify 2.13 the cards call
+const SVCS = { supernotify: { notify: { response: { optional: true } }, enquire_archive: {}, enquire_active_scenarios: {}, enquire_last_notification: {},
+  enquire_snoozes: {}, enquire_occupancy: {}, enquire_deliveries_by_scenario: {}, enquire_implicit_deliveries: {}, enquire_scenarios: {},
+  enquire_configuration: {}, snooze: {}, unsnooze: {}, clear_snoozes: {} }, switch: {}, button: {} };
 window.__mkHass = (dark) => ({
   language: "en", locale: { language: "en" }, themes: { darkMode: dark }, entities: ENTS, services: SVCS, states: S, user: { is_admin: true },
   callService: async () => {}, callApi: async () => ({}),
   callWS: async (m) => {
-    if (m.type === "history/history_during_period") return hist;
-    if (m.type === "recorder/statistics_during_period") return { "sensor.supernotify_sent_today": stats };
-    if (m.domain === "shell_command") return { response: { stdout: JSON.stringify(DET), stderr: "", returncode: 0 } };
     const s = m.service || "";
+    if (s === "enquire_archive") return { context: {}, response: enquireArchive(m.service_data || {}) };
     if (s === "notify") {
       if (((m.service_data || {}).apply_scenarios || []).includes("night")) {
         const d = JSON.parse(JSON.stringify(DRY));
@@ -318,6 +380,7 @@ const APPL_DEMO = String.raw`
       }
       if (m.service === "enquire_archive") {
         const sd = m.service_data || {};
+        if (sd.verbosity === "daily") return base(m); // 1.0.0: the daily totals of the main demo
         if (sd.id) return { response: DOCS.find(function (d) { return d.id === sd.id; }) };
         return { response: { notifications: DOCS.filter(function (d) { return !sd.after || d.created >= sd.after; }).map(sum) } };
       }
@@ -333,8 +396,8 @@ const BANDS = Object.fromEntries(["early_morning", "morning", "afternoon", "even
 const CONTROL = { presence_entity: "person.alex", dnd_entity: "input_boolean.notifier_dnd", last_notification: true,
   tiles: ["dnd", "snooze", { toggle: "input_boolean.notifier_phone_notifications", name: "Push", icon: "mdi:cellphone" }, "announce"],
   groups: [{ name: "House modes", entities: ["input_boolean.bedtime", "input_boolean.guests", "input_boolean.babysitter", "input_boolean.holiday"] }] };
-const OVERVIEW = { sent_today_entity: "sensor.supernotify_sent_today", quiet_entity: "input_boolean.notifier_dnd" };
-const ARCH = { source: "sensor", entity: "sensor.supernotify_archive" };
+const OVERVIEW = { quiet_entity: "input_boolean.notifier_dnd" };
+const ARCH = {};
 // 0.2.19: the appliances card as set up in the docs - a device added by hand, maintenance, a robot's buttons
 const APPL = { price_per_kwh: 0.3,
   appliances: {
@@ -360,7 +423,7 @@ const SHOTS = {
   simulator: [700, [["simulator", {}]]],
   archive: [1100, [["archive", ARCH]]],
   why: [460, [["why", ARCH]]], // 0.85.0: the alias in a narrow column = list on top, detail below
-  stats: [700, [["stats", { sent_today_entity: "sensor.supernotify_sent_today" }]]],
+  stats: [700, [["stats", {}]]],
   tools: [460, [["tools", {}]], 1, false, "tools"],
   composer: [700, [["composer", {}]], 1, false, "composer"],
   composer_adv: [460, [["composer", {}]], 1, false, "adv"],
