@@ -3,6 +3,12 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+- **archive**: a delivery's errors are read from `failed_calls`, which SuperNotify sanitises, rather than its
+  duplicate `failedcalls`, which SuperNotify will remove. `failedcalls` is still read when `failed_calls` is missing.
+
 ## [1.0.0] - 2026-10-23
 
 > **Breaking: requires SuperNotify 2.13+ and Home Assistant 2026.2+.** The code that kept the cards

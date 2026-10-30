@@ -2866,7 +2866,8 @@ function snArchiveDelivery(name, res) {
     if (env.target) targets.push(env.target);
     if (env.skip_reason && !("why" in d)) d.why = String(env.skip_reason);
     calls += (env.calls || []).length;
-    for (const call of env.failedcalls || []) {
+    // failed_calls is sanitised by SuperNotify, failedcalls (a duplicate, to be removed) isn't
+    for (const call of env.failed_calls || env.failedcalls || []) {
       if (snIsObj(call) && call.exception) errors.push(snArchiveShort(call.exception));
     }
   }
