@@ -3,6 +3,25 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.0] - 2026-11-04
+
+### Added
+- **control** (0.40.0): the last notification says whether it **spoke at home** - "Spoke at home" with the
+  speakers that spoke (the `media_player` / `notify` targets of the voice channels' successful sends, by
+  friendly name), or "Did not speak" and always why (paused, priority below the threshold, nobody home,
+  channel condition, duplicate, no recipient, off in a scenario named by the record's `delivery_provenance`).
+  Read only from the archived record of that notification, never from the house as it is now; no box when
+  no voice channel is configured.
+- **control** (0.40.0): "Got past …" (amber, red when critical) for what a high or critical notification
+  went through, once SuperNotify archives `bypassed_scenarios` / `bypassed_snoozes`; hidden until then.
+- **control** (0.40.0): "3 skipped" opens (tap, Enter or Space; `aria-expanded`) the list of the skipped
+  channels with their reasons, and a last line says "Sent on N channels".
+
+### Changed
+- **control** (0.40.0): the priority badge carries the time - "● High · 3 min ago" - instead of a chip of its own.
+- **control** (0.40.0): the last-notification block is rebuilt only when what it shows changes (the 30 s tick
+  redrew it every time).
+
 ## [1.0.1] - 2026-11-04
 
 ### Fixed
