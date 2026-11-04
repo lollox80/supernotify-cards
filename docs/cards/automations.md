@@ -9,7 +9,7 @@ enable/disable, tap a row for the automation's own more-info dialog.
 <img src="../images/automations.png" alt="supernotify-automations-card" width="420">
 
 Home Assistant does not expose the config of YAML/package automations (they
-have no `id`), so discovery is hybrid: [`tools/genera_vista_automazioni.py`](tools/genera_vista_automazioni.py)
+have no `id`), so discovery is hybrid: [`tools/genera_vista_automazioni.py`](../../tools/genera_vista_automazioni.py)
 (included in this repo, run on the HA host or wherever it can read your
 config directory) scans `automations.yaml`/`packages/*.yaml`, finds the
 ones calling `notify.supernotify` and writes a JSON manifest to
