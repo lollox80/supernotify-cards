@@ -40,7 +40,38 @@ Giro 4 (revisione dei commit di stanotte e degli ultimi 7 giorni: sono gli 8 di 
   singola vista (che non arriva in `hass`). Comportamento coerente col codice ma non scritto nei docs:
   aggiunta una riga alla FAQ in docs/configuration.md: `5d81d4b`.
 
+Giro 4 bis (test mancanti):
+- Suite di partenza 64/64 verde (output completo salvato, nessun rosso).
+- Scansione: per ogni funzione di primo livello del bundle, quanti file di test la nominano. Molte funzioni
+  di calcolo non avevano test propri (pause, numeri giornalieri, versioni, elettrodomestici).
+- `75f8701` test: `tests/pure_helpers.test.mjs` - `snLiveSnoozes` (pause "HH:MM:SS" a cavallo di mezzanotte,
+  scarto d'orologio, fine ISO, voci nulle, lista non modificata), `snOvDays` (oggi senza doppioni, ieri,
+  media, guasti, archivio vuoto, 30 giorni col cambio d'ora), `snVerCmp`, testi delle pause
+  (`snSnzDur`, `snSnzUntil`, `snSnoozeLabel`), `snAgo`, `snTitleShow`, `snPyJson`, `snTruthy`,
+  `snLen`/`snCut`, `snJoinMax`. Verde anche con TZ America/New_York e Australia/Sydney. Suite 65/65.
+- `988c1d9` test: `tests/appliance_math.test.mjs` - `snApplEstimate` (era importata da design_091 ma mai
+  chiamata: fine da orario, tempo residuo in min/h/s/H:MM/H:MM:SS, avanzamento, medie corti/lunghi),
+  `snApplCycles`, `snApplTypes`, `snApplPeriodStarts` (settimana da lunedì, domenica inclusa),
+  `snApplPeriods`, `snApplDays`, `snApplBins`. Suite 66/66.
+- BUG trovato dal nuovo test, corretto a parte: `de190aa` fix: un sensore "tempo residuo" che contiene un
+  orario ISO (device_class timestamp) veniva letto da `parseFloat` come 2026 minuti (~34 h); il ramo
+  `Date.parse` era irraggiungibile. Ora una data viene letta prima come istante. appliances 0.3.1 (la CI
+  controlla ogni commit contro `HEAD~1`), voce in CHANGELOG [Unreleased] › Fixed. Suite 66/66,
+  `node --check`, `check_card_versions.py` contro HEAD e main verdi.
+  Da provare su HA: un elettrodomestico col tempo residuo come timestamp mostra la fine giusta.
+
 ## Non fatto e perché
+
+- Giro 4 bis: a metà giro il disco F: è diventato lentissimo (caricare jsdom dalla node_modules originale:
+  ~130-265 s a processo, contro pochi secondi prima), quindi `tools/run_tests.mjs` (timeout 90 s a file)
+  andava in ETIMEDOUT su tutto. Suite eseguita con un runner nello scratchpad identico nella regola di
+  successo ma con timeout 15 min e 6 file in parallelo: 66/66 verde prima e dopo la correzione. Nessun
+  file del repo cambiato per questo.
+- Non toccati (restano poco coperti, candidati al prossimo giro): `snArchive*` (provenienza, canali,
+  destinatari del dettaglio archivio), `snApplRunCycles`/`snApplRunPeriods` oltre ai casi di design_091,
+  `snScenarioCondLine`/`snCondText`, `snTpl`.
+- Osservato, non cambiato (non è un bug dichiarato): `snVerCmp("1.1.0b1", "1.1.0")` dà 0 (le pre-release
+  contano come la release); un `snooze_until` numerico (secondi epoch) è trattato come pausa senza fine.
 
 - Giro 3: node_modules e .venv NON sono presenti nel worktree (di nuovo, diversamente da quanto previsto).
   jsdom preso dalla node_modules della cartella originale con un hook di risoluzione nello scratchpad;
