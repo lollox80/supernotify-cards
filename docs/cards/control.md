@@ -70,7 +70,7 @@ bands:
 | `tiles` | no | list of `dnd`, `snooze`, `announce`, or `{toggle, name, icon}` |
 | `groups` | no | grouped `input_boolean` toggles with a `name` |
 | `bands` | no | time bands (`input_datetime` start + `input_number` volume) for the status bar |
-| `last_notification` | no | `true` shows the native last-notification block (title, message, priority, relative time, how many channels delivered / failed / missed / skipped, and "Why ›" when a why-card is on the dashboard) |
+| `last_notification` | no | `true` shows the native last-notification block (title, message, priority with the relative time, whether it spoke at home, how many channels delivered / failed / missed / skipped - the skipped ones open with their reasons - "Sent on N channels", and "Why ›" when a why-card is on the dashboard) |
 | `last_channels` | no | `true` = one chip per channel in the last-notification block instead of the counts |
 | `last_notification_entity` | no | `input_text` holding the last title (fallback when the engine has no title) |
 | `last_notification_strip` | no | regex removed from the message, e.g. `\\s*🕐 Ora:.*$` to drop a timestamp line |
@@ -78,6 +78,29 @@ bands:
 | `collapsible` | no | groups fold on header tap with an active/total counter (default `true`); per-group `collapsed: true` folds by default |
 | `tile_columns` | no | force N tile columns (default: as many 150 px tiles as fit, 2 on a phone) |
 | `tile_layout` | no | `stacked` = the tall tiles with the icon on top (before 0.52) |
+
+### Last notification: voice, skipped channels, sent on (0.40.0)
+
+The last-notification block reads **only the archived record of that notification**
+(`supernotify.enquire_last_notification`, already read by the card - no new polling), never the
+state of the house now: switching a channel off or leaving home afterwards does not change what it
+says about a notification already sent.
+
+- **Priority and time in one badge**: "● High · 3 min ago".
+- **Voice box**, when a voice channel exists (transport `tts`, `alexa_devices`, `alexa_media_player`,
+  `media` or `chime`, or a channel whose envelopes carry a spoken message):
+  - **Spoke at home** (accent colour) and the speakers that spoke - the `media_player` / `notify`
+    targets of the successful sends, by friendly name.
+  - **Did not speak** (grey) and always why, from the skip reasons archived for the voice channels:
+    paused, priority below the threshold, nobody home, channel condition, duplicate, no recipient;
+    "off in the scenario Night" when the record's `delivery_provenance` says a scenario switched it off;
+    "no voice channel selected" when the notification did not involve one at all.
+  - No voice channel configured: no box.
+- **Got past …** (amber, red for a critical notification): what a high or critical notification
+  went through that would otherwise have stopped it - shown only when the record has
+  `bypassed_scenarios` / `bypassed_snoozes` (a SuperNotify version that archives them), hidden otherwise.
+- **"3 skipped"** is a button: tap it (or Enter / Space) to list every skipped channel with its reason.
+- **Sent on N channels**: the channels with at least one successful send.
 
 Active scenarios are read from `binary_sensor.supernotify_scenario_*`. With
 `scenario_control: {refresh: true}` in the SuperNotify config these report a live `on`/`off`
