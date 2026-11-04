@@ -29,6 +29,17 @@ Giro 3 (ripresa):
 - NOTE_DA_IMPLEMENTARE.md: tutte le voci (1.1–1.4) risultano già fatte nei giri precedenti; nessun codice
   nuovo in questo giro.
 
+Giro 4 (revisione dei commit di stanotte e degli ultimi 7 giorni: sono gli 8 di stanotte):
+- `e257688` (style: auto, `p.card`): riletto riga per riga. Nessun punto legge `config.style` saltando
+  `snStyle()` (l'unico uso è `_palette()` e il setter `hass` di `SnCard`); badge e tile feature usano già
+  le variabili del tema; `setConfig` azzera `_rendered`, quindi cambiare `style` dall'editor ridisegna;
+  `o_auto` esisteva già (en/it, le uniche lingue delle etichette del form). Nessun bug trovato.
+- Test di stanotte (`db0920b`, `b62d2d3`, `f41be67`) e docs (`76bddb5`, `9035e0a`): corretti; il link
+  `../../tools/genera_vista_automazioni.py` punta a un file che esiste.
+- Unico buco trovato: `style: auto` guarda solo il tema del profilo/server, non il tema impostato su una
+  singola vista (che non arriva in `hass`). Comportamento coerente col codice ma non scritto nei docs:
+  aggiunta una riga alla FAQ in docs/configuration.md: `5d81d4b`.
+
 ## Non fatto e perché
 
 - Giro 3: node_modules e .venv NON sono presenti nel worktree (di nuovo, diversamente da quanto previsto).
@@ -43,6 +54,16 @@ Giro 3 (ripresa):
   probabili test sensibili ai tempi. Non ho il nome dei 4 (output troncato); da tenere d'occhio.
 - Prova a mano su HA (tema default chiaro/scuro, tema a vetro "Cielo", cambio tema dal profilo): non
   eseguibile di notte (niente dispositivi reali). Da fare.
+
+- Giro 4: suite eseguita due volte. La prima 62/64 (l'output finiva in `tail`, quindi i nomi dei 2 file
+  rossi sono andati persi; girava in parallelo a un test singolo lanciato da me), la seconda 64/64 senza
+  modifiche al codice. Di nuovo test sensibili ai tempi/carico: per il prossimo giro salvare l'output
+  completo (`> suite.log`) per avere i nomi. `node -c` e `check_card_versions.py --base main` verdi.
+- Giro 4: `snStyle()` dà la precedenza a `hass.selectedTheme.theme` su `hass.themes.theme`. Se, come
+  ricordo, il frontend di HA mette in `hass.themes.theme` il tema effettivamente applicato (profilo, oppure
+  `default_dark_theme` del server col modo scuro), le due fonti coincidono e va bene; non ho potuto
+  verificarlo sul sorgente del frontend (non c'è in locale, niente rete). Da controllare con un tema scuro
+  predefinito del server (`default_dark_theme`) e `style: auto`.
 
 ## Da decidere
 
