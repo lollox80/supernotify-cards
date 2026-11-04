@@ -25,6 +25,14 @@ Polish, Portuguese, Japanese, Simplified Chinese and Hindi. Any other language f
 cards and SuperNotify talk about the same thing (priority, scenario, transport, recipient, outcomes), they use
 the words of SuperNotify's own translation. Corrections are welcome as issues or pull requests.
 
+### The card has a different colour from the other cards
+
+- By default the cards draw with their own SuperNotify colours. With a custom theme set `style: theme` (or
+  `style: auto`, which follows the theme only when one other than the default is in use).
+- Still a different shade with `style: theme`? Look at the view's YAML: a view with `theme: Backend-selected`
+  makes Home Assistant set the default theme's colours (for example `--card-background-color`) on the view,
+  over the theme you picked in your profile. Remove the `theme` key from the view. This is Home Assistant's behaviour, not the card's.
+
 ## Which SuperNotify version each feature needs
 
 Since 1.0.0 the cards need **SuperNotify 2.13 or later** and **Home Assistant 2026.2 or later**; the
