@@ -32,6 +32,9 @@ the words of SuperNotify's own translation. Corrections are welcome as issues or
 - Still a different shade with `style: theme`? Look at the view's YAML: a view with `theme: Backend-selected`
   makes Home Assistant set the default theme's colours (for example `--card-background-color`) on the view,
   over the theme you picked in your profile. Remove the `theme` key from the view. This is Home Assistant's behaviour, not the card's.
+- A theme set on a single view (`theme: <name>` in the view's YAML) is not seen by `style: auto`, which looks at
+  the theme of your profile or of the server: on the default theme it keeps the SuperNotify colours. In that view
+  use `style: theme`.
 
 ## Which SuperNotify version each feature needs
 
