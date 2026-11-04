@@ -106,7 +106,10 @@ config entry, so:
   `appliance_<entry id>`. The thresholds are Autonotify's own, so the card agrees with the
   notifications. A notification is recognised by the appliance's name in its title, also with an
   emoji or more words around it ("🧺 Lavatrice", "🤖 Bruno ha finito"), else by its tag when the
-  title is one of your own with no name in it ("🧺 Bucato pronto"). If the newest one is a "live"
+  title is one of your own with no name in it ("🧺 Bucato pronto"); when a "live" is over 4 hours
+  old, every such row since it is read (up to 200) so a late end is still found on a busy day. A
+  cycle under way starts at its own first "live": two "live" rows more than 12 hours apart are two
+  cycles. If the newest one is a "live"
   whose end never came (lost, or Home Assistant restarted in between), an appliance on a plug is idle
   again once the plug has been at rest for the grace period and 10 minutes more and the statistics show
   no cycle under way. Without SuperNotify's archive the power alone decides;

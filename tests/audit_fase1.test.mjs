@@ -190,7 +190,7 @@ const ctlHass = (extra = {}) => ({
   const D = api.snStatsDaily;
   window.localStorage.removeItem("supernotify-stats-daily");
   let n = 0;
-  const hass = { callWS: async () => { if (++n === 1) throw new Error("Connection lost"); return { response: { days: [{ date: "2026-10-22", count: 3 }] } }; } };
+  const hass = { callWS: async () => { if (++n === 1) throw new Error("Connection lost"); const d = new Date(); return { response: { days: [{ date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, count: 3 }] } }; } };
   const start = Date.now() - 3 * 86400000;
   let err = null;
   try { await D.get(hass, start); } catch (e) { err = e; }

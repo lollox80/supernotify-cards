@@ -3,6 +3,12 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.1] - 2026-11-04
+
+### Fixed
+- **appliances** (0.2.24): the end of a cycle with a title of its own ("🧺 Bucato pronto", no appliance's name in it) is found however many notifications came after it. For an appliance whose newest event is a "live" over 4 hours old, the rows without a name since that "live" are read in full, oldest first and up to 200, until one with its tag; only the newest 40 such rows were read, and on a busy day the end of last night's wash fell past them, so the washer stayed "running" at 0 W and the next cycle started at the day before.
+- **appliances** (0.2.24): a cycle under way starts at its own first "live" notification of Autonotify, not at one of a cycle before whose end never reached the archive: two "live" rows more than 12 hours apart are two cycles. A washer started at 22:33 showed "started 21:08" of the day before, "25 h 50 min" and an estimated end already past.
+
 ## [1.0.0] - 2026-10-23
 
 > **Breaking: requires SuperNotify 2.13+ and Home Assistant 2026.2+.** The code that kept the cards
