@@ -11,7 +11,8 @@ const asks = [];
 const hass = { callWS: async (m) => {
   const after = Date.parse(m.service_data.after); asks.push(after);
   const days = [];
-  for (let t = after; t <= Date.now(); t += 86400000) days.push({ date: key(new Date(t)), count: 5, hour: new Array(24).fill(0) });
+  // calendar days, not 24 h steps: across a change of the clock (DST) 24 h steps land on the wrong day
+  for (const d = new Date(after); d.getTime() <= Date.now(); d.setDate(d.getDate() + 1)) days.push({ date: key(d), count: 5, hour: new Array(24).fill(0) });
   return { response: { days } };
 } };
 dom.window.localStorage.clear();
