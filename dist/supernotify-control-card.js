@@ -32,7 +32,7 @@ const SN_CARD_VERSIONS = {
   automations: "0.22.0",
   stats: "0.34.0",
   archive: "0.46.0",
-  appliances: "0.3.0",
+  appliances: "0.3.1",
   tools: "0.3.0",
 };
 
@@ -11076,6 +11076,8 @@ function snApplEstimate(hass, ap, s, cy, now) {
     const unit = String((rem.attributes || {}).unit_of_measurement || "min");
     let ms = NaN;
     if (/^\d+:\d{2}(:\d{2})?$/.test(raw)) { const [h, m, sec] = raw.split(":").map(Number); ms = ((h * 60 + m) * 60 + (sec || 0)) * 1000; }
+    // a timestamp ("2026-11-04T10:25:00+00:00") before parseFloat, which would read it as 2026 minutes
+    else if (/^\d{4}-\d{2}-\d{2}[T ]/.test(raw) && Number.isFinite(Date.parse(raw))) ms = Date.parse(raw) - now;
     else if (Number.isFinite(parseFloat(raw))) ms = parseFloat(raw) * (unit === "h" ? 3600000 : unit === "s" ? 1000 : 60000);
     else if (Number.isFinite(Date.parse(raw))) ms = Date.parse(raw) - now;
     if (Number.isFinite(ms) && ms >= 0) return { end: now + ms, pct: (now - since) / Math.max(1, now + ms - since) * 100 };

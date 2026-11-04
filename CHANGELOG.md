@@ -17,6 +17,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   background now look the same on the SuperNotify cards. Buttons and fields inside keep the solid card colour.
   With the SuperNotify colours nothing changes.
 
+### Fixed
+- **appliances** (0.3.1): a "time left" entity that holds a timestamp (the moment the cycle ends) is read as that
+  moment. It was read as a number of minutes - the year, about 34 hours - so the end shown was a day and a half off.
+
 ## [1.0.0] - 2026-10-23
 
 > **Breaking: requires SuperNotify 2.13+ and Home Assistant 2026.2+.** The code that kept the cards
