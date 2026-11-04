@@ -20,20 +20,20 @@ const VERSION = "1.0.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.39.2",
-  overview: "0.40.1",
-  bands: "0.21.2",
-  deliveries: "0.33.2",
-  transports: "0.27.2",
-  recipients: "0.31.1",
-  scenarios: "0.33.1",
-  simulator: "0.18.0",
-  composer: "0.25.2",
-  automations: "0.21.5",
-  stats: "0.33.2",
-  archive: "0.45.2",
-  appliances: "0.2.23",
-  tools: "0.2.3",
+  control: "0.40.0",
+  overview: "0.41.0",
+  bands: "0.22.0",
+  deliveries: "0.34.0",
+  transports: "0.28.0",
+  recipients: "0.32.0",
+  scenarios: "0.34.0",
+  simulator: "0.19.0",
+  composer: "0.26.0",
+  automations: "0.22.0",
+  stats: "0.34.0",
+  archive: "0.46.0",
+  appliances: "0.3.0",
+  tools: "0.3.0",
 };
 
 /**
@@ -542,7 +542,10 @@ class SnCard extends HTMLElement {
     // native controls (time pickers, selects, scrollbars) follow the HA theme too
     // 0.92.0 (perf): written only when it changes - a style write on every state change in the house
     if (wasDark !== this._dark || !this._rendered) this.style.colorScheme = this._dark ? "dark" : "light";
-    this._onHass(hass, !this._rendered || wasDark !== this._dark, changed, first);
+    // `style: auto`: a theme picked or dropped redraws the card like a dark / light switch
+    const wasStyle = this._snStyle;
+    this._snStyle = snStyle(hass, this._config && this._config.style);
+    this._onHass(hass, !this._rendered || wasDark !== this._dark || (!first && wasStyle !== this._snStyle), changed, first);
     snA11yInit(this);
   }
 
@@ -552,7 +555,7 @@ class SnCard extends HTMLElement {
   }
 
   _palette() {
-    return snPalette(this._dark, this._config && this._config.style);
+    return snPalette(this._dark, snStyle(this._hass, this._config && this._config.style));
   }
 
   _st(id) {
@@ -2118,7 +2121,7 @@ function snForm(kind) {
   const num = (name, min, max, step = 1) => ({ name, selector: { number: { min, max, step, mode: "box" } } });
   const txt = (name, multiline) => ({ name, selector: { text: multiline ? { multiline: true } : {} } });
   const common = { type: "expandable", name: "", flatten: true, title: L._common, schema: [
-    sel("style", [["supernotify", "o_supernotify"], ["theme", "o_theme"]]),
+    sel("style", [["supernotify", "o_supernotify"], ["theme", "o_theme"], ["auto", "o_auto"]]),
     sel("icons", [["", "o_mdi"], ["emoji", "o_emoji"]]),
     bool("show_version"), txt("intro", true)] };
   const archive = [num("limit", 5, 500), ent("trigger_entity", "sensor")];
@@ -2161,6 +2164,9 @@ function snForm(kind) {
  * `style: theme` takes everything from the Home Assistant theme.
  * warnSoft / warnLine / warnInk: a tinted surface for "on but limited"
  * states (an active snooze), instead of white text on orange.
+ * card: the background of ha-card. With `style: theme` it is the theme's
+ * --ha-card-background (semi-transparent in glass themes), like the other
+ * cards of the dashboard; panel stays the solid colour of buttons and fields.
  * ════════════════════════════════════════════════════════════════════════ */
 function snPalette(dark, style) {
   if (style === "theme") {
@@ -2173,12 +2179,13 @@ function snPalette(dark, style) {
       warnSoft: "rgba(var(--rgb-warning-color, 255,166,0), .16)",
       warnLine: "var(--warning-color, #f0c48a)", warnInk: "var(--primary-text-color)",
       line: "var(--divider-color)", panel: "var(--card-background-color)",
+      card: "var(--ha-card-background, var(--card-background-color))",
       soft: "rgba(var(--rgb-primary-color, 3,169,244), .08)",
       ink: "var(--primary-text-color)", muted: "var(--secondary-text-color)",
       dot: "var(--disabled-text-color)",
     };
   }
-  return dark
+  const p = dark
     ? { brand: "#03a9f4", brandD: "#8fd0ff", onBrand: "#06131d", ok: "#7fe0a5", okSoft: "rgba(127,224,165,.10)", warn: "#f0b050",
         crit: "#ff9a9a", warnSoft: "rgba(240,160,32,.18)", warnLine: "#8a5a10", warnInk: "#ffd8a3",
         line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#9aa8b6",
@@ -2187,6 +2194,20 @@ function snPalette(dark, style) {
         crit: "#c62828", warnSoft: "#fdf1e3", warnLine: "#f0c48a", warnInk: "#5c3200",
         line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#5b6b7c",
         dot: "#c3cdd8" };
+  p.card = p.panel;
+  return p;
+}
+
+/**
+ * The style a card draws with. `style: auto` follows the Home Assistant theme when one other
+ * than the default is in use (picked in the profile, else the backend's), and keeps the
+ * SuperNotify colours on the default theme. Any other value is returned as it is.
+ */
+function snStyle(hass, style) {
+  if (style !== "auto") return style;
+  const sel = hass && hass.selectedTheme && hass.selectedTheme.theme;
+  const name = sel || (hass && hass.themes && hass.themes.theme);
+  return name && name !== "default" ? "theme" : "supernotify";
 }
 
 /**
@@ -3389,7 +3410,7 @@ function snSwitchHtml(p, id, on, label, title) {
 /** 1.0.0: the CSS the deliveries, transports and recipients lists share (each card adds its own after it). */
 function snListCss(p) {
   return `:host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 14px; background: ${p.card}; color: ${p.ink}; }
         .row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; position: relative;
                cursor: pointer; border-radius: 8px; }
         .row + .row::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0;
@@ -3630,7 +3651,7 @@ class SupernotifyControlCard extends SnCard {
       announce_delivery: "alexa_announce",
       tiles: ["dnd", "snooze", "announce"],
       groups: [],
-      style: "supernotify", // "supernotify" = prototype look; "theme" = follow HA theme
+      style: "supernotify", // "supernotify" = prototype look; "theme" = follow HA theme; "auto" = theme unless it is the default one
       collapsible: true,     // groups fold on header tap (active/total counter)
       last_notification: false, // native "last notification" block (replaces a markdown card)
       ...config,
@@ -3894,7 +3915,7 @@ class SupernotifyControlCard extends SnCard {
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
-        ha-card { padding: 14px; position: relative; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 14px; position: relative; background: ${p.card}; color: ${p.ink}; }
         .statusbar { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 0 4px; margin-bottom: 12px;
                      font-size: 13.5px; }
         .sseg { display: inline-flex; align-items: baseline; gap: 6px; }
@@ -4731,7 +4752,7 @@ class SupernotifyOverviewCard extends SnCard {
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; container-type: inline-size; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 14px; background: ${p.card}; color: ${p.ink}; }
         .part + .part { margin-top: 14px; }
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
         /* 0.56.1: no hole in the grid - 4 numbers 2+2 (one row when the card is wide) */
@@ -5220,7 +5241,7 @@ class SupernotifyBandsCard extends SnCard {
     const p = this._palette();
     if (!Object.keys(this._config.bands).length) {
       const T = snT(this._config, this._hass);
-      this.shadowRoot.innerHTML = snIconify(`<ha-card style="padding:16px;background:${p.panel};color:${p.ink}">
+      this.shadowRoot.innerHTML = snIconify(`<ha-card style="padding:16px;background:${p.card};color:${p.ink}">
         <div style="font-weight:700;font-size:15px">🕐 ${T.bands_empty_t}</div>
         <div style="color:${p.muted};font-size:13px;line-height:1.5;margin-top:6px">${T.bands_empty}</div>
         <pre style="background:${p.soft};border-radius:10px;padding:10px 12px;font-size:12px;margin:10px 0 0;overflow:auto">bands:
@@ -5232,7 +5253,7 @@ class SupernotifyBandsCard extends SnCard {
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 14px; background: ${p.card}; color: ${p.ink}; }
         /* 0.59.0: one line per band - name and end, start time, volume slider, percent */
         .row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(80px, 1fr) 42px;
                align-items: center; gap: 12px; padding: 10px 8px; border-radius: 12px; position: relative; }
@@ -6081,7 +6102,7 @@ class SupernotifyScenariosCard extends SnCard {
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 14px; background: ${p.card}; color: ${p.ink}; }
         .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
                font-weight: 800; color: ${p.muted}; margin: 14px 0 6px; }
         .sec:first-child { margin-top: 0; }
@@ -6343,7 +6364,7 @@ class SupernotifySimulatorCard extends SnCard {
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 14px; background: ${p.card}; color: ${p.ink}; }
         .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
                font-weight: 800; color: ${p.muted}; margin: 12px 0 7px; }
         .sec:first-child { margin-top: 0; }
@@ -6563,7 +6584,7 @@ class SupernotifyComposerCard extends SnCard {
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; container-type: inline-size; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 14px; background: ${p.card}; color: ${p.ink}; }
         .grid2 { display: grid; grid-template-columns: 1fr 220px; gap: 16px; }
         @container (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
         label { display: block; font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
@@ -6947,7 +6968,7 @@ window.customCards.push({
  * Options:
  *   manifest_url  (default /local/supernotify/automations.json)
  *   intro         optional intro text (HTML)
- *   style         "supernotify" (default) | "theme"
+ *   style         "supernotify" (default) | "theme" | "auto"
  *   language      override, else follows hass.language
  * ==================================================================== */
 class SupernotifyAutomationsCard extends SnCard {
@@ -7044,7 +7065,7 @@ class SupernotifyAutomationsCard extends SnCard {
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 14px; background: ${p.card}; color: ${p.ink}; }
         .top { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
         input[type=search] { flex: 1; border: 1.5px solid ${p.line}; border-radius: 10px;
           padding: 8px 12px; font-size: 13.5px; background: ${p.panel}; color: ${p.ink}; }
@@ -7566,7 +7587,7 @@ class SupernotifyStatsCard extends SnCard {
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; container-type: inline-size; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 14px; background: ${p.card}; color: ${p.ink}; }
         .hdr { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
         .hdr h3 { margin: 0; font-size: 15px; font-weight: 800; }
         .hdr .win { font-size: 11.5px; color: ${p.muted}; }
@@ -8224,7 +8245,7 @@ class SupernotifyArchiveCard extends SnCard {
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
-        ha-card { padding: 0; background: ${p.panel}; color: ${p.ink}; font-size: 13px; overflow: hidden; }
+        ha-card { padding: 0; background: ${p.card}; color: ${p.ink}; font-size: 13px; overflow: hidden; }
         .wrap { container-type: inline-size; }
         .top { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 12px 14px;
                border-bottom: 1px solid ${p.line}; }
@@ -9307,7 +9328,7 @@ class SupernotifyToolsCard extends SnCard {
     this.shadowRoot.innerHTML = snIconify(`
       <style>
         :host { display: block; }
-        ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+        ha-card { padding: 14px; background: ${p.card}; color: ${p.ink}; }
         .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800; color: ${p.muted}; margin: 14px 0 8px; }
         .sec:first-of-type { margin-top: 0; }
         .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; position: relative; }
@@ -11961,7 +11982,7 @@ function snApplFire() {
 function snApplCss(p) {
   return `
   :host { display: block; container-type: inline-size; }
-  ha-card { padding: 14px; background: ${p.panel}; color: ${p.ink}; }
+  ha-card { padding: 14px; background: ${p.card}; color: ${p.ink}; }
   .hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .ttl { flex: 1; font-size: 16px; }
   .newb { font-size: 12.5px; font-weight: 700; color: ${p.brandD}; text-decoration: none; border: 1.5px solid ${p.line};

@@ -13,7 +13,8 @@ scenario groups) are edited in the code editor; the form keeps them.
 
 | Option | What it does |
 |---|---|
-| `style: theme` | Follow the Home Assistant theme instead of the SuperNotify colours |
+| `style: theme` | Follow the Home Assistant theme instead of the SuperNotify colours (background, border and glass effect of the theme's cards included) |
+| `style: auto` | Follow the theme when one other than the default is in use (picked in your profile or set for the whole server), keep the SuperNotify colours on the default theme |
 | `intro: <text>` | An info banner at the top of the card (HTML allowed) |
 | `language: de` | Pin the language (`en`, `it`, `de`, `es`, `fr`, `nl`, `pl`, `pt`, `ja`, `zh`, `hi`); by default the card follows Home Assistant |
 | `show_version: true` | Show the card's version at the bottom (hidden since 0.49.0) |

@@ -3,6 +3,20 @@
 All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- **All cards**: `style: auto` (also "Automatic" in the visual editor's Colours): the cards follow the Home
+  Assistant theme when one other than the default is in use - picked in the profile, else the server's - and keep
+  the SuperNotify colours on the default theme. Switching theme from the profile redraws the card without a reload.
+  The default stays `style: supernotify`.
+
+### Changed
+- **All cards**: with `style: theme` the card background is the theme's `--ha-card-background` (falling back to
+  `--card-background-color`), the same as Home Assistant's own cards: glass themes with a semi-transparent card
+  background now look the same on the SuperNotify cards. Buttons and fields inside keep the solid card colour.
+  With the SuperNotify colours nothing changes.
+
 ## [1.0.0] - 2026-10-23
 
 > **Breaking: requires SuperNotify 2.13+ and Home Assistant 2026.2+.** The code that kept the cards
