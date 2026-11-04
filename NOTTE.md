@@ -21,7 +21,20 @@ Giro 2:
 - Voce 1.4 (parti "prodotto" a colori fissi): nessuna modifica, come da nota.
 - NOTE_DA_IMPLEMENTARE.md (file locale nella cartella originale) non l'ho toccato: va segnata come fatta a mano.
 
+Giro 3 (ripresa):
+- Albero pulito all'avvio, nessun lavoro lasciato a metà.
+- Suite completa eseguita due volte di fila sul ramo: 64/64 verde entrambe le volte (nessun test instabile
+  ricomparso). `node -c dist/supernotify-control-card.js`, `tools/check_card_versions.py --base main`
+  ("card versions OK"), `py_compile` dei tools e `hacs.json` verdi.
+- NOTE_DA_IMPLEMENTARE.md: tutte le voci (1.1–1.4) risultano già fatte nei giri precedenti; nessun codice
+  nuovo in questo giro.
+
 ## Non fatto e perché
+
+- Giro 3: node_modules e .venv NON sono presenti nel worktree (di nuovo, diversamente da quanto previsto).
+  jsdom preso dalla node_modules della cartella originale con un hook di risoluzione nello scratchpad;
+  i controlli Python girati con il Python di sistema. `tools/contrast_audit.mjs` non eseguito: richiede
+  Playwright, che non è installato e non va installato (sarebbe una dipendenza Node nuova).
 
 - node_modules NON era presente nel worktree (diversamente da quanto previsto). Non ho installato nulla:
   i test girano con un hook di risoluzione nello scratchpad che prende `jsdom` dalla node_modules della
