@@ -1,6 +1,7 @@
 // CHANGELOG
 // 2026-10-23 v1.0.0: audit fase 1 (bug). Ogni blocco fallisce su 50ed25d e passa dopo la correzione
 //   (SN_SRC=<file> per provarlo su un'altra copia del bundle).
+// 2026-11-04: BUG-6 risponde col giorno di oggi: la data fissa 2026-10-22 usciva dalla finestra di 3 giorni dal 26/10.
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -190,7 +191,9 @@ const ctlHass = (extra = {}) => ({
   const D = api.snStatsDaily;
   window.localStorage.removeItem("supernotify-stats-daily");
   let n = 0;
-  const hass = { callWS: async () => { if (++n === 1) throw new Error("Connection lost"); return { response: { days: [{ date: "2026-10-22", count: 3 }] } }; } };
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const hass = { callWS: async () => { if (++n === 1) throw new Error("Connection lost"); return { response: { days: [{ date: today, count: 3 }] } }; } };
   const start = Date.now() - 3 * 86400000;
   let err = null;
   try { await D.get(hass, start); } catch (e) { err = e; }
