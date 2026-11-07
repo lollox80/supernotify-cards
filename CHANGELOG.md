@@ -4,10 +4,49 @@ All notable changes to **supernotify-control-card** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
-
-### Changed
 - **archive**: a delivery's errors are read from `failed_calls`, which SuperNotify sanitises, rather than its
   duplicate `failedcalls`, which SuperNotify will remove. `failedcalls` is still read when `failed_calls` is missing.
+  
+## [1.2.0] - 2026-11-08
+
+> **Action needed if you use the automations card.** Its list no longer comes from
+> `/local/supernotify/automations.json`: set up `sensor.supernotify_automations` as described in
+> [the card's page](docs/cards/automations.md), then delete `config/www/supernotify/automations.json`.
+
+### Security
+- **automations** (0.23.0), **dashboard strategy**: the list of the automations that notify (entity id, alias,
+  category, source file) was written by `tools/genera_vista_automazioni.py` to `config/www/supernotify/`, which Home
+  Assistant serves at `/local/` without authentication, so anyone who could reach the instance could read it
+  (hacs/default#11548). The script now writes it to `config/supernotify/automations.json` and removes the old copy
+  under `www`; a `command_line` sensor exposes it in its attributes and the card and the strategy read it from
+  `sensor.supernotify_automations` (option `manifest_entity`), through the same authenticated connection as every
+  other entity. The list also refreshes on its own when the sensor changes.
+
+### Removed
+- **automations**: the `manifest_url` option (ignored if still in a dashboard) and the strategy's request to that URL.
+
+## [1.1.0] - 2026-11-07
+
+### Added
+- **All cards**: `style: auto` (also "Automatic" in the visual editor's Colours): the cards follow the Home
+  Assistant theme when one other than the default is in use - picked in the profile, else the server's - and keep
+  the SuperNotify colours on the default theme. Switching theme from the profile redraws the card without a reload.
+  The default stays `style: supernotify`.
+
+### Changed
+- **All cards**: with `style: theme` the card background is the theme's `--ha-card-background` (falling back to
+  `--card-background-color`), the same as Home Assistant's own cards: glass themes with a semi-transparent card
+  background now look the same on the SuperNotify cards. Buttons and fields inside keep the solid card colour.
+  With the SuperNotify colours nothing changes.
+
+### Fixed
+- **All cards**: with SuperNotify 2.18, where each delivery switch is listed under its transport's own device, a
+  delivery's alias was shown with the transport in front ("Mobile Push Delivery Notifica sul telefono"), and a
+  delivery without an alias showed its transport and technical name as if they were one. The device part is now
+  dropped, so the alias reads as before ("Notifica sul telefono"). Names from earlier SuperNotify versions are
+  unchanged.
+- **appliances** (0.3.1): a "time left" entity that holds a timestamp (the moment the cycle ends) is read as that
+  moment. It was read as a number of minutes - the year, about 34 hours - so the end shown was a day and a half off.
 
 ## [1.0.0] - 2026-10-23
 

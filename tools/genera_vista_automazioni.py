@@ -9,9 +9,11 @@ notify.supernotify, resolves their real entity_id (via the entity registry
 when the automation has an explicit `id:`, otherwise by slugifying its
 alias the same way Home Assistant does) and writes:
 
-  config/www/supernotify/automations.json
-      -> manifest read live by supernotify-automations-card at
-         /local/supernotify/automations.json
+  config/supernotify/automations.json
+      -> manifest exposed by a command_line sensor (sensor.supernotify_automations,
+         see docs/cards/automations.md) and read from its attributes by
+         supernotify-automations-card. It is deliberately NOT under config/www:
+         everything there is served at /local/ without authentication.
 
   examples/dashboard_supernotify.yaml   (optional, only if DASHBOARD_STORAGE
       exists) -> a starting-point "Automations" view you can paste into a
@@ -57,7 +59,9 @@ WORKSPACE = Path(__file__).resolve().parent.parent
 OUT_YAML = WORKSPACE / "examples" / "dashboard_supernotify.yaml"
 DASHBOARD_STORAGE = HA_CONFIG_DIR / ".storage" / "lovelace.dashboard_supernotify"
 ENTITY_REGISTRY = HA_CONFIG_DIR / ".storage" / "core.entity_registry"
-MANIFEST = HA_CONFIG_DIR / "www" / "supernotify" / "automations.json"
+# 1.2.0: outside www (was www/supernotify/automations.json, readable by anyone via /local/)
+MANIFEST = HA_CONFIG_DIR / "supernotify" / "automations.json"
+OLD_MANIFEST = HA_CONFIG_DIR / "www" / "supernotify" / "automations.json"
 
 # ---------------------------------------------------------------- YAML loader
 class HALoader(yaml.SafeLoader):
@@ -194,7 +198,7 @@ def build_view(autos):
 
 # ---------------------------------------------------------------- manifest
 def write_manifest(autos):
-    """JSON manifest for supernotify-automations-card (served from /local/)."""
+    """JSON manifest for supernotify-automations-card (read through a command_line sensor)."""
     import datetime
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -209,6 +213,10 @@ def write_manifest(autos):
     MANIFEST.write_text(json.dumps(payload, ensure_ascii=False, indent=1),
                         encoding="utf-8")
     print(f"Manifest: {MANIFEST} ({len(payload['automations'])} automations)")
+    # 1.2.0: the copy of before under www/ was public: remove it
+    if OLD_MANIFEST.exists():
+        OLD_MANIFEST.unlink()
+        print(f"Removed the old public manifest {OLD_MANIFEST}")
 
 # ------------------------------------------------------------------- main
 def main():

@@ -1,6 +1,7 @@
 // v0.85.0: archivio e "perché" in UNA card - lista a sinistra, dettaglio a destra;
 // supernotify-why-card resta come alias.
 // 1.0.0 (fase 3): le righe dell'archivio hanno un solo listener sulla lista: .click() invece di .onclick().
+// 2026-11-04: nei primi 15 minuti dopo mezzanotte le notifiche finte restano tutte di oggi («oggi in una riga» falliva).
 import { JSDOM } from "jsdom";
 import fs from "fs";
 
@@ -16,7 +17,10 @@ new dom.window.Function(SRC)();
 let fail = 0;
 const ok = (c, m) => { console.log((c ? "  PASS  " : "  FAIL  ") + m); if (!c) fail++; };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const iso = (sAgo) => new Date(Date.now() - sAgo * 1000).toISOString();
+// the fake notifications are up to 15 minutes old: just after midnight they are squeezed into today, or "5 oggi" fails
+const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+const squeeze = Math.max(0.0005, Math.min(1, (Date.now() - midnight.getTime() - 1000) / 900000));
+const iso = (sAgo) => new Date(Date.now() - sAgo * 1000 * squeeze).toISOString();
 
 // three camera alerts in a row, one failed channel, one that went nowhere (paused)
 const cam = (id, sAgo) => ({ id, created: iso(sAgo), message: `Movimento Camera Ingresso\nalle ${sAgo}`,
