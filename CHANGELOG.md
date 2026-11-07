@@ -18,6 +18,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   With the SuperNotify colours nothing changes.
 
 ### Fixed
+- **All cards**: with SuperNotify 2.18, where each delivery switch is listed under its transport's own device, a
+  delivery's alias was shown with the transport in front ("Mobile Push Delivery Notifica sul telefono"), and a
+  delivery without an alias showed its transport and technical name as if they were one. The device part is now
+  dropped, so the alias reads as before ("Notifica sul telefono"). Names from earlier SuperNotify versions are
+  unchanged.
 - **appliances** (0.3.1): a "time left" entity that holds a timestamp (the moment the cycle ends) is read as that
   moment. It was read as a number of minutes - the year, about 34 hours - so the end shown was a day and a half off.
 

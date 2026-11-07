@@ -2216,12 +2216,17 @@ function snStyle(hass, style) {
  * "SuperNotify Condizione scenario Morning"): strip the integration name,
  * the type prefix and the "enabled" suffix. Returns "" when nothing is left
  * or the name is just the technical one.
+ * SuperNotify 2.18 lists each delivery switch under its transport's own device,
+ * so the name starts with that device ("Mobile Push Delivery Notifica sul
+ * telefono abilitata"): the device part before "Delivery" is dropped too.
  */
+const SN_NAME_TYPE_RE = /^(Condizione scenario|Scenario Condition|Scenario manuale|Scenario Manual|Scenario|Recipient|Destinatario|Delivery|Transport)\s+/i;
 function snCleanName(fn, techName) {
   if (!fn) return "";
-  const n = String(fn)
-    .replace(/^SuperNotify\s+/i, "")
-    .replace(/^(Condizione scenario|Scenario Condition|Scenario manuale|Scenario Manual|Scenario|Recipient|Destinatario|Delivery|Transport)\s+/i, "")
+  let n = String(fn).replace(/^SuperNotify\s+/i, "");
+  if (!SN_NAME_TYPE_RE.test(n)) n = n.replace(/^.+?\s(?=Delivery\s)/i, "");
+  n = n
+    .replace(SN_NAME_TYPE_RE, "")
     .replace(/\s+(abilitato|abilitata|attivo|enabled)$/i, "")
     .trim();
   return n && n !== techName ? n : "";
