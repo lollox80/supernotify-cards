@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-07
+
 ### Added
 - **All cards**: `style: auto` (also "Automatic" in the visual editor's Colours): the cards follow the Home
   Assistant theme when one other than the default is in use - picked in the profile, else the server's - and keep
