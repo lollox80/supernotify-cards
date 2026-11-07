@@ -5,6 +5,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-08
+
+> **Action needed if you use the automations card.** Its list no longer comes from
+> `/local/supernotify/automations.json`: set up `sensor.supernotify_automations` as described in
+> [the card's page](docs/cards/automations.md), then delete `config/www/supernotify/automations.json`.
+
+### Security
+- **automations** (0.23.0), **dashboard strategy**: the list of the automations that notify (entity id, alias,
+  category, source file) was written by `tools/genera_vista_automazioni.py` to `config/www/supernotify/`, which Home
+  Assistant serves at `/local/` without authentication, so anyone who could reach the instance could read it
+  (hacs/default#11548). The script now writes it to `config/supernotify/automations.json` and removes the old copy
+  under `www`; a `command_line` sensor exposes it in its attributes and the card and the strategy read it from
+  `sensor.supernotify_automations` (option `manifest_entity`), through the same authenticated connection as every
+  other entity. The list also refreshes on its own when the sensor changes.
+
+### Removed
+- **automations**: the `manifest_url` option (ignored if still in a dashboard) and the strategy's request to that URL.
+
 ## [1.1.0] - 2026-11-07
 
 ### Added

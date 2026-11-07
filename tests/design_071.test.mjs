@@ -6,8 +6,9 @@ const dom = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBe
 global.window = dom.window; global.document = dom.window.document; global.CustomEvent = dom.window.CustomEvent;
 global.HTMLElement = dom.window.HTMLElement; global.customElements = dom.window.customElements;
 dom.window.customCards = [];
-let manifestOk = true;
-dom.window.fetch = async (url) => ({ ok: manifestOk && String(url).endsWith("automations.json") });
+// 1.2.0: the automations list is the sensor's attributes, nothing is fetched from /local/
+let fetched = 0;
+dom.window.fetch = async () => { fetched++; return { ok: true }; };
 new dom.window.Function(fs.readFileSync("dist/supernotify-control-card.js", "utf8"))();
 
 let fail = 0;
@@ -21,6 +22,7 @@ const fullStates = {
   "input_datetime.notifier_start_morning": S("07:00:00"),
   "input_number.notifier_morning_volume": S("0.5"),
   "sensor.supernotify_notifications": S("10"),
+  "sensor.supernotify_automations": S("1", { generated: "2026-11-08T00:00:00+00:00", automations: [{ e: "automation.a", n: "A", c: "Casa" }] }),
 };
 const hass = (states, isAdmin = true, language = "it") => ({ language, states, user: { id: "u1", is_admin: isAdmin }, callWS: async () => ({}) });
 const Strat = customElements.get("ll-strategy-dashboard-supernotify");
@@ -37,11 +39,11 @@ ok(d1.views[0].title === "Casa" && d1.title === "SuperNotify", "titoli in italia
 const setup = d1.views.find((v) => v.path === "setup");
 const bands = setup.sections.flatMap((s) => s.cards).find((c) => c.type === "custom:supernotify-bands-card");
 ok(bands && bands.bands && bands.bands.morning && bands.bands.morning.volume === "input_number.notifier_morning_volume", "fasce prese dagli helper (getStubConfig)");
-ok(setup.sections.flatMap((s) => s.cards).some((c) => c.type === "custom:supernotify-automations-card"), "automazioni quando il manifest c'è");
+ok(setup.sections.flatMap((s) => s.cards).some((c) => c.type === "custom:supernotify-automations-card"), "automazioni quando il sensore ha l'elenco");
+ok(fetched === 0, "nessuna richiesta a /local/ (1.2.0)");
 ok(d1.views.every((v) => v.type === "sections" && v.max_columns >= 1), "viste a sezioni");
 
 // utente non admin, installazione minima, niente manifest
-manifestOk = false;
 const d2 = await Strat.generate({ type: "custom:supernotify" }, hass({ "switch.supernotify_delivery_email": S() }, false, "en"));
 console.log("    ", kinds(d2).join("  "));
 ok(!d2.views.some((v) => v.path === "tools"), "niente Strumenti per chi non è admin");
@@ -52,7 +54,6 @@ ok(setup2.max_columns === 2 && setup2.sections[0].column_span === 2, "una sola s
 ok(d2.views[0].title === "Home", "titoli in inglese");
 
 // opzioni: views, hide, cards, title
-manifestOk = true;
 const d3 = await Strat.generate({ type: "custom:supernotify", title: "Notifiche", views: ["stats", "home"], hide: ["archive"],
   cards: { control: { tiles: ["dnd", "snooze"] } } }, hass(fullStates));
 ok(d3.title === "Notifiche" && d3.views.map((v) => v.path).join() === "stats,home", "views sceglie e ordina, title");
