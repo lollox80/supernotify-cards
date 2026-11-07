@@ -22,6 +22,7 @@
 //   npm i --no-save playwright @mdi/js        (once; or set NODE_PATH to where they are)
 //   node tools/showcase.mjs                    (all images)
 //   node tools/showcase.mjs control why        (only some)
+// 2026-10-30 - archive documents carry failed_calls rather than failedcalls, as the card now reads.
 import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
@@ -118,7 +119,7 @@ for (let i = 0; i < 9; i++) {
 
 // archive: the notifications as SuperNotify 2.13 archives them (enquire_archive reads these)
 const ANAME = { "person.alex": "Alex", "person.sam": "Sam", "person.robin": "Robin" };
-const ok = (target, calls, extra = {}) => [{ target, calls: Array.from({ length: calls }, () => ({})), failedcalls: [], ...extra }];
+const ok = (target, calls, extra = {}) => [{ target, calls: Array.from({ length: calls }, () => ({})), failed_calls: [], ...extra }];
 const skip = (reason, extra = {}) => ({ skipped: { suppression_reason: reason, ...extra } });
 const OCC = { home: [{ person: "person.alex" }, { person: "person.sam" }], not_home: [{ person: "person.robin" }] };
 const adoc = (id, ago, title, message, priority, outcome, deliveries, extra = {}) => {
@@ -142,7 +143,7 @@ const ARCHIVE = [
     mobile_push: { success: ok({ mobile_app_id: ["mobile_app_alex_phone"] }, 1) },
     alexa_announce: skip("SCENARIO") }, { scenarios: ["people_home"] }),
   adoc("cccc3333-0000", 6200, "Garage door open for 10 minutes", "Garage door open for 10 minutes", "critical", "failed", {
-    mobile_push: { error: [{ target: { mobile_app_id: ["mobile_app_alex_phone"] }, calls: [], failedcalls: [{ exception: "Push service unreachable" }] }] } }),
+    mobile_push: { error: [{ target: { mobile_app_id: ["mobile_app_alex_phone"] }, calls: [], failed_calls: [{ exception: "Push service unreachable" }] }] } }),
   adoc("dddd4444-0000", 9800, "Good morning! 14°C and sunny", "Good morning! 14°C and sunny", "low", "success", {
     tts: { success: ok({ entity_id: ["media_player.kitchen"] }, 1, { spoken_message: "Good morning, it is fourteen degrees and sunny outside",
       data: { message_template: "<amazon:effect name=\"whispered\">{{ message }}</amazon:effect>" } }) } }),
@@ -160,7 +161,7 @@ const asum = (c) => {
     if (o.skipped) { deliveries[name] = { skipped: o.skipped.suppression_reason }; continue; }
     const s = {};
     for (const k of ["success", "suppressed", "error"]) if ((o[k] || []).length) s[k] = o[k].length;
-    const errs = (o.error || []).flatMap((e) => (e.failedcalls || []).map((x) => x.exception).filter(Boolean));
+    const errs = (o.error || []).flatMap((e) => (e.failed_calls || []).map((x) => x.exception).filter(Boolean));
     if (errs.length) s.errors = errs;
     deliveries[name] = s;
   }
