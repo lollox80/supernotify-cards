@@ -2525,6 +2525,7 @@ function snArchiveStamp(doc) {
 }
 
 function snArchiveTitle(doc, message) {
+  if (doc && doc.title) return snCut(doc.title, 120);
   const cv = (doc && doc.condition_variables) || {};
   if (cv.notification_title) return snCut(cv.notification_title, 120);
   return snCut(String(message || "").split("\n")[0], 120);
