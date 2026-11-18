@@ -20,7 +20,7 @@ const VERSION = "1.1.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.40.0",
+  control: "0.40.1",
   overview: "0.41.0",
   bands: "0.22.0",
   deliveries: "0.34.0",
@@ -4213,7 +4213,7 @@ class SupernotifyControlCard extends SnCard {
     el.innerHTML = snIconify(defs
       .map((d, i) =>
         `<div class="ctile ${d.cls}" data-i="${i}" role="button" tabindex="0">
-           ${this._icon(d.icon)}<span class="tx"><b>${d.name}</b><span class="ts">${d.sub}</span></span>
+           ${this._icon(d.icon)}<span class="tx"><b>${snEsc(d.name)}</b><span class="ts">${d.sub}</span></span>
          </div>`)
       .join(""), this._config);
     el.querySelectorAll(".ctile").forEach((node) => {
@@ -4505,12 +4505,12 @@ class SupernotifyControlCard extends SnCard {
         const shown = isFold ? ents.filter((e) => e.on) : ents;
         const pills = shown
           .map((e) => `<span class="mpill ${e.on ? "on" : ""}" data-e="${e.id}" role="switch" aria-checked="${e.on}">
-                      <span class="pd"></span>${e.name}</span>`)
+                      <span class="pd"></span>${snEsc(e.name)}</span>`)
           .join("");
         const counter = `<span class="gc ${nOn ? "" : "zero"}">${nOn}/${ents.length} ${T.grp_active}</span>`;
         const chev = foldable ? `<span class="gv">▾</span>` : "";
         return `<div class="mgroup ${foldable ? "clk" : ""} ${isFold ? "fold" : ""}" data-g="${gi}" role="${foldable ? "button" : ""}"
-                     ${foldable ? `aria-expanded="${!isFold}" tabindex="0"` : ""}>${g.name || ""}${counter}${chev}</div><div>${pills}</div>`;
+                     ${foldable ? `aria-expanded="${!isFold}" tabindex="0"` : ""}>${snEsc(g.name)}${counter}${chev}</div><div>${pills}</div>`;
       })
       .join(""), this._config);
     el.querySelectorAll(".mpill").forEach((node) => {

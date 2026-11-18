@@ -9,6 +9,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Archive, why, appliances**: notifications are ordered newest first by the moment they were created, not by the
   text of their time. At the end of summer time the hour after the change was listed before the hour before it,
   and two notifications in the same second could swap (one with microseconds, one without).
+- **Control** (0.40.1): the names on the group pills, on the group headers and on the toggle tiles are shown as
+  text. An entity name such as "Luce <sala>" lost the part in angle brackets, and markup in a name was drawn.
 
 ## [1.1.0] - 2026-11-07
 
