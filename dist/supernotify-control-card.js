@@ -3082,9 +3082,13 @@ function snArchiveSig(list) {
   return s;
 }
 
-/** Newest first, by the ISO creation time. */
+/**
+ * Newest first, by the ISO creation time: by the moment, not the text - the offset changes at the
+ * end of summer time and localeCompare puts "." (microseconds) before "+"; an unreadable time goes last.
+ */
 function snByCreatedDesc(a, b) {
-  return String(b.created || "").localeCompare(String(a.created || ""));
+  const t = (d) => { const v = Date.parse(d.created || ""); return Number.isFinite(v) ? v : -Infinity; };
+  return (t(b) - t(a)) || String(b.created || "").localeCompare(String(a.created || ""));
 }
 
 // 1.0.0: the two lists of snArchiveStore (full documents / light summaries) - their fields and what they ask

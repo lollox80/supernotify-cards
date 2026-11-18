@@ -5,6 +5,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Archive, why, appliances**: notifications are ordered newest first by the moment they were created, not by the
+  text of their time. At the end of summer time the hour after the change was listed before the hour before it,
+  and two notifications in the same second could swap (one with microseconds, one without).
+
 ## [1.1.0] - 2026-11-07
 
 ### Added
