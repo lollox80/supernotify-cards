@@ -13,6 +13,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   text. An entity name such as "Luce <sala>" lost the part in angle brackets, and markup in a name was drawn.
 - **Bands** (0.22.1): a band's own `name` is shown as text, and the labels of its time and volume fields keep the
   whole name even when it has quotes in it.
+- **Scenarios** (0.34.1): the `name` of a group from `groups:` is shown as text in its header.
 
 ## [1.1.0] - 2026-11-07
 

@@ -26,7 +26,7 @@ const SN_CARD_VERSIONS = {
   deliveries: "0.34.0",
   transports: "0.28.0",
   recipients: "0.32.0",
-  scenarios: "0.34.0",
+  scenarios: "0.34.1",
   simulator: "0.19.0",
   composer: "0.26.0",
   automations: "0.22.0",
@@ -6240,7 +6240,7 @@ class SupernotifyScenariosCard extends SnCard {
           .filter(Boolean);
         items.forEach((s) => used.add(s.name));
         if (!items.length) continue;
-        html += `<div class="sec">${g.name || ""}</div>` +
+        html += `<div class="sec">${snEsc(g.name)}</div>` +
           items.map((s) => this._rowHtml(s, all.indexOf(s), active)).join("");
       }
       const rest = all.filter((s) => !used.has(s.name)).sort(sortFn);
