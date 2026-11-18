@@ -22,7 +22,7 @@ const VERSION = "1.1.0"; // bundle / HACS release
 const SN_CARD_VERSIONS = {
   control: "0.40.1",
   overview: "0.41.0",
-  bands: "0.22.0",
+  bands: "0.22.1",
   deliveries: "0.34.0",
   transports: "0.28.0",
   recipients: "0.32.0",
@@ -5326,11 +5326,11 @@ class SupernotifyBandsCard extends SnCard {
         const isAct = b.key === active;
         const isMute = b.vol === 0;
         return `<div class="row ${isAct ? "act" : ""} ${isMute ? "mute" : ""}" data-row="${b.key}">
-        <div class="who"><b>${b.icon} ${b.name}</b> <span class="badge" data-now ${isAct ? "" : "hidden"}>${T.now}</span><span class="badge mute" data-m="${b.key}" ${isMute ? "" : "hidden"}>\u{1F507} ${T.no_voice}</span>
+        <div class="who"><b>${b.icon} ${snEsc(b.name)}</b> <span class="badge" data-now ${isAct ? "" : "hidden"}>${T.now}</span><span class="badge mute" data-m="${b.key}" ${isMute ? "" : "hidden"}>\u{1F507} ${T.no_voice}</span>
           <div class="rng">${T.until} ${next.hhmm || "\u2014"}${i === bands.length - 1 ? " \u00b7 " + T.crosses : ""}</div>
         </div>
-        <input type="time" value="${b.hhmm}" data-e="${b.start}" aria-label="${b.name} - ${T.start}" title="${T.start}">
-        <input type="range" class="volwrap" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}" aria-label="${b.name} - ${T.volume}" title="${T.volume}">
+        <input type="time" value="${b.hhmm}" data-e="${b.start}" aria-label="${snEsc(b.name)} - ${T.start}" title="${T.start}">
+        <input type="range" class="volwrap" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}" aria-label="${snEsc(b.name)} - ${T.volume}" title="${T.volume}">
         <span class="pct"><span data-l="${b.key}">${b.vol != null ? b.vol : "\u2014"}</span>%</span>
       </div>`;
       }).join(""), this._config);

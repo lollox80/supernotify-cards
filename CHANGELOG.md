@@ -11,6 +11,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and two notifications in the same second could swap (one with microseconds, one without).
 - **Control** (0.40.1): the names on the group pills, on the group headers and on the toggle tiles are shown as
   text. An entity name such as "Luce <sala>" lost the part in angle brackets, and markup in a name was drawn.
+- **Bands** (0.22.1): a band's own `name` is shown as text, and the labels of its time and volume fields keep the
+  whole name even when it has quotes in it.
 
 ## [1.1.0] - 2026-11-07
 
