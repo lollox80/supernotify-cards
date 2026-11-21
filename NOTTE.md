@@ -19,14 +19,14 @@ Giro 2:
 - `9035e0a` voce 1.3: FAQ "La card ha un colore diverso" in docs/configuration.md (style theme/auto e l'insidia
   della vista con `theme: Backend-selected`).
 - Voce 1.4 (parti "prodotto" a colori fissi): nessuna modifica, come da nota.
-- NOTE_DA_IMPLEMENTARE.md (file locale nella cartella originale) non l'ho toccato: va segnata come fatta a mano.
+- docs/note-da-implementare.md (file locale nella cartella originale) non l'ho toccato: va segnata come fatta a mano.
 
 Giro 3 (ripresa):
 - Albero pulito all'avvio, nessun lavoro lasciato a metà.
 - Suite completa eseguita due volte di fila sul ramo: 64/64 verde entrambe le volte (nessun test instabile
   ricomparso). `node -c dist/supernotify-control-card.js`, `tools/check_card_versions.py --base main`
   ("card versions OK"), `py_compile` dei tools e `hacs.json` verdi.
-- NOTE_DA_IMPLEMENTARE.md: tutte le voci (1.1–1.4) risultano già fatte nei giri precedenti; nessun codice
+- docs/note-da-implementare.md: tutte le voci (1.1–1.4) risultano già fatte nei giri precedenti; nessun codice
   nuovo in questo giro.
 
 Giro 4 (revisione dei commit di stanotte e degli ultimi 7 giorni: sono gli 8 di stanotte):
