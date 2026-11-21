@@ -28,7 +28,7 @@ type: custom:supernotify-archive-card
 | `limit` | no | notifications in the list (default 150, max 500) |
 | `trigger_entity` | no | entity whose change means "a notification was sent" (default `sensor.supernotify_notifications`) |
 | `intro` | no | info banner at the top of the card |
-| `style` | no | `supernotify` (default) or `theme` |
+| `style` | no | `supernotify` (default), `theme` or `auto` (see [Configuration](../configuration.md)) |
 | `pause` | no | `false` hides the pause bar under the detail (default shown when SuperNotify has `supernotify.snooze`) |
 | `priority_filters` | no | `false` hides the **Critical** and **High** filters (default shown when the archive has some) |
 | `group_repeats` | no | `false` lists every notification on its own line (default: repeats in a row are one "×N" line) |

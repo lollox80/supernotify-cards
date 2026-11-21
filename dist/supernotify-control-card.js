@@ -20,13 +20,13 @@ const VERSION = "1.1.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.40.0",
+  control: "0.40.1",
   overview: "0.41.0",
-  bands: "0.22.0",
+  bands: "0.22.1",
   deliveries: "0.34.0",
   transports: "0.28.0",
   recipients: "0.32.0",
-  scenarios: "0.34.0",
+  scenarios: "0.34.1",
   simulator: "0.19.0",
   composer: "0.26.0",
   automations: "0.22.0",
@@ -3082,9 +3082,13 @@ function snArchiveSig(list) {
   return s;
 }
 
-/** Newest first, by the ISO creation time. */
+/**
+ * Newest first, by the ISO creation time: by the moment, not the text - the offset changes at the
+ * end of summer time and localeCompare puts "." (microseconds) before "+"; an unreadable time goes last.
+ */
 function snByCreatedDesc(a, b) {
-  return String(b.created || "").localeCompare(String(a.created || ""));
+  const t = (d) => { const v = Date.parse(d.created || ""); return Number.isFinite(v) ? v : -Infinity; };
+  return (t(b) - t(a)) || String(b.created || "").localeCompare(String(a.created || ""));
 }
 
 // 1.0.0: the two lists of snArchiveStore (full documents / light summaries) - their fields and what they ask
@@ -4209,7 +4213,7 @@ class SupernotifyControlCard extends SnCard {
     el.innerHTML = snIconify(defs
       .map((d, i) =>
         `<div class="ctile ${d.cls}" data-i="${i}" role="button" tabindex="0">
-           ${this._icon(d.icon)}<span class="tx"><b>${d.name}</b><span class="ts">${d.sub}</span></span>
+           ${this._icon(d.icon)}<span class="tx"><b>${snEsc(d.name)}</b><span class="ts">${d.sub}</span></span>
          </div>`)
       .join(""), this._config);
     el.querySelectorAll(".ctile").forEach((node) => {
@@ -4501,12 +4505,12 @@ class SupernotifyControlCard extends SnCard {
         const shown = isFold ? ents.filter((e) => e.on) : ents;
         const pills = shown
           .map((e) => `<span class="mpill ${e.on ? "on" : ""}" data-e="${e.id}" role="switch" aria-checked="${e.on}">
-                      <span class="pd"></span>${e.name}</span>`)
+                      <span class="pd"></span>${snEsc(e.name)}</span>`)
           .join("");
         const counter = `<span class="gc ${nOn ? "" : "zero"}">${nOn}/${ents.length} ${T.grp_active}</span>`;
         const chev = foldable ? `<span class="gv">▾</span>` : "";
         return `<div class="mgroup ${foldable ? "clk" : ""} ${isFold ? "fold" : ""}" data-g="${gi}" role="${foldable ? "button" : ""}"
-                     ${foldable ? `aria-expanded="${!isFold}" tabindex="0"` : ""}>${g.name || ""}${counter}${chev}</div><div>${pills}</div>`;
+                     ${foldable ? `aria-expanded="${!isFold}" tabindex="0"` : ""}>${snEsc(g.name)}${counter}${chev}</div><div>${pills}</div>`;
       })
       .join(""), this._config);
     el.querySelectorAll(".mpill").forEach((node) => {
@@ -5322,11 +5326,11 @@ class SupernotifyBandsCard extends SnCard {
         const isAct = b.key === active;
         const isMute = b.vol === 0;
         return `<div class="row ${isAct ? "act" : ""} ${isMute ? "mute" : ""}" data-row="${b.key}">
-        <div class="who"><b>${b.icon} ${b.name}</b> <span class="badge" data-now ${isAct ? "" : "hidden"}>${T.now}</span><span class="badge mute" data-m="${b.key}" ${isMute ? "" : "hidden"}>\u{1F507} ${T.no_voice}</span>
+        <div class="who"><b>${b.icon} ${snEsc(b.name)}</b> <span class="badge" data-now ${isAct ? "" : "hidden"}>${T.now}</span><span class="badge mute" data-m="${b.key}" ${isMute ? "" : "hidden"}>\u{1F507} ${T.no_voice}</span>
           <div class="rng">${T.until} ${next.hhmm || "\u2014"}${i === bands.length - 1 ? " \u00b7 " + T.crosses : ""}</div>
         </div>
-        <input type="time" value="${b.hhmm}" data-e="${b.start}" aria-label="${b.name} - ${T.start}" title="${T.start}">
-        <input type="range" class="volwrap" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}" aria-label="${b.name} - ${T.volume}" title="${T.volume}">
+        <input type="time" value="${b.hhmm}" data-e="${b.start}" aria-label="${snEsc(b.name)} - ${T.start}" title="${T.start}">
+        <input type="range" class="volwrap" min="0" max="100" value="${b.vol != null ? b.vol : 0}" data-e="${b.volume || ""}" data-k="${b.key}" aria-label="${snEsc(b.name)} - ${T.volume}" title="${T.volume}">
         <span class="pct"><span data-l="${b.key}">${b.vol != null ? b.vol : "\u2014"}</span>%</span>
       </div>`;
       }).join(""), this._config);
@@ -6236,7 +6240,7 @@ class SupernotifyScenariosCard extends SnCard {
           .filter(Boolean);
         items.forEach((s) => used.add(s.name));
         if (!items.length) continue;
-        html += `<div class="sec">${g.name || ""}</div>` +
+        html += `<div class="sec">${snEsc(g.name)}</div>` +
           items.map((s) => this._rowHtml(s, all.indexOf(s), active)).join("");
       }
       const rest = all.filter((s) => !used.has(s.name)).sort(sortFn);
