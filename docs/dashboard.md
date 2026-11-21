@@ -33,7 +33,7 @@ The views are built for whoever opens the dashboard, every time:
 - transports, scenarios and recipients appear only when SuperNotify has them;
 - the time bands card only when helpers named like the [bands example](cards/bands.md) exist
   (`input_datetime.…start_<band>` + `input_number.…<band>_volume`);
-- the automations card only when its manifest (`/local/supernotify/automations.json`) is there;
+- the automations card only when `sensor.supernotify_automations` holds the list (or the entity set in `cards: automations: manifest_entity`);
 - the Tools view only for administrators.
 
 The links between cards (a channel off, a person, a scenario) open the right view.

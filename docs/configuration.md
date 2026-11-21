@@ -49,7 +49,7 @@ helpers and utility meter, the version checks). On an older SuperNotify stay on 
 | Channels: how the last send went (`last_outcome`), Critical / High filters in one call (`enquire_archive` `priority`) | 2.14 |
 
 The automations card works with any version but needs its manifest generator
-(`tools/genera_vista_automazioni.py`), see [its page](cards/automations.md).
+(`tools/genera_vista_automazioni.py`) and a `command_line` sensor, see [its page](cards/automations.md).
 
 ## Versions
 The bundle has one release version (HACS, this repo's tags) and **each card has its own
