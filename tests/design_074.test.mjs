@@ -94,6 +94,9 @@ sr.querySelector('.sc[data-g="who"][data-v="EVERYONE"]').click();
 sr.querySelector('.sc[data-g="min"][data-v="0"]').click();
 calls.length = 0;
 sr.querySelector("#snzGo").click(); await wait(30);
+// control 0.41.0: silencing everything asks for a second tap
+ok(!calls.some((c) => c[1] === "silence"), "pannello: silence everything chiede conferma");
+sr.querySelector("#snzGo").click(); await wait(30);
 const p2 = (calls.find((c) => c[1] === "silence") || [])[2] || {};
 ok(!("command" in p2) && p2.scope === "everything" && !("minutes" in p2) && !("name" in p2), `pannello: silence everything (${JSON.stringify(p2)})`);
 // riprendi una pausa in corso

@@ -20,7 +20,7 @@ const VERSION = "1.2.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.40.1",
+  control: "0.41.0",
   overview: "0.41.0",
   bands: "0.22.1",
   deliveries: "0.34.0",
@@ -46,12 +46,12 @@ const SN_STRINGS = {
     presence: "Presence", time_band: "Time band", quiet: "Quiet",
     act_scen: "Active scenarios", on: "on", off: "off", active: "active",
     dnd: "Do not disturb", tap_silence: "tap to silence",
-    snooze: "Snooze", min: "min", pause_nc: "pause non-critical",
-    snoozed: "Snoozed", until: "until", tap_clear: "tap to clear",
+    snooze: "Pause", min: "min", pause_nc: "pause non-critical",
+    snoozed: "Paused", until: "until", tap_clear: "tap to resume",
     announce: "Announce", intercom: "intercom",
     announce_ph: "Announce on all speakers…", send: "Send",
-    announced: "Announced", cleared: "Snoozes cleared",
-    snoozed_for: "Snoozed non-critical notifications for",
+    announced: "Announced", cleared: "Notifications resumed",
+    snoozed_for: "Non-critical notifications paused for",
     sent: "Sent",
     yesterday: "yesterday", deliveries: "Deliveries",
     last_notif: "Last notification",
@@ -167,6 +167,18 @@ const SN_STRINGS = {
     adv_dc: "Channel settings for this notification", adv_dc_ph: "key: value, one per line", adv_dc_add: "+ channel",
     snz_active: "Paused now", snz_resume: "Resume", snz_resume_all: "Resume everything", snz_until_resumed: "until resumed",
     snz_done: "Paused", snz_resumed: "Resumed",
+    snz_go_all: "Silence everything, critical too", snz_go_forever: "Pause until I resume", snz_confirm: "Tap again to confirm",
+    snz_warn_all: "Alarms and critical alerts will not reach anyone either.",
+    snz_warn_all_me: "Alarms and critical alerts will not reach you either.",
+    snz_warn_forever: "This pause does not end on its own: resume it when you are done.",
+    alert_all: "Everything is silenced, critical alerts too", alert_forever: "Notifications are paused with no end time",
+    sn_down: "SuperNotify is not responding: pauses and the last notification may be out of date.", sn_retry: "Retry",
+    err_generic: "That did not work.", err_perm: "This user is not allowed to do it: ask an administrator.",
+    err_missing: "SuperNotify is not available: check that it is installed and loaded.",
+    err_timeout: "Home Assistant did not answer: check the connection and try again.",
+    err_announce: "Couldn't announce on {x}.", err_toggle: "Couldn't change {x}.",
+    st_notif: "Notifications", st_normal: "normal", st_all: "all silenced", st_dnd: "do not disturb", st_quiet: "quiet",
+    st_paused: "paused", st_part_1: "normal · 1 pause", st_part: "normal · {n} pauses",
     no_notif: "no notification yet",
   },
   it: {
@@ -174,10 +186,10 @@ const SN_STRINGS = {
     act_scen: "Scenari attivi", on: "attivo", off: "spento", active: "attivo",
     dnd: "Non disturbare", tap_silence: "tocca per silenziare",
     snooze: "Pausa", min: "min", pause_nc: "pausa ai non critici",
-    snoozed: "In pausa", until: "fino alle", tap_clear: "tocca per annullare",
+    snoozed: "In pausa", until: "fino alle", tap_clear: "tocca per riprendere",
     announce: "Annuncia", intercom: "interfono",
     announce_ph: "Annuncia su tutti gli Echo di casa…", send: "Invia",
-    announced: "Annunciato", cleared: "Pause annullate",
+    announced: "Annunciato", cleared: "Notifiche riprese",
     snoozed_for: "Notifiche non critiche in pausa per",
     sent: "Inviate",
     yesterday: "ieri", deliveries: "Delivery",
@@ -293,6 +305,18 @@ const SN_STRINGS = {
     adv_dc: "Impostazioni di un canale per questa notifica", adv_dc_ph: "chiave: valore, uno per riga", adv_dc_add: "+ canale",
     snz_active: "In pausa adesso", snz_resume: "Riprendi", snz_resume_all: "Riprendi tutto", snz_until_resumed: "finché non riprendi",
     snz_done: "In pausa", snz_resumed: "Ripreso",
+    snz_go_all: "Silenzia tutto, anche le critiche", snz_go_forever: "Metti in pausa finché non riprendo", snz_confirm: "Tocca di nuovo per confermare",
+    snz_warn_all: "Nemmeno allarmi e avvisi critici arriveranno a nessuno.",
+    snz_warn_all_me: "Nemmeno allarmi e avvisi critici ti arriveranno.",
+    snz_warn_forever: "Questa pausa non finisce da sola: riprendi quando hai finito.",
+    alert_all: "Tutto silenziato, anche gli avvisi critici", alert_forever: "Notifiche in pausa senza scadenza",
+    sn_down: "SuperNotify non risponde: pause e ultima notifica potrebbero non essere aggiornate.", sn_retry: "Riprova",
+    err_generic: "Non è andata.", err_perm: "Questo utente non può farlo: chiedi a un amministratore.",
+    err_missing: "SuperNotify non è disponibile: controlla che sia installato e caricato.",
+    err_timeout: "Home Assistant non ha risposto: controlla la connessione e riprova.",
+    err_announce: "Annuncio non riuscito su {x}.", err_toggle: "Non sono riuscito a cambiare {x}.",
+    st_notif: "Notifiche", st_normal: "normali", st_all: "tutte silenziate", st_dnd: "non disturbare", st_quiet: "silenziose",
+    st_paused: "in pausa", st_part_1: "normali · 1 pausa", st_part: "normali · {n} pause",
     no_notif: "nessuna notifica ancora",
   },
 };
@@ -2187,7 +2211,7 @@ function snPalette(dark, style) {
       onBrand: "var(--text-primary-color, #fff)",
       ok: "var(--success-color, #17733d)", warn: "var(--warning-color, #a04f00)",
       okSoft: "rgba(var(--rgb-success-color, 23,115,61), .10)",
-      crit: "var(--error-color, #c62828)",
+      crit: "var(--error-color, #c62828)", critSoft: "rgba(var(--rgb-error-color, 198,40,40), .10)",
       warnSoft: "rgba(var(--rgb-warning-color, 255,166,0), .16)",
       warnLine: "var(--warning-color, #f0c48a)", warnInk: "var(--primary-text-color)",
       line: "var(--divider-color)", panel: "var(--card-background-color)",
@@ -2199,11 +2223,11 @@ function snPalette(dark, style) {
   }
   const p = dark
     ? { brand: "#03a9f4", brandD: "#8fd0ff", onBrand: "#06131d", ok: "#7fe0a5", okSoft: "rgba(127,224,165,.10)", warn: "#f0b050",
-        crit: "#ff9a9a", warnSoft: "rgba(240,160,32,.18)", warnLine: "#8a5a10", warnInk: "#ffd8a3",
+        crit: "#ff9a9a", critSoft: "rgba(255,154,154,.12)", warnSoft: "rgba(240,160,32,.18)", warnLine: "#8a5a10", warnInk: "#ffd8a3",
         line: "#2b3441", panel: "#1a222c", soft: "#16212c", ink: "#e6ecf3", muted: "#9aa8b6",
         dot: "#3a4653" }
     : { brand: "#0277bd", brandD: "#01579b", onBrand: "#fff", ok: "#17733d", okSoft: "#e8f5ed", warn: "#a04f00",
-        crit: "#c62828", warnSoft: "#fdf1e3", warnLine: "#f0c48a", warnInk: "#5c3200",
+        crit: "#c62828", critSoft: "#fdecec", warnSoft: "#fdf1e3", warnLine: "#f0c48a", warnInk: "#5c3200",
         line: "#e3e9f0", panel: "#fff", soft: "#eef4fb", ink: "#1f3b57", muted: "#5b6b7c",
         dot: "#c3cdd8" };
   p.card = p.panel;
@@ -3702,7 +3726,7 @@ class SupernotifyControlCard extends SnCard {
     // 30 s tick: snooze countdown + relative time of the last notification
     this._tickTimer = setInterval(() => {
       if (!this._rendered) return;
-      if ((this._snoozes || []).length) this._renderTiles(); // also hides a snooze that just ended
+      if ((this._snoozes || []).length) { this._renderTiles(); this._renderStatus(); } // also hides a snooze that just ended
       if (this._config.last_notification) this._renderLast();
     }, 30000);
     this._refreshSnoozes();
@@ -3759,14 +3783,22 @@ class SupernotifyControlCard extends SnCard {
       const r = await snEnquire(this._hass, "enquire_snoozes");
       const list = (r && r.response && r.response.snoozes) || [];
       const raw = JSON.stringify(list);
+      this._failSince = 0;
+      if (this._snDown) { this._snDown = false; if (this._rendered) this._renderAlert(); }
       if (raw !== this._snoozesRaw) {
         this._snoozesRaw = raw;
         this._snoozes = list;
-        if (this._rendered) this._renderTiles();
+        if (this._rendered) { this._renderTiles(); this._renderStatus(); }
       }
       this._catchUp(list);
     } catch (e) {
-      // supernotify may still be loading; retry on next poll
+      // 0.41.0: supernotify may still be loading - retry on the next poll, but say so once it has
+      // failed for longer than a poll: the pauses and the last notification on the card are stale
+      this._failSince = this._failSince || Date.now();
+      if (!this._snDown && Date.now() - this._failSince > 50000) {
+        this._snDown = true;
+        if (this._rendered) this._renderAlert();
+      }
     }
   }
 
@@ -3850,11 +3882,42 @@ class SupernotifyControlCard extends SnCard {
     return snFname(this._hass, entityId, fallback || entityId);
   }
   // 0.60.0: any domain (input_boolean, switch, light, fan...) - the visual editor also offers switch.*
-  _toggle(entityId) {
+  // 0.41.0: the tapped tile or pill is busy until Home Assistant answers, and a refusal is shown
+  async _toggle(entityId, node) {
     const dom = String(entityId).split(".")[0];
-    if (["input_boolean", "switch", "light", "fan", "automation", "siren", "humidifier"].includes(dom))
-      this._hass.callService(dom, "toggle", { entity_id: entityId });
-    else this._hass.callService("homeassistant", "toggle", { entity_id: entityId });
+    const busy = (on) => { if (node) { node.classList.toggle("busy", on); node.setAttribute("aria-busy", String(on)); } };
+    busy(true);
+    try {
+      if (["input_boolean", "switch", "light", "fan", "automation", "siren", "humidifier"].includes(dom))
+        await this._hass.callService(dom, "toggle", { entity_id: entityId });
+      else await this._hass.callService("homeassistant", "toggle", { entity_id: entityId });
+    } catch (e) {
+      const T = snT(this._config, this._hass);
+      this._toastErr(e, T.err_toggle.replace("{x}", this._friendly(entityId)));
+    } finally {
+      busy(false);
+    }
+  }
+
+  /**
+   * 0.41.0: an error in words - what failed, then why when Home Assistant says it in a way
+   * we know (not allowed, SuperNotify missing, no answer), else its own message, shortened.
+   */
+  _errText(e, what) {
+    const T = snT(this._config, this._hass);
+    const code = String((e && e.code) || "");
+    const msg = String((e && e.message) || (typeof e === "string" ? e : "") || "");
+    const all = code + " " + msg;
+    let why = "";
+    if (/unauthori[sz]ed|permission|admin/i.test(all)) why = T.err_perm;
+    else if (/service_not_found|not.?found|not loaded|unknown service/i.test(all)) why = T.err_missing;
+    else if (/timeout|timed out|connection|disconnected/i.test(all)) why = T.err_timeout;
+    else if (msg) why = snCut(msg, 90);
+    return [what || T.err_generic, why].filter(Boolean).join(" ");
+  }
+
+  _toastErr(e, what) {
+    this._toast(this._errText(e, what), true);
   }
 
   _activeBand() {
@@ -3870,12 +3933,7 @@ class SupernotifyControlCard extends SnCard {
     // 0.61.0: the tile opens the pause panel (what, for whom, how long, and the pauses in
     // force, each one resumable); `snooze_panel: false` keeps the one-tap behaviour below
     if (this._config.snooze_panel !== false) {
-      this._snzOpen = !this._snzOpen;
-      this._renderSnz(true);
-      if (this._snzOpen) {
-        const el = this.shadowRoot.getElementById("snzp");
-        if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      }
+      if (this._snzOpen) this._closeSnz(); else this._openSnz();
       return;
     }
     // SuperNotify snoozing is event-driven (same mechanism as the push
@@ -3898,31 +3956,47 @@ class SupernotifyControlCard extends SnCard {
         else await this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
         this._toast(`${T.snoozed_for} ${minutes} ${T.min}`);
       } catch (e) {
-        this._toast(`✖ ${(e && e.message) || e}`);
+        this._toastErr(e);
       }
     }
     snEnquireBust(800); // this card and the others read the snoozes again
   }
 
-  _announce() {
+  // 0.41.0: "Announced" only once SuperNotify took it; on a failure the text stays in the box
+  async _announce() {
     const input = this.shadowRoot.getElementById("announceInput");
+    const btn = this.shadowRoot.getElementById("announceBtn");
     const message = (input.value || "").trim();
     if (!message) {
       input.focus();
       return;
     }
-    snAnnounce(this._hass, this._config.announce_delivery || "alexa_announce", message);
-    input.value = "";
-    this._toast(snT(this._config, this._hass).announced);
+    if (this._annBusy) return;
+    this._annBusy = true;
+    if (btn) btn.disabled = true;
+    const T = snT(this._config, this._hass);
+    const delivery = this._config.announce_delivery || "alexa_announce";
+    try {
+      await snAnnounce(this._hass, delivery, message);
+      if (input.value.trim() === message) input.value = "";
+      this._toast(T.announced);
+    } catch (e) {
+      this._toastErr(e, T.err_announce.replace("{x}", snDeliveryAlias(this._hass, delivery) || delivery));
+    } finally {
+      this._annBusy = false;
+      if (btn) btn.disabled = false;
+    }
   }
 
-  _toast(msg) {
+  // 0.41.0: an error stays longer (6 s) and looks like one
+  _toast(msg, err) {
     const t = this.shadowRoot.getElementById("toast");
     if (!t) return;
     t.textContent = msg;
+    t.classList.toggle("err", !!err);
     t.classList.add("show");
     clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => t.classList.remove("show"), 2400);
+    this._toastTimer = setTimeout(() => t.classList.remove("show"), err ? 6000 : 2400);
   }
 
   // ── palette ────────────────────────────────────────────────────────────
@@ -3953,11 +4027,14 @@ class SupernotifyControlCard extends SnCard {
                  min-height: 64px; display: flex; flex-direction: row;
                  align-items: center; justify-content: flex-start; gap: 12px;
                  transition: transform .1s, border-color .15s; }
-        .ctile .tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .ctile .tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+        .ctile .mo { flex: none; font-size: 22px; line-height: 1; color: ${p.muted}; transition: transform .15s; }
+        .ctile[aria-expanded="true"] .mo { transform: rotate(90deg); }
+        .stacked .ctile .mo { display: none; }
         .stacked .ctile { flex-direction: column; text-align: center; justify-content: center; gap: 5px;
                           min-height: 96px; padding: 14px 8px; }
         .stacked .ctile .tx { align-items: center; }
-        .ctile:hover { border-color: ${p.brand}; transform: translateY(-1px); }
+        .ctile:hover { border-color: ${p.brand}; }
         .ctile:active { transform: scale(.97); }
         .ctile .ti { --mdc-icon-size: 26px; font-size: 24px; line-height: 1.1; flex: none; color: ${p.muted}; }
         .stacked .ctile .ti { --mdc-icon-size: 30px; font-size: 30px; }
@@ -3972,8 +4049,9 @@ class SupernotifyControlCard extends SnCard {
         .announce input { flex: 1; border: 1.5px solid ${p.line}; border-radius: 10px;
                           padding: 10px 12px; font-size: 13.5px; background: ${p.panel};
                           color: ${p.ink}; }
+        .announce input::placeholder { color: ${p.muted}; opacity: 1; }
         .announce input:focus { outline: none; border-color: ${p.brand};
-                                box-shadow: 0 0 0 3px rgba(3,169,244,.14); }
+                                box-shadow: 0 0 0 3px ${p.soft}; }
         .announce button {
           border: 0; border-radius: 10px; background: ${p.brand}; color: ${p.onBrand};
           font-weight: 700; padding: 10px 16px; cursor: pointer; font-size: 13px; }
@@ -3981,13 +4059,13 @@ class SupernotifyControlCard extends SnCard {
                   font-weight: 800; color: ${p.muted}; margin: 14px 0 8px;
                   display: flex; align-items: center; gap: 8px; }
         .mgroup.clk { cursor: pointer; user-select: none; }
-        .mgroup .gc { font-size: 10.5px; font-weight: 700; letter-spacing: 0; text-transform: none;
+        .mgroup .gc { font-size: 11px; font-weight: 700; letter-spacing: 0; text-transform: none;
                       border-radius: 999px; padding: 2px 8px; background: ${p.soft}; color: ${p.brandD}; }
         .mgroup .gc.zero { background: transparent; border: 1px solid ${p.line}; color: ${p.muted}; }
-        .mgroup .gv { margin-left: auto; font-size: 15px; line-height: 1; opacity: .8; transition: transform .15s; }
+        .mgroup .gv { margin-left: auto; font-size: 15px; line-height: 1; transition: transform .15s; }
         .mgroup.fold .gv { transform: rotate(-90deg); }
         .lastn { border: 1px solid ${p.line}; border-radius: 14px; padding: 12px 14px;
-                 margin-bottom: 14px; background: ${p.panel}; box-shadow: 0 1px 3px rgba(16,42,67,.06); }
+                 margin-bottom: 14px; background: ${p.panel}; }
         .lastn .lh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 4px; }
         .lastn .lt { font-size: 14.5px; font-weight: 750; flex: 1 1 180px; min-width: 0; line-height: 1.3;
                      overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical;
@@ -3997,9 +4075,9 @@ class SupernotifyControlCard extends SnCard {
                      font-size: 11.5px; color: ${p.muted}; }
         .lastn .lb { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px;
                      padding: 3px 9px; font-weight: 700; font-size: 11px; background: ${p.soft}; }
-        .lastn .lb.ok { color: ${p.ok}; background: rgba(46,158,91,.12); }
-        .lastn .lb.err { color: ${p.crit}; background: rgba(226,60,60,.12); }
-        .lastn .lb.mis { color: ${p.warn}; background: rgba(240,160,32,.14); }
+        .lastn .lb.ok { color: ${p.ok}; background: ${p.okSoft}; }
+        .lastn .lb.err { color: ${p.crit}; background: ${p.critSoft}; }
+        .lastn .lb.mis { color: ${p.warn}; background: ${p.warnSoft}; }
         .lastn .lb.mut { color: ${p.muted}; background: transparent; border: 1px solid ${p.line}; }
         .lastn .rep { margin-left: auto; border: 1.5px solid ${p.line}; background: ${p.panel};
                       color: ${p.brandD}; border-radius: 999px; padding: 5px 12px; font-size: 12px;
@@ -4015,7 +4093,7 @@ class SupernotifyControlCard extends SnCard {
         .mpill:active { transform: scale(.96); }
         .mpill.on { border-color: ${p.brand}; color: ${p.brandD}; background: ${p.soft}; }
         .mpill .pd { width: 8px; height: 8px; border-radius: 50%; background: ${p.dot}; }
-        .mpill.on .pd { background: ${p.ok}; box-shadow: 0 0 0 3px rgba(46,158,91,.18); }
+        .mpill.on .pd { background: ${p.ok}; box-shadow: 0 0 0 3px ${p.okSoft}; }
         .ver { text-align: right; font-size: 10px; color: ${p.muted};
                margin-top: 10px; user-select: none; }
         .toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%) translateY(20px);
@@ -4027,8 +4105,8 @@ class SupernotifyControlCard extends SnCard {
                 background: ${p.panel}; }
         .snzp .sh { display: flex; align-items: center; justify-content: space-between; }
         .snzp .sh b { font-size: 15px; }
-        .snzp .sx { border: 0; background: none; color: ${p.muted}; font-size: 16px; cursor: pointer; min-width: 32px; min-height: 32px; }
-        .snzp .sk { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800;
+        .snzp .sx { border: 0; background: none; color: ${p.muted}; font-size: 16px; cursor: pointer; min-width: 40px; min-height: 40px; border-radius: 10px; }
+        .snzp .sk { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 800;
                     color: ${p.muted}; margin: 10px 0 5px; }
         .snzp .srow { display: flex; flex-wrap: wrap; gap: 6px; }
         .snzp .sc { border: 1.5px solid ${p.line}; background: ${p.soft}; color: ${p.ink}; border-radius: 999px;
@@ -4048,9 +4126,34 @@ class SupernotifyControlCard extends SnCard {
                     overflow-wrap: anywhere; line-height: 1.3; }
         .snzp .su { font-size: 12px; color: ${p.muted}; line-height: 1.3; }
         .snzp .sr .sb { flex: none; }
+        .snzp .sp.crit { background: ${p.crit}; color: ${p.onBrand}; }
+        .snzp .swarn { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; padding: 8px 10px;
+                       border-radius: 10px; font-size: 12.5px; line-height: 1.4; }
+        .snzp .swarn.warn { background: ${p.warnSoft}; color: ${p.warnInk}; }
+        .snzp .swarn.crit { background: ${p.critSoft}; color: ${p.ink}; }
+        .snzp .swarn ha-icon { --mdc-icon-size: 18px; flex: none; }
+        .snzp .swarn.crit ha-icon { color: ${p.crit}; }
+        .alert { border: 1.5px solid ${p.warnLine}; background: ${p.warnSoft}; color: ${p.warnInk};
+                 border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+        .alert.crit { border-color: ${p.crit}; background: ${p.critSoft}; color: ${p.ink}; }
+        .alert.down { border-color: ${p.line}; background: ${p.panel}; color: ${p.ink}; }
+        .alert .ar { display: flex; align-items: center; gap: 10px; }
+        .alert .ar + .ar { margin-top: 8px; }
+        .alert ha-icon { --mdc-icon-size: 22px; flex: none; }
+        .alert.crit ha-icon { color: ${p.crit}; }
+        .alert.down ha-icon { color: ${p.muted}; }
+        .alert .am { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .alert .at { font-size: 13.5px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+        .alert .au { font-size: 12px; line-height: 1.35; opacity: .85; overflow-wrap: anywhere; }
+        .alert button { flex: none; border: 1.5px solid currentColor; background: transparent; color: inherit;
+                        border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 12.5px; font-weight: 700;
+                        cursor: pointer; min-height: 34px; }
+        .ctile.busy, .mpill.busy { opacity: .55; pointer-events: none; cursor: progress; }
+        .announce button:disabled { opacity: .55; cursor: progress; }
+        .toast.err { background: ${p.crit}; color: ${p.onBrand}; max-width: calc(100% - 28px); text-align: center; }
       </style>
       <ha-card>
-        ${snIntro(this._config, this._dark)}<div class="statusbar" id="statusbar"></div>
+        ${snIntro(this._config, this._dark)}<div class="alert" id="alert" role="status" hidden></div><div class="statusbar" id="statusbar"></div>
         ${this._config.last_notification ? `<div class="lastn" id="lastn"></div>` : ""}
         <div class="tiles${this._config.tile_layout === "stacked" ? " stacked" : ""}" id="tiles"></div>
         <div class="snzp" id="snzp" hidden></div>
@@ -4078,7 +4181,7 @@ class SupernotifyControlCard extends SnCard {
     if (!this.shadowRoot) return;
     this._renderStatus();
     if (this._config.last_notification) this._renderLast();
-    this._renderTiles();
+    this._renderTiles(); // also draws the alert
     this._renderGroups();
     this._renderCatchUp();
   }
@@ -4148,12 +4251,10 @@ class SupernotifyControlCard extends SnCard {
       const vol = band.volume ? Math.round(+this._st(band.volume) || 0) + "%" : "";
       segs.push(seg("🕐 " + T.time_band, band.name + (vol ? " · vol " + vol : ""), p.brandD));
     }
-    if (c.dnd_entity || c.quiet_entity) {
-      // quiet_entity (optional): a COMPUTED quiet state (e.g. a template
-      // binary_sensor combining DND switch, schedules, voice toggle) shown in
-      // the status bar, while the DND tile keeps toggling the manual switch.
-      const on = this._on(c.quiet_entity || c.dnd_entity);
-      segs.push(seg("🔕 " + T.quiet, on ? T.on : T.off, on ? p.warn : p.ok));
+    const ns = this._notifState();
+    if (ns) {
+      const v = seg("🔔 " + T.st_notif, snEsc(ns.text), ns.color);
+      segs.push(ns.go ? v.replace('<div class="sseg"', '<div class="sseg go" data-go="snz"') : v);
     }
     const act = this._activeScenarios();
     if (act !== null) segs.push(seg("🎬 " + T.act_scen, String(act.length))
@@ -4162,11 +4263,65 @@ class SupernotifyControlCard extends SnCard {
     bar.innerHTML = snIconify(segs.join(""), this._config);
     // 0.65.0: who is home -> recipients card, active scenarios -> scenarios card
     bar.querySelectorAll("[data-go]").forEach((g) => {
+      if (g.dataset.go === "snz") { g.onclick = () => this._openSnz(); return; }
       g.onclick = () => g.dataset.go === "recipients"
         ? snGo("recipients", { persons: (this._occ && this._occ.ids) || [] })
         : snGo("scenarios", { names: (act || []).map(snScenarioKey) });
     });
     bar.style.display = segs.length ? "" : "none";
+  }
+
+  /**
+   * 0.41.0: one answer to "will my phone ring?" in the status bar, instead of a Quiet segment that
+   * read only the do-not-disturb switch and said "off" during a pause. In order: everything
+   * silenced (critical included), do not disturb / the computed quiet state, a pause of all
+   * non-critical notifications (with its end), pauses of a part (a channel, a priority, one
+   * person, one notification), else normal. Null when the card has neither DND nor the pause tile.
+   */
+  _notifState() {
+    const c = this._config;
+    const T = snT(c, this._hass);
+    const p = this._palette();
+    const hasSnz = (c.tiles || []).includes("snooze");
+    if (!c.dnd_entity && !c.quiet_entity && !hasSnz) return null;
+    const go = hasSnz && c.snooze_panel !== false;
+    const live = snLiveSnoozes(this._snoozes);
+    const tt = (s) => String(s.target_type || "").toUpperCase();
+    const forAll = (s) => String(s.recipient_type || "EVERYONE").toUpperCase() !== "USER";
+    const endOf = (list) => {
+      const ends = list.map((s) => s._end);
+      if (ends.includes(null)) return T.snz_until_resumed;
+      return `${T.until} ${snSnzUntil(new Date(Math.max(...ends)), this._hass)}`;
+    };
+    const all = live.filter((s) => forAll(s) && tt(s) === "EVERYTHING");
+    if (all.length) return { text: `${T.st_all} · ${endOf(all)}`, color: p.crit, go };
+    if (c.dnd_entity && this._on(c.dnd_entity)) return { text: T.st_dnd, color: p.warn, go: false };
+    if (c.quiet_entity && this._on(c.quiet_entity)) return { text: T.st_quiet, color: p.warn, go: false };
+    const nc = live.filter((s) => forAll(s) && tt(s) === "NONCRITICAL");
+    if (nc.length) return { text: `${T.st_paused} · ${endOf(nc)}`, color: p.warn, go };
+    if (live.length) return { text: live.length === 1 ? T.st_part_1 : T.st_part.replace("{n}", live.length), color: p.ok, go };
+    return { text: T.st_normal, color: p.ok, go };
+  }
+
+  /** Open the pause panel, bring it into view and put the focus on its first choice. */
+  _openSnz() {
+    this._snzOpen = true;
+    this._renderSnz(true);
+    this._renderTiles();
+    const el = this.shadowRoot.getElementById("snzp");
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const first = el && el.querySelector(".sc.on, .sc, #snzGo");
+    if (first) first.focus({ preventScroll: true });
+  }
+
+  /** Close the pause panel; the focus goes back to the pause tile. */
+  _closeSnz() {
+    this._snzOpen = false;
+    this._snzArm = 0;
+    this._renderSnz(true);
+    this._renderTiles();
+    const t = this.shadowRoot.querySelector(".ctile[aria-expanded]");
+    if (t) t.focus({ preventScroll: true });
   }
 
   _icon(ic) {
@@ -4182,11 +4337,12 @@ class SupernotifyControlCard extends SnCard {
     const T = snT(c, this._hass);
     if (t === "dnd" && c.dnd_entity) {
       const on = this._on(c.dnd_entity);
-      return { cls: on ? "warn" : "", icon: on ? "🔕" : "🔔",
-        name: T.dnd, sub: on ? T.active : T.tap_silence,
-        act: () => this._toggle(c.dnd_entity) };
+      return { cls: on ? "on" : "", icon: on ? "🔕" : "🔔",
+        name: T.dnd, sub: on ? T.on : T.off,
+        act: (n) => this._toggle(c.dnd_entity, n) };
     }
     if (t === "snooze") {
+      const panel = c.snooze_panel !== false;
       // expired snoozes dropped, end anchored on snoozed_at (see snLiveSnoozes)
       const act = snLiveSnoozes(this._snoozes);
       if (act.length) {
@@ -4197,24 +4353,23 @@ class SupernotifyControlCard extends SnCard {
         if (end) {
           until = snSnzUntil(end, this._hass);
           const mins = Math.max(1, Math.ceil((end - new Date()) / 60000));
-          left = `${T.snoozed} · ${snSnzDur(mins, T)}`;
+          left = `${T.snoozed} · ${snSnzDur(mins, T).replace(/ /g, "\u00a0")}`;
         }
         const what = snEsc(snSnoozeLabels(this._hass, act, T, 1));
-        return { cls: "warn", icon: "😴", name: left || T.snoozed,
-          sub: what ? (until ? `${T.until} ${until}<br>` : "") + what : (until ? T.until + " " + until + " · " : "") + (c.snooze_panel === false ? T.tap_clear : T.snz_choose),
+        return { cls: "warn", icon: "😴", name: left || T.snoozed, panel,
+          sub: what ? (until ? `${T.until} ${until}<br>` : "") + what : (until ? T.until + " " + until + " · " : "") + (panel ? T.snz_choose : T.tap_clear),
           act: () => this._snooze() };
       }
-      return { cls: "", icon: "😴", name: `${T.snooze} ${c.snooze_minutes || 30} ${T.min}`,
-        sub: c.snooze_panel === false ? T.pause_nc : T.snz_choose, act: () => this._snooze() };
+      return { cls: "", icon: "😴", name: panel ? `${T.snooze}…` : `${T.snooze} ${c.snooze_minutes || 30}\u00a0${T.min}`, panel,
+        sub: panel ? T.snz_choose : T.pause_nc, act: () => this._snooze() };
     }
-    if (t === "announce")
-      return { cls: "", icon: "📢", name: T.announce, sub: T.intercom,
-        act: () => this.shadowRoot.getElementById("announceInput").focus() };
+    // 0.41.0: "announce" shows the announce row only - its tile repeated the row and just focused it
+    if (t === "announce") return null;
     if (t && t.toggle) {
       const on = this._on(t.toggle);
       return { cls: on ? "on" : "", icon: t.icon || "⚙️",
         name: t.name || this._friendly(t.toggle), sub: on ? T.on : T.off,
-        act: () => this._toggle(t.toggle) };
+        act: (n) => this._toggle(t.toggle, n) };
     }
     return null;
   }
@@ -4224,16 +4379,18 @@ class SupernotifyControlCard extends SnCard {
     const el = this.shadowRoot.getElementById("tiles");
     el.innerHTML = snIconify(defs
       .map((d, i) =>
-        `<div class="ctile ${d.cls}" data-i="${i}" role="button" tabindex="0">
-           ${this._icon(d.icon)}<span class="tx"><b>${snEsc(d.name)}</b><span class="ts">${d.sub}</span></span>
+        `<div class="ctile ${d.cls}" data-i="${i}" role="button" tabindex="0"${d.panel ? ` aria-expanded="${!!this._snzOpen}"` : ""}>
+           ${this._icon(d.icon)}<span class="tx"><b>${snEsc(d.name)}</b><span class="ts">${d.sub}</span></span>${d.panel ? `<span class="mo" aria-hidden="true">›</span>` : ""}
          </div>`)
       .join(""), this._config);
     el.querySelectorAll(".ctile").forEach((node) => {
       const d = defs[+node.dataset.i];
-      node.onclick = () => d.act();
-      node.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") d.act(); };
+      node.onclick = () => d.act(node);
+      // 0.41.0: Space no longer scrolls the page as well
+      node.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); d.act(node); } };
     });
     this._renderSnz();
+    this._renderAlert();
   }
 
   /**
@@ -4274,10 +4431,16 @@ class SupernotifyControlCard extends SnCard {
     const lenRow = lens.map((m) => chip("min", m, m < 60 ? `${m} ${T.min}` : `${m / 60} h`, +st.min === m)).join("")
       + chip("min", 0, T.snz_forever, +st.min === 0);
     const live = snLiveSnoozes(this._snoozes);
-    const myUser = this._hass && this._hass.user && this._hass.user.id;
-    const canResume = (s) => String(s.recipient_type || "").toUpperCase() !== "USER" ||
-      (s.recipient && this._hass.states[s.recipient] && (this._hass.states[s.recipient].attributes || {}).user_id === myUser);
+    const canResume = (s) => this._canResume(s);
     const voice = this._snzVoice();
+    // 0.41.0: a pause of everything (critical included) or one with no end asks twice and says why
+    const risky = !voice && st.what === "EVERYTHING";
+    const forever = +st.min === 0;
+    const armed = !!(this._snzArm && Date.now() - this._snzArm < 5000);
+    const goLabel = armed ? T.snz_confirm : risky ? T.snz_go_all : forever ? T.snz_go_forever : T.snz_go;
+    const warnTxt = [risky ? (st.who === "USER" ? T.snz_warn_all_me : T.snz_warn_all) : "", forever ? T.snz_warn_forever : ""]
+      .filter(Boolean).join(" ");
+    const warn = warnTxt ? `<div class="swarn ${risky ? "crit" : "warn"}"><ha-icon icon="mdi:alert-outline"></ha-icon><span>${esc(warnTxt)}</span></div>` : "";
     const rows = live.map((s, i) => `<div class="sr"><div class="sm"><span class="sl">${esc(snSnoozeLabel(this._hass, s, T))}</span>
         <span class="su">${s._end ? `${esc(T.until)} ${esc(snSnzUntil(s._end, this._hass))}` : esc(T.snz_until_resumed)}${snSnoozeReason(s, T) ? ` · ${esc(snSnoozeReason(s, T))}` : ""}</span></div>
         ${canResume(s) && !voice ? `<button class="sb" data-r="${i}">${esc(T.snz_resume)}</button>` : ""}</div>`).join("");
@@ -4285,7 +4448,7 @@ class SupernotifyControlCard extends SnCard {
       ${voice ? `<div class="sk">${esc(T.snz_voice_info)}</div>` : `<div class="sk">${esc(T.snz_what)}</div><div class="srow">${whatRow}</div>${sub ? `<div class="srow">${sub}</div>` : ""}
       <div class="sk">${esc(T.snz_who)}</div><div class="srow">${whoRow}</div>`}
       <div class="sk">${esc(T.snz_len)}</div><div class="srow">${lenRow}</div>
-      <div class="sgo"><button class="sp" id="snzGo">😴 ${esc(T.snz_go)}</button>${voice ? `<button class="sb" id="snzMine">${esc(T.snz_resume_mine)}</button>` : ""}</div>
+      ${warn}<div class="sgo"><button class="sp${risky ? " crit" : ""}" id="snzGo">${armed ? "" : "😴 "}${esc(goLabel)}</button>${voice ? `<button class="sb" id="snzMine">${esc(T.snz_resume_mine)}</button>` : ""}</div>
       ${live.length ? `<div class="sk">${esc(T.snz_active)}</div><div class="slist">${rows}</div>
         <div class="sgo"><button class="sb" id="snzAll">${esc(T.snz_resume_all)}</button></div>` : ""}`, this._config);
     if (html !== this._snzHtml) { el.innerHTML = html; this._snzHtml = html; } // 1.0.0: only when it changed
@@ -4295,30 +4458,110 @@ class SupernotifyControlCard extends SnCard {
         if (g === "min") st.min = +v;
         else st[g] = v;
         if (g === "what") st.target = "";
+        this._snzArm = 0;
         this._renderSnz(true);
       };
     });
     const sel = el.querySelector("#snzT");
     if (sel) sel.onchange = () => { st.target = sel.value; };
-    el.querySelector("#snzX").onclick = () => { this._snzOpen = false; this._renderSnz(true); };
+    el.querySelector("#snzX").onclick = () => this._closeSnz();
+    el.onkeydown = (e) => { if (e.key === "Escape") { e.stopPropagation(); this._closeSnz(); } };
     el.querySelector("#snzGo").onclick = async () => {
-      const kind = +st.min > 0 ? "snooze" : "silence";
-      await this._snzSpeak(this._snzText(kind, voice ? { ...st, mine: true } : st));
-      if (voice) this._snzSay(kind, +st.min); else this._snzGo(st, T.snz_done);
+      if ((risky || forever) && !armed) {
+        this._snzArm = Date.now();
+        this._renderSnz(true);
+        const g = el.querySelector("#snzGo");
+        if (g) g.focus();
+        clearTimeout(this._snzArmT);
+        this._snzArmT = setTimeout(() => { this._snzArm = 0; this._renderSnz(true); }, 5000);
+        return;
+      }
+      this._snzArm = 0;
+      clearTimeout(this._snzArmT);
+      if (this._snzBusy) return;
+      this._snzBusy = true;
+      try {
+        const kind = +st.min > 0 ? "snooze" : "silence";
+        await this._snzSpeak(this._snzText(kind, voice ? { ...st, mine: true } : st));
+        if (voice) await this._snzSay(kind, +st.min); else await this._snzGo(st, T.snz_done);
+      } finally {
+        this._snzBusy = false;
+        this._renderSnz(true);
+      }
     };
     const mine = el.querySelector("#snzMine");
     if (mine) mine.onclick = async () => { await this._snzSay("resume"); this._snzSpeak(this._snzText("resume", { mine: true })); };
     el.querySelectorAll(".sb[data-r]").forEach((b) => {
-      const s0 = live[+b.dataset.r];
-      b.onclick = async () => {
-        await this._snzGo({ resume: true, what: String(s0.target_type || "").toUpperCase(),
-          target: Array.isArray(s0.target) ? s0.target.join("_") : (s0.target || ""), who: String(s0.recipient_type || "EVERYONE").toUpperCase(),
-          person: s0.recipient || "" }, T.snz_resumed);
-        this._snzSpeak(this._snzText("resume_one", { label: snSnoozeLabel(this._hass, s0, T) }));
-      };
+      b.onclick = () => this._resumeOne(live[+b.dataset.r]);
     });
     const all = el.querySelector("#snzAll");
     if (all) all.onclick = () => this._resumeAll();
+  }
+
+  /** A pause this user may resume: one for everyone, or their own person's. */
+  _canResume(s) {
+    const myUser = this._hass && this._hass.user && this._hass.user.id;
+    return String(s.recipient_type || "").toUpperCase() !== "USER" ||
+      !!(s.recipient && this._hass.states[s.recipient] && (this._hass.states[s.recipient].attributes || {}).user_id === myUser);
+  }
+
+  /** Resume one pause in force (panel row, alert). */
+  async _resumeOne(s0) {
+    const T = snT(this._config, this._hass);
+    await this._snzGo({ resume: true, what: String(s0.target_type || "").toUpperCase(),
+      target: Array.isArray(s0.target) ? s0.target.join("_") : (s0.target || ""), who: String(s0.recipient_type || "EVERYONE").toUpperCase(),
+      person: s0.recipient || "" }, T.snz_resumed);
+    this._snzSpeak(this._snzText("resume_one", { label: snSnoozeLabel(this._hass, s0, T) }));
+  }
+
+  /**
+   * 0.41.0: what must not go unnoticed, at the top of the card - SuperNotify not answering, and
+   * the pauses that silence everything (critical included) or that have no end, each resumable.
+   * A pause of one channel or of one notification is a narrow choice and stays on the tile.
+   */
+  _renderAlert() {
+    const el = this.shadowRoot && this.shadowRoot.getElementById("alert");
+    if (!el) return;
+    const T = snT(this._config, this._hass);
+    const esc = snEsc;
+    let html = "";
+    let cls = "";
+    if (this._snDown) {
+      cls = "down";
+      html = `<div class="ar"><ha-icon icon="mdi:lan-disconnect"></ha-icon><div class="am"><span class="at">${esc(T.sn_down)}</span></div>
+        <button data-a="retry">${esc(T.sn_retry)}</button></div>`;
+    } else {
+      const glob = (s) => ["EVERYTHING", "NONCRITICAL"].includes(String(s.target_type || "").toUpperCase());
+      const all = (s) => String(s.target_type || "").toUpperCase() === "EVERYTHING";
+      const list = snLiveSnoozes(this._snoozes).filter((s) => glob(s) && (all(s) || !s._end))
+        .sort((x, y) => (all(y) ? 1 : 0) - (all(x) ? 1 : 0));
+      this._alertList = list;
+      if (list.length) {
+        cls = list.some(all) ? "crit" : "warn";
+        const voice = this._snzVoice();
+        html = list.slice(0, 3).map((s, i) => {
+          const end = s._end ? `${T.until} ${snSnzUntil(s._end, this._hass)}` : T.snz_until_resumed;
+          // the title already says what; a pause of one person says whose
+          const mine = String(s.recipient_type || "").toUpperCase() === "USER";
+          const sub = [mine ? snSnoozeLabel(this._hass, s, T) : "", end].filter(Boolean).join(" · ");
+          return `<div class="ar"><ha-icon icon="${all(s) ? "mdi:bell-off" : "mdi:bell-sleep-outline"}"></ha-icon>
+            <div class="am"><span class="at">${esc(all(s) ? T.alert_all : T.alert_forever)}</span><span class="au">${esc(sub)}</span></div>
+            ${this._canResume(s) && !voice ? `<button data-a="r${i}">${esc(T.snz_resume)}</button>` : ""}</div>`;
+        }).join("");
+      }
+    }
+    if (!html) { el.hidden = true; el.innerHTML = ""; this._alertHtml = ""; return; }
+    el.hidden = false;
+    el.className = "alert " + cls;
+    if (html !== this._alertHtml) { el.innerHTML = snIconify(html, this._config); this._alertHtml = html; }
+    el.querySelectorAll("button[data-a]").forEach((b) => {
+      b.onclick = () => {
+        const a = b.dataset.a;
+        if (a === "retry") { snEnquireBust(); return; } // every card reads again
+        const s0 = (this._alertList || [])[+a.slice(1)];
+        if (s0) this._resumeOne(s0);
+      };
+    });
   }
 
   /**
@@ -4403,14 +4646,14 @@ class SupernotifyControlCard extends SnCard {
       const said = (((res.speech || {}).plain || {}).speech) || "";
       this._toast(res.response_type === "error" ? T.snz_voice_off : said || T.snz_done);
     } catch (e) {
-      this._toast(`✖ ${(e && e.message) || e}`);
+      this._toastErr(e);
     }
     snEnquireBust(800);
   }
 
   /** A link from another card (0.65.0): { snz: true } opens the pause panel. */
   _focus(d) {
-    if (d && d.snz && this._config.snooze_panel !== false) { this._snzOpen = true; this._renderSnz(true); }
+    if (d && d.snz && this._config.snooze_panel !== false) this._openSnz();
   }
 
   /** clear_snoozes, said out loud with snooze_announce (0.64.0: one copy for tile and panel). */
@@ -4421,7 +4664,7 @@ class SupernotifyControlCard extends SnCard {
       this._toast(T.cleared);
       this._snzSpeak(this._snzText("resume_all"));
     } catch (e) {
-      this._toast(`✖ ${(e && e.message) || e}`);
+      this._toastErr(e);
     }
     snEnquireBust(800);
   }
@@ -4452,7 +4695,7 @@ class SupernotifyControlCard extends SnCard {
       await snSnoozeCall(this._hass, this._snzData(st));
       this._toast(msg);
     } catch (e) {
-      this._toast(`✖ ${(e && e.message) || e}`);
+      this._toastErr(e);
     }
     snEnquireBust(800);
   }
@@ -4470,7 +4713,7 @@ class SupernotifyControlCard extends SnCard {
       await this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
       this._toast(msg);
     } catch (e) {
-      this._toast(`✖ ${(e && e.message) || e}`);
+      this._toastErr(e);
     }
     snEnquireBust(800);
   }
@@ -4526,7 +4769,7 @@ class SupernotifyControlCard extends SnCard {
       })
       .join(""), this._config);
     el.querySelectorAll(".mpill").forEach((node) => {
-      node.onclick = () => this._toggle(node.dataset.e);
+      node.onclick = () => this._toggle(node.dataset.e, node);
     });
     if (foldable) el.querySelectorAll(".mgroup.clk").forEach((node) => {
       node.onclick = () => this._toggleGroup(+node.dataset.g);

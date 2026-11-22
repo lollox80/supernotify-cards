@@ -39,6 +39,7 @@ await wait(50);
 ctl._snzOpen = true; ctl._renderSnz();
 const sr = ctl.shadowRoot;
 sr.querySelector('.sc[data-g="min"][data-v="0"]').click();
+sr.querySelector("#snzGo").click(); await wait(30); // control 0.41.0: no end = confirm with a second tap
 sr.querySelector("#snzGo").click(); await wait(30);
 const b = last("silence");
 ok(b && !("minutes" in b) && !("command" in b) && b.reason === "Dashboard", `pannello: silence (${JSON.stringify(b)})`);
