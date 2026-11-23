@@ -8,6 +8,10 @@ charts, channels most used (with error share), priority and day-period mix, auto
 and a version strip showing installed vs. latest version of SuperNotify and of these cards (from the
 HACS `update.*` entities, with their brand icon and release link).
 
+For a user who is not an administrator (no archive) the card counts from the statistics of
+`sensor.supernotify_notifications`: per day, hour and weekday; channels, errors, priority and day period say they
+are for administrators ([users who are not administrators](../configuration.md#users-who-are-not-administrators)).
+
 <img src="../images/stats.png" alt="supernotify-stats-card" width="800">
 
 Every figure comes from `supernotify.enquire_archive` with `verbosity: daily`: the totals per day of

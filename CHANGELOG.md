@@ -5,6 +5,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-24
+
+### Changed
+- **Users who are not administrators.** SuperNotify keeps the archive, the last notification, the configuration,
+  resuming every pause at once, the cleanups and `reset_overrides` for administrators; the cards called them anyway
+  and showed errors or empty boxes. Now one place (`snAccess`) decides what the user may see and do, and every card
+  asks it; an action for administrators is no longer called for anyone else.
+  - **Resume every pause** (control, overview, tools, the pause tile feature) ends with `supernotify.unsnooze`, which
+    any user may call, each pause in force for everyone and the user's own - another person's pause stays.
+  - **Undo the changes made by hand** (tools) presses SuperNotify's *Reset overrides* button: everything at once,
+    without the list of what was put back.
+  - **Stats** (0.35.0) and the **overview**'s numbers (0.42.0) come from the statistics of
+    `sensor.supernotify_notifications` ("from SuperNotify's counter"): per day, hour and weekday; channels, errors,
+    priority and day period say they are for administrators.
+  - The **archive** (0.47.0) and **why** cards show one line instead; the **last notification** (control 0.42.0,
+    overview, tile feature) says it is for administrators; **tools** (0.4.0) hides the cleanups, the configuration
+    and the last notification behind a line, and the link to the integration settings.
+  - The **dashboard strategy** leaves the Archive view (and the archive in Home) out for them and shows the Tools
+    view to everyone.
+  - Appliances (0.3.2) take the state from the plug and the power, recipients show "last notified" without the
+    title. Automations 0.23.1: no change of its own (the stats data lives in its part of the file).
+  - Docs: [users who are not administrators](docs/configuration.md#users-who-are-not-administrators).
+
 ## [1.3.0] - 2026-11-23
 
 > **Control card: `announce` no longer adds a tile.** The announce box under the tiles stays; its tile only

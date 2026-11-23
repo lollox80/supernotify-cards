@@ -51,6 +51,29 @@ helpers and utility meter, the version checks). On an older SuperNotify stay on 
 The automations card works with any version but needs its manifest generator
 (`tools/genera_vista_automazioni.py`) and a `command_line` sensor, see [its page](cards/automations.md).
 
+## Users who are not administrators
+
+SuperNotify keeps some of its actions for administrators: the archive (`enquire_archive`), the last
+notification (`enquire_last_notification`), the configuration (`enquire_configuration`), resuming every pause
+at once (`clear_snoozes`), the cleanups (`purge_archive`, `purge_media`) and `reset_overrides`. Home Assistant
+refuses them to anyone else, and the live `supernotify_notification` event and the repairs list are for
+administrators too. Since 1.4.0 the cards ask once what the user may do and adapt (they no longer call an
+action that would be refused):
+
+| Card | For a user who is not an administrator |
+|---|---|
+| Control | pauses, do not disturb and announcements as before; **Resume all** ends with `supernotify.unsnooze` each pause for everyone and the user's own, not another person's; the last notification says it is for administrators |
+| Overview | today, yesterday and the average from the statistics of `sensor.supernotify_notifications`; channel failures and the last notification say they are for administrators |
+| Stats | per day, hour and weekday from the same statistics ("from SuperNotify's counter"); channels, errors, priority and day period say they are for administrators |
+| Archive, Why | one line: the archive is for administrators |
+| Tools | **Refresh**, **Resume every pause** (`unsnooze`, the pauses for everyone and the user's own), **Undo the changes made by hand** (SuperNotify's *Reset overrides* button, everything at once) and the enquiries open to everyone; a line says the rest is for administrators |
+| Recipients | "last notified" from the entity, without the title (that is in the archive) |
+| Appliances | state from the plug and the power, not from the archive's notifications |
+| Dashboard strategy | no Archive view (nor the archive in Home); the Tools view is there for everyone |
+
+The numbers from the counter count what was delivered: no duplicates, failures or "nothing sent". The
+statistics need the recorder (on by default) and fill in hour by hour.
+
 ## Versions
 The bundle has one release version (HACS, this repo's tags) and **each card has its own
 version**, shown in its footer with `show_version: true` and bumped only when that card changes. A card footer that

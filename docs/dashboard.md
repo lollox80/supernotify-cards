@@ -21,11 +21,11 @@ Where Home Assistant lists custom strategies in **Add dashboard**, *SuperNotify*
 | View | Cards |
 |---|---|
 | Home | status badge on top; control · overview (and the archive, when the Archive view is left out) |
-| Archive | the archive at full width, with the pause of the sending automation (`pause_sender`) |
+| Archive | the archive at full width, with the pause of the sending automation (`pause_sender`) - **administrators only** |
 | Send | composer · simulator (the "why" is inside archive since 0.85) |
 | Setup | channels, transports · scenarios, recipients · time bands, automations |
 | Stats | stats |
-| Tools | tools - **administrators only** |
+| Tools | tools - each user sees what they may do (1.4.0) |
 
 The views are built for whoever opens the dashboard, every time:
 
@@ -34,7 +34,8 @@ The views are built for whoever opens the dashboard, every time:
 - the time bands card only when helpers named like the [bands example](cards/bands.md) exist
   (`input_datetime.…start_<band>` + `input_number.…<band>_volume`);
 - the automations card only when `sensor.supernotify_automations` holds the list (or the entity set in `cards: automations: manifest_entity`);
-- the Tools view only for administrators.
+- the Archive view (and the archive in Home) only for administrators: SuperNotify keeps its archive for them;
+- the Tools view for everyone since 1.4.0: the card shows each user what they may do ([users who are not administrators](configuration.md#users-who-are-not-administrators)).
 
 The links between cards (a channel off, a person, a scenario) open the right view.
 
