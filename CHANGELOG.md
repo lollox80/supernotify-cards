@@ -20,8 +20,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - The status bar has one **Notifications** state instead of **Quiet**, which read only the do-not-disturb
     switch and said "off" during a pause: all silenced (with its end), do not disturb, quiet (`quiet_entity`),
     paused (non-critical, with its end), normal with N pauses of a part, or normal. It is shown when the card has
-    the pause tile or a DND / quiet entity, and a tap on it opens the pause panel. Languages other than English
-    and Italian show the new texts in English until translated.
+    the pause tile or a DND / quiet entity, and a tap on it opens the pause panel.
+  - The new texts are translated in all eleven languages; Polish and Hindi call the pause tile a pause, no
+    longer a snooze.
+  - Docs: the control card page describes the status bar, the announce box, pausing everything and what the
+    card says when something fails, and documents `quiet_entity`; the control, hero and dark images are new.
   - One word per idea: in English a pause is "Pause" / "Paused" everywhere (the tile said "Snooze", the panel
     "Pause"); resuming says "Notifications resumed" (it said "Snoozes cleared"), and "tap to resume".
   - The pause tile says "Pause…" with a chevron when it opens the panel (it promised "Snooze 30 min" and opened
