@@ -14,6 +14,8 @@
 //   supernotify.enquire_archive (daily / summary / standard / by id) from archived notifications, the
 //   real supernotify services are declared; no sensor.supernotify_archive, shell_command bridge,
 //   sensor.supernotify_sent_today or stats helpers any more (1.0.0 reads none of them).
+// 2026-11-23 - control 0.41.0: the announce tile is gone (the box stays), so the demo control card has a Voice
+//   switch tile to keep four tiles.
 //
 // Renders each card with invented data (English UI, no real names or addresses) in headless
 // Chromium at 2x and writes docs/images/*.png. <ha-icon> is stubbed with the real Material
@@ -394,7 +396,8 @@ const APPL_DEMO = String.raw`
 const BANDS = Object.fromEntries(["early_morning", "morning", "afternoon", "evening", "night", "late_night"].map((b) =>
   [b, { start: `input_datetime.notifier_start_${b}`, volume: `input_number.notifier_${b}_volume` }]));
 const CONTROL = { presence_entity: "person.alex", dnd_entity: "input_boolean.notifier_dnd", last_notification: true,
-  tiles: ["dnd", "snooze", { toggle: "input_boolean.notifier_phone_notifications", name: "Push", icon: "mdi:cellphone" }, "announce"],
+  tiles: ["dnd", "snooze", { toggle: "input_boolean.notifier_speech_notifications", name: "Voice", icon: "mdi:account-voice" },
+    { toggle: "input_boolean.notifier_phone_notifications", name: "Push", icon: "mdi:cellphone" }, "announce"],
   groups: [{ name: "House modes", entities: ["input_boolean.bedtime", "input_boolean.guests", "input_boolean.babysitter", "input_boolean.holiday"] }] };
 const OVERVIEW = { quiet_entity: "input_boolean.notifier_dnd" };
 const ARCH = {};

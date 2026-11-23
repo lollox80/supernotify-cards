@@ -5,6 +5,47 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-23
+
+> **Control card: `announce` no longer adds a tile.** The announce box under the tiles stays; its tile only
+> repeated it. If the control card had four tiles in two columns, one may now sit alone on the second row:
+> set `tile_columns: 3` to keep them on one row.
+
+### Changed
+- **Control** (0.41.0): the card no longer lets the risky things go unnoticed.
+  - Silencing everything (critical alerts included) or pausing with no end shows what it means above the
+    button, gives the button its consequence as a label ("Silence everything, critical too") and asks for a
+    second tap.
+  - While such a pause is in force, a notice at the top of the card says so, with its end and a Resume button.
+  - "Announced" appears only once SuperNotify accepted the announcement; on a failure the text stays in the box.
+  - A tile or pill is shown busy until Home Assistant answers, and a refused toggle is said in words.
+  - Errors are written for people (not allowed, SuperNotify missing, no answer) and stay 6 s instead of a raw
+    message for 2.4 s.
+  - When SuperNotify has not answered for over a minute, the card says so, with a Retry button.
+  - Space on a tile no longer scrolls the page as well.
+  - The status bar has one **Notifications** state instead of **Quiet**, which read only the do-not-disturb
+    switch and said "off" during a pause: all silenced (with its end), do not disturb, quiet (`quiet_entity`),
+    paused (non-critical, with its end), normal with N pauses of a part, or normal. It is shown when the card has
+    the pause tile or a DND / quiet entity, and a tap on it opens the pause panel.
+  - The new texts are translated in all eleven languages; Polish and Hindi call the pause tile a pause, no
+    longer a snooze.
+  - Docs: the control card page describes the status bar, the announce box, pausing everything and what the
+    card says when something fails, and documents `quiet_entity`; the control, hero and dark images are new.
+  - One word per idea: in English a pause is "Pause" / "Paused" everywhere (the tile said "Snooze", the panel
+    "Pause"); resuming says "Notifications resumed" (it said "Snoozes cleared"), and "tap to resume".
+  - The pause tile says "Pause…" with a chevron when it opens the panel (it promised "Snooze 30 min" and opened
+    a panel), and tells assistive technology whether the panel is open. "25 min" no longer breaks in two.
+  - The do-not-disturb tile behaves like the other switches: blue when on, its state ("on" / "off") as subtitle,
+    no longer the pause's orange.
+  - `announce` in `tiles` shows the announce row only: its tile repeated the row and only focused it. With three
+    other tiles left, a grid of two columns has one tile alone on the second row; `tile_columns: 3` keeps one row.
+  - The pause panel takes the focus when it opens; Esc closes it and gives the focus back to the pause tile. Its
+    close button is a 40 px target.
+  - Colours follow `style: theme`: the delivery chips, the active pill's dot and the input's focus glow used fixed
+    colours. The announce placeholder is readable on the dark panel (it was the browser's grey, 3.5:1).
+  - Smaller details: the "1/4 active" counter and the pause panel's headings are 11 px (were 10.5), the fold caret
+    is at full contrast, tiles no longer lift on hover, and the last notification has a border without a shadow.
+
 ### Fixed
 - **Archive, why, appliances**: notifications are ordered newest first by the moment they were created, not by the
   text of their time. At the end of summer time the hour after the change was listed before the hour before it,

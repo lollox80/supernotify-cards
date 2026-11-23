@@ -39,7 +39,7 @@ assert.ok(!groups.innerHTML.includes("<sala>") && !groups.innerHTML.includes("<b
 // a toggle tile with the entity's name; the snooze tile's own <br> in the subtitle stays markup
 const tiles = el();
 const tcard = {
-  _config: { tiles: [{ toggle: "switch.luce" }] }, _renderSnz() {}, _icon: (ic) => `<span class="ti">${ic}</span>`,
+  _config: { tiles: [{ toggle: "switch.luce" }] }, _renderSnz() {}, _renderAlert() {}, _icon: (ic) => `<span class="ti">${ic}</span>`,
   _tileDef: () => ({ cls: "on", icon: "⚙️", name: NAME, sub: "until 10:00<br>all", act() {} }),
   shadowRoot: { getElementById: () => tiles },
 };
