@@ -158,8 +158,8 @@ views:
 </details>
 
 The bands card needs its time bands set up first ([bands](https://github.com/lollox80/supernotify-cards/blob/main/docs/cards/bands.md));
-the tools card is meant for administrators - put it in a view only they can see
-(view → **Visibility**).
+the tools card and the others adapt to users who are not administrators (1.4.0): see
+[users who are not administrators](https://github.com/lollox80/supernotify-cards/blob/main/docs/configuration.md#users-who-are-not-administrators).
 
 ## In Home Assistant's own cards
 

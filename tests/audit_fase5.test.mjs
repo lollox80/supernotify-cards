@@ -62,7 +62,7 @@ const DOC = { id: "aaaa1111-2222", created: new Date(Date.now() - 300000).toISOS
 const calls = [];
 const mkHass = (extra = {}) => ({
   language: "it", themes: { darkMode: false }, entities, services, states, config: { version: "2026.2.0" },
-  user: { id: "u1", is_admin: false },
+  user: { id: "u1", is_admin: true }, // 1.4.0: the archive is read by administrators only
   callService: async (d, s, data) => { calls.push(["svc", `${d}.${s}`, data]); },
   callApi: async (m, p, d) => { calls.push(["api", p, d]); },
   callWS: async (m) => {

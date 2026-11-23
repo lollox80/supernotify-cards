@@ -50,7 +50,7 @@ const summarize = (c) => ({ id: c.id, created: c.created, outcome: c.outcome, me
 const ws = [];
 let entriesOk = true;
 const hass = {
-  language: "it", themes: { darkMode: false }, entities: {}, user: { id: "u1", is_admin: false },
+  language: "it", themes: { darkMode: false }, entities: {}, user: { id: "u1", is_admin: true }, // 1.4.0: the archive is for administrators
   services: { supernotify: { enquire_archive: {}, enquire_snoozes: {}, snooze: {} } },
   states: { "sensor.supernotify_notifications": { state: "25", attributes: {}, last_updated: "a" } },
   callService: async () => {}, callApi: async () => ({}),

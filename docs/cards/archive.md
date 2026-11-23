@@ -4,6 +4,9 @@
 
 Notification history, read from the SuperNotify archive, and **why** each one went where it went.
 
+SuperNotify keeps its archive for administrators: anyone else sees one line that says so
+([users who are not administrators](../configuration.md#users-who-are-not-administrators)).
+
 <img src="../images/archive.png" alt="supernotify-archive-card" width="900">
 
 **One card for the list and the detail (0.85.0).** On the left (on top when the card is narrow) one

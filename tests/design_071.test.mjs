@@ -46,7 +46,8 @@ ok(d1.views.every((v) => v.type === "sections" && v.max_columns >= 1), "viste a 
 // utente non admin, installazione minima, niente manifest
 const d2 = await Strat.generate({ type: "custom:supernotify" }, hass({ "switch.supernotify_delivery_email": S() }, false, "en"));
 console.log("    ", kinds(d2).join("  "));
-ok(!d2.views.some((v) => v.path === "tools"), "niente Strumenti per chi non è admin");
+// 1.4.0: Strumenti per tutti (la card mostra a ciascuno quel che può fare), l'archivio solo agli amministratori
+ok(d2.views.some((v) => v.path === "tools") && !d2.views.some((v) => v.path === "archive"), "non admin: Strumenti sì, Archivio no (1.4.0)");
 const setup2 = d2.views.find((v) => v.path === "setup");
 const k2 = setup2.sections.flatMap((s) => s.cards).map((c) => c.type);
 ok(k2.join() === "custom:supernotify-deliveries-card", `setup minimo: solo canali (${k2.join()})`);

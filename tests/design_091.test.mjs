@@ -327,7 +327,12 @@ const c4 = document.createElement("supernotify-appliances-card");
 c4.setConfig({});
 document.body.appendChild(c4);
 c4.hass = mkHass({ admin: false }); await wait(400); c4.hass = mkHass({ admin: false }); await wait(300);
-const lav4 = [...c4.shadowRoot.querySelectorAll(".ap")].find((n) => /Lavatrice/.test(n.textContent));
+// 1.4.0: the row can take a few more redraws to appear (flaky on CI): wait for it, up to 3 s
+let lav4 = null;
+for (let i = 0; i < 30 && !lav4; i++) {
+  lav4 = [...c4.shadowRoot.querySelectorAll(".ap")].find((n) => /Lavatrice/.test(n.textContent));
+  if (!lav4) { c4.hass = mkHass({ admin: false }); await wait(100); }
+}
 ok(lav4 && !lav4.querySelector(".pb"), "non admin: niente Svuotata");
 ok(!txt(c4.shadowRoot.getElementById("newdev")), "non admin: niente badge dei nuovi dispositivi");
 
