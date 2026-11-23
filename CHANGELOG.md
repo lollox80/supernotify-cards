@@ -5,6 +5,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-23
+
+> **Control card: `announce` no longer adds a tile.** The announce box under the tiles stays; its tile only
+> repeated it. If the control card had four tiles in two columns, one may now sit alone on the second row:
+> set `tile_columns: 3` to keep them on one row.
+
 ### Changed
 - **Control** (0.41.0): the card no longer lets the risky things go unnoticed.
   - Silencing everything (critical alerts included) or pausing with no end shows what it means above the

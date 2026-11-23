@@ -9,7 +9,7 @@
  * Changelog: see CHANGELOG.md
  */
 
-const VERSION = "1.2.0"; // bundle / HACS release
+const VERSION = "1.3.0"; // bundle / HACS release
 
 /**
  * Per-card versions: bumped ONLY when that card changes (the bundle VERSION
