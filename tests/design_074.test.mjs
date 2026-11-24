@@ -136,6 +136,7 @@ document.body.appendChild(ctl4); ctl4.hass = mk({ states: { ...base, "input_bool
 await wait(40);
 ok(ctl4.shadowRoot.getElementById("statusbar").style.display === "none" && !ctl4.shadowRoot.getElementById("statusbar").innerHTML, "status: false nasconde la riga di stato");
 ok(ctl4.shadowRoot.getElementById("head").hidden, "status: false nasconde anche la testata (control 0.44.0)");
+ok(/\[hidden\] \{ display: none !important; \}/.test(ctl4.shadowRoot.querySelector("style").textContent), "hidden vince sul display: grid della testata (control 0.46.1, niente striscia verde vuota)");
 const ctl5 = document.createElement("supernotify-control-card");
 ctl5.setConfig({ dnd_entity: "input_boolean.dnd", tiles: [] });
 document.body.appendChild(ctl5); ctl5.hass = mk({ states: { ...base, "input_boolean.dnd": S("off") } });

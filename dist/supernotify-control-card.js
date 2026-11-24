@@ -20,7 +20,7 @@ const VERSION = "1.4.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.46.0",
+  control: "0.46.1",
   overview: "0.42.0",
   bands: "0.22.1",
   deliveries: "0.34.0",
@@ -4235,6 +4235,8 @@ class SupernotifyControlCard extends SnCard {
           .snzp select { min-height: 44px; }
           .announce input, .announce button { min-height: 44px; box-sizing: border-box; }
         }
+        /* 0.46.1: hidden wins over a display rule (the hidden head stayed as an empty green bar with status: false) */
+        [hidden] { display: none !important; }
         /* 0.44.0: the answer to "are notifications arriving?" leads the card, readable across the room */
         .head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 14px;
                 padding: 14px 16px; margin-bottom: 10px;

@@ -21,6 +21,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   through. The DND and switch tiles are `role="switch"` with `aria-checked` for screen readers.
 
 ### Fixed
+- **Control card (0.46.1): no empty green bar with `status: false`.** The hidden status head kept its grid layout
+  and showed as an empty strip above the tiles; a hidden element of the card is now always hidden.
 - **Control card (0.46.0): the pause panel is safe to hand to anyone.** Every opening starts from *Non-critical*
   and the configured length: *Everything* / *Until I resume* stayed selected and the next person found the red
   button ready. A pause that worked closes the panel and brings the head, which says the new state, into view;
