@@ -5,6 +5,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Control card (0.43.0): the status line no longer says "normal" when SuperNotify is down.** *Notifications* now
+  says **may not arrive**, in red, when SuperNotify has not answered for over a minute, is not loaded (its actions
+  are missing) or `sensor.supernotify_notifications` is unavailable - before, "normal" in green sat under the
+  "SuperNotify is not responding" alert, which now shows in these cases too. It comes before every other state and
+  shows even on a card without DND or the pause tile. In all 11 languages.
+
 ## [1.4.0] - 2026-11-24
 
 ### Changed

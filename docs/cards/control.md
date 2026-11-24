@@ -89,7 +89,10 @@ configured with `expose_state: false`, they stay `unknown` and the cards ask
 conditions hold **and** its switch is not off.
 
 **Status bar.** *Notifications* answers "will my phone ring?" in one word (control 0.41.0, it replaced
-*Quiet*, which read only the DND switch and said "off" during a pause). In order: **all silenced** (a pause
+*Quiet*, which read only the DND switch and said "off" during a pause). In order: **may not arrive** (in red,
+control 0.43.0: SuperNotify has not answered for over a minute, is not loaded or `sensor.supernotify_notifications`
+is unavailable; the alert at the top says so too, and it shows even on a card without DND or the pause tile),
+**all silenced** (a pause
 of everything for everyone, critical included, with its end), **do not disturb** (`dnd_entity` on),
 **quiet** (`quiet_entity` on), **paused** (non-critical notifications for everyone, with its end),
 **normal · N pauses** (pauses of a part: a channel, a priority, one person, one notification) or
