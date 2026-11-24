@@ -108,6 +108,8 @@ ok(!calls.some((c) => c[1] === "snooze") && /Tap again to confirm/.test(txt(sr.g
 sr.getElementById("snzGo").click(); await wait(20);
 const sn = calls.find((c) => c[1] === "snooze");
 ok(sn && sn[2].scope === "everything" && sn[2].minutes === 30, `tutto: il secondo tocco mette in pausa (${JSON.stringify(sn)})`);
+// control 0.46.0: a pause that worked closes the panel - open it again
+ctl._openSnz(); await wait(5);
 pick("min", 0);
 ok(/does not end on its own/.test(txt(sr.querySelector(".swarn"))), "senza fine: avviso che non finisce da sola");
 ctl._snzOpen = false; ctl._renderSnz(true);

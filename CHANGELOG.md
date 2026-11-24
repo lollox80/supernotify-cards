@@ -21,6 +21,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   through. The DND and switch tiles are `role="switch"` with `aria-checked` for screen readers.
 
 ### Fixed
+- **Control card (0.46.0): the pause panel is safe to hand to anyone.** Every opening starts from *Non-critical*
+  and the configured length: *Everything* / *Until I resume* stayed selected and the next person found the red
+  button ready. A pause that worked closes the panel and brings the head, which says the new state, into view;
+  the toast at the bottom of the card was off screen on a phone with the panel open. A pause that failed is said
+  in the panel, by the button (`role="alert"`), and the choice stays. On a touch screen the chips, *Resume*, the
+  main button, ✕ and the announce box are at least 44 px (some were 30-38 px); the announce box has a name for
+  screen readers.
 - **Control card (0.43.0): the status line no longer says "normal" when SuperNotify is down.** *Notifications* now
   says **may not arrive**, in red, when SuperNotify has not answered for over a minute, is not loaded (its actions
   are missing) or `sensor.supernotify_notifications` is unavailable - before, "normal" in green sat under the

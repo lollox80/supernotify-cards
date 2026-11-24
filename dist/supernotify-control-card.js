@@ -20,7 +20,7 @@ const VERSION = "1.4.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.45.0",
+  control: "0.46.0",
   overview: "0.42.0",
   bands: "0.22.1",
   deliveries: "0.34.0",
@@ -4224,6 +4224,17 @@ class SupernotifyControlCard extends SnCard {
         .snzp .swarn.crit { background: ${p.critSoft}; color: ${p.ink}; }
         .snzp .swarn ha-icon { --mdc-icon-size: 18px; flex: none; }
         .snzp .swarn.crit ha-icon { color: ${p.crit}; }
+        /* 0.46.0: a failed pause is said here, by the button - the toast at the bottom of the card was off screen */
+        .snzp .serr { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; padding: 8px 10px;
+                      border-radius: 10px; font-size: 13px; line-height: 1.4; background: ${p.critSoft}; color: ${p.ink}; }
+        .snzp .serr ha-icon { --mdc-icon-size: 18px; flex: none; color: ${p.crit}; }
+        /* 0.46.0: on a touch screen every control of the panel and the announce box is at least 44 px */
+        @media (pointer: coarse) {
+          .snzp .sc, .snzp .sb, .snzp .sp { min-height: 44px; }
+          .snzp .sx { min-width: 44px; min-height: 44px; }
+          .snzp select { min-height: 44px; }
+          .announce input, .announce button { min-height: 44px; box-sizing: border-box; }
+        }
         /* 0.44.0: the answer to "are notifications arriving?" leads the card, readable across the room */
         .head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 14px;
                 padding: 14px 16px; margin-bottom: 10px;
@@ -4253,7 +4264,7 @@ class SupernotifyControlCard extends SnCard {
         <div class="snzp" id="cu" hidden></div>
         ${(this._config.tiles || []).includes("announce") ? `<div class="announce" id="announceRow">
           <ha-icon icon="mdi:bullhorn"></ha-icon>
-          <input id="announceInput" placeholder="${snT(this._config, this._hass).announce_ph}">
+          <input id="announceInput" placeholder="${snT(this._config, this._hass).announce_ph}" aria-label="${snEsc(snT(this._config, this._hass).announce)}">
           <button id="announceBtn">${snT(this._config, this._hass).send}</button>
         </div>` : ""}
         <div id="groups"></div>
@@ -4402,6 +4413,9 @@ class SupernotifyControlCard extends SnCard {
 
   /** Open the pause panel, bring it into view and put the focus on its first choice. */
   _openSnz() {
+    // 0.46.0: every opening starts from the safe choice - "everything / until I resume" stayed selected and the
+    // next person found the red button ready
+    if (!this._snzOpen) { this._snz = null; this._snzErr = ""; this._snzArm = 0; }
     this._snzOpen = true;
     this._renderSnz(true);
     this._renderTiles();
@@ -4415,6 +4429,7 @@ class SupernotifyControlCard extends SnCard {
   _closeSnz() {
     this._snzOpen = false;
     this._snzArm = 0;
+    this._snzErr = "";
     this._renderSnz(true);
     this._renderTiles();
     const t = this.shadowRoot.querySelector(".ctile[aria-expanded]");
@@ -4559,7 +4574,7 @@ class SupernotifyControlCard extends SnCard {
       ${voice ? `<div class="sk">${esc(T.snz_voice_info)}</div>` : `<div class="sk">${esc(T.snz_what)}</div><div class="srow">${whatRow}</div>${sub ? `<div class="srow">${sub}</div>` : ""}
       <div class="sk">${esc(T.snz_who)}</div><div class="srow">${whoRow}</div>`}
       <div class="sk">${esc(T.snz_len)}</div><div class="srow">${lenRow}</div>
-      ${warn}<div class="sgo"><button class="sp${risky ? " crit" : ""}" id="snzGo">${armed ? "" : "😴 "}${esc(goLabel)}</button>${voice ? `<button class="sb" id="snzMine">${esc(T.snz_resume_mine)}</button>` : ""}</div>
+      ${warn}${this._snzErr ? `<div class="serr" role="alert"><ha-icon icon="mdi:alert-circle-outline"></ha-icon><span>${esc(this._snzErr)}</span></div>` : ""}<div class="sgo"><button class="sp${risky ? " crit" : ""}" id="snzGo">${armed ? "" : "😴 "}${esc(goLabel)}</button>${voice ? `<button class="sb" id="snzMine">${esc(T.snz_resume_mine)}</button>` : ""}</div>
       ${live.length ? `<div class="sk">${esc(T.snz_active)}</div><div class="slist">${rows}</div>
         <div class="sgo"><button class="sb" id="snzAll">${esc(T.snz_resume_all)}</button></div>` : ""}`, this._config);
     if (html !== this._snzHtml) { el.innerHTML = html; this._snzHtml = html; } // 1.0.0: only when it changed
@@ -4570,6 +4585,7 @@ class SupernotifyControlCard extends SnCard {
         else st[g] = v;
         if (g === "what") st.target = "";
         this._snzArm = 0;
+        this._snzErr = "";
         this._renderSnz(true);
       };
     });
@@ -4591,14 +4607,17 @@ class SupernotifyControlCard extends SnCard {
       clearTimeout(this._snzArmT);
       if (this._snzBusy) return;
       this._snzBusy = true;
+      this._snzErr = "";
+      let done = false;
       try {
         const kind = +st.min > 0 ? "snooze" : "silence";
         await this._snzSpeak(this._snzText(kind, voice ? { ...st, mine: true } : st));
-        if (voice) await this._snzSay(kind, +st.min); else await this._snzGo(st, T.snz_done);
+        done = voice ? await this._snzSay(kind, +st.min, true) : await this._snzGo(st, T.snz_done, true);
       } finally {
         this._snzBusy = false;
-        this._renderSnz(true);
       }
+      // 0.46.0: done - the panel closes and the head, which says the new state, comes into view
+      if (done) { this._closeSnz(); this._showHead(); } else this._renderSnz(true);
     };
     const mine = el.querySelector("#snzMine");
     if (mine) mine.onclick = async () => { await this._snzSay("resume"); this._snzSpeak(this._snzText("resume", { mine: true })); };
@@ -4739,7 +4758,7 @@ class SupernotifyControlCard extends SnCard {
     return T.sa_snooze.replace("{what}", what).replace("{len}", len);
   }
 
-  async _snzSay(cmd, min) {
+  async _snzSay(cmd, min, panel) {
     const T = snT(this._config, this._hass);
     const it = snLang(this._config, this._hass) === "it";
     const text = cmd === "resume" ? (it ? "riattiva le mie notifiche" : "resume my notifications")
@@ -4749,11 +4768,15 @@ class SupernotifyControlCard extends SnCard {
       const r = await this._hass.callWS({ type: "conversation/process", text, language: it ? "it" : "en" });
       const res = (r && r.response) || {};
       const said = (((res.speech || {}).plain || {}).speech) || "";
-      this._toast(res.response_type === "error" ? T.snz_voice_off : said || T.snz_done);
+      if (res.response_type === "error") { this._snzFail(null, panel, T.snz_voice_off); snEnquireBust(800); return false; }
+      this._toast(said || T.snz_done);
     } catch (e) {
-      this._toastErr(e);
+      this._snzFail(e, panel);
+      snEnquireBust(800);
+      return false;
     }
     snEnquireBust(800);
+    return true;
   }
 
   /** A link from another card (0.65.0): { snz: true } opens the pause panel. */
@@ -4794,15 +4817,31 @@ class SupernotifyControlCard extends SnCard {
   }
 
   /** A pause from the panel: the action, or the event as before. */
-  async _snzGo(st, msg) {
-    if (!this._snzUseAction()) return this._snzFire(this._snzAction(st), msg);
+  /** 0.46.0: true when SuperNotify took it; `panel`: a failure is said in the pause panel, not in the toast. */
+  async _snzGo(st, msg, panel) {
+    if (!this._snzUseAction()) return this._snzFire(this._snzAction(st), msg, panel);
+    let ok = false;
     try {
       await snSnoozeCall(this._hass, this._snzData(st));
       this._toast(msg);
+      ok = true;
     } catch (e) {
-      this._toastErr(e);
+      this._snzFail(e, panel);
     }
     snEnquireBust(800);
+    return ok;
+  }
+
+  /** 0.46.0: a failed pause - in the panel when it came from there, else in the toast. */
+  _snzFail(e, panel, text) {
+    if (panel) { this._snzErr = text || this._errText(e); return; }
+    if (text) this._toast(text, true); else this._toastErr(e);
+  }
+
+  /** 0.46.0: the head into view (after a pause from the panel it says the new state). */
+  _showHead() {
+    const h = this.shadowRoot && this.shadowRoot.getElementById("head");
+    if (h && !h.hidden && h.scrollIntoView) h.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 
   /** The SUPERNOTIFY_... action name for a pause (or, with `resume`, for resuming it). */
@@ -4813,14 +4852,17 @@ class SupernotifyControlCard extends SnCard {
     return +st.min > 0 ? `SUPERNOTIFY_SNOOZE_${st.who}_${tgt}_${+st.min}` : `SUPERNOTIFY_SILENCE_${st.who}_${tgt}`;
   }
 
-  async _snzFire(action, msg) {
+  async _snzFire(action, msg, panel) {
+    let ok = false;
     try {
       await this._hass.callApi("POST", "events/mobile_app_notification_action", { action });
       this._toast(msg);
+      ok = true;
     } catch (e) {
-      this._toastErr(e);
+      this._snzFail(e, panel);
     }
     snEnquireBust(800);
+    return ok;
   }
 
   _collapseKey() {

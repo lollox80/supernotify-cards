@@ -89,6 +89,8 @@ const p1 = (calls.find((c) => c[1] === "snooze") || [])[2] || {};
 ok(!("command" in p1) && p1.scope === "delivery" && p1.name && p1.person === "person.lorenzo" && p1.minutes === 120,
   `pannello: snooze delivery per me 120 min (${JSON.stringify(p1)})`);
 // silenzio fino a nuovo ordine
+// control 0.46.0: a pause that worked closes the panel - open it again
+ctl._openSnz(); await wait(5);
 sr.querySelector('.sc[data-g="what"][data-v="EVERYTHING"]').click();
 sr.querySelector('.sc[data-g="who"][data-v="EVERYONE"]').click();
 sr.querySelector('.sc[data-g="min"][data-v="0"]').click();
@@ -102,7 +104,7 @@ ok(!("command" in p2) && p2.scope === "everything" && !("minutes" in p2) && !("n
 // riprendi una pausa in corso
 ctl._snoozes = [{ target_type: "DELIVERY", target: "alexa_announce", recipient_type: "USER", recipient: "person.lorenzo",
   snooze_until: new Date(Date.now() + 3600000).toISOString(), snoozed_at: new Date().toISOString() }];
-ctl._renderSnz();
+ctl._openSnz(); // 0.46.0: the panel closed after the pause
 calls.length = 0;
 const rb = sr.querySelector(".sb[data-r]");
 ok(!!rb, "pausa in corso: pulsante Riprendi anche per chi non è admin");

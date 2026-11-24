@@ -45,7 +45,7 @@ const b = last("silence");
 ok(b && !("minutes" in b) && !("command" in b) && b.reason === "Dashboard", `pannello: silence (${JSON.stringify(b)})`);
 ctl._snoozes = [{ target_type: "DELIVERY", target: "mobile_push", recipient_type: "USER", recipient: "person.lorenzo",
   snooze_until: new Date(Date.now() + 3600000).toISOString(), snoozed_at: new Date().toISOString() }];
-ctl._renderSnz();
+ctl._openSnz(); // 0.46.0: the panel closed after the pause
 sr.querySelector(".sb[data-r]").click(); await wait(30);
 const c = last("unsnooze");
 ok(c && c.scope === "delivery" && c.name === "mobile_push" && c.person === "person.lorenzo" && !("reason" in c) && !("command" in c),

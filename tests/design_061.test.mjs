@@ -55,12 +55,16 @@ sel.value = "alexa_announce"; sel.dispatchEvent(new dom.window.Event("change"));
 click("who", "USER"); click("min", 60);
 panel.querySelector("#snzGo").click(); await wait(10);
 ok(api.some((a) => a[2] === "SUPERNOTIFY_SNOOZE_USER_DELIVERY_alexa_announce_60"), `pausa: canale, solo io, 1 h (${api.map((a) => a[2])})`);
+// control 0.46.0: a pause that worked closes the panel - open it again
+cc._openSnz(); await wait(5);
 click("what", "NONCRITICAL"); click("who", "EVERYONE"); click("min", 0);
 panel.querySelector("#snzGo").click(); await wait(10);
 // control 0.41.0: a pause with no end asks for a second tap
 ok(!api.some((a) => a[2] === "SUPERNOTIFY_SILENCE_EVERYONE_NONCRITICAL"), "finché non riprendo: il primo tocco chiede conferma");
 panel.querySelector("#snzGo").click(); await wait(10);
 ok(api.some((a) => a[2] === "SUPERNOTIFY_SILENCE_EVERYONE_NONCRITICAL"), "finché non riprendo = SILENCE senza minuti");
+// control 0.46.0: a pause that worked closes the panel - open it again
+cc._openSnz(); await wait(5);
 const rows = [...panel.querySelectorAll(".slist .sr")];
 ok(rows.length === 2, `2 pause in corso (${rows.length})`);
 const resumeBtns = [...panel.querySelectorAll(".sb[data-r]")];

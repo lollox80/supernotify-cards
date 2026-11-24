@@ -122,6 +122,12 @@ head says it in red, with its end and *Resume*. A pause of one channel, one prio
 or one notification is a narrow choice and stays on the tile only. The panel takes the keyboard focus
 when it opens; Esc closes it.
 
+**The pause panel is safe to hand to anyone** (control 0.46.0). Every time it opens it starts from
+*Non-critical* and `snooze_minutes`, whatever was picked last time. A pause that worked closes the panel and
+brings the head into view, which says the new state; a pause that failed is said in the panel, right above the
+button, and the choice stays so you can try again. On a touch screen every control of the panel and the announce
+box is at least 44 px high.
+
 **When something fails.** A tile or a group pill is dimmed until Home Assistant answers; a refused
 change, a failed announce or pause is said in words (not allowed for this user, SuperNotify not
 available, no answer) for 6 seconds. When SuperNotify has not answered for over a minute, the head

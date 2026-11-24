@@ -39,6 +39,8 @@ ok(log[0] && log[0][0] === "say" && log[0][1] === "Le notifiche non critiche in 
   `acceso: annuncio PRIMA della pausa (${JSON.stringify(log.slice(0, 2))})`);
 ok(log[0][2].delivery_selection === "fixed" && "alexa_announce" in log[0][2].delivery, "annuncio sul canale annunci");
 log.length = 0;
+// control 0.46.0: a pause that worked closes the panel - open it again
+c._openSnz(); await wait(5);
 c.shadowRoot.getElementById("snzAll").click(); await wait(20);
 ok(log[0] && log[0][0] === "clear" && log[1] && log[1][1] === "Notifiche di nuovo attive.", "riprendi tutto: annuncio DOPO");
 log.length = 0;
@@ -70,6 +72,8 @@ p.querySelector('.sc[data-g="min"][data-v="30"]').click(); await wait(5);
 c.shadowRoot.getElementById("snzGo").click(); await wait(20);
 ok(log[0] && log[0][1] === "Le tue notifiche in pausa per 30 minuti." && log[1] && log[1][0] === "voice", "non admin: annuncio prima del comando vocale");
 log.length = 0;
+// control 0.46.0: a pause that worked closes the panel - open it again
+c._openSnz(); await wait(5);
 c.shadowRoot.getElementById("snzMine").click(); await wait(20);
 ok(log[0] && log[0][0] === "voice" && log[1] && log[1][1] === "Le tue notifiche di nuovo attive.", "non admin: riprendi le mie, annuncio dopo");
 
