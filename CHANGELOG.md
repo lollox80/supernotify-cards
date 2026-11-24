@@ -5,6 +5,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Docs: SuperNotify Cards is in the HACS default list (hacs/default#11548). The README's install section now starts
+  from the HACS search; the custom repository is the fallback. The HACS badge says *Default*.
+
 ## [1.4.0] - 2026-11-24
 
 ### Changed
