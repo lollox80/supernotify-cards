@@ -133,11 +133,14 @@ ctl4.setConfig({ status: false, dnd_entity: "input_boolean.dnd", tiles: [] });
 document.body.appendChild(ctl4); ctl4.hass = mk({ states: { ...base, "input_boolean.dnd": S("off") } });
 await wait(40);
 ok(ctl4.shadowRoot.getElementById("statusbar").style.display === "none" && !ctl4.shadowRoot.getElementById("statusbar").innerHTML, "status: false nasconde la riga di stato");
+ok(ctl4.shadowRoot.getElementById("head").hidden, "status: false nasconde anche la testata (control 0.44.0)");
 const ctl5 = document.createElement("supernotify-control-card");
 ctl5.setConfig({ dnd_entity: "input_boolean.dnd", tiles: [] });
 document.body.appendChild(ctl5); ctl5.hass = mk({ states: { ...base, "input_boolean.dnd": S("off") } });
 await wait(40);
-ok(ctl5.shadowRoot.getElementById("statusbar").style.display !== "none", "senza status: la riga c'è come prima");
+// control 0.44.0: the notifications state moved from the status row to the head; the row (who is home, time band,
+// scenarios) stays empty and hidden on a card that has none of them
+ok(!ctl5.shadowRoot.getElementById("head").hidden && /Le notifiche arrivano/.test(ctl5.shadowRoot.getElementById("head").textContent), "senza status: la testata c'è");
 
 // (5) composer: niente canali spenti o col transport spento
 const cmp = document.createElement("supernotify-composer-card");

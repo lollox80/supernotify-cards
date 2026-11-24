@@ -2,7 +2,7 @@
 
 [← SuperNotify Cards](../../README.md) · [Common options](../configuration.md)
 
-Touch-first control center: a status bar that says whether notifications get through, big
+Touch-first control center: a head that says whether notifications get through, big
 quick-action tiles, an announce box and grouped mode toggles. Implements the "control center" concept from the SuperNotify
 UI roadmap (feature #27, statistics and dashboard).
 
@@ -60,9 +60,9 @@ bands:
 | `occupancy` | no | without `presence_entity`, the status bar shows who is home for SuperNotify (`enquire_occupancy`, what its conditions see). `false` hides it |
 | `snooze_via` | no | how pauses are made: `action` (`supernotify.snooze`, `silence` and `unsnooze`, any user, full panel), `event` (the push buttons event, needs an admin), `voice` (SuperNotify's voice commands, the user's own pauses). Default: `action` |
 | `catch_up` | no | `false` hides "while notifications were paused": when no pause is in force, the card with the snooze tile lists what a pause held back since the last OK in this browser (at most 24 h), from SuperNotify's archive. Default `true` |
-| `status` | no | `false` hides the status row (who is home, time band, notifications, active scenarios): for a second control card in the same view. Default `true` |
-| `dnd_entity` | no | `input_boolean` (or `switch`) used by the DND tile and by the status bar's *Notifications* |
-| `quiet_entity` | no | a computed quiet state (e.g. a template `binary_sensor` combining DND, schedules and the voice switch): the status bar says *quiet* while it is on; the DND tile keeps toggling `dnd_entity` |
+| `status` | no | `false` hides the head and the status row (who is home, time band, active scenarios): for a second control card in the same view. Default `true` |
+| `dnd_entity` | no | `input_boolean` (or `switch`) used by the DND tile and by the head |
+| `quiet_entity` | no | a computed quiet state (e.g. a template `binary_sensor` combining DND, schedules and the voice switch): the head says *Notifications are quiet* while it is on; the DND tile keeps toggling `dnd_entity` |
 | `announce_delivery` | no | SuperNotify delivery used by the announce box (default `alexa_announce`) |
 | `snooze_minutes` | no | minutes for the pause tile with `snooze_panel: false`, and the panel's first choice (default 30) |
 | `snooze_panel` | no | `true` (default): the pause tile (*Pause…*) opens a panel to pause non-critical notifications, everything, one channel or one priority, for everyone or only you, for 15 min to 4 h or until resumed, and lists the pauses in force with Resume. `false`: one tap pauses non-critical notifications as before (`snooze_minutes`, `snooze_action`). Pausing goes through `supernotify.snooze` (any user); with `snooze_via: event` or `snooze_action` it fires the same `mobile_app_notification_action` event as the push buttons, which needs an admin user. |
@@ -88,16 +88,28 @@ configured with `expose_state: false`, they stay `unknown` and the cards ask
 `switch.supernotify_scenario_*` (enabled or not): a scenario counts as active only when its
 conditions hold **and** its switch is not off.
 
-**Status bar.** *Notifications* answers "will my phone ring?" in one word (control 0.41.0, it replaced
-*Quiet*, which read only the DND switch and said "off" during a pause). In order: **may not arrive** (in red,
-control 0.43.0: SuperNotify has not answered for over a minute, is not loaded or `sensor.supernotify_notifications`
-is unavailable; the alert at the top says so too, and it shows even on a card without DND or the pause tile),
-**all silenced** (a pause
-of everything for everyone, critical included, with its end), **do not disturb** (`dnd_entity` on),
-**quiet** (`quiet_entity` on), **paused** (non-critical notifications for everyone, with its end),
-**normal · N pauses** (pauses of a part: a channel, a priority, one person, one notification) or
-**normal**. It shows when the card has the pause tile or a DND / quiet entity; a tap opens the pause
-panel.
+**The head** (control 0.44.0) answers "are notifications arriving?" in a sentence large enough to read
+from across the room, on a green, orange or red ground, with a line under it and at most one button. In
+order:
+
+| Head | Colour | Line under it | Button |
+|---|---|---|---|
+| *Notifications may not arrive* | red | the notification system is not responding (SuperNotify has not answered for over a minute, is not loaded or `sensor.supernotify_notifications` is unavailable) | *Retry* |
+| *Everything is silenced* | red | critical alerts too · until 23:00 (or *until resumed*) | *Resume* |
+| *Do not disturb is on* | orange | | |
+| *Notifications are quiet* | orange | (`quiet_entity` on) | |
+| *Notifications are paused* | orange | critical alerts still get through · until 23:00 (or *until resumed*) | *Resume* |
+| *Notifications are getting through* | green | the pauses of a part, if any: *1 pause: garden* (a channel, a priority, one person, one notification) | |
+
+*Resume* ends that pause; it is not shown when the user may not end it or pauses go by voice.
+
+**Tiles** (control 0.45.0) use the same colours as the head: the pause tile is red while everything is
+silenced, orange while non-critical notifications are paused for everyone and neutral for a pause of a part
+(it still says which pause); the DND tile is orange while do not disturb is on. A switch tile that is on (Voice,
+Push...) stays blue. The DND tile and the switch tiles are switches for screen readers (`role="switch"`,
+`aria-checked`); the pause tile is a button that opens the panel. Under the head,
+the status row shows who is home, the time band and, for administrators, the active scenarios. The last
+notification sits at the bottom of the card, after the controls.
 
 **Announce.** The box calls `notify.supernotify` with
 `data: {delivery_selection: fixed, delivery: {<announce_delivery>: {}}}`. *Announced* appears once
@@ -105,15 +117,15 @@ SuperNotify accepted the message; when it fails the text stays in the box and th
 
 **Pausing everything.** In the panel, *Everything* or *Until I resume* shows what it means above the
 button (alarms and critical alerts reach no one / the pause does not end on its own), the button says
-so (*Silence everything, critical too*) and a second tap confirms. While such a pause is in force a
-notice at the top of the card says it, with its end and *Resume*. A pause of one channel, one priority
+so (*Silence everything, critical too*) and a second tap confirms. While such a pause is in force the
+head says it in red, with its end and *Resume*. A pause of one channel, one priority
 or one notification is a narrow choice and stays on the tile only. The panel takes the keyboard focus
 when it opens; Esc closes it.
 
 **When something fails.** A tile or a group pill is dimmed until Home Assistant answers; a refused
 change, a failed announce or pause is said in words (not allowed for this user, SuperNotify not
-available, no answer) for 6 seconds. When SuperNotify has not answered for over a minute, a notice
-at the top says the pauses and the last notification may be out of date, with *Retry*.
+available, no answer) for 6 seconds. When SuperNotify has not answered for over a minute, the head
+says notifications may not arrive, with *Retry*.
 
 **Pauses in force** show why they were set: *by hand* (the panel or a push button), *by voice* or
 *by the assistant*.
