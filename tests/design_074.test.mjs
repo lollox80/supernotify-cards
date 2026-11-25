@@ -89,6 +89,8 @@ const p1 = (calls.find((c) => c[1] === "snooze") || [])[2] || {};
 ok(!("command" in p1) && p1.scope === "delivery" && p1.name && p1.person === "person.lorenzo" && p1.minutes === 120,
   `pannello: snooze delivery per me 120 min (${JSON.stringify(p1)})`);
 // silenzio fino a nuovo ordine
+// control 0.46.0: a pause that worked closes the panel - open it again
+ctl._openSnz(); await wait(5);
 sr.querySelector('.sc[data-g="what"][data-v="EVERYTHING"]').click();
 sr.querySelector('.sc[data-g="who"][data-v="EVERYONE"]').click();
 sr.querySelector('.sc[data-g="min"][data-v="0"]').click();
@@ -102,7 +104,7 @@ ok(!("command" in p2) && p2.scope === "everything" && !("minutes" in p2) && !("n
 // riprendi una pausa in corso
 ctl._snoozes = [{ target_type: "DELIVERY", target: "alexa_announce", recipient_type: "USER", recipient: "person.lorenzo",
   snooze_until: new Date(Date.now() + 3600000).toISOString(), snoozed_at: new Date().toISOString() }];
-ctl._renderSnz();
+ctl._openSnz(); // 0.46.0: the panel closed after the pause
 calls.length = 0;
 const rb = sr.querySelector(".sb[data-r]");
 ok(!!rb, "pausa in corso: pulsante Riprendi anche per chi non è admin");
@@ -133,11 +135,15 @@ ctl4.setConfig({ status: false, dnd_entity: "input_boolean.dnd", tiles: [] });
 document.body.appendChild(ctl4); ctl4.hass = mk({ states: { ...base, "input_boolean.dnd": S("off") } });
 await wait(40);
 ok(ctl4.shadowRoot.getElementById("statusbar").style.display === "none" && !ctl4.shadowRoot.getElementById("statusbar").innerHTML, "status: false nasconde la riga di stato");
+ok(ctl4.shadowRoot.getElementById("head").hidden, "status: false nasconde anche la testata (control 0.44.0)");
+ok(/\[hidden\] \{ display: none !important; \}/.test(ctl4.shadowRoot.querySelector("style").textContent), "hidden vince sul display: grid della testata (control 0.46.1, niente striscia verde vuota)");
 const ctl5 = document.createElement("supernotify-control-card");
 ctl5.setConfig({ dnd_entity: "input_boolean.dnd", tiles: [] });
 document.body.appendChild(ctl5); ctl5.hass = mk({ states: { ...base, "input_boolean.dnd": S("off") } });
 await wait(40);
-ok(ctl5.shadowRoot.getElementById("statusbar").style.display !== "none", "senza status: la riga c'è come prima");
+// control 0.44.0: the notifications state moved from the status row to the head; the row (who is home, time band,
+// scenarios) stays empty and hidden on a card that has none of them
+ok(!ctl5.shadowRoot.getElementById("head").hidden && /Le notifiche arrivano/.test(ctl5.shadowRoot.getElementById("head").textContent), "senza status: la testata c'è");
 
 // (5) composer: niente canali spenti o col transport spento
 const cmp = document.createElement("supernotify-composer-card");

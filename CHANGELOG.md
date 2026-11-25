@@ -6,8 +6,40 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- **Control card (0.44.0): a head that answers "are notifications arriving?"** across the room. The one word
+  *Notifications* in the status bar and the alert at the top became one sentence at the top of the card, on a
+  green, orange or red ground: *Notifications are getting through* (with the pauses of a part under it),
+  *Notifications are paused*, *Do not disturb is on*, *Notifications are quiet*, *Everything is silenced* or
+  *Notifications may not arrive*, with *Resume* or *Retry* when there is something to do. The status row keeps who
+  is home and the time band; **active scenarios** show to administrators only. The **last notification** moved to
+  the bottom of the card, after the controls. In all 11 languages.
+  > The pause panel no longer opens from the status row; the pause tile opens it as before.
+- **Control card (0.45.0): one severity for the head and the tiles.** The pause tile is red while everything is
+  silenced, orange while non-critical notifications are paused for everyone and neutral for a pause of a part
+  (a channel, a priority, one person, one notification), which leaves notifications arriving - it was always
+  orange. Do not disturb on is orange like the head, no longer the blue of a switch that lets notifications
+  through. The DND and switch tiles are `role="switch"` with `aria-checked` for screen readers.
 - Docs: SuperNotify Cards is in the HACS default list (hacs/default#11548). The README's install section now starts
   from the HACS search; the custom repository is the fallback. The HACS badge says *Default*.
+
+### Fixed
+- **Control card (0.47.0): the pause tile no longer takes four narrow lines.** It reads *Paused*, the time left
+  on one line (*15 min*, *1 h 30 min*) and what is paused. The end time (*until 01:15*) shows there only when the
+  head does not already say it: with `status: false`, or for a pause of a part.
+- **Control card (0.46.1): no empty green bar with `status: false`.** The hidden status head kept its grid layout
+  and showed as an empty strip above the tiles; a hidden element of the card is now always hidden.
+- **Control card (0.46.0): the pause panel is safe to hand to anyone.** Every opening starts from *Non-critical*
+  and the configured length: *Everything* / *Until I resume* stayed selected and the next person found the red
+  button ready. A pause that worked closes the panel and brings the head, which says the new state, into view;
+  the toast at the bottom of the card was off screen on a phone with the panel open. A pause that failed is said
+  in the panel, by the button (`role="alert"`), and the choice stays. On a touch screen the chips, *Resume*, the
+  main button, ✕ and the announce box are at least 44 px (some were 30-38 px); the announce box has a name for
+  screen readers.
+- **Control card (0.43.0): the status line no longer says "normal" when SuperNotify is down.** *Notifications* now
+  says **may not arrive**, in red, when SuperNotify has not answered for over a minute, is not loaded (its actions
+  are missing) or `sensor.supernotify_notifications` is unavailable - before, "normal" in green sat under the
+  "SuperNotify is not responding" alert, which now shows in these cases too. It comes before every other state and
+  shows even on a card without DND or the pause tile. In all 11 languages.
 
 ## [1.4.0] - 2026-11-24
 

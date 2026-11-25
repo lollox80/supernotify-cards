@@ -88,6 +88,8 @@ cu.shadowRoot.getElementById("snzGo").click(); await wait(10);
 const cv = ws.filter((m) => m.type === "conversation/process").pop();
 ok(cv && cv.text === "metti in pausa le mie notifiche per 60 minuti" && cv.language === "it", `non admin: frase inviata (${cv && cv.text})`);
 ok(!ws.some((m) => m.type === "events/mobile_app_notification_action"), "non admin: niente evento (servirebbe admin)");
+// control 0.46.0: a pause that worked closes the panel - open it again
+cu._openSnz(); await wait(5);
 cu.shadowRoot.getElementById("snzMine").click(); await wait(10);
 ok(ws.filter((m) => m.type === "conversation/process").pop().text === "riattiva le mie notifiche", "non admin: riprendi le mie");
 

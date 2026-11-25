@@ -1,4 +1,6 @@
 // CHANGELOG
+// 2026-11-24 - control 0.44.0: the alert at the top and the Notifications word of the status bar became the head;
+//   the same behaviour is checked there (sentence, severity, Resume / Retry).
 // 2026-11-22 - control 0.41.0: the card says the truth when it matters. Silencing everything (or pausing with
 //   no end) asks for a second tap and says what it means; such a pause stays at the top of the card until it
 //   is resumed; "Announced" only once SuperNotify took it (the text stays on a failure); a refused toggle is
@@ -41,7 +43,6 @@ ctl.hass = hass;
 await wait(60);
 const sr = ctl.shadowRoot;
 const toast = () => sr.getElementById("toast");
-const alertEl = () => sr.getElementById("alert");
 
 // --- tiles: one name per concept, one behaviour per tile
 const tileTxt = () => [...sr.querySelectorAll(".ctile")].map(txt);
@@ -107,55 +108,55 @@ ok(!calls.some((c) => c[1] === "snooze") && /Tap again to confirm/.test(txt(sr.g
 sr.getElementById("snzGo").click(); await wait(20);
 const sn = calls.find((c) => c[1] === "snooze");
 ok(sn && sn[2].scope === "everything" && sn[2].minutes === 30, `tutto: il secondo tocco mette in pausa (${JSON.stringify(sn)})`);
+// control 0.46.0: a pause that worked closes the panel - open it again
+ctl._openSnz(); await wait(5);
 pick("min", 0);
 ok(/does not end on its own/.test(txt(sr.querySelector(".swarn"))), "senza fine: avviso che non finisce da sola");
 ctl._snzOpen = false; ctl._renderSnz(true);
 
-// --- the alert at the top: everything silenced, critical included
-snoozes = [{ target_type: "EVERYTHING", recipient_type: "EVERYONE", snooze_until: new Date(Date.now() + 3600e3).toISOString(), snoozed_at: new Date().toISOString() }];
-G.snEnquireBust(); ctl._snoozesRaw = null; await ctl._refreshSnoozes(); await wait(10);
-ok(!alertEl().hidden && alertEl().classList.contains("crit") && /Everything is silenced/.test(txt(alertEl())), `avviso in cima: tutto silenziato (${txt(alertEl())})`);
+// --- the head (control 0.44.0, it took the alert at the top and the Notifications word of the status bar):
+// one sentence for "are notifications arriving?", the severity, one action
+const head = () => sr.getElementById("head");
+const ht = () => txt(head());
+const sev = () => (head().classList.contains("crit") ? "crit" : head().classList.contains("warn") ? "warn" : "ok");
+const setSnz = async (list) => { snoozes = list; G.snEnquireBust(); ctl._snoozesRaw = null; await ctl._refreshSnoozes(); await wait(10); };
+const inH = (ms) => new Date(Date.now() + ms).toISOString();
+
+// everything silenced, critical included: red, with its end, Resume resumes that pause
+await setSnz([{ target_type: "EVERYTHING", recipient_type: "EVERYONE", snooze_until: inH(3600e3), snoozed_at: new Date().toISOString() }]);
+ok(sev() === "crit" && /Everything is silenced/.test(ht()) && /Critical alerts too · until/.test(ht()), `testata: tutto silenziato (${ht()})`);
 calls.length = 0;
-alertEl().querySelector("button").click(); await wait(20);
-ok(calls.some((c) => c[1] === "unsnooze" && c[2].scope === "everything"), "avviso: Riprendi riprende quella pausa");
+head().querySelector("button").click(); await wait(20);
+ok(calls.some((c) => c[1] === "unsnooze" && c[2].scope === "everything"), "testata: Riprendi riprende quella pausa");
 
-// a timed non-critical pause is a normal choice: no alert
-snoozes = [{ target_type: "NONCRITICAL", recipient_type: "EVERYONE", snooze_until: new Date(Date.now() + 1800e3).toISOString(), snoozed_at: new Date().toISOString() }];
-G.snEnquireBust(); ctl._snoozesRaw = null; await ctl._refreshSnoozes(); await wait(10);
-ok(alertEl().hidden, "pausa non critica a tempo: nessun avviso");
-// a non-critical pause with no end: warn
-snoozes = [{ target_type: "NONCRITICAL", recipient_type: "EVERYONE" }];
-G.snEnquireBust(); ctl._snoozesRaw = null; await ctl._refreshSnoozes(); await wait(10);
-ok(!alertEl().hidden && alertEl().classList.contains("warn") && /no end time/.test(txt(alertEl())), "pausa senza fine: avviso");
+// non-critical paused for everyone: orange, says critical alerts still arrive, with the end or "until resumed"
+await setSnz([{ target_type: "NONCRITICAL", recipient_type: "EVERYONE", snooze_until: inH(1800e3), snoozed_at: new Date().toISOString() }]);
+ok(sev() === "warn" && /Notifications are paused/.test(ht()) && /Critical alerts still get through · until/.test(ht()), `testata: in pausa a tempo (${ht()})`);
+await setSnz([{ target_type: "NONCRITICAL", recipient_type: "EVERYONE" }]);
+ok(sev() === "warn" && /until resumed/.test(ht()) && !!head().querySelector('button[data-a="resume"]'), `testata: in pausa senza fine, con Riprendi (${ht()})`);
 
-// --- the status bar: one notification state, which sees the pauses (Quiet said "off" during a pause)
-const bar = () => txt(sr.getElementById("statusbar"));
-ok(/Notifications ?paused · until resumed/.test(bar()) && !/Quiet/.test(bar()), `stato: in pausa senza fine (${bar()})`);
-snoozes = [{ target_type: "EVERYTHING", recipient_type: "EVERYONE", snooze_until: new Date(Date.now() + 3600e3).toISOString(), snoozed_at: new Date().toISOString() }];
-G.snEnquireBust(); ctl._snoozesRaw = null; await ctl._refreshSnoozes(); await wait(10);
-ok(/Notifications ?all silenced · until/.test(bar()), `stato: tutte silenziate (${bar()})`);
-ok(!!sr.querySelector('#statusbar [data-go="snz"]'), "stato: tocca per aprire il pannello pausa");
-snoozes = [{ target_type: "DELIVERY", target: "alexa_announce", recipient_type: "EVERYONE", snooze_until: new Date(Date.now() + 600e3).toISOString(), snoozed_at: new Date().toISOString() }];
-G.snEnquireBust(); ctl._snoozesRaw = null; await ctl._refreshSnoozes(); await wait(10);
-ok(/Notifications ?normal · 1 pause/.test(bar()), `stato: pausa di un canale (${bar()})`);
-snoozes = [];
-G.snEnquireBust(); ctl._snoozesRaw = null; await ctl._refreshSnoozes(); await wait(10);
-ok(/Notifications ?normal/.test(bar()) && !/pause/.test(bar()), `stato: normali (${bar()})`);
+// a pause of one channel: they arrive, the line under says which pause
+await setSnz([{ target_type: "DELIVERY", target: "alexa_announce", recipient_type: "EVERYONE", snooze_until: inH(600e3), snoozed_at: new Date().toISOString() }]);
+ok(sev() === "ok" && /Notifications are getting through/.test(ht()) && /1 pause: /.test(ht()) && !head().querySelector("button"), `testata: pausa di un canale (${ht()})`);
+await setSnz([]);
+ok(sev() === "ok" && /Notifications are getting through/.test(ht()) && !/pause/.test(ht()), `testata: arrivano (${ht()})`);
 hass.states = { ...hass.states, "input_boolean.dnd": S("on", { friendly_name: "Do not disturb" }) };
 ctl.hass = { ...hass }; await wait(20);
-ok(/Notifications ?do not disturb/.test(bar()), `stato: non disturbare (${bar()})`);
+ok(sev() === "warn" && /Do not disturb is on/.test(ht()), `testata: non disturbare (${ht()})`);
 hass.states = { ...hass.states, "input_boolean.dnd": S("off", { friendly_name: "Do not disturb" }) };
 ctl.hass = { ...hass }; await wait(20);
+// the status row no longer repeats it, and the head is announced politely, not as an alarm
+ok(!/Notifications/.test(txt(sr.getElementById("statusbar"))) && head().getAttribute("role") === "status", "riga di stato senza «Notifications», testata role=status");
 
 // --- SuperNotify not answering: said after a poll, gone when it answers again
 wsDown = true;
 G.snEnquireBust(); await wait(10);
 ctl._failSince = Date.now() - 60000;
 await ctl._refreshSnoozes(); await wait(10);
-ok(!alertEl().hidden && alertEl().classList.contains("down") && /not responding/.test(txt(alertEl())), "SuperNotify non risponde: detto");
+ok(sev() === "crit" && /may not arrive/.test(ht()) && /not responding/.test(ht()) && /Retry/.test(txt(head().querySelector("button"))), `SuperNotify non risponde: detto, con Riprova (${ht()})`);
 wsDown = false;
 G.snEnquireBust(); await ctl._refreshSnoozes(); await wait(10);
-ok(!/not responding/.test(txt(alertEl())), "SuperNotify risponde di nuovo: avviso tolto");
+ok(!/not responding/.test(ht()) && sev() === "ok", "SuperNotify risponde di nuovo: testata normale");
 
 ctl.remove();
 console.log(fail ? `FAIL ${fail}` : "control_harden: all ok");
