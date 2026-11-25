@@ -20,7 +20,7 @@ const VERSION = "1.4.0"; // bundle / HACS release
  * without a bump here.
  */
 const SN_CARD_VERSIONS = {
-  control: "0.46.1",
+  control: "0.47.0",
   overview: "0.42.0",
   bands: "0.22.1",
   deliveries: "0.34.0",
@@ -4129,6 +4129,8 @@ class SupernotifyControlCard extends SnCard {
         .ctile b { font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
         .ctile .ts { font-size: 11px; color: ${p.muted}; line-height: 1.3; overflow-wrap: anywhere;
                      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+        /* 0.47.0: the time left of a pause stays on one line */
+        .ctile .ts .nw { white-space: nowrap; }
         .ctile.on { background: ${p.soft}; border-color: ${p.brand}; color: ${p.ink}; }
         .ctile.on .ti { color: ${p.brand}; }
         .ctile.warn { background: ${p.warnSoft}; border-color: ${p.warnLine}; color: ${p.warnInk}; }
@@ -4468,11 +4470,18 @@ class SupernotifyControlCard extends SnCard {
         if (end) {
           until = snSnzUntil(end, this._hass);
           const mins = Math.max(1, Math.ceil((end - new Date()) / 60000));
-          left = `${T.snoozed} · ${snSnzDur(mins, T).replace(/ /g, "\u00a0")}`;
+          left = snSnzDur(mins, T).replace(/ /g, "\u00a0");
         }
+        // 0.47.0: "Paused" / the time left on one line / what - "Paused · 15 min / until 01:15 / non-critical" took four
+        // narrow lines; the end time only when the head does not already say it (status: false, a pause of a part)
+        const head = c.status !== false ? this._headState() : null;
+        const headSaysEnd = !!(until && head && head.sub && head.sub.includes(until));
         const what = snEsc(snSnoozeLabels(this._hass, act, T, 1));
-        return { cls: this._snzSev(act), icon: "😴", name: left || T.snoozed, panel,
-          sub: what ? (until ? `${T.until} ${until}<br>` : "") + what : (until ? T.until + " " + until + " · " : "") + (panel ? T.snz_choose : T.tap_clear),
+        const lines = [];
+        if (left) lines.push(`<span class="nw">${left}</span>`);
+        if (until && !headSaysEnd) lines.push(`${T.until} ${until}`);
+        lines.push(what || (panel ? T.snz_choose : T.tap_clear));
+        return { cls: this._snzSev(act), icon: "😴", name: T.snoozed, panel, sub: lines.join("<br>"),
           act: () => this._snooze() };
       }
       return { cls: "", icon: "😴", name: panel ? `${T.snooze}…` : `${T.snooze} ${c.snooze_minutes || 30}\u00a0${T.min}`, panel,

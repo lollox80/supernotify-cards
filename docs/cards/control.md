@@ -107,7 +107,9 @@ order:
 silenced, orange while non-critical notifications are paused for everyone and neutral for a pause of a part
 (it still says which pause); the DND tile is orange while do not disturb is on. A switch tile that is on (Voice,
 Push...) stays blue. The DND tile and the switch tiles are switches for screen readers (`role="switch"`,
-`aria-checked`); the pause tile is a button that opens the panel. Under the head,
+`aria-checked`); the pause tile is a button that opens the panel. While a pause is on, the pause tile reads
+*Paused*, the time left on one line and what is paused (control 0.47.0); the end time shows there only when the
+head does not already say it (with `status: false`, or for a pause of a part). Under the head,
 the status row shows who is home, the time band and, for administrators, the active scenarios. The last
 notification sits at the bottom of the card, after the controls.
 

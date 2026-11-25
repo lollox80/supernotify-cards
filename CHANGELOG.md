@@ -23,6 +23,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   from the HACS search; the custom repository is the fallback. The HACS badge says *Default*.
 
 ### Fixed
+- **Control card (0.47.0): the pause tile no longer takes four narrow lines.** It reads *Paused*, the time left
+  on one line (*15 min*, *1 h 30 min*) and what is paused. The end time (*until 01:15*) shows there only when the
+  head does not already say it: with `status: false`, or for a pause of a part.
 - **Control card (0.46.1): no empty green bar with `status: false`.** The hidden status head kept its grid layout
   and showed as an empty strip above the tiles; a hidden element of the card is now always hidden.
 - **Control card (0.46.0): the pause panel is safe to hand to anyone.** Every opening starts from *Non-critical*
