@@ -2,7 +2,7 @@
 
 # SuperNotify Cards
 
-[![HACS](https://img.shields.io/badge/HACS-Custom-orange?style=for-the-badge)](https://hacs.xyz/docs/faq/custom_repositories/) [![Release](https://img.shields.io/github/v/release/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/releases/latest) [![Downloads](https://img.shields.io/github/downloads/lollox80/supernotify-cards/total?style=for-the-badge&label=downloads)](https://github.com/lollox80/supernotify-cards/releases) [![SuperNotify](https://img.shields.io/badge/SuperNotify-2.13%2B-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://github.com/rhizomatics/supernotify) [![Tests](https://img.shields.io/github/actions/workflow/status/lollox80/supernotify-cards/lint.yml?branch=main&label=tests&style=for-the-badge)](https://github.com/lollox80/supernotify-cards/actions/workflows/lint.yml) [![HACS validation](https://img.shields.io/github/actions/workflow/status/lollox80/supernotify-cards/hacs.yml?branch=main&label=HACS%20validation&style=for-the-badge)](https://github.com/lollox80/supernotify-cards/actions/workflows/hacs.yml) [![Last commit](https://img.shields.io/github/last-commit/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/commits/main) [![License](https://img.shields.io/github/license/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/blob/main/LICENSE)
+[![HACS](https://img.shields.io/badge/HACS-Default-41BDF5?style=for-the-badge)](https://hacs.xyz/) [![Release](https://img.shields.io/github/v/release/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/releases/latest) [![Downloads](https://img.shields.io/github/downloads/lollox80/supernotify-cards/total?style=for-the-badge&label=downloads)](https://github.com/lollox80/supernotify-cards/releases) [![SuperNotify](https://img.shields.io/badge/SuperNotify-2.13%2B-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://github.com/rhizomatics/supernotify) [![Tests](https://img.shields.io/github/actions/workflow/status/lollox80/supernotify-cards/lint.yml?branch=main&label=tests&style=for-the-badge)](https://github.com/lollox80/supernotify-cards/actions/workflows/lint.yml) [![HACS validation](https://img.shields.io/github/actions/workflow/status/lollox80/supernotify-cards/hacs.yml?branch=main&label=HACS%20validation&style=for-the-badge)](https://github.com/lollox80/supernotify-cards/actions/workflows/hacs.yml) [![Last commit](https://img.shields.io/github/last-commit/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/commits/main) [![License](https://img.shields.io/github/license/lollox80/supernotify-cards?style=for-the-badge)](https://github.com/lollox80/supernotify-cards/blob/main/LICENSE)
 
 [![Open your Home Assistant instance and open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=lollox80&repository=supernotify-cards&category=plugin)
 
@@ -22,9 +22,17 @@ Still on an older version? Stay on release 0.92.0 of these cards until you updat
 
 ## Install
 
-1. HACS → ⋮ → **Custom repositories** → add `https://github.com/lollox80/supernotify-cards`, type **Dashboard**.
-2. Install **SuperNotify Cards** and reload the browser.
+SuperNotify Cards is in the HACS default list:
+
+1. In HACS search for **SuperNotify Cards** (or use the button above), open it and **Download**.
+2. Reload the browser.
 3. Add a card: **Add card** → search *SuperNotify*, or paste one of the examples below.
+
+<details><summary>If HACS does not find it: add it as a custom repository</summary>
+
+HACS → ⋮ → **Custom repositories** → add `https://github.com/lollox80/supernotify-cards`, type **Dashboard**, then
+install **SuperNotify Cards** as above.
+</details>
 
 <details><summary>Manual install (without HACS)</summary>
 

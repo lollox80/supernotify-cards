@@ -19,6 +19,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (a channel, a priority, one person, one notification), which leaves notifications arriving - it was always
   orange. Do not disturb on is orange like the head, no longer the blue of a switch that lets notifications
   through. The DND and switch tiles are `role="switch"` with `aria-checked` for screen readers.
+- Docs: SuperNotify Cards is in the HACS default list (hacs/default#11548). The README's install section now starts
+  from the HACS search; the custom repository is the fallback. The HACS badge says *Default*.
 
 ### Fixed
 - **Control card (0.46.1): no empty green bar with `status: false`.** The hidden status head kept its grid layout
